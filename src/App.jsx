@@ -313,20 +313,28 @@ function MeowChiGame() {
     });
   };
 
-  // Simplified - no complex global listeners needed
+  useEffect(() => {
+    if (dragState.draggedCat) {
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd, { passive: false });
+      
+      return () => {
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [dragState.draggedCat]);
 
   const DraggableCat = ({ cat, columnId, index }) => {
-    const isDraggedCat = touchState.draggedCat?.id === cat.id;
+    const isDraggedCat = dragState.draggedCat?.id === cat.id;
     const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
         className={`text-6xl select-none transition-all duration-200 p-1 ${
           isTopCat && gameState.isActive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
-        } ${isDraggedCat && touchState.isDragging ? 'opacity-50' : isTopCat ? 'hover:scale-105' : ''}`}
-        onTouchStart={isTopCat ? (e) => handleCatTouch(e, cat.id, columnId) : undefined}
-        onTouchMove={touchState.isDragging ? handleCatTouchMove : undefined}
-        onTouchEnd={touchState.isDragging ? handleCatTouchEnd : undefined}
+        } ${isDraggedCat && dragState.isDragging ? 'opacity-50' : isTopCat ? 'hover:scale-105' : ''}`}
+        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
