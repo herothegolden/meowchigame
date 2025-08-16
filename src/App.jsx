@@ -91,6 +91,7 @@ function MeowChiGame() {
       nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
     }));
     setAnimations([]);
+    setDragData(null); // Clear any drag state
   };
 
   const endGame = () => {
@@ -347,7 +348,9 @@ function MeowChiGame() {
         }`}
         onDragOver={(e) => {
           e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
+          if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = "move";
+          }
         }}
         onDragEnter={(e) => e.preventDefault()}
         onDrop={(e) => {
