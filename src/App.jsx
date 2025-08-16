@@ -313,57 +313,20 @@ function MeowChiGame() {
     });
   };
 
-  useEffect(() => {
-    if (dragState.draggedCat && dragState.isDragging) {
-      const handleGlobalTouchMove = (e) => {
-        e.preventDefault();
-        if (e.touches && e.touches[0]) {
-          const touch = e.touches[0];
-          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-          setDragState(prev => ({
-            ...prev,
-            dragPosition: { x: touch.clientX, y: touch.clientY },
-            highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-          }));
-        }
-      };
-      
-      const handleGlobalTouchEnd = (e) => {
-        e.preventDefault();
-        if (e.changedTouches && e.changedTouches[0]) {
-          const touch = e.changedTouches[0];
-          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-          if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-          }
-        }
-        resetDragState();
-      };
-      
-      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalTouchMove);
-        document.removeEventListener('touchend', handleGlobalTouchEnd);
-      };
-    }
-  }, [dragState.draggedCat, dragState.isDragging, dragState.fromColumn]);
+  // Simplified - no complex global listeners needed
 
   const DraggableCat = ({ cat, columnId, index }) => {
-    const isDraggedCat = dragState.draggedCat?.id === cat.id;
-    const isTopCat = index === gameState.columns[columnId].length - 1; // Only top cat can be dragged
+    const isDraggedCat = touchState.draggedCat?.id === cat.id;
+    const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
         className={`text-6xl select-none transition-all duration-200 p-1 ${
           isTopCat && gameState.isActive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
-        } ${isDraggedCat && dragState.isDragging ? 'opacity-30' : isTopCat ? 'hover:scale-105' : ''}`}
-        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
-        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
+        } ${isDraggedCat && touchState.isDragging ? 'opacity-50' : isTopCat ? 'hover:scale-105' : ''}`}
+        onTouchStart={isTopCat ? (e) => handleCatTouch(e, cat.id, columnId) : undefined}
+        onTouchMove={touchState.isDragging ? handleCatTouchMove : undefined}
+        onTouchEnd={touchState.isDragging ? handleCatTouchEnd : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
