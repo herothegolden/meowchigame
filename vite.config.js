@@ -7,12 +7,16 @@ export default defineConfig({
     host: '0.0.0.0',
     port: process.env.PORT || 3000
   },
+  preview: {
+    host: '0.0.0.0',
+    port: process.env.PORT || 3000
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets'
   },
-  preview: {
-    host: '0.0.0.0',
-    port: process.env.PORT || 3000
+  // Remove the preview.allowedHosts restriction
+  define: {
+    global: 'globalThis',
   }
 })
