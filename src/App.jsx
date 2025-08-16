@@ -463,7 +463,10 @@ const BottomNavBar = () => {
                onClick={() => handleTabClick(item.id)}
                className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg min-w-16 transition-all duration-200 ${
                  isActive 
-                   ? `bg-${item.color}-500 shadow-lg scale-105` 
+                   ? (item.color === 'orange' ? 'bg-orange-500' : 
+                      item.color === 'blue' ? 'bg-blue-500' : 
+                      item.color === 'purple' ? 'bg-purple-500' : 
+                      item.color === 'green' ? 'bg-green-500' : 'bg-gray-500') + ' shadow-lg scale-105'
                    : 'bg-gray-700 hover:bg-gray-600'
                }`}
              >
