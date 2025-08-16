@@ -336,14 +336,15 @@ function MeowChiGame() {
 
   const DraggableCat = ({ cat, columnId, index }) => {
     const isDraggedCat = dragState.draggedCat?.id === cat.id;
+    const isTopCat = index === gameState.columns[columnId].length - 1; // Only top cat can be dragged
     
     return (
       <div
-        className={`text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing ${
-          isDraggedCat && dragState.isDragging ? 'opacity-30' : 'hover:scale-105'
-        } ${gameState.isActive ? '' : 'cursor-default'}`}
-        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
-        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        className={`text-6xl select-none transition-all duration-200 p-1 ${
+          isTopCat && gameState.isActive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+        } ${isDraggedCat && dragState.isDragging ? 'opacity-30' : isTopCat ? 'hover:scale-105' : ''}`}
+        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
+        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
