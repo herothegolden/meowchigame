@@ -744,56 +744,83 @@ const BottomNavBar = () => {
 if (!gameState.gameStarted && gameState.currentTab === 'play') {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black relative overflow-hidden" style={{backgroundColor: '#FFD700'}}>
-        {/* Cat Character */}
-        <div className="absolute bottom-4 right-4 w-16 h-20">
-          <div className="relative">
-            {/* Cat body */}
-            <div className="w-12 h-16 bg-orange-400 rounded-full mx-auto" style={{backgroundColor: '#CD853F'}}></div>
-            {/* Cat head */}
-            <div className="w-10 h-10 bg-orange-400 rounded-full mx-auto -mt-6" style={{backgroundColor: '#CD853F'}}></div>
-            {/* Cat ears */}
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1">
-              <div className="w-3 h-3 bg-orange-400 rounded-full -rotate-45 absolute -left-2" style={{backgroundColor: '#CD853F'}}></div>
-              <div className="w-3 h-3 bg-orange-400 rounded-full rotate-45 absolute right-2" style={{backgroundColor: '#CD853F'}}></div>
-            </div>
-            {/* Cat eyes */}
-            <div className="absolute top-2 left-1/2 transform -translate-x-1/2">
-              <div className="w-1 h-1 bg-black rounded-full absolute -left-1"></div>
-              <div className="w-1 h-1 bg-black rounded-full absolute right-1"></div>
-            </div>
-            {/* Cat tail */}
-            <div className="w-2 h-8 bg-orange-400 rounded-full absolute -right-1 top-8 rotate-45" style={{backgroundColor: '#CD853F'}}></div>
+      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black" style={{backgroundColor: '#FFD700'}}>
+        <h1 className="text-4xl font-bold text-black mb-2" style={{textShadow: '2px 2px 0px white'}}>🐾 MEOWCHI CHAOS</h1>
+        <p className="text-black font-semibold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+          Drop cats. Cause mayhem. Match 3 before they scream.
+        </p>
+        
+        <div className="mb-6">
+          <div className="flex justify-center gap-2 mb-2">
+            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
+            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
+            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
+            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
+            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
           </div>
+          <p className="text-sm text-black font-bold" style={{textShadow: '1px 1px 0px white'}}>5 ridiculous cats to wrangle.</p>
         </div>
         
-return (
-  <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-    <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black relative overflow-hidden" style={{backgroundColor: '#FFD700'}}>
-      {/* Cat Character */}
-      <div className="absolute bottom-4 left-4 w-16 h-20">
-        <div className="relative">
-          {/* Cat body */}
-          <div className="w-12 h-16 bg-orange-400 rounded-full mx-auto" style={{backgroundColor: '#CD853F'}}></div>
-          {/* Cat head */}
-          <div className="w-10 h-10 bg-orange-400 rounded-full mx-auto -mt-6" style={{backgroundColor: '#CD853F'}}></div>
-          {/* Cat ears */}
-          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1">
-            <div className="w-3 h-3 bg-orange-400 rounded-full -rotate-45 absolute -left-2" style={{backgroundColor: '#CD853F'}}></div>
-            <div className="w-3 h-3 bg-orange-400 rounded-full rotate-45 absolute right-2" style={{backgroundColor: '#CD853F'}}></div>
-          </div>
-          {/* Cat eyes - sleepy/disappointed */}
-          <div className="absolute top-2 left-1/2 transform -translate-x-1/2">
-            <div className="w-2 h-0.5 bg-black rounded-full absolute -left-1"></div>
-            <div className="w-2 h-0.5 bg-black rounded-full absolute right-1"></div>
-          </div>
-          {/* Cat mouth - frown */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
-            <div className="w-1 h-1 border-b border-black rounded-full"></div>
-          </div>
+        <div className="mb-6 text-xs text-black font-semibold" style={{textShadow: '1px 1px 0px white'}}>
+          ⏱ 60 seconds of panic 🐾 +1000 purr-points 🔥 Combos = Catnado
+        </div>
+        
+        <button
+          onClick={startGame}
+          className="bg-black text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+        >
+          ▶️ LET'S GOOO!
+        </button>
+      </div>
+      <BottomNavBar />
+    </div>
+  );
+}
+
+if (!gameState.isActive && gameState.gameStarted) {
+  // Dynamic flavor text based on score
+  let flavorText = "🐾 That's tragic. Even my paw is better at this.";
+  if (gameState.score > 5000) {
+    flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
+  } else if (gameState.score > 2000) {
+    flavorText = "😼 Not bad. You may live another round.";
+  }
+  
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
+      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black" style={{backgroundColor: '#FFD700'}}>
+        <h2 className="text-3xl font-bold text-black mb-4" style={{textShadow: '2px 2px 0px white'}}>🎉 GAME OVER, HUMAN!</h2>
+        <div className="text-6xl font-bold text-black mb-2">{gameState.score}</div>
+        <p className="text-black font-semibold mb-2" style={{textShadow: '1px 1px 0px white'}}>Final Score</p>
+        <p className="text-sm text-black font-bold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+          😿 "Meowchi is disappointed but still cute."
+        </p>
+        <p className="text-xs text-black font-semibold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+          {flavorText}
+        </p>
+        
+        <div className="space-y-3">
+          <button
+            onClick={startGame}
+            className="w-full bg-black text-white font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            😺 PLAY AGAIN
+          </button>
+          
+          <button
+            onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
+            className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-3 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200"
+            style={{backgroundColor: '#FFD700'}}
+          >
+            📊 BOARD
+          </button>
         </div>
       </div>
-      
+      <BottomNavBar />
+    </div>
+  );
+}
+
  return (
    <div className="min-h-screen bg-gray-100 flex flex-col relative pb-20">
      {animations.map((animation) => (
@@ -858,7 +885,7 @@ return (
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">📍</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.left.length >= 10 ? 'Full' : 'Drop'}</span>
          </button>
          
@@ -871,7 +898,7 @@ return (
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">📍</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.center.length >= 10 ? 'Full' : 'Drop'}</span>
          </button>
          
@@ -884,7 +911,7 @@ return (
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">📍</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.right.length >= 10 ? 'Full' : 'Drop'}</span>
          </button>
        </div>
