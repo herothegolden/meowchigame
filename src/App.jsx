@@ -654,6 +654,7 @@ const BottomNavBar = () => {
          </div>
        </div>
      </div>
+     <BottomNavBar />
    </div>
  );
 
@@ -711,6 +712,7 @@ const BottomNavBar = () => {
          </div>
        </div>
      </div>
+     <BottomNavBar />
    </div>
  );
 
@@ -748,14 +750,15 @@ const BottomNavBar = () => {
          </div>
        </div>
      </div>
+     <BottomNavBar />
    </div>
  );
 
  // Main render logic
- if (gameState.currentTab === 'tasks') return <><TasksScreen /><BottomNavBar /></>;
- if (gameState.currentTab === 'leaderboard') return <><LeaderboardScreen /><BottomNavBar /></>;
- if (gameState.currentTab === 'bonus') return <><BonusScreen /><BottomNavBar /></>;
- if (gameState.currentTab === 'account') return <><AccountScreen /><BottomNavBar /></>;
+ if (gameState.currentTab === 'tasks') return <TasksScreen />;
+ if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
+ if (gameState.currentTab === 'bonus') return <BonusScreen />;
+ if (gameState.currentTab === 'account') return <AccountScreen />;
 
 if (!gameState.gameStarted && gameState.currentTab === 'play') {
   return (
