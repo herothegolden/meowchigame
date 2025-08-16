@@ -196,6 +196,10 @@ function MeowChiGame() {
       startPosition: { x: touch.clientX, y: touch.clientY },
       highlightedColumn: null
     });
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
   };
 
   const handleTouchMove = (e) => {
@@ -227,8 +231,12 @@ function MeowChiGame() {
     if (dragState.isDragging) {
       const touch = e.changedTouches[0];
       const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
+      if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
         moveCat(targetColumn);
+        // Add success haptic feedback
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
       }
     }
     resetDragState();
@@ -334,7 +342,7 @@ function MeowChiGame() {
     
     return (
       <div
-        className={`text-4xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing ${
+        className={`text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing ${
           isDraggedCat && dragState.isDragging ? 'opacity-30' : 'hover:scale-105'
         } ${gameState.isActive ? '' : 'cursor-default'}`}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
@@ -649,23 +657,6 @@ const BottomNavBar = () => {
      </div>
      <div className="p-4 space-y-3">
        <div className="bg-white rounded-lg p-4 shadow-sm">
-         <h3 className="font-semibold text-gray-800 mb-3">🏆 Today's Top Players</h3>
-         <div className="space-y-2">
-           <div className="flex justify-between items-center">
-             <span>🥇 @player1</span>
-             <span className="font-bold text-yellow-600">15,000 pts</span>
-           </div>
-           <div className="flex justify-between items-center">
-             <span>🥈 @player2</span>
-             <span className="font-bold text-gray-500">12,500 pts</span>
-           </div>
-           <div className="flex justify-between items-center">
-             <span>🥉 @player3</span>
-             <span className="font-bold text-orange-500">10,000 pts</span>
-           </div>
-         </div>
-       </div>
-       <div className="bg-white rounded-lg p-4 shadow-sm">
          <h3 className="font-semibold text-gray-800 mb-3">🌟 All-Time Champions</h3>
          <div className="space-y-2">
            <div className="flex justify-between items-center">
@@ -848,7 +839,7 @@ if (!gameState.isActive && gameState.gameStarted) {
 
      {dragState.isDragging && dragState.draggedCat && (
        <div
-         className="fixed pointer-events-none z-40 text-4xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
+         className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
          style={{
            left: dragState.dragPosition.x,
            top: dragState.dragPosition.y,
@@ -908,7 +899,7 @@ if (!gameState.isActive && gameState.gameStarted) {
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span>🔽</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
          
@@ -921,7 +912,7 @@ if (!gameState.isActive && gameState.gameStarted) {
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span>🔽</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
          
@@ -934,13 +925,13 @@ if (!gameState.isActive && gameState.gameStarted) {
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span>🔽</span>
+           <span className="text-red-500">🔽</span>
            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
        </div>
        
        <p className="text-center text-gray-500 text-xs">
-         💡 Drag cats between columns!
+         💡 Tip: Drag top cats between columns!
        </p>
      </div>
 
@@ -949,4 +940,20 @@ if (!gameState.isActive && gameState.gameStarted) {
  );
 }
 
-export default MeowChiGame;
+export default MeowChiGame;<h3 className="font-semibold text-gray-800 mb-3">🏆 Today's Top Players</h3>
+         <div className="space-y-2">
+           <div className="flex justify-between items-center">
+             <span>🥇 @player1</span>
+             <span className="font-bold text-yellow-600">15,000 pts</span>
+           </div>
+           <div className="flex justify-between items-center">
+             <span>🥈 @player2</span>
+             <span className="font-bold text-gray-500">12,500 pts</span>
+           </div>
+           <div className="flex justify-between items-center">
+             <span>🥉 @player3</span>
+             <span className="font-bold text-orange-500">10,000 pts</span>
+           </div>
+         </div>
+       </div>
+       <div className="bg-white rounded-lg p-4 shadow-sm">
