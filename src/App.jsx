@@ -340,11 +340,25 @@ function MeowChiGame() {
     
     return (
       <div
-        className="flex-1 max-w-20 border-2 border-gray-300 rounded-lg p-2 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full"
-        onDragOver={(e) => e.preventDefault()}
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full transition-colors ${
+          dragData && dragData.fromColumn !== columnId && !isFull 
+            ? 'border-green-400 bg-green-50' 
+            : 'border-gray-300'
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }}
+        onDragEnter={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          endDrag(e, columnId);
+          endDrag(columnId);
+        }}
+        onClick={() => {
+          // Fallback: click to move if drag doesn't work
+          if (dragData && dragData.fromColumn !== columnId) {
+            endDrag(columnId);
+          }
         }}
       >
         {cats.map((cat, index) => (
