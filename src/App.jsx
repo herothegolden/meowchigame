@@ -313,36 +313,17 @@ function MeowChiGame() {
     });
   };
 
-  useEffect(() => {
-    if (dragState.draggedCat) {
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
-      document.addEventListener('touchend', handleTouchEnd, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEnd);
-      };
-    }
-  }, [dragState.draggedCat]);
+  // No complex event listeners needed for click-based approach
 
   const DraggableCat = ({ cat, columnId, index }) => {
-    const isDraggedCat = dragState.draggedCat?.id === cat.id;
     const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
-        className={`text-6xl select-none transition-all duration-200 p-1 ${
-          isTopCat && gameState.isActive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
-        } ${isDraggedCat && dragState.isDragging ? 'opacity-50' : isTopCat ? 'hover:scale-105' : ''}`}
-        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
-        style={{
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          MozUserSelect: 'none',
-          msUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent'
-        }}
+        className="text-6xl select-none p-1 cursor-grab"
+        draggable={isTopCat && gameState.isActive}
+        onDragStart={isTopCat ? (e) => startDrag(e, cat.id, columnId) : undefined}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         {cat.emoji}
       </div>
@@ -350,19 +331,16 @@ function MeowChiGame() {
   };
 
   const GameColumn = ({ columnId, cats }) => {
-    const isHighlighted = dragState.highlightedColumn === columnId;
     const isFull = cats.length >= 6;
     
     return (
       <div
-        data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
-          isHighlighted && !isFull
-            ? 'border-blue-400 bg-blue-50 shadow-lg scale-105 ring-2 ring-blue-300' 
-            : isFull
-            ? 'border-red-300 bg-red-50'
-            : 'border-gray-300'
-        }`}
+        className="flex-1 max-w-20 border-2 border-gray-300 rounded-lg p-2 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          endDrag(e, columnId);
+        }}
       >
         {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
