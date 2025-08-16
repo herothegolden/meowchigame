@@ -321,15 +321,20 @@ function MeowChiGame() {
     
     return (
       <div
-        className="text-6xl select-none p-1 cursor-grab hover:scale-105 transition-transform"
-        draggable={isTopCat && gameState.isActive}
-        onDragStart={isTopCat ? (e) => startDrag(e, cat.id, columnId) : undefined}
+        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onTouchStart={() => {
           if (isTopCat && navigator.vibrate) {
             navigator.vibrate(50);
           }
         }}
-        style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          MozUserSelect: 'none',
+          msUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitTapHighlightColor: 'transparent'
+        }}
       >
         {cat.emoji}
       </div>
@@ -341,28 +346,7 @@ function MeowChiGame() {
     
     return (
       <div
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full transition-colors ${
-          dragData && dragData.fromColumn !== columnId && !isFull 
-            ? 'border-green-400 bg-green-50' 
-            : 'border-gray-300'
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = "move";
-          }
-        }}
-        onDragEnter={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          endDrag(columnId);
-        }}
-        onClick={() => {
-          // Fallback: click to move if drag doesn't work
-          if (dragData && dragData.fromColumn !== columnId) {
-            endDrag(columnId);
-          }
-        }}
+        className="flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full border-gray-300"
       >
         {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
