@@ -522,297 +522,11 @@ function MeowChiGame() {
       </div>
       
       <div className="p-4 space-y-6">
-        {/* Main Tasks Section */}
         <div>
           <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
           
-          {/* Social Media Tasks */}
           <div className="space-y-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">🌟 All-Time Champions</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>👑 @champion1</span>
-              <span className="font-bold text-purple-600">50,000 pts</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>⭐ @champion2</span>
-              <span className="font-bold text-blue-600">45,000 pts</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const BonusScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
-      <div className="bg-green-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
-        <h1 className="text-lg font-semibold">Bonus Time</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
-          <p className="text-gray-600 text-sm">Added to your game timer!</p>
-        </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">Earn More Time</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span>📱 Share with friends</span>
-              <span className="text-green-600 font-bold">+10s each</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>📺 Join Telegram channel</span>
-              <span className="text-green-600 font-bold">+10s</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>📷 Follow Instagram</span>
-              <span className="text-green-600 font-bold">+10s</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const AccountScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
-      <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
-        <h1 className="text-lg font-semibold">Account</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800">@username</h3>
-          <p className="text-gray-600 text-sm">MeowChi Player</p>
-        </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">Your Stats</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>Games Played</span>
-              <span className="font-bold">127</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Best Score</span>
-              <span className="font-bold text-purple-600">15,000</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Total Matches</span>
-              <span className="font-bold">1,234</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Friends Invited</span>
-              <span className="font-bold text-green-600">8</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Render different screens based on current tab
-  if (gameState.currentTab === 'tasks') return <><TasksScreen /><BottomNavBar /></>;
-  if (gameState.currentTab === 'leaderboard') return <><LeaderboardScreen /><BottomNavBar /></>;
-  if (gameState.currentTab === 'bonus') return <><BonusScreen /><BottomNavBar /></>;
-  if (gameState.currentTab === 'account') return <><AccountScreen /><BottomNavBar /></>;
-
-  if (!gameState.gameStarted && gameState.currentTab === 'play') {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-purple-400 to-purple-600 flex flex-col items-center justify-center p-4 pb-20">
-        <div className="text-center bg-white rounded-2xl shadow-xl p-8 max-w-sm">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">🐾 MeowChi</h1>
-          <p className="text-gray-600 mb-6">
-            Drop cats and drag them between columns to create matches of 3!
-          </p>
-          
-          <div className="mb-6">
-            <div className="flex justify-center gap-2 mb-2">
-              {CAT_EMOJIS.map((cat, i) => (
-                <span key={i} className="text-2xl">{cat}</span>
-              ))}
-            </div>
-            <p className="text-sm text-gray-500">5 different cats to match!</p>
-          </div>
-          
-          <button
-            onClick={startGame}
-            className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-          >
-            ▶️ Start Game
-          </button>
-          
-          <div className="mt-4 text-xs text-gray-500">
-            ⏰ 60 seconds • 🎯 1000 pts per match • 🔥 Combo bonuses
-          </div>
-        </div>
-        <BottomNavBar />
-      </div>
-    );
-  }
-
-  if (!gameState.isActive && gameState.gameStarted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-purple-400 to-purple-600 flex flex-col items-center justify-center p-4 pb-20">
-        <div className="text-center bg-white rounded-2xl shadow-xl p-8 max-w-sm">
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">🎉 Game Over!</h2>
-          <div className="text-6xl font-bold text-blue-600 mb-2">{gameState.score}</div>
-          <p className="text-gray-600 mb-6">Final Score</p>
-          
-          <div className="space-y-3">
-            <button
-              onClick={startGame}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-            >
-              🔁 Play Again
-            </button>
-            
-            <button
-              onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
-              className="w-full bg-gray-200 text-gray-700 font-bold py-3 px-6 rounded-full hover:bg-gray-300 transition-all duration-200"
-            >
-              📊 Main Menu
-            </button>
-          </div>
-        </div>
-        <BottomNavBar />
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col relative pb-20">
-      {/* Explosion Animations */}
-      {animations.map((animation) => (
-        <ExplosionAnimation key={animation.id} animation={animation} />
-      ))}
-
-      {/* Dragged Cat Ghost */}
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="fixed pointer-events-none z-40 text-4xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
-        </div>
-      )}
-
-      {/* Telegram-style Header */}
-      <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-          🎮
-        </div>
-        <h1 className="text-lg font-semibold">MeowChi Bot</h1>
-      </div>
-
-      {/* Game Stats */}
-      <div className="bg-white p-4 flex justify-between items-center border-b">
-        <div className="flex items-center gap-2">
-          <span>⏰</span>
-          <span className="font-semibold">Time: {gameState.timeLeft}s</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span>💯</span>
-          <span className="font-semibold">Score: {gameState.score}</span>
-        </div>
-      </div>
-
-      {/* Next Cat Preview */}
-      <div className="p-4">
-        <div className="bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl p-6 text-center text-white">
-          <h3 className="text-white font-semibold mb-4">NEXT CAT TO DROP</h3>
-          <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center mx-auto">
-            <span className="text-4xl">{gameState.nextCat}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div className="flex-1 p-4">
-        <div ref={boardRef} className="flex justify-center gap-4 mb-6">
-          <GameColumn 
-            columnId="left" 
-            cats={gameState.columns.left}
-          />
-          <GameColumn 
-            columnId="center" 
-            cats={gameState.columns.center}
-          />
-          <GameColumn 
-            columnId="right" 
-            cats={gameState.columns.right}
-          />
-        </div>
-      </div>
-
-      {/* Bottom Controls */}
-      <div className="p-4 bg-white border-t">
-        <div className="flex gap-3 mb-3">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 10}
-            className={`
-              flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
-              ${gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 10
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }
-            `}
-          >
-            <span className="text-red-500">📍</span>
-            <span>{gameState.columns.left.length >= 10 ? 'Full' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 10}
-            className={`
-              flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
-              ${gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 10
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }
-            `}
-          >
-            <span className="text-red-500">📍</span>
-            <span>{gameState.columns.center.length >= 10 ? 'Full' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 10}
-            className={`
-              flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
-              ${gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 10
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }
-            `}
-          >
-            <span className="text-red-500">📍</span>
-            <span>{gameState.columns.right.length >= 10 ? 'Full' : 'Drop'}</span>
-          </button>
-        </div>
-        
-        <p className="text-center text-gray-500 text-sm italic">
-          💡 Tip: Drag top cats between columns!
-        </p>
-      </div>
-
-      {/* Bottom Navigation Bar */}
-      <BottomNavBar />
-    </div>
-  );
-}
-
-export default MeowChiGame;gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
+            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="text-4xl">🐱</div>
                 <div className="flex items-center gap-2">
@@ -876,7 +590,6 @@ export default MeowChiGame;gray-50 rounded-2xl p-4 flex items-center justify-bet
             </div>
           </div>
 
-          {/* Invite Friends Tasks */}
           <div className="space-y-4 mt-6">
             {[
               { friends: 1, reward: 2500 },
@@ -912,7 +625,6 @@ export default MeowChiGame;gray-50 rounded-2xl p-4 flex items-center justify-bet
           </div>
         </div>
 
-        {/* Daily Tasks Section */}
         <div>
           <h2 className="text-gray-800 text-xl font-bold mb-4">Daily Tasks</h2>
           
@@ -996,4 +708,6 @@ export default MeowChiGame;gray-50 rounded-2xl p-4 flex items-center justify-bet
             </div>
           </div>
         </div>
-        <div className="bg-
+        <div className="bg-white rounded-lg p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-3">🌟 All-Time Champions</h3>
+          <div className="
