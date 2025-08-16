@@ -91,7 +91,6 @@ function MeowChiGame() {
       nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
     }));
     setAnimations([]);
-    setDragData(null); // Clear any drag state
   };
 
   const endGame = () => {
@@ -318,10 +317,25 @@ function MeowChiGame() {
 
   const DraggableCat = ({ cat, columnId, index }) => {
     const isTopCat = index === gameState.columns[columnId].length - 1;
+    const isBeingDragged = draggedCat?.id === cat.id;
+    
+    const handleDragStart = (e) => {
+      if (!isTopCat || !gameState.isActive) {
+        e.preventDefault();
+        return;
+      }
+      setIsDragging(true);
+      setDraggedCat({ ...cat, fromColumn: columnId });
+      if (navigator.vibrate) navigator.vibrate(50);
+    };
     
     return (
       <div
-        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        className={`text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105 ${
+          isBeingDragged ? 'opacity-50' : ''
+        }`}
+        draggable={isTopCat && gameState.isActive}
+        onDragStart={handleDragStart}
         onTouchStart={() => {
           if (isTopCat && navigator.vibrate) {
             navigator.vibrate(50);
@@ -343,10 +357,49 @@ function MeowChiGame() {
 
   const GameColumn = ({ columnId, cats }) => {
     const isFull = cats.length >= 6;
+    const canDrop = isDragging && draggedCat && draggedCat.fromColumn !== columnId && !isFull;
+    
+    const handleDrop = (e) => {
+      e.preventDefault();
+      if (!draggedCat || !isDragging) return;
+      
+      if (draggedCat.fromColumn !== columnId && !isFull) {
+        // Move the cat
+        setGameState(prev => {
+          const newColumns = { ...prev.columns };
+          // Remove from source
+          newColumns[draggedCat.fromColumn] = newColumns[draggedCat.fromColumn].filter(
+            cat => cat.id !== draggedCat.id
+          );
+          // Add to target
+          newColumns[columnId] = [...newColumns[columnId], { id: draggedCat.id, emoji: draggedCat.emoji }];
+          
+          // Check for matches
+          const { updatedColumns, scoreGained } = checkMatches(newColumns, columnId);
+          
+          return {
+            ...prev,
+            columns: updatedColumns,
+            score: prev.score + scoreGained,
+            consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
+          };
+        });
+        
+        if (navigator.vibrate) navigator.vibrate(100);
+      }
+      
+      // Reset drag state
+      setIsDragging(false);
+      setDraggedCat(null);
+    };
     
     return (
       <div
-        className="flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full border-gray-300"
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
+          canDrop ? 'border-green-400 bg-green-50' : 'border-gray-300'
+        }`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
       >
         {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
