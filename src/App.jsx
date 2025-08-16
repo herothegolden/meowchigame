@@ -744,30 +744,32 @@ const BottomNavBar = () => {
 if (!gameState.gameStarted && gameState.currentTab === 'play') {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black" style={{backgroundColor: '#FFD700'}}>
-        <h1 className="text-4xl font-bold text-black mb-2" style={{textShadow: '2px 2px 0px white'}}>🐾 MEOWCHI CHAOS</h1>
-        <p className="text-black font-semibold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+        <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
+        <p className="text-black text-xl font-bold mb-8">
           Drop cats. Cause mayhem. Match 3 before they scream.
         </p>
         
-        <div className="mb-6">
-          <div className="flex justify-center gap-2 mb-2">
-            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
-            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
-            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
-            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
-            <span className="text-2xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+        <div className="mb-8">
+          <div className="flex justify-center gap-3 mb-4">
+            <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
+            <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
+            <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
+            <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
+            <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
           </div>
-          <p className="text-sm text-black font-bold" style={{textShadow: '1px 1px 0px white'}}>5 ridiculous cats to wrangle.</p>
+          <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
         </div>
         
-        <div className="mb-6 text-xs text-black font-semibold" style={{textShadow: '1px 1px 0px white'}}>
-          ⏱ 60 seconds of panic 🐾 +1000 purr-points 🔥 Combos = Catnado
+        <div className="mb-8 text-lg text-black font-bold leading-relaxed">
+          <div>⏱ 60 seconds of panic</div>
+          <div>🐾 +1000 purr-points</div>
+          <div>🔥 Combos = Catnado</div>
         </div>
         
         <button
           onClick={startGame}
-          className="bg-black text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+          className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
         >
           ▶️ LET'S GOOO!
         </button>
@@ -776,7 +778,7 @@ if (!gameState.gameStarted && gameState.currentTab === 'play') {
     </div>
   );
 }
-
+  
 if (!gameState.isActive && gameState.gameStarted) {
   // Dynamic flavor text based on score
   let flavorText = "🐾 That's tragic. Even my paw is better at this.";
@@ -788,28 +790,28 @@ if (!gameState.isActive && gameState.gameStarted) {
   
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm border-4 border-black" style={{backgroundColor: '#FFD700'}}>
-        <h2 className="text-3xl font-bold text-black mb-4" style={{textShadow: '2px 2px 0px white'}}>🎉 GAME OVER, HUMAN!</h2>
-        <div className="text-6xl font-bold text-black mb-2">{gameState.score}</div>
-        <p className="text-black font-semibold mb-2" style={{textShadow: '1px 1px 0px white'}}>Final Score</p>
-        <p className="text-sm text-black font-bold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+      <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+        <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+        <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
+        <p className="text-black text-xl font-bold mb-4">Final Score</p>
+        <p className="text-lg text-black font-bold mb-4">
           😿 "Meowchi is disappointed but still cute."
         </p>
-        <p className="text-xs text-black font-semibold mb-6" style={{textShadow: '1px 1px 0px white'}}>
+        <p className="text-base text-black font-bold mb-8">
           {flavorText}
         </p>
         
-        <div className="space-y-3">
+        <div className="space-y-4">
           <button
             onClick={startGame}
-            className="w-full bg-black text-white font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
           >
             😺 PLAY AGAIN
           </button>
           
           <button
             onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
-            className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-3 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200"
+            className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
             style={{backgroundColor: '#FFD700'}}
           >
             📊 BOARD
@@ -820,8 +822,8 @@ if (!gameState.isActive && gameState.gameStarted) {
     </div>
   );
 }
-
- return (
+  
+return (
    <div className="min-h-screen bg-gray-100 flex flex-col relative pb-20">
      {animations.map((animation) => (
        <ExplosionAnimation key={animation.id} animation={animation} />
