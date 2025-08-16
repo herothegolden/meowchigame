@@ -320,9 +320,14 @@ function MeowChiGame() {
     
     return (
       <div
-        className="text-6xl select-none p-1 cursor-grab"
+        className="text-6xl select-none p-1 cursor-grab hover:scale-105 transition-transform"
         draggable={isTopCat && gameState.isActive}
         onDragStart={isTopCat ? (e) => startDrag(e, cat.id, columnId) : undefined}
+        onTouchStart={() => {
+          if (isTopCat && navigator.vibrate) {
+            navigator.vibrate(50);
+          }
+        }}
         style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         {cat.emoji}
