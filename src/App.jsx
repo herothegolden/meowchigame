@@ -754,6 +754,53 @@ function MeowChiGame() {
         </p>
       </div>
 
+      <div className="p-3 bg-white border-t">
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => dropNewCat('left')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-red-500">🔽</span>
+            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+          
+          <button
+            onClick={() => dropNewCat('center')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-red-500">🔽</span>
+            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+          
+          <button
+            onClick={() => dropNewCat('right')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-red-500">🔽</span>
+            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+        </div>
+        
+        <p className="text-center text-gray-500 text-xs">
+          💡 Tip: Drag top cats between columns!
+        </p>
+      </div>
+
       <BottomNavBar />
     </div>
   );
