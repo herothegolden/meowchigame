@@ -27,6 +27,13 @@ function MeowChiGame() {
   });
 
   const [animations, setAnimations] = useState([]);
+  const [currentTagline, setCurrentTagline] = useState(0);
+  const taglines = [
+    "😼 Chaos Mode Activated",
+    "🐾 Don't Blink, Human", 
+    "🔥 Catnado Incoming"
+  ];
+  
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
   const dragThreshold = 15;
@@ -58,6 +65,16 @@ function MeowChiGame() {
       }
     };
   }, [gameState.timeLeft, gameState.isActive]);
+
+  // Tagline rotation
+  useEffect(() => {
+    if (gameState.isActive) {
+      const taglineTimer = setInterval(() => {
+        setCurrentTagline(prev => (prev + 1) % taglines.length);
+      }, 2000);
+      return () => clearInterval(taglineTimer);
+    }
+  }, [gameState.isActive]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -100,7 +117,7 @@ function MeowChiGame() {
 
   const dropNewCat = (column) => {
     if (!gameState.isActive || dragState.isDragging) return;
-    if (gameState.columns[column].length >= 10) return;
+    if (gameState.columns[column].length >= 6) return; // Hard limit at 6
 
     const newCat = { id: generateCatId(), emoji: gameState.nextCat };
     const nextNextCat = CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)];
@@ -262,7 +279,7 @@ function MeowChiGame() {
   };
 
   const moveCat = (targetColumn) => {
-    if (gameState.columns[targetColumn].length >= 10) return;
+    if (gameState.columns[targetColumn].length >= 6) return; // Hard limit at 6
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       newColumns[dragState.fromColumn] = newColumns[dragState.fromColumn].filter(
@@ -338,12 +355,12 @@ function MeowChiGame() {
 
   const GameColumn = ({ columnId, cats }) => {
     const isHighlighted = dragState.highlightedColumn === columnId;
-    const isFull = cats.length >= 10;
+    const isFull = cats.length >= 6;
     
     return (
       <div
         data-column={columnId}
-        className={`h-80 w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden ${
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
           isHighlighted && !isFull
             ? 'border-blue-400 bg-blue-50 shadow-lg scale-105 ring-2 ring-blue-300' 
             : isFull
@@ -356,7 +373,7 @@ function MeowChiGame() {
         ))}
         
         {cats.length === 0 && (
-          <div className="text-gray-300 text-xs text-center mt-16">Empty</div>
+          <div className="text-gray-300 text-xs text-center mt-8">Empty</div>
         )}
         
         {isFull && (
@@ -778,7 +795,7 @@ if (!gameState.gameStarted && gameState.currentTab === 'play') {
     </div>
   );
 }
-  
+
 if (!gameState.isActive && gameState.gameStarted) {
   // Dynamic flavor text based on score
   let flavorText = "🐾 That's tragic. Even my paw is better at this.";
@@ -822,9 +839,9 @@ if (!gameState.isActive && gameState.gameStarted) {
     </div>
   );
 }
-  
-return (
-   <div className="min-h-screen bg-gray-100 flex flex-col relative pb-20">
+
+ return (
+   <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden">
      {animations.map((animation) => (
        <ExplosionAnimation key={animation.id} animation={animation} />
      ))}
@@ -841,85 +858,89 @@ return (
        </div>
      )}
 
-     <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-       <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-         🎮
-       </div>
-       <h1 className="text-lg font-semibold">MeowChi Bot</h1>
+     {/* Header with rotating tagline */}
+     <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
+       <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
      </div>
 
-     <div className="bg-white p-4 flex justify-between items-center border-b">
+     {/* Timer and Score - Big and Bold */}
+     <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
        <div className="flex items-center gap-2">
-         <span>⏰</span>
-         <span className="font-semibold">Time: {gameState.timeLeft}s</span>
+         <span className="text-2xl">⏱</span>
+         <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
+           {gameState.timeLeft}s
+         </span>
        </div>
        <div className="flex items-center gap-2">
-         <span>💯</span>
-         <span className="font-semibold">Score: {gameState.score}</span>
+         <span className="text-2xl">🐾</span>
+         <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
        </div>
      </div>
 
-     <div className="p-4">
-       <div className="bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl p-6 text-center text-white">
-         <h3 className="text-white font-semibold mb-4">NEXT CAT TO DROP</h3>
-         <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center mx-auto">
-           <span className="text-4xl">{gameState.nextCat}</span>
+     {/* Next Cat - Compact */}
+     <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
+       <div className="flex items-center justify-center gap-3 text-white">
+         <span className="font-semibold">NEXT:</span>
+         <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+           <span className="text-2xl">{gameState.nextCat}</span>
          </div>
        </div>
      </div>
 
-     <div className="flex-1 p-4">
-       <div ref={boardRef} className="flex justify-center gap-4 mb-6">
+     {/* Game Board - Flexible height */}
+     <div className="flex-1 p-3 min-h-0">
+       <div ref={boardRef} className="flex justify-center gap-3 h-full">
          <GameColumn columnId="left" cats={gameState.columns.left} />
          <GameColumn columnId="center" cats={gameState.columns.center} />
          <GameColumn columnId="right" cats={gameState.columns.right} />
        </div>
      </div>
 
-     <div className="p-4 bg-white border-t">
-       <div className="flex gap-3 mb-3">
+     {/* Drop Buttons - Fixed at bottom */}
+     <div className="p-3 bg-white border-t">
+       <div className="flex gap-2 mb-2">
          <button
            onClick={() => dropNewCat('left')}
-           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 10}
-           className={`flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-             gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 10
-               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
+           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+           className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+             gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">🔽</span>
-           <span>{gameState.columns.left.length >= 10 ? 'Full' : 'Drop'}</span>
+           <span>🔽</span>
+           <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
          
          <button
            onClick={() => dropNewCat('center')}
-           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 10}
-           className={`flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-             gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 10
-               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
+           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+           className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+             gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">🔽</span>
-           <span>{gameState.columns.center.length >= 10 ? 'Full' : 'Drop'}</span>
+           <span>🔽</span>
+           <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
          
          <button
            onClick={() => dropNewCat('right')}
-           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 10}
-           className={`flex-1 py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-             gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 10
-               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg' 
+           disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+           className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
+             gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+               ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
            }`}
          >
-           <span className="text-red-500">🔽</span>
-           <span>{gameState.columns.right.length >= 10 ? 'Full' : 'Drop'}</span>
+           <span>🔽</span>
+           <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
          </button>
        </div>
        
-       <p className="text-center text-gray-500 text-sm italic">
-         💡 Tip: Drag top cats between columns!
+       <p className="text-center text-gray-500 text-xs">
+         💡 Drag cats between columns!
        </p>
      </div>
 
