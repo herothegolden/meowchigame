@@ -400,6 +400,47 @@ function App() {
     resetDragState();
   };
 
+  const handleMouseDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: null
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragState.isDragging) return;
+    
+    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+    
+    setDragState(prev => ({
+      ...prev,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: targetColumn
+    }));
+  };
+
+  const handleMouseUp = (e) => {
+    if (!dragState.isDragging) return;
+    
+    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+    
+    if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+      moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+    }
+    
+    resetDragState();
+  };
+
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
