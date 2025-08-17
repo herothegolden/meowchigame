@@ -421,6 +421,50 @@ function App() {
     });
   };
 
+  // Document-level touch listeners for Telegram compatibility
+  useEffect(() => {
+    if (!dragState.draggedCat) return;
+
+    const onMove = (e) => {
+      // mirror handleTouchMove
+      e.preventDefault();
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const targetColumn = getColumnFromPosition(t.clientX, t.clientY);
+      setDragState(prev => ({
+        ...prev,
+        isDragging: true,
+        dragPosition: { x: t.clientX, y: t.clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+
+    const onEnd = (e) => {
+      e.preventDefault();
+      const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+      if (t && dragState.draggedCat) {
+        const targetColumn = getColumnFromPosition(t.clientX, t.clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn) {
+          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+        }
+      }
+      resetDragState();
+    };
+
+    const onCancel = () => {
+      resetDragState();
+    };
+
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd, { passive: false });
+    document.addEventListener('touchcancel', onCancel, { passive: false });
+    return () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onCancel);
+    };
+  }, [dragState.draggedCat, dragState.fromColumn]);
+
   const DraggableCat = ({ cat, columnId, index }) => {
     
     return (
