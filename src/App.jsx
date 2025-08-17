@@ -76,66 +76,84 @@ function MeowChiGame() {
     }
   }, [gameState.isActive]);
 
-  // Simpler mobile-friendly drag approach
+  // MINIMAL TOUCH DRAG - Added to original code
   useEffect(() => {
-    let touchMoveHandler = null;
-    let touchEndHandler = null;
+    let touching = null;
 
-    if (dragState.draggedCat) {
-      touchMoveHandler = (e) => {
-        console.log('Touch move detected'); // Debug log
-        const touch = e.touches[0];
-        const currentPos = { x: touch.clientX, y: touch.clientY };
-        
-        if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-          setDragState(prev => ({ ...prev, isDragging: true }));
-          console.log('Started dragging'); // Debug log
-        }
-        
-        if (dragState.isDragging) {
-          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-          setDragState(prev => ({
-            ...prev,
-            dragPosition: { x: touch.clientX, y: touch.clientY },
-            highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-          }));
-        }
-        
-        e.preventDefault();
+    function onTouchStart(e) {
+      const cat = e.target.closest('[data-draggable-cat]');
+      if (!cat || !gameState.isActive) return;
+      
+      const isTop = cat.dataset.isTop === 'true';
+      if (!isTop) return;
+
+      const touch = e.touches[0];
+      touching = {
+        catId: cat.dataset.catId,
+        column: cat.dataset.column,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        element: cat
       };
 
-      touchEndHandler = (e) => {
-        console.log('Touch end detected'); // Debug log
-        if (dragState.isDragging) {
-          const touch = e.changedTouches[0];
-          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-          console.log('Drop on column:', targetColumn); // Debug log
-          
-          if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-          }
-        }
-        resetDragState();
-        e.preventDefault();
-      };
-
-      // Add listeners with passive: false to allow preventDefault
-      document.addEventListener('touchmove', touchMoveHandler, { passive: false });
-      document.addEventListener('touchend', touchEndHandler, { passive: false });
-      document.addEventListener('touchcancel', touchEndHandler, { passive: false });
+      if (navigator.vibrate) navigator.vibrate(50);
     }
 
-    return () => {
-      if (touchMoveHandler) {
-        document.removeEventListener('touchmove', touchMoveHandler);
-        document.removeEventListener('touchend', touchEndHandler);
-        document.removeEventListener('touchcancel', touchEndHandler);
+    function onTouchMove(e) {
+      if (!touching) return;
+      
+      const touch = e.touches[0];
+      const dx = touch.clientX - touching.startX;
+      const dy = touch.clientY - touching.startY;
+      
+      if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+        touching.element.style.opacity = '0.5';
+        e.preventDefault();
       }
+    }
+
+    function onTouchEnd(e) {
+      if (!touching) return;
+      
+      const touch = e.changedTouches[0];
+      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+      const targetColumn = target?.closest('[data-column]')?.dataset.column;
+      
+      if (targetColumn && targetColumn !== touching.column && gameState.columns[targetColumn].length < 6) {
+        const catToMove = gameState.columns[touching.column].find(c => c.id === touching.catId);
+        
+        setGameState(prev => {
+          const newCols = { ...prev.columns };
+          newCols[touching.column] = newCols[touching.column].filter(c => c.id !== touching.catId);
+          newCols[targetColumn] = [...newCols[targetColumn], catToMove];
+          
+          const { updatedColumns, scoreGained } = checkMatches(newCols, targetColumn);
+          
+          return {
+            ...prev,
+            columns: updatedColumns,
+            score: prev.score + scoreGained,
+            consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
+          };
+        });
+        
+        if (navigator.vibrate) navigator.vibrate(100);
+      }
+      
+      if (touching.element) touching.element.style.opacity = '';
+      touching = null;
+    }
+
+    document.addEventListener('touchstart', onTouchStart);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+    
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
     };
-  }, [dragState.draggedCat, dragState.isDragging]);
+  }, [gameState.isActive, gameState.columns]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -152,7 +170,14 @@ function MeowChiGame() {
       nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
     }));
     setAnimations([]);
-    resetDragState();
+    setDragState({
+      isDragging: false,
+      draggedCat: null,
+      fromColumn: null,
+      dragPosition: { x: 0, y: 0 },
+      highlightedColumn: null,
+      startPosition: { x: 0, y: 0 }
+    });
   };
 
   const endGame = () => {
@@ -246,13 +271,10 @@ function MeowChiGame() {
 
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    
-    // Don't prevent default immediately - let's see if this helps
+    e.preventDefault();
+    e.stopPropagation();
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    console.log('Touch start detected:', catId, fromColumn); // Debug log
-    
     setDragState({
       isDragging: false,
       draggedCat: cat,
@@ -261,14 +283,48 @@ function MeowChiGame() {
       startPosition: { x: touch.clientX, y: touch.clientY },
       highlightedColumn: null
     });
-    
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
-    
-    // Prevent default after setting state
+  };
+
+  const handleTouchMove = (e) => {
+    if (!dragState.draggedCat) return;
     e.preventDefault();
     e.stopPropagation();
+    const touch = e.touches[0];
+    const currentPos = { x: touch.clientX, y: touch.clientY };
+    
+    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
+      setDragState(prev => ({ ...prev, isDragging: true }));
+    }
+    
+    if (dragState.isDragging) {
+      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: touch.clientX, y: touch.clientY },
+        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
+      }));
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!dragState.draggedCat) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (dragState.isDragging) {
+      const touch = e.changedTouches[0];
+      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+      if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
+        moveCat(targetColumn);
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+      }
+    }
+    resetDragState();
   };
 
   const handleMouseDown = (e, catId, fromColumn) => {
@@ -284,6 +340,35 @@ function MeowChiGame() {
       startPosition: { x: e.clientX, y: e.clientY },
       highlightedColumn: null
     });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragState.draggedCat) return;
+    const currentPos = { x: e.clientX, y: e.clientY };
+    
+    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
+      setDragState(prev => ({ ...prev, isDragging: true }));
+    }
+    
+    if (dragState.isDragging) {
+      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: e.clientX, y: e.clientY },
+        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
+      }));
+    }
+  };
+
+  const handleMouseUp = (e) => {
+    if (!dragState.draggedCat) return;
+    if (dragState.isDragging) {
+      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+      if (targetColumn && targetColumn !== dragState.fromColumn) {
+        moveCat(targetColumn);
+      }
+    }
+    resetDragState();
   };
 
   const moveCat = (targetColumn) => {
@@ -315,18 +400,57 @@ function MeowChiGame() {
     });
   };
 
+  // Global listeners for desktop drag
+  useEffect(() => {
+    const handleGlobalMouseMove = (e) => {
+      if (dragState.draggedCat) {
+        handleMouseMove(e);
+      }
+    };
+
+    const handleGlobalMouseUp = (e) => {
+      if (dragState.draggedCat) {
+        handleMouseUp(e);
+      }
+    };
+
+    const handleGlobalTouchMove = (e) => {
+      if (dragState.draggedCat) {
+        handleTouchMove(e);
+      }
+    };
+
+    const handleGlobalTouchEnd = (e) => {
+      if (dragState.draggedCat) {
+        handleTouchEnd(e);
+      }
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+    };
+  }, [dragState.draggedCat]);
+
   const DraggableCat = ({ cat, columnId, index }) => {
     const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
-        className={`text-6xl select-none transition-all duration-200 p-1 ${
-          isTopCat ? 'cursor-grab active:cursor-grabbing hover:scale-105' : 'cursor-default'
-        }`}
-        data-draggable={isTopCat ? 'true' : 'false'}
+        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        data-draggable-cat="true"
         data-cat-id={cat.id}
         data-column={columnId}
         data-is-top={isTopCat}
+        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
+        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -334,7 +458,6 @@ function MeowChiGame() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: isTopCat ? 'none' : 'auto',
           opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.3 : 1
         }}
       >
@@ -351,7 +474,7 @@ function MeowChiGame() {
       <div
         data-column={columnId}
         className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
-          isHighlighted ? 'border-green-400 bg-green-50 shadow-lg' : 'border-gray-300'
+          isHighlighted ? 'border-green-400 bg-green-50' : 'border-gray-300'
         }`}
       >
         {cats.map((cat, index) => (
