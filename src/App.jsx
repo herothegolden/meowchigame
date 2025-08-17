@@ -81,6 +81,7 @@ function MeowChiGame() {
     const handleGlobalTouchMove = (e) => {
       if (dragState.draggedCat) {
         e.preventDefault();
+        e.stopPropagation();
         const touch = e.touches[0];
         const currentPos = { x: touch.clientX, y: touch.clientY };
         
@@ -102,6 +103,7 @@ function MeowChiGame() {
     const handleGlobalTouchEnd = (e) => {
       if (dragState.draggedCat) {
         e.preventDefault();
+        e.stopPropagation();
         
         if (dragState.isDragging) {
           const touch = e.changedTouches[0];
@@ -148,20 +150,21 @@ function MeowChiGame() {
       }
     };
 
-    if (dragState.draggedCat) {
-      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('mouseup', handleGlobalMouseUp);
+    // Always add listeners, but make them conditional
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleGlobalTouchEnd, { passive: false });
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
 
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalTouchMove);
-        document.removeEventListener('touchend', handleGlobalTouchEnd);
-        document.removeEventListener('mousemove', handleGlobalMouseMove);
-        document.removeEventListener('mouseup', handleGlobalMouseUp);
-      };
-    }
-  }, [dragState.draggedCat, dragState.isDragging, dragState.startPosition]);
+    return () => {
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+      document.removeEventListener('touchcancel', handleGlobalTouchEnd);
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [dragState.draggedCat, dragState.isDragging, dragState.startPosition, dragState.fromColumn]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -350,6 +353,7 @@ function MeowChiGame() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
+          touchAction: 'none',
           opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.3 : 1
         }}
       >
