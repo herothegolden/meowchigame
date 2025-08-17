@@ -20,9 +20,7 @@ const handleTouchMove = (e) => {
     const touch = e.changedTouches?.[0];
     if (touch) {
       const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      console.log('Target column:', targetColumn, 'Source:', dragState.fromColumn);
       if (targetColumn && targetColumn !== dragState.fromColumn) {
-        console.log('Moving cat from', dragState.fromColumn, 'to', targetColumn);
         moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
         if (navigator.vibrate) {
           navigator.vibrate(100);
