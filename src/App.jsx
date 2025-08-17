@@ -697,6 +697,8 @@ function App() {
     <div className="w-full h-full bg-white pb-20">
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
+        <h1 className="text-lg font-semibold">Tasks</h1>
+      </div>
   const BonusScreen = () => (
     <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
@@ -1014,9 +1016,7 @@ function App() {
   );
 }
 
-export default App;Tasks</h1>
-      </div>
-      <div className="p-4 space-y-6">
+export default App;y-6">
         <div>
           <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
           <div className="space-y-4">
@@ -1061,7 +1061,7 @@ export default App;Tasks</h1>
                     </span>
                     <div>
                       <div className="font-semibold text-gray-800">
-                        {player.username? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
+                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
                       </div>
                       <div className="text-sm text-gray-500">{player.games_played} games played</div>
                     </div>
@@ -1089,4 +1089,6 @@ export default App;Tasks</h1>
     <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
-        <h1 className="text-lg font-semibold">
+        <h1 className="text-lg font-semibold">Bonus Time</h1>
+      </div>
+      <div className="p-4 space-
