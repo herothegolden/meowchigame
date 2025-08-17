@@ -333,125 +333,108 @@ function App() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  const handleTouchStart = (e, catId, fromColumn) => {
+  const handleDragStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
+    
     e.preventDefault();
     e.stopPropagation();
-    const touch = e.touches[0];
+
+    // Set pointer capture if available
+    if (e.pointerId && e.currentTarget.setPointerCapture) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    
+    let clientX, clientY;
+    if (e.touches) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
     setDragState({
-      isDragging: false,
+      isDragging: true,
       draggedCat: cat,
       fromColumn: fromColumn,
-      dragPosition: { x: touch.clientX, y: touch.clientY },
-      startPosition: { x: touch.clientX, y: touch.clientY },
+      dragPosition: { x: clientX, y: clientY },
+      startPosition: { x: clientX, y: clientY },
       highlightedColumn: null
     });
     
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
-    
-    const handleMove = (moveE) => {
-      moveE.preventDefault();
-      const touch = moveE.touches[0];
-      const currentPos = { x: touch.clientX, y: touch.clientY };
-      const distanceMoved = getDistanceMoved(
-        { x: touch.clientX, y: touch.clientY },
-        currentPos
-      );
-      
-      if (distanceMoved > dragThreshold || dragState.isDragging) {
-        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+  };
+
+  // Global drag event handlers for WebView
+  useEffect(() => {
+    if (dragState.isDragging) {
+      const handleGlobalMove = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
         
+        if (e.touches) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
         setDragState(prev => ({
           ...prev,
-          isDragging: true,
-          dragPosition: currentPos,
+          dragPosition: { x: clientX, y: clientY },
           highlightedColumn: targetColumn
         }));
-      }
-    };
-    
-    const handleEnd = (endE) => {
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('touchend', handleEnd);
-      
-      const touch = endE.changedTouches[0];
-      const distanceMoved = getDistanceMoved(
-        dragState.startPosition,
-        { x: touch.clientX, y: touch.clientY }
-      );
-      
-      if (distanceMoved > dragThreshold) {
-        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-        if (targetColumn && targetColumn !== fromColumn) {
-          moveCat(targetColumn, cat, fromColumn);
-          if (navigator.vibrate) {
-            navigator.vibrate(100);
+      };
+
+      const handleGlobalEnd = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
+        
+        if (e.changedTouches) {
+          clientX = e.changedTouches[0].clientX;
+          clientY = e.changedTouches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+          // Check if target column is full before allowing drop
+          if (gameState.columns[targetColumn].length < 6) {
+            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
+            }
           }
         }
-      }
-      resetDragState();
-    };
+        resetDragState();
+      };
 
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('touchend', handleEnd, { passive: false });
-  };
-
-  const handleMouseDown = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    setDragState({
-      isDragging: false,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      startPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: null
-    });
-    
-    const handleMove = (moveE) => {
-      const currentPos = { x: moveE.clientX, y: moveE.clientY };
-      const distanceMoved = getDistanceMoved(dragState.startPosition, currentPos);
+      // Add global listeners
+      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
+      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
+      document.addEventListener('touchcancel', resetDragState, { passive: false });
+      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
+      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
+      document.addEventListener('pointercancel', resetDragState, { passive: false });
       
-      if (distanceMoved > dragThreshold || dragState.isDragging) {
-        const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
-        
-        setDragState(prev => ({
-          ...prev,
-          isDragging: true,
-          dragPosition: currentPos,
-          highlightedColumn: targetColumn
-        }));
-      }
-    };
-    
-    const handleEnd = (endE) => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleEnd);
-      
-      const distanceMoved = getDistanceMoved(
-        dragState.startPosition,
-        { x: endE.clientX, y: endE.clientY }
-      );
-      
-      if (distanceMoved > dragThreshold) {
-        const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
-        if (targetColumn && targetColumn !== fromColumn) {
-          moveCat(targetColumn, cat, fromColumn);
-        }
-      }
-      resetDragState();
-    };
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
-  };
+      return () => {
+        document.removeEventListener('touchmove', handleGlobalMove);
+        document.removeEventListener('touchend', handleGlobalEnd);
+        document.removeEventListener('touchcancel', resetDragState);
+        document.removeEventListener('pointermove', handleGlobalMove);
+        document.removeEventListener('pointerup', handleGlobalEnd);
+        document.removeEventListener('pointercancel', resetDragState);
+      };
+    }
+  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
@@ -497,13 +480,13 @@ function App() {
     });
   };
 
-  const DraggableCat = ({ cat, columnId, index }) => {
-    
+  const DraggableCat = ({ cat, columnId }) => {
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
-        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
+        onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
+        onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -511,6 +494,7 @@ function App() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
+          touchAction: 'none',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
@@ -531,7 +515,7 @@ function App() {
         }`}
       >
         {cats.map((cat, index) => (
-          <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
+          <DraggableCat key={cat.id} cat={cat} columnId={columnId} />
         ))}
         
         {cats.length === 0 && (
@@ -945,7 +929,14 @@ function App() {
       </div>
 
       <div className="flex-1 p-3 min-h-0">
-        <div ref={boardRef} className="flex justify-center gap-3 h-full">
+        <div 
+          ref={boardRef} 
+          className="flex justify-center gap-3 h-full"
+          style={{
+            touchAction: 'none',
+            overscrollBehavior: 'contain'
+          }}
+        >
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
