@@ -187,14 +187,11 @@ function App() {
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     
-    // Prevent Telegram WebApp from interfering
+    // Prevent multiple triggers
+    if (dragState.isDragging) return;
+    
     e.preventDefault();
     e.stopPropagation();
-    
-    // Disable Telegram WebApp haptic feedback during drag
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-    }
     
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
@@ -208,14 +205,21 @@ function App() {
       highlightedColumn: null
     });
     
-    if (navigator.vibrate) {
+    // Use Telegram haptic if available, otherwise vibrate
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    } else if (navigator.vibrate) {
       navigator.vibrate(50);
     }
     
-    // Add touch event listeners with better Telegram compatibility
+    let moved = false;
+    
+    // Add touch event listeners
     const handleMove = (moveE) => {
       moveE.preventDefault();
       moveE.stopPropagation();
+      
+      moved = true;
       
       if (!moveE.touches || moveE.touches.length === 0) return;
       
@@ -235,55 +239,32 @@ function App() {
       
       document.removeEventListener('touchmove', handleMove);
       document.removeEventListener('touchend', handleEnd);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseEnd);
       
-      let clientX = touch.clientX; // fallback to start position
-      
-      if (endE.changedTouches && endE.changedTouches.length > 0) {
-        clientX = endE.changedTouches[0].clientX;
-      }
-      
-      const targetColumn = getColumnFromPosition(clientX, clientX);
-      
-      if (targetColumn && targetColumn !== fromColumn) {
-        moveCat(targetColumn, cat, fromColumn);
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        } else if (navigator.vibrate) {
-          navigator.vibrate(100);
+      // Only move if actually dragged
+      if (moved) {
+        let clientX = touch.clientX;
+        
+        if (endE.changedTouches && endE.changedTouches.length > 0) {
+          clientX = endE.changedTouches[0].clientX;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientX);
+        
+        if (targetColumn && targetColumn !== fromColumn) {
+          moveCat(targetColumn, cat, fromColumn);
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+          } else if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
         }
       }
-      resetDragState();
-    };
-
-    const handleMouseMove = (moveE) => {
-      const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: moveE.clientX, y: moveE.clientY },
-        highlightedColumn: targetColumn
-      }));
-    };
-
-    const handleMouseEnd = (endE) => {
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('touchend', handleEnd);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseEnd);
       
-      const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
-      if (targetColumn && targetColumn !== fromColumn) {
-        moveCat(targetColumn, cat, fromColumn);
-      }
       resetDragState();
     };
 
-    // Add listeners with passive: false for better touch handling in Telegram
-    document.addEventListener('touchmove', handleMove, { passive: false, capture: true });
-    document.addEventListener('touchend', handleEnd, { passive: false, capture: true });
-    document.addEventListener('mousemove', handleMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleMouseEnd, { passive: false });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: false });
   };
 
 
@@ -331,6 +312,10 @@ function App() {
   };
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
+    // Prevent multiple calls
+    if (!targetColumn || !draggedCat || !fromColumn) return;
+    if (targetColumn === fromColumn) return;
+    
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
