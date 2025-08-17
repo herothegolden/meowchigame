@@ -1001,7 +1001,7 @@ function App() {
         </div>
       </ViewportContainer>
     );
-  }<div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
+  }          <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
             <div className="flex justify-between">
               <span>Matches:</span>
               <span className="font-bold">{gameState.matchesMade}</span>
