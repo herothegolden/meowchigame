@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
+const CAT_EMOJIS = ['ðŸ˜º', 'ðŸ˜»', 'ðŸ˜¼', 'ðŸˆ', 'ðŸˆâ€â¬›'];
 const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
@@ -29,9 +29,9 @@ function App() {
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
   const taglines = [
-    "😼 Chaos Mode Activated",
-    "🐾 Don't Blink, Human", 
-    "🔥 Catnado Incoming"
+    "ðŸ˜¼ Chaos Mode Activated",
+    "ðŸ¾ Don't Blink, Human", 
+    "ðŸ"¥ Catnado Incoming"
   ];
   
   const gameTimerRef = useRef(null);
@@ -241,6 +241,8 @@ function App() {
     document.addEventListener('mouseup', handleEnd);
   };
 
+
+
   const handleMouseDown = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     e.preventDefault();
@@ -323,6 +325,7 @@ function App() {
   };
 
   const DraggableCat = ({ cat, columnId, index }) => {
+    
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
@@ -416,11 +419,11 @@ function App() {
 
   const BottomNavBar = () => {
     const navItems = [
-      { id: 'play', icon: '🎮', label: 'Play', color: 'orange' },
-      { id: 'tasks', icon: '✅', label: 'Tasks', color: 'blue' },
-      { id: 'leaderboard', icon: '📊', label: 'Board', color: 'purple' },
-      { id: 'bonus', icon: '🎁', label: 'Bonus', color: 'green' },
-      { id: 'account', icon: '👤', label: 'Account', color: 'gray' }
+      { id: 'play', icon: 'ðŸŽ®', label: 'Play', color: 'orange' },
+      { id: 'tasks', icon: 'âœ…', label: 'Tasks', color: 'blue' },
+      { id: 'leaderboard', icon: 'ðŸ"Š', label: 'Board', color: 'purple' },
+      { id: 'bonus', icon: 'ðŸŽ', label: 'Bonus', color: 'green' },
+      { id: 'account', icon: 'ðŸ'¤', label: 'Account', color: 'gray' }
     ];
 
     const handleTabClick = (tabId) => {
@@ -468,7 +471,7 @@ function App() {
   const TasksScreen = () => (
     <div className="min-h-screen bg-white pb-20">
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">âœ…</div>
         <h1 className="text-lg font-semibold">Tasks</h1>
       </div>
       <div className="p-4 space-y-6">
@@ -477,12 +480,12 @@ function App() {
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="text-4xl">🐱</div>
+                <div className="text-4xl">ðŸ±</div>
                 <div>
                   <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
                   <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-sm">🪙 1,000</span>
-                    <span className="text-sm">⏰ +5s</span>
+                    <span className="text-sm">ðŸª™ 1,000</span>
+                    <span className="text-sm">â° +5s</span>
                   </div>
                 </div>
               </div>
@@ -500,15 +503,15 @@ function App() {
   const LeaderboardScreen = () => (
     <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸ"Š</div>
         <h1 className="text-lg font-semibold">Leaderboard</h1>
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
+          <h3 className="font-semibold text-gray-800 mb-3">ðŸ† Top Players</h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span>🥇 @player1</span>
+              <span>ðŸ¥‡ @player1</span>
               <span className="font-bold text-yellow-600">15,000 pts</span>
             </div>
           </div>
@@ -521,7 +524,7 @@ function App() {
   const BonusScreen = () => (
     <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸŽ</div>
         <h1 className="text-lg font-semibold">Bonus Time</h1>
       </div>
       <div className="p-4 space-y-3">
@@ -537,12 +540,12 @@ function App() {
   const AccountScreen = () => (
     <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸ'¤</div>
         <h1 className="text-lg font-semibold">Account</h1>
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
+          <div className="text-4xl mb-2">ðŸ±</div>
           <h3 className="font-semibold text-gray-800">@username</h3>
         </div>
       </div>
@@ -559,33 +562,33 @@ function App() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
         <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
+          <h1 className="text-6xl font-black text-black mb-4">ðŸ¾ MEOWCHI CHAOS</h1>
           <p className="text-black text-xl font-bold mb-8">
             Drop cats. Cause mayhem. Match 3 before they scream.
           </p>
           
           <div className="mb-8">
             <div className="flex justify-center gap-3 mb-4">
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>ðŸ˜º</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>ðŸ˜¹</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>ðŸˆ</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>ðŸ˜»</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>ðŸˆâ€â¬›</span>
             </div>
             <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
           </div>
           
           <div className="mb-8 text-lg text-black font-bold leading-relaxed">
-            <div>⏱ 60 seconds of panic</div>
-            <div>🐾 +1000 purr-points</div>
-            <div>🔥 Combos = Catnado</div>
+            <div>â± 60 seconds of panic</div>
+            <div>ðŸ¾ +1000 purr-points</div>
+            <div>ðŸ"¥ Combos = Catnado</div>
           </div>
           
           <button
             onClick={startGame}
             className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
           >
-            ▶️ LET'S GOOO!
+            â–¶ï¸ LET'S GOOO!
           </button>
         </div>
         <BottomNavBar />
@@ -594,21 +597,21 @@ function App() {
   }
 
   if (!gameState.isActive && gameState.gameStarted) {
-    let flavorText = "🐾 That's tragic. Even my paw is better at this.";
+    let flavorText = "ðŸ¾ That's tragic. Even my paw is better at this.";
     if (gameState.score > 5000) {
-      flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
+      flavorText = "ðŸ"¥ Absolute CatGod. Touch grass, maybe?";
     } else if (gameState.score > 2000) {
-      flavorText = "😼 Not bad. You may live another round.";
+      flavorText = "ðŸ˜¼ Not bad. You may live another round.";
     }
     
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
         <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+          <h2 className="text-5xl font-black text-black mb-6">ðŸŽ‰ GAME OVER, HUMAN!</h2>
           <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
           <p className="text-black text-xl font-bold mb-4">Final Score</p>
           <p className="text-lg text-black font-bold mb-4">
-            😿 "Meowchi is disappointed but still cute."
+            ðŸ˜¿ "Meowchi is disappointed but still cute."
           </p>
           <p className="text-base text-black font-bold mb-8">
             {flavorText}
@@ -619,7 +622,7 @@ function App() {
               onClick={startGame}
               className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
             >
-              😺 PLAY AGAIN
+              ðŸ˜º PLAY AGAIN
             </button>
             
             <button
@@ -627,7 +630,7 @@ function App() {
               className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
               style={{backgroundColor: '#FFD700'}}
             >
-              📊 BOARD
+              ðŸ"Š BOARD
             </button>
           </div>
         </div>
@@ -660,13 +663,13 @@ function App() {
 
       <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">⏱</span>
+          <span className="text-2xl">â±</span>
           <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
             {gameState.timeLeft}s
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-2xl">🐾</span>
+          <span className="text-2xl">ðŸ¾</span>
           <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
         </div>
       </div>
@@ -699,7 +702,7 @@ function App() {
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            <span className="text-2xl">🔽</span>
+            <span className="text-2xl">ðŸ"½</span>
             <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
           
@@ -712,7 +715,7 @@ function App() {
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            <span className="text-2xl">🔽</span>
+            <span className="text-2xl">ðŸ"½</span>
             <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
           
@@ -725,13 +728,13 @@ function App() {
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            <span className="text-2xl">🔽</span>
+            <span className="text-2xl">ðŸ"½</span>
             <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
         </div>
         
         <p className="text-center text-gray-500 text-sm font-medium">
-          💡 Tip: Drag top cats between columns or use drop buttons!
+          ðŸ'¡ Tip: Drag top cats between columns or use drop buttons!
         </p>
       </div>
 
