@@ -43,7 +43,6 @@ function App() {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
       
-      // CRITICAL: Disable vertical swipes to prevent interference with touch events
       if (window.Telegram.WebApp.disableVerticalSwipes) {
         window.Telegram.WebApp.disableVerticalSwipes();
       }
@@ -53,51 +52,7 @@ function App() {
         document.body.style.backgroundColor = tg.backgroundColor;
       }
     }
-
-    // AGGRESSIVE: Multiple touch prevention strategies
-    let isPreventingTouch = false;
-    
-    // Strategy 1: Global touch capture with highest priority
-    const aggressiveTouchCapture = (e) => {
-      if (isPreventingTouch || e.target.closest('[data-draggable]')) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    };
-
-    // Strategy 2: Body-level prevention
-    const bodyTouchHandler = (e) => {
-      if (dragState.isDragging) {
-        e.preventDefault();
-        return false;
-      }
-    };
-
-    // Strategy 3: Document-level prevention with capture phase
-    document.addEventListener('touchstart', aggressiveTouchCapture, { capture: true, passive: false });
-    document.addEventListener('touchmove', aggressiveTouchCapture, { capture: true, passive: false });
-    document.addEventListener('touchend', aggressiveTouchCapture, { capture: true, passive: false });
-    
-    // Strategy 4: Body-level handlers
-    document.body.addEventListener('touchmove', bodyTouchHandler, { passive: false });
-    document.body.addEventListener('touchstart', bodyTouchHandler, { passive: false });
-
-    // Update prevention state
-    if (dragState.isDragging) {
-      isPreventingTouch = true;
-    } else {
-      isPreventingTouch = false;
-    }
-    
-    return () => {
-      document.removeEventListener('touchstart', aggressiveTouchCapture, { capture: true });
-      document.removeEventListener('touchmove', aggressiveTouchCapture, { capture: true });
-      document.removeEventListener('touchend', aggressiveTouchCapture, { capture: true });
-      document.body.removeEventListener('touchmove', bodyTouchHandler);
-      document.body.removeEventListener('touchstart', bodyTouchHandler);
-    };
-  }, [dragState.isDragging]); // Add dragState.isDragging as dependency
+  }, []);
 
   // Game timer
   useEffect(() => {
@@ -124,38 +79,6 @@ function App() {
       return () => clearInterval(taglineTimer);
     }
   }, [gameState.isActive]);
-
-  // Global touch event handlers - Update to include pointer events
-  useEffect(() => {
-    if (dragState.isDragging) {
-      // Add both touch AND pointer events for maximum coverage
-      document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-      document.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
-      document.addEventListener('pointermove', handlePointerMove, { passive: false, capture: true });
-      document.addEventListener('pointerup', handlePointerEnd, { passive: false, capture: true });
-      document.addEventListener('mousemove', handleMouseMove, { passive: false });
-      document.addEventListener('mouseup', handleMouseUp, { passive: false });
-      
-      // Prevent any scrolling during drag
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      
-      return () => {
-        document.removeEventListener('touchmove', handleTouchMove, { capture: true });
-        document.removeEventListener('touchend', handleTouchEnd, { capture: true });
-        document.removeEventListener('pointermove', handlePointerMove, { capture: true });
-        document.removeEventListener('pointerup', handlePointerEnd, { capture: true });
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        
-        // Restore scrolling
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.body.style.width = '';
-      };
-    }
-  }, [dragState.isDragging]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -229,13 +152,11 @@ function App() {
           scoreGained = MATCH_SCORE + (consecutiveMatches * COMBO_BONUS);
           const matchedEmoji = column[i].emoji;
           
-          // Remove matched cats immediately
           updatedColumns[targetColumn] = [
             ...updatedColumns[targetColumn].slice(0, i-2),
             ...updatedColumns[targetColumn].slice(i+1)
           ];
           
-          // Create explosion effect
           setTimeout(() => {
             createExplosion(0, 0, matchedEmoji, scoreGained);
           }, 100);
@@ -246,23 +167,7 @@ function App() {
     return { updatedColumns, scoreGained };
   };
 
-  // Add new unified drag start function
-  const startDrag = (e, catId, fromColumn, position) => {
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    setDragState({
-      isDragging: true,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: position,
-      startPosition: position,
-      highlightedColumn: null
-    });
-    
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-  };
+  const getColumnFromPosition = (x, y) => {
     if (!boardRef.current) return null;
     const columns = boardRef.current.querySelectorAll('[data-column]');
     for (let i = 0; i < columns.length; i++) {
@@ -275,16 +180,13 @@ function App() {
     return null;
   };
 
-  const getColumnFromPosition = (x, y) => {
+  const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    
-    // Don't prevent default on touchstart - let it bubble for initial grab
     e.stopPropagation();
     
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
-    // Set drag state immediately
     setDragState({
       isDragging: true,
       draggedCat: cat,
@@ -294,39 +196,15 @@ function App() {
       highlightedColumn: null
     });
     
-    // Immediate haptic feedback
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
   };
 
-  const handleTouchStart = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    
-    // Immediately grab control of all touch events
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    
-    const touch = e.touches[0];
-    startDrag(e, catId, fromColumn, { x: touch.clientX, y: touch.clientY });
-    
-    // Additional aggressive prevention
-    setTimeout(() => {
-      if (e.target) {
-        e.target.style.pointerEvents = 'none';
-        setTimeout(() => {
-          if (e.target) e.target.style.pointerEvents = 'auto';
-        }, 50);
-      }
-    }, 0);
-  };
+  const handleTouchMove = (e) => {
     if (!dragState.isDragging) return;
-    
-    // CRITICAL: Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
-    e.stopImmediatePropagation();
     
     const touch = e.touches[0];
     const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
@@ -340,11 +218,8 @@ function App() {
 
   const handleTouchEnd = (e) => {
     if (!dragState.isDragging) return;
-    
-    // CRITICAL: Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
-    e.stopImmediatePropagation();
     
     const touch = e.changedTouches[0];
     const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
@@ -400,64 +275,37 @@ function App() {
     resetDragState();
   };
 
-  const handleMouseDown = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    setDragState({
-      isDragging: true,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      startPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: null
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!dragState.isDragging) return;
-    
-    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-    
-    setDragState(prev => ({
-      ...prev,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: targetColumn
-    }));
-  };
-
-  const handleMouseUp = (e) => {
-    if (!dragState.isDragging) return;
-    
-    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-    
-    if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-      moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+  // Global event handlers
+  useEffect(() => {
+    if (dragState.isDragging) {
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd, { passive: false });
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
     }
-    
-    resetDragState();
-  };
+  }, [dragState.isDragging]);
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
-      // Remove cat from source column
       if (newColumns[fromColumn]) {
         newColumns[fromColumn] = newColumns[fromColumn].filter(
           cat => cat.id !== draggedCat.id
         );
       }
       
-      // Add cat to target column  
       if (newColumns[targetColumn]) {
         newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
       
-      // Check matches
       const { updatedColumns, scoreGained } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
       
       return {
@@ -481,31 +329,9 @@ function App() {
   };
 
   const DraggableCat = ({ cat, columnId, index }) => {
-    const catRef = useRef(null);
-    
-    // Strategy: Use both pointer events AND touch events
-    const handlePointerStart = (e) => {
-      if (!gameState.isActive) return;
-      
-      // Try pointer events first (may bypass Telegram better)
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      
-      if (catRef.current) {
-        catRef.current.setPointerCapture(e.pointerId);
-      }
-      
-      startDrag(e, cat.id, columnId, { x: e.clientX, y: e.clientY });
-    };
-
     return (
       <div
-        ref={catRef}
-        data-draggable="true"
-        tabIndex="0"
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onPointerDown={handlePointerStart}
         onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
@@ -516,7 +342,6 @@ function App() {
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
           touchAction: 'none',
-          pointerEvents: 'auto',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
