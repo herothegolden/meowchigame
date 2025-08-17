@@ -483,7 +483,7 @@ function App() {
   const DraggableCat = ({ cat, columnId }) => {
     return (
       <div
-        className="text-5xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        className="text-4xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
         onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
