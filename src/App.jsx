@@ -1061,7 +1061,7 @@ export default App;Tasks</h1>
                     </span>
                     <div>
                       <div className="font-semibold text-gray-800">
-                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
+                        {player.username? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
                       </div>
                       <div className="text-sm text-gray-500">{player.games_played} games played</div>
                     </div>
