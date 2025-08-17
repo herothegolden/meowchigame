@@ -653,7 +653,7 @@ function App() {
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="text-4xl">🱝</div>
+                <div className="text-4xl">🐱</div>
                 <div>
                   <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
                   <div className="flex items-center gap-2 text-yellow-600">
@@ -740,7 +740,7 @@ function App() {
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🱝</div>
+          <div className="text-4xl mb-2">🐱</div>
           <h3 className="font-semibold text-gray-800">
             {userState.telegramUser ? 
               (userState.telegramUser.username ? 
