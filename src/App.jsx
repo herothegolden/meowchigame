@@ -93,10 +93,12 @@ function MeowChiGame() {
         column: cat.dataset.column,
         startX: touch.clientX,
         startY: touch.clientY,
-        element: cat
+        element: cat,
+        isDragging: false
       };
 
       if (navigator.vibrate) navigator.vibrate(50);
+      console.log('TOUCH START:', touching.catId, touching.column);
     }
 
     function onTouchMove(e) {
@@ -108,6 +110,8 @@ function MeowChiGame() {
       
       if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
         touching.element.style.opacity = '0.5';
+        touching.isDragging = true;
+        console.log('DRAGGING STARTED');
         e.preventDefault();
       }
     }
@@ -115,29 +119,38 @@ function MeowChiGame() {
     function onTouchEnd(e) {
       if (!touching) return;
       
-      const touch = e.changedTouches[0];
-      const target = document.elementFromPoint(touch.clientX, touch.clientY);
-      const targetColumn = target?.closest('[data-column]')?.dataset.column;
+      console.log('TOUCH END, isDragging:', touching.isDragging);
       
-      if (targetColumn && targetColumn !== touching.column && gameState.columns[targetColumn].length < 6) {
-        const catToMove = gameState.columns[touching.column].find(c => c.id === touching.catId);
+      if (touching.isDragging) {
+        const touch = e.changedTouches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetColumn = target?.closest('[data-column]')?.dataset.column;
         
-        setGameState(prev => {
-          const newCols = { ...prev.columns };
-          newCols[touching.column] = newCols[touching.column].filter(c => c.id !== touching.catId);
-          newCols[targetColumn] = [...newCols[targetColumn], catToMove];
-          
-          const { updatedColumns, scoreGained } = checkMatches(newCols, targetColumn);
-          
-          return {
-            ...prev,
-            columns: updatedColumns,
-            score: prev.score + scoreGained,
-            consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
-          };
-        });
+        console.log('DROP TARGET:', targetColumn, 'FROM:', touching.column);
         
-        if (navigator.vibrate) navigator.vibrate(100);
+        if (targetColumn && targetColumn !== touching.column && gameState.columns[targetColumn].length < 6) {
+          const catToMove = gameState.columns[touching.column].find(c => c.id === touching.catId);
+          
+          console.log('MOVING CAT:', catToMove);
+          
+          setGameState(prev => {
+            const newCols = { ...prev.columns };
+            newCols[touching.column] = newCols[touching.column].filter(c => c.id !== touching.catId);
+            newCols[targetColumn] = [...newCols[targetColumn], catToMove];
+            
+            const { updatedColumns, scoreGained } = checkMatches(newCols, targetColumn);
+            
+            return {
+              ...prev,
+              columns: updatedColumns,
+              score: prev.score + scoreGained,
+              consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
+            };
+          });
+          
+          if (navigator.vibrate) navigator.vibrate(100);
+          console.log('CAT MOVED SUCCESSFULLY!');
+        }
       }
       
       if (touching.element) touching.element.style.opacity = '';
