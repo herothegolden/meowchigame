@@ -23,7 +23,8 @@ function App() {
     fromColumn: null,
     dragPosition: { x: 0, y: 0 },
     highlightedColumn: null,
-    startPosition: { x: 0, y: 0 }
+    startPosition: { x: 0, y: 0 },
+    pointerId: null
   });
 
   const [animations, setAnimations] = useState([]);
@@ -284,7 +285,81 @@ function App() {
     }
   };
 
-  const handleTouchStart = (e, catId, fromColumn) => {
+  const handlePointerDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    
+    // Prevent all default behaviors
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Capture the pointer to this element
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: null,
+      pointerId: e.pointerId
+    });
+    
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragState.isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+    
+    setDragState(prev => ({
+      ...prev,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: targetColumn
+    }));
+  };
+
+  const handlePointerUp = (e) => {
+    if (!dragState.isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Release pointer capture
+    if (dragState.pointerId && e.currentTarget.hasPointerCapture) {
+      e.currentTarget.releasePointerCapture(dragState.pointerId);
+    }
+    
+    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+    
+    if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+      moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+      if (navigator.vibrate) {
+        navigator.vibrate(100);
+      }
+    }
+    
+    resetDragState();
+  };
+
+  const handlePointerCancel = (e) => {
+    if (!dragState.isDragging) return;
+    
+    // Release pointer capture on cancel
+    if (dragState.pointerId && e.currentTarget.hasPointerCapture) {
+      e.currentTarget.releasePointerCapture(dragState.pointerId);
+    }
+    
+    resetDragState();
+  };
     if (!gameState.isActive) return;
     
     e.preventDefault();
@@ -320,7 +395,29 @@ function App() {
     }));
   };
 
-  const handleTouchMove = (e) => {
+  const handleTouchStart = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.touches[0];
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      startPosition: { x: touch.clientX, y: touch.clientY },
+      highlightedColumn: null,
+      pointerId: null
+    });
+    
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+  };
     if (!dragState.isDragging) return;
     
     e.preventDefault();
@@ -376,7 +473,45 @@ function App() {
     resetDragState();
   };
 
-  const handleMouseDown = (e, catId, fromColumn) => {
+  const handleTouchMove = (e) => {
+    if (!dragState.isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.touches[0];
+    const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+    
+    setDragState(prev => ({
+      ...prev,
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      highlightedColumn: targetColumn
+    }));
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!dragState.isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const touch = e.changedTouches[0];
+    const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+    
+    if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+      moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+      if (navigator.vibrate) {
+        navigator.vibrate(100);
+      }
+    }
+    
+    resetDragState();
+  };
+
+  const handleTouchCancel = (e) => {
+    if (!dragState.isDragging) return;
+    resetDragState();
+  };
     if (!gameState.isActive) return;
     e.preventDefault();
     e.stopPropagation();
@@ -417,7 +552,23 @@ function App() {
     resetDragState();
   };
 
-  // Global document-level event handlers for drag continuation
+  const handleMouseDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: null,
+      pointerId: null
+    });
+  };
   useEffect(() => {
     if (dragState.isDragging) {
       // Document-level handlers with passive: false
@@ -494,7 +645,8 @@ function App() {
     }
   }, [dragState.isDragging]);
 
-  const moveCat = (targetColumn, draggedCat, fromColumn) => {
+  // Global document-level event handlers for drag continuation
+  useEffect(() => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
@@ -519,7 +671,82 @@ function App() {
     });
   };
 
-  const resetDragState = () => {
+    if (dragState.isDragging) {
+      // Document-level handlers with passive: false
+      const handleDocumentPointerMove = (e) => {
+        if (!dragState.isDragging) return;
+        e.preventDefault();
+        
+        const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+        setDragState(prev => ({
+          ...prev,
+          dragPosition: { x: e.clientX, y: e.clientY },
+          highlightedColumn: targetColumn
+        }));
+      };
+
+      const handleDocumentPointerUp = (e) => {
+        if (!dragState.isDragging) return;
+        e.preventDefault();
+        
+        const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+          if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
+        }
+        resetDragState();
+      };
+
+      const handleDocumentTouchMove = (e) => {
+        if (!dragState.isDragging) return;
+        e.preventDefault();
+        
+        const touch = e.touches[0];
+        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+        setDragState(prev => ({
+          ...prev,
+          dragPosition: { x: touch.clientX, y: touch.clientY },
+          highlightedColumn: targetColumn
+        }));
+      };
+
+      const handleDocumentTouchEnd = (e) => {
+        if (!dragState.isDragging) return;
+        e.preventDefault();
+        
+        const touch = e.changedTouches[0];
+        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+          if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
+        }
+        resetDragState();
+      };
+
+      // Add document-level listeners
+      document.addEventListener('pointermove', handleDocumentPointerMove, { passive: false });
+      document.addEventListener('pointerup', handleDocumentPointerUp, { passive: false });
+      document.addEventListener('pointercancel', () => resetDragState(), { passive: false });
+      document.addEventListener('touchmove', handleDocumentTouchMove, { passive: false });
+      document.addEventListener('touchend', handleDocumentTouchEnd, { passive: false });
+      document.addEventListener('touchcancel', () => resetDragState(), { passive: false });
+      
+      return () => {
+        document.removeEventListener('pointermove', handleDocumentPointerMove);
+        document.removeEventListener('pointerup', handleDocumentPointerUp);
+        document.removeEventListener('pointercancel', () => resetDragState());
+        document.removeEventListener('touchmove', handleDocumentTouchMove);
+        document.removeEventListener('touchend', handleDocumentTouchEnd);
+        document.removeEventListener('touchcancel', () => resetDragState());
+      };
+    }
+  }, [dragState.isDragging]);
+
+  const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setDragState({
       isDragging: false,
       draggedCat: null,
