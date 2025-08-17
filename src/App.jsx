@@ -101,7 +101,7 @@ const ViewportContainer = ({ children }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#f3f4f6', // Gray background for letterboxing
+        backgroundColor: '#f3f4f6',
         position: 'fixed',
         top: 0,
         left: 0
