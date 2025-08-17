@@ -321,14 +321,6 @@ function MeowChiGame() {
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        draggable={isTopCat && gameState.isActive}
-        onDragStart={(e) => {
-          if (isTopCat && gameState.isActive) {
-            setDraggedCat({ ...cat, fromColumn: columnId });
-            if (navigator.vibrate) navigator.vibrate(50);
-          }
-        }}
-        onDragEnd={() => setDraggedCat(null)}
         onTouchStart={() => {
           if (isTopCat && navigator.vibrate) {
             navigator.vibrate(50);
