@@ -1,4 +1,59 @@
-import React, { useState, useEffect, useRef } from 'react';
+const handlePointerDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // lock the pointer to this element for the whole drag
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: getColumnFromPosition(e.clientX, e.clientY)
+    });
+
+    // haptics if available (Telegram or native)
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    } else if (navigator.vibrate) {
+      navigator.vibrate(15);
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragState.isDragging || !dragState.draggedCat) return;
+    e.preventDefault();
+    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+    setDragState(prev => ({
+      ...prev,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: targetColumn
+    }));
+  };
+
+  const handlePointerUp = (e) => {
+    e.preventDefault();
+    if (dragState.draggedCat) {
+      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+      if (targetColumn && targetColumn !== dragState.fromColumn) {
+        moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        } else if (navigator.vibrate) {
+          navigator.vibrate(30);
+        }
+      }
+    }
+    resetDragState();
+  };
+
+  const handlePointerCancel = () => {
+    resetDragState();
+  };import React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
@@ -470,11 +525,10 @@ function App() {
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchCancel}
-        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
+        onPointerDown={(e) => handlePointerDown(e, cat.id, columnId)}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -482,6 +536,7 @@ function App() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
+          touchAction: 'none',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
