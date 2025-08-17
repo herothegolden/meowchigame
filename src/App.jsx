@@ -34,24 +34,20 @@ const ViewportContainer = ({ children }) => {
   const containerRef = useRef(null);
 
   const computeScale = () => {
-    // Get available viewport dimensions
     let availableWidth = window.innerWidth;
     let availableHeight = window.innerHeight;
 
-    // Use Telegram's stable height if available
     if (window.Telegram?.WebApp?.viewportStableHeight) {
       availableHeight = window.Telegram.WebApp.viewportStableHeight;
     } else if (window.visualViewport) {
       availableHeight = window.visualViewport.height;
     }
 
-    // Deduct safe area insets if available
     const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0;
     const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')) || 0;
     
     availableHeight -= (safeAreaTop + safeAreaBottom);
 
-    // Compute scale to fit reference canvas
     const scaleX = availableWidth / REFERENCE_WIDTH;
     const scaleY = availableHeight / REFERENCE_HEIGHT;
     const newScale = Math.min(scaleX, scaleY);
@@ -60,10 +56,8 @@ const ViewportContainer = ({ children }) => {
   };
 
   useEffect(() => {
-    // Initial scale computation
     computeScale();
 
-    // Recompute on viewport changes
     const handleResize = () => {
       computeScale();
     };
@@ -71,12 +65,10 @@ const ViewportContainer = ({ children }) => {
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
 
-    // Visual viewport changes (keyboard, etc.)
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
     }
 
-    // Telegram viewport changes
     if (window.Telegram?.WebApp?.onEvent) {
       window.Telegram.WebApp.onEvent('viewportChanged', handleResize);
     }
@@ -178,13 +170,11 @@ function App() {
         document.body.style.backgroundColor = tg.backgroundColor;
       }
 
-      // Get Telegram user data
       const user = tg.initDataUnsafe?.user;
       if (user) {
         setUserState(prev => ({ ...prev, telegramUser: user }));
         initializeUser(user);
       } else {
-        // Fallback for testing outside Telegram
         const testUser = {
           id: 123456789,
           username: 'testuser',
@@ -195,7 +185,6 @@ function App() {
         initializeUser(testUser);
       }
     } else {
-      // Fallback for development
       const testUser = {
         id: 123456789,
         username: 'testuser',
@@ -207,7 +196,6 @@ function App() {
     }
   }, []);
 
-  // Initialize user in database
   const initializeUser = async (user) => {
     const result = await apiCall('/user', {
       method: 'POST',
@@ -224,7 +212,6 @@ function App() {
     }
   };
 
-  // Load user data
   const loadUserData = async (telegramId) => {
     try {
       const [bestScoreResult, statsResult] = await Promise.all([
@@ -244,7 +231,6 @@ function App() {
     }
   };
 
-  // Load leaderboard
   const loadLeaderboard = async () => {
     const result = await apiCall('/leaderboard?limit=50');
     if (result.success) {
@@ -252,7 +238,6 @@ function App() {
     }
   };
 
-  // Save game score
   const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
     if (!userState.telegramUser) return;
 
@@ -268,7 +253,6 @@ function App() {
     });
 
     if (result.success) {
-      // Refresh user data after saving score
       loadUserData(userState.telegramUser.id);
     }
   };
@@ -306,6 +290,71 @@ function App() {
     }
   }, [gameState.currentTab]);
 
+  // Global drag event handlers for WebView
+  useEffect(() => {
+    if (dragState.isDragging) {
+      const handleGlobalMove = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
+        
+        if (e.touches) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
+        setDragState(prev => ({
+          ...prev,
+          dragPosition: { x: clientX, y: clientY },
+          highlightedColumn: targetColumn
+        }));
+      };
+
+      const handleGlobalEnd = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
+        
+        if (e.changedTouches) {
+          clientX = e.changedTouches[0].clientX;
+          clientY = e.changedTouches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+          if (gameState.columns[targetColumn].length < 6) {
+            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
+            }
+          }
+        }
+        resetDragState();
+      };
+
+      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
+      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
+      document.addEventListener('touchcancel', resetDragState, { passive: false });
+      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
+      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
+      document.addEventListener('pointercancel', resetDragState, { passive: false });
+      
+      return () => {
+        document.removeEventListener('touchmove', handleGlobalMove);
+        document.removeEventListener('touchend', handleGlobalEnd);
+        document.removeEventListener('touchcancel', resetDragState);
+        document.removeEventListener('pointermove', handleGlobalMove);
+        document.removeEventListener('pointerup', handleGlobalEnd);
+        document.removeEventListener('pointercancel', resetDragState);
+      };
+    }
+  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
+
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
   const startGame = () => {
@@ -334,7 +383,6 @@ function App() {
 
     setGameState(prev => ({ ...prev, isActive: false }));
     
-    // Save score to database
     saveGameScore(finalScore, gameDuration, matches, maxCombo);
   };
 
@@ -396,13 +444,11 @@ function App() {
           matchFound = true;
           const matchedEmoji = column[i].emoji;
           
-          // Remove matched cats immediately
           updatedColumns[targetColumn] = [
             ...updatedColumns[targetColumn].slice(0, i-2),
             ...updatedColumns[targetColumn].slice(i+1)
           ];
           
-          // Create explosion effect
           setTimeout(() => {
             createExplosion(0, 0, matchedEmoji, scoreGained);
           }, 100);
@@ -426,19 +472,12 @@ function App() {
     return null;
   };
 
-  const getDistanceMoved = (startPos, currentPos) => {
-    const dx = currentPos.x - startPos.x;
-    const dy = currentPos.y - startPos.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
   const handleDragStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     
     e.preventDefault();
     e.stopPropagation();
 
-    // Set pointer capture if available
     if (e.pointerId && e.currentTarget.setPointerCapture) {
       e.currentTarget.setPointerCapture(e.pointerId);
     }
@@ -468,90 +507,20 @@ function App() {
     }
   };
 
-  // Global drag event handlers for WebView
-  useEffect(() => {
-    if (dragState.isDragging) {
-      const handleGlobalMove = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.touches) {
-          clientX = e.touches[0].clientX;
-          clientY = e.touches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        setDragState(prev => ({
-          ...prev,
-          dragPosition: { x: clientX, y: clientY },
-          highlightedColumn: targetColumn
-        }));
-      };
-
-      const handleGlobalEnd = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.changedTouches) {
-          clientX = e.changedTouches[0].clientX;
-          clientY = e.changedTouches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-          // Check if target column is full before allowing drop
-          if (gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-          }
-        }
-        resetDragState();
-      };
-
-      // Add global listeners
-      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
-      document.addEventListener('touchcancel', resetDragState, { passive: false });
-      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
-      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
-      document.addEventListener('pointercancel', resetDragState, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalMove);
-        document.removeEventListener('touchend', handleGlobalEnd);
-        document.removeEventListener('touchcancel', resetDragState);
-        document.removeEventListener('pointermove', handleGlobalMove);
-        document.removeEventListener('pointerup', handleGlobalEnd);
-        document.removeEventListener('pointercancel', resetDragState);
-      };
-    }
-  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
-
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
-      // Remove cat from source column
       if (newColumns[fromColumn]) {
         newColumns[fromColumn] = newColumns[fromColumn].filter(
           cat => cat.id !== draggedCat.id
         );
       }
       
-      // Add cat to target column  
       if (newColumns[targetColumn]) {
         newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
       
-      // Check matches
       const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
       
       const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
@@ -728,77 +697,6 @@ function App() {
     <div className="w-full h-full bg-white pb-20">
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
-        <h1 className="text-lg font-semibold">Tasks</h1>
-      </div>
-      <div className="p-4 space-y-6">
-        <div>
-          <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="text-4xl">🐱</div>
-                <div>
-                  <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
-                  <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-sm">🪙 1,000</span>
-                    <span className="text-sm">⏰ +5s</span>
-                  </div>
-                </div>
-              </div>
-              <button className="bg-gray-300 text-gray-500 px-6 py-2 rounded-full font-semibold">
-                Claim
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <BottomNavBar />
-    </div>
-  );
-
-  const LeaderboardScreen = () => (
-    <div className="w-full h-full bg-gray-100 pb-20">
-      <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
-        <h1 className="text-lg font-semibold">Leaderboard</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
-          <div className="space-y-3">
-            {leaderboard.length > 0 ? (
-              leaderboard.map((player, index) => (
-                <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
-                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                    </span>
-                    <div>
-                      <div className="font-semibold text-gray-800">
-                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
-                      </div>
-                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">best score</div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-500 py-4">
-                <div className="text-4xl mb-2">🐾</div>
-                <div>No scores yet! Be the first to play!</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <BottomNavBar />
-    </div>
-  );
-
   const BonusScreen = () => (
     <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
@@ -1001,48 +899,6 @@ function App() {
         </div>
       </ViewportContainer>
     );
-  }          <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
-            <div className="flex justify-between">
-              <span>Matches:</span>
-              <span className="font-bold">{gameState.matchesMade}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Best Combo:</span>
-              <span className="font-bold">{gameState.maxCombo}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Time Played:</span>
-              <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
-            </div>
-          </div>
-          
-          <p className="text-lg text-black font-bold mb-4">
-            😿 "Meowchi is disappointed but still cute."
-          </p>
-          <p className="text-base text-black font-bold mb-8">
-            {flavorText}
-          </p>
-          
-          <div className="space-y-4">
-            <button
-              onClick={startGame}
-              className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
-            >
-              😺 PLAY AGAIN
-            </button>
-            
-            <button
-              onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-              className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
-              style={{backgroundColor: '#FFD700'}}
-            >
-              📊 LEADERBOARD
-            </button>
-          </div>
-        </div>
-        <BottomNavBar />
-      </div>
-    );
   }
 
   return (
@@ -1158,4 +1014,79 @@ function App() {
   );
 }
 
-export default App;
+export default App;Tasks</h1>
+      </div>
+      <div className="p-4 space-y-6">
+        <div>
+          <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="text-4xl">🐱</div>
+                <div>
+                  <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
+                  <div className="flex items-center gap-2 text-yellow-600">
+                    <span className="text-sm">🪙 1,000</span>
+                    <span className="text-sm">⏰ +5s</span>
+                  </div>
+                </div>
+              </div>
+              <button className="bg-gray-300 text-gray-500 px-6 py-2 rounded-full font-semibold">
+                Claim
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <BottomNavBar />
+    </div>
+  );
+
+  const LeaderboardScreen = () => (
+    <div className="w-full h-full bg-gray-100 pb-20">
+      <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
+        <h1 className="text-lg font-semibold">Leaderboard</h1>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
+          <div className="space-y-3">
+            {leaderboard.length > 0 ? (
+              leaderboard.map((player, index) => (
+                <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                    </span>
+                    <div>
+                      <div className="font-semibold text-gray-800">
+                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
+                      </div>
+                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500">best score</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-gray-500 py-4">
+                <div className="text-4xl mb-2">🐾</div>
+                <div>No scores yet! Be the first to play!</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <BottomNavBar />
+    </div>
+  );
+
+  const BonusScreen = () => (
+    <div className="w-full h-full bg-gray-100 pb-20">
+      <div className="bg-green-500 text-white p-4 flex items-center gap-3">
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
+        <h1 className="text-lg font-semibold">
