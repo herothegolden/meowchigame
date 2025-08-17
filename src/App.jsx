@@ -186,8 +186,16 @@ function App() {
 
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
+    
+    // Prevent Telegram WebApp from interfering
     e.preventDefault();
     e.stopPropagation();
+    
+    // Disable Telegram WebApp haptic feedback during drag
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+    
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
@@ -204,41 +212,78 @@ function App() {
       navigator.vibrate(50);
     }
     
-    // Add simple event listeners
+    // Add touch event listeners with better Telegram compatibility
     const handleMove = (moveE) => {
-      const clientX = moveE.touches ? moveE.touches[0].clientX : moveE.clientX;
-      const clientY = moveE.touches ? moveE.touches[0].clientY : moveE.clientY;
-      const targetColumn = getColumnFromPosition(clientX, clientY);
+      moveE.preventDefault();
+      moveE.stopPropagation();
+      
+      if (!moveE.touches || moveE.touches.length === 0) return;
+      
+      const touchMove = moveE.touches[0];
+      const targetColumn = getColumnFromPosition(touchMove.clientX, touchMove.clientY);
       
       setDragState(prev => ({
         ...prev,
-        dragPosition: { x: clientX, y: clientY },
+        dragPosition: { x: touchMove.clientX, y: touchMove.clientY },
         highlightedColumn: targetColumn
       }));
     };
     
     const handleEnd = (endE) => {
+      endE.preventDefault();
+      endE.stopPropagation();
+      
       document.removeEventListener('touchmove', handleMove);
       document.removeEventListener('touchend', handleEnd);
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseEnd);
       
-      const clientX = endE.changedTouches ? endE.changedTouches[0].clientX : endE.clientX;
+      let clientX = touch.clientX; // fallback to start position
+      
+      if (endE.changedTouches && endE.changedTouches.length > 0) {
+        clientX = endE.changedTouches[0].clientX;
+      }
+      
       const targetColumn = getColumnFromPosition(clientX, clientX);
       
       if (targetColumn && targetColumn !== fromColumn) {
         moveCat(targetColumn, cat, fromColumn);
-        if (navigator.vibrate) {
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        } else if (navigator.vibrate) {
           navigator.vibrate(100);
         }
       }
       resetDragState();
     };
 
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('touchend', handleEnd, { passive: false });
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
+    const handleMouseMove = (moveE) => {
+      const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: moveE.clientX, y: moveE.clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+
+    const handleMouseEnd = (endE) => {
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseEnd);
+      
+      const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+      }
+      resetDragState();
+    };
+
+    // Add listeners with passive: false for better touch handling in Telegram
+    document.addEventListener('touchmove', handleMove, { passive: false, capture: true });
+    document.addEventListener('touchend', handleEnd, { passive: false, capture: true });
+    document.addEventListener('mousemove', handleMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleMouseEnd, { passive: false });
   };
 
 
