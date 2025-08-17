@@ -76,17 +76,20 @@ function MeowChiGame() {
     }
   }, [gameState.isActive]);
 
-  // Add global event listeners for drag
+  // Simpler mobile-friendly drag approach
   useEffect(() => {
-    const handleGlobalTouchMove = (e) => {
-      if (dragState.draggedCat) {
-        e.preventDefault();
-        e.stopPropagation();
+    let touchMoveHandler = null;
+    let touchEndHandler = null;
+
+    if (dragState.draggedCat) {
+      touchMoveHandler = (e) => {
+        console.log('Touch move detected'); // Debug log
         const touch = e.touches[0];
         const currentPos = { x: touch.clientX, y: touch.clientY };
         
         if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
           setDragState(prev => ({ ...prev, isDragging: true }));
+          console.log('Started dragging'); // Debug log
         }
         
         if (dragState.isDragging) {
@@ -97,17 +100,17 @@ function MeowChiGame() {
             highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
           }));
         }
-      }
-    };
-
-    const handleGlobalTouchEnd = (e) => {
-      if (dragState.draggedCat) {
-        e.preventDefault();
-        e.stopPropagation();
         
+        e.preventDefault();
+      };
+
+      touchEndHandler = (e) => {
+        console.log('Touch end detected'); // Debug log
         if (dragState.isDragging) {
           const touch = e.changedTouches[0];
           const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+          console.log('Drop on column:', targetColumn); // Debug log
+          
           if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
             moveCat(targetColumn);
             if (navigator.vibrate) {
@@ -116,55 +119,23 @@ function MeowChiGame() {
           }
         }
         resetDragState();
-      }
-    };
+        e.preventDefault();
+      };
 
-    const handleGlobalMouseMove = (e) => {
-      if (dragState.draggedCat) {
-        const currentPos = { x: e.clientX, y: e.clientY };
-        
-        if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-          setDragState(prev => ({ ...prev, isDragging: true }));
-        }
-        
-        if (dragState.isDragging) {
-          const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-          setDragState(prev => ({
-            ...prev,
-            dragPosition: { x: e.clientX, y: e.clientY },
-            highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-          }));
-        }
-      }
-    };
-
-    const handleGlobalMouseUp = (e) => {
-      if (dragState.draggedCat) {
-        if (dragState.isDragging) {
-          const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-          if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn);
-          }
-        }
-        resetDragState();
-      }
-    };
-
-    // Always add listeners, but make them conditional
-    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
-    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
-    document.addEventListener('touchcancel', handleGlobalTouchEnd, { passive: false });
-    document.addEventListener('mousemove', handleGlobalMouseMove);
-    document.addEventListener('mouseup', handleGlobalMouseUp);
+      // Add listeners with passive: false to allow preventDefault
+      document.addEventListener('touchmove', touchMoveHandler, { passive: false });
+      document.addEventListener('touchend', touchEndHandler, { passive: false });
+      document.addEventListener('touchcancel', touchEndHandler, { passive: false });
+    }
 
     return () => {
-      document.removeEventListener('touchmove', handleGlobalTouchMove);
-      document.removeEventListener('touchend', handleGlobalTouchEnd);
-      document.removeEventListener('touchcancel', handleGlobalTouchEnd);
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      if (touchMoveHandler) {
+        document.removeEventListener('touchmove', touchMoveHandler);
+        document.removeEventListener('touchend', touchEndHandler);
+        document.removeEventListener('touchcancel', touchEndHandler);
+      }
     };
-  }, [dragState.draggedCat, dragState.isDragging, dragState.startPosition, dragState.fromColumn]);
+  }, [dragState.draggedCat, dragState.isDragging]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -275,10 +246,13 @@ function MeowChiGame() {
 
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
+    
+    // Don't prevent default immediately - let's see if this helps
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    console.log('Touch start detected:', catId, fromColumn); // Debug log
+    
     setDragState({
       isDragging: false,
       draggedCat: cat,
@@ -287,9 +261,14 @@ function MeowChiGame() {
       startPosition: { x: touch.clientX, y: touch.clientY },
       highlightedColumn: null
     });
+    
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
+    
+    // Prevent default after setting state
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const handleMouseDown = (e, catId, fromColumn) => {
@@ -344,7 +323,10 @@ function MeowChiGame() {
         className={`text-6xl select-none transition-all duration-200 p-1 ${
           isTopCat ? 'cursor-grab active:cursor-grabbing hover:scale-105' : 'cursor-default'
         }`}
-        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
+        onTouchStart={isTopCat ? (e) => {
+          console.log('Cat touched:', cat.emoji, columnId); // Debug log
+          handleTouchStart(e, cat.id, columnId);
+        } : undefined}
         onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
@@ -353,7 +335,7 @@ function MeowChiGame() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
+          touchAction: isTopCat ? 'none' : 'auto',
           opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.3 : 1
         }}
       >
