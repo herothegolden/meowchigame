@@ -212,14 +212,10 @@ function App() {
       navigator.vibrate(50);
     }
     
-    let moved = false;
-    
     // Add touch event listeners
     const handleMove = (moveE) => {
       moveE.preventDefault();
       moveE.stopPropagation();
-      
-      moved = true;
       
       if (!moveE.touches || moveE.touches.length === 0) return;
       
@@ -240,23 +236,21 @@ function App() {
       document.removeEventListener('touchmove', handleMove);
       document.removeEventListener('touchend', handleEnd);
       
-      // Only move if actually dragged
-      if (moved) {
-        let clientX = touch.clientX;
-        
-        if (endE.changedTouches && endE.changedTouches.length > 0) {
-          clientX = endE.changedTouches[0].clientX;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientX);
-        
-        if (targetColumn && targetColumn !== fromColumn) {
-          moveCat(targetColumn, cat, fromColumn);
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-          } else if (navigator.vibrate) {
-            navigator.vibrate(100);
-          }
+      let clientX = touch.clientX;
+      
+      if (endE.changedTouches && endE.changedTouches.length > 0) {
+        clientX = endE.changedTouches[0].clientX;
+      }
+      
+      const targetColumn = getColumnFromPosition(clientX, clientX);
+      
+      // Allow move even without movement (just touch and release on different column)
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        } else if (navigator.vibrate) {
+          navigator.vibrate(100);
         }
       }
       
