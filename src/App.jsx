@@ -54,10 +54,10 @@ function App() {
       }
     }
 
-    // Prevent Telegram Web App from interfering with touch events
+    // Prevent Telegram Web App from interfering with touch events ONLY during active dragging
     const preventTelegramTouch = (event) => {
-      // Only prevent if we're on draggable elements
-      if (event.target.closest('[data-draggable]')) {
+      // Only prevent if we're actively dragging
+      if (dragState.isDragging) {
         event.preventDefault();
       }
     };
@@ -67,7 +67,7 @@ function App() {
     return () => {
       document.removeEventListener('touchmove', preventTelegramTouch);
     };
-  }, []);
+  }, [dragState.isDragging]); // Add dragState.isDragging as dependency
 
   // Game timer
   useEffect(() => {
@@ -217,10 +217,8 @@ function App() {
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     
-    // CRITICAL: Prevent all default behaviors immediately
-    e.preventDefault();
+    // Don't prevent default on touchstart - let it bubble for initial grab
     e.stopPropagation();
-    e.stopImmediatePropagation();
     
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
