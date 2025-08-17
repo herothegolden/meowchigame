@@ -317,25 +317,10 @@ function MeowChiGame() {
 
   const DraggableCat = ({ cat, columnId, index }) => {
     const isTopCat = index === gameState.columns[columnId].length - 1;
-    const isBeingDragged = draggedCat?.id === cat.id;
-    
-    const handleDragStart = (e) => {
-      if (!isTopCat || !gameState.isActive) {
-        e.preventDefault();
-        return;
-      }
-      setIsDragging(true);
-      setDraggedCat({ ...cat, fromColumn: columnId });
-      if (navigator.vibrate) navigator.vibrate(50);
-    };
     
     return (
       <div
-        className={`text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105 ${
-          isBeingDragged ? 'opacity-50' : ''
-        }`}
-        draggable={isTopCat && gameState.isActive}
-        onDragStart={handleDragStart}
+        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onTouchStart={() => {
           if (isTopCat && navigator.vibrate) {
             navigator.vibrate(50);
