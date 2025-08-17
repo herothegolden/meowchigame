@@ -26,6 +26,12 @@ function App() {
     startPosition: { x: 0, y: 0 }
   });
 
+  const [boardDimensions, setBoardDimensions] = useState({
+    height: 0,
+    cellHeight: 60,
+    emojiSize: 48
+  });
+
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
   const taglines = [
@@ -79,7 +85,92 @@ function App() {
     };
   }, [gameState.timeLeft, gameState.isActive]);
 
-  // Tagline rotation
+  // Board height measurement and cell sizing
+  useEffect(() => {
+    const measureBoardHeight = () => {
+      if (!boardRef.current) return;
+      
+      const boardRect = boardRef.current.getBoundingClientRect();
+      const boardHeight = boardRect.height;
+      
+      if (boardHeight > 0) {
+        // Calculate cell height for 6 rows + padding + gaps
+        // Account for column padding (p-2 = 16px total) and gaps (gap-1 = 4px × 5 = 20px)
+        const availableHeight = boardHeight - 16 - 20;
+        const calculatedCellHeight = availableHeight / 6;
+        
+        // Clamp cell height to reasonable range (min 40px, max 80px)
+        const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
+        const emojiSize = cellHeight * 0.8; // Emoji slightly smaller than cell
+        
+        setBoardDimensions({
+          height: boardHeight,
+          cellHeight,
+          emojiSize
+        });
+      }
+    };
+
+    // Measure on initial render
+    const timeoutId = setTimeout(measureBoardHeight, 100);
+    
+    // Measure on viewport changes
+    const handleResize = () => {
+      measureBoardHeight();
+    };
+
+    // Listen for various viewport change events
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    // Listen for visual viewport changes (keyboard, etc.)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
+
+    // Listen for Telegram viewport changes
+    if (window.Telegram?.WebApp) {
+      const handleTelegramViewport = () => {
+        setTimeout(measureBoardHeight, 100);
+      };
+      window.Telegram.WebApp.onEvent('viewportChanged', handleTelegramViewport);
+    }
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
+
+  // Re-measure when game starts (board becomes visible)
+  useEffect(() => {
+    if (gameState.isActive) {
+      const timeoutId = setTimeout(() => {
+        if (boardRef.current) {
+          const boardRect = boardRef.current.getBoundingClientRect();
+          const boardHeight = boardRect.height;
+          
+          if (boardHeight > 0) {
+            const availableHeight = boardHeight - 16 - 20;
+            const calculatedCellHeight = availableHeight / 6;
+            const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
+            const emojiSize = cellHeight * 0.8;
+            
+            setBoardDimensions({
+              height: boardHeight,
+              cellHeight,
+              emojiSize
+            });
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [gameState.isActive]);
   useEffect(() => {
     if (gameState.isActive) {
       const taglineTimer = setInterval(() => {
@@ -89,7 +180,8 @@ function App() {
     }
   }, [gameState.isActive]);
 
-  // Global drag event handlers for WebView
+  // Tagline rotation
+  useEffect(() => {
   useEffect(() => {
     if (dragState.isDragging) {
       const handleGlobalMove = (e) => {
@@ -153,7 +245,16 @@ function App() {
     }
   }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat]);
 
-  const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
+    if (gameState.isActive) {
+      const taglineTimer = setInterval(() => {
+        setCurrentTagline(prev => (prev + 1) % taglines.length);
+      }, 2000);
+      return () => clearInterval(taglineTimer);
+    }
+  }, [gameState.isActive]);
+
+  // Global drag event handlers for WebView
+  useEffect(() => {
 
   const startGame = () => {
     setGameState(prev => ({
@@ -325,7 +426,72 @@ function App() {
     });
   };
 
-  const DraggableCat = ({ cat, columnId, index }) => {
+    if (dragState.isDragging) {
+      const handleGlobalMove = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
+        
+        if (e.touches) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
+        setDragState(prev => ({
+          ...prev,
+          dragPosition: { x: clientX, y: clientY },
+          highlightedColumn: targetColumn
+        }));
+      };
+
+      const handleGlobalEnd = (e) => {
+        e.preventDefault();
+        let clientX, clientY;
+        
+        if (e.changedTouches) {
+          clientX = e.changedTouches[0].clientX;
+          clientY = e.changedTouches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        
+        const targetColumn = getColumnFromPosition(clientX, clientY);
+        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
+          // Check if target column is full before allowing drop
+          if (gameState.columns[targetColumn].length < 6) {
+            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
+            }
+          }
+        }
+        resetDragState();
+      };
+
+      // Add global listeners
+      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
+      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
+      document.addEventListener('touchcancel', resetDragState, { passive: false });
+      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
+      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
+      document.addEventListener('pointercancel', resetDragState, { passive: false });
+      
+      return () => {
+        document.removeEventListener('touchmove', handleGlobalMove);
+        document.removeEventListener('touchend', handleGlobalEnd);
+        document.removeEventListener('touchcancel', resetDragState);
+        document.removeEventListener('pointermove', handleGlobalMove);
+        document.removeEventListener('pointerup', handleGlobalEnd);
+        document.removeEventListener('pointercancel', resetDragState);
+      };
+    }
+  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
+
+  const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
@@ -348,7 +514,36 @@ function App() {
     );
   };
 
-  const GameColumn = ({ columnId, cats }) => {
+  const DraggableCat = ({ cat, columnId, index, cellHeight, emojiSize }) => {
+    return (
+      <div
+        className="select-none transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 flex items-center justify-center"
+        onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
+        onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
+        style={{
+          height: `${cellHeight}px`,
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          MozUserSelect: 'none',
+          msUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          touchAction: 'none',
+          opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
+        }}
+      >
+        <span 
+          style={{
+            fontSize: `${emojiSize}px`,
+            lineHeight: 1
+          }}
+        >
+          {cat.emoji}
+        </span>
+      </div>
+    );
+  };
     const isFull = cats.length >= 6;
     const isHighlighted = dragState.highlightedColumn === columnId;
     
@@ -498,7 +693,35 @@ function App() {
           </div>
         </div>
       </div>
-      <BottomNavBar />
+      <div className="flex-1 p-3 min-h-0">
+        <div 
+          ref={boardRef} 
+          className="flex justify-center gap-3 h-full"
+          style={{
+            touchAction: 'none',
+            overscrollBehavior: 'contain'
+          }}
+        >
+          <GameColumn 
+            columnId="left" 
+            cats={gameState.columns.left}
+            cellHeight={boardDimensions.cellHeight}
+            emojiSize={boardDimensions.emojiSize}
+          />
+          <GameColumn 
+            columnId="center" 
+            cats={gameState.columns.center}
+            cellHeight={boardDimensions.cellHeight}
+            emojiSize={boardDimensions.emojiSize}
+          />
+          <GameColumn 
+            columnId="right" 
+            cats={gameState.columns.right}
+            cellHeight={boardDimensions.cellHeight}
+            emojiSize={boardDimensions.emojiSize}
+          />
+        </div>
+      </div>
     </div>
   );
 
@@ -685,7 +908,57 @@ function App() {
         </div>
       </div>
 
-      <div className="flex-1 p-3 min-h-0">
+  const GameColumn = ({ columnId, cats, cellHeight, emojiSize }) => {
+    const isFull = cats.length >= 6;
+    const isHighlighted = dragState.highlightedColumn === columnId;
+    
+    // Create array of 6 slots, filling from bottom (newest at top visually)
+    const slots = Array(6).fill(null);
+    
+    // Fill slots from the end (bottom) with cats, so newest appears at top
+    for (let i = 0; i < Math.min(cats.length, 6); i++) {
+      slots[5 - i] = cats[cats.length - 1 - i];
+    }
+    
+    return (
+      <div
+        data-column={columnId}
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col items-center gap-1 bg-white overflow-hidden ${
+          isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        }`}
+        style={{ height: '100%' }}
+      >
+        {slots.map((cat, slotIndex) => (
+          <div
+            key={slotIndex}
+            className="flex items-center justify-center"
+            style={{ 
+              height: `${cellHeight}px`,
+              minHeight: `${cellHeight}px`
+            }}
+          >
+            {cat ? (
+              <DraggableCat 
+                cat={cat} 
+                columnId={columnId} 
+                index={slotIndex}
+                cellHeight={cellHeight}
+                emojiSize={emojiSize}
+              />
+            ) : (
+              slotIndex === 5 && cats.length === 0 ? (
+                <div className="text-gray-300 text-xs text-center">Empty</div>
+              ) : null
+            )}
+          </div>
+        ))}
+        
+        {isFull && (
+          <div className="text-red-400 text-xs text-center font-bold absolute bottom-1">FULL</div>
+        )}
+      </div>
+    );
+  };
         <div 
           ref={boardRef} 
           className="flex justify-center gap-3 h-full"
