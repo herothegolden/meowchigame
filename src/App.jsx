@@ -1,34 +1,4 @@
-const handleTouchMove = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches?.[0];
-    if (!touch) return;
-    
-    setDragState(prev => ({
-      ...prev,
-      dragPosition: { x: touch.clientX, y: touch.clientY },
-      highlightedColumn: getColumnFromPosition(touch.clientX, touch.clientY)
-    }));
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const touch = e.changedTouches?.[0];
-    if (touch) {
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
-        moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-        if (navigator.vibrate) {
-          navigator.vibrate(100);
-        }
-      }
-    }
-    resetDragState();
-  };import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
@@ -233,53 +203,45 @@ function App() {
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
-  };
-
-  const handleTouchMove = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches?.[0];
-    if (!touch) return;
-    const currentPos = { x: touch.clientX, y: touch.clientY };
     
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const clientX = moveE.touches ? moveE.touches[0].clientX : moveE.clientX;
+      const clientY = moveE.touches ? moveE.touches[0].clientY : moveE.clientY;
+      const targetColumn = getColumnFromPosition(clientX, clientY);
+      
       setDragState(prev => ({
         ...prev,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
+        dragPosition: { x: clientX, y: clientY },
+        highlightedColumn: targetColumn
       }));
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
+    };
     
-    // Remove global touch event listeners
-    document.removeEventListener('touchmove', handleTouchMove);
-    document.removeEventListener('touchend', handleTouchEnd);
-    
-    if (dragState.isDragging) {
-      const touch = e.changedTouches?.[0];
-      if (touch) {
-        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-          moveCat(targetColumn);
-          if (navigator.vibrate) {
-            navigator.vibrate(100);
-          }
+    const handleEnd = (endE) => {
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const clientX = endE.changedTouches ? endE.changedTouches[0].clientX : endE.clientX;
+      const targetColumn = getColumnFromPosition(clientX, clientX);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
         }
       }
-    }
-    resetDragState();
+      resetDragState();
+    };
+
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: false });
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
+
+
 
   const handleMouseDown = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
@@ -287,104 +249,61 @@ function App() {
     e.stopPropagation();
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
-    const newDragState = {
-      isDragging: false,
+    setDragState({
+      isDragging: true,
       draggedCat: cat,
       fromColumn: fromColumn,
       dragPosition: { x: e.clientX, y: e.clientY },
       startPosition: { x: e.clientX, y: e.clientY },
       highlightedColumn: null
-    };
+    });
     
-    setDragState(newDragState);
-    
-    // Create handlers that capture current state
-    const moveHandler = (moveE) => {
-      if (!newDragState.draggedCat) return;
-      const currentPos = { x: moveE.clientX, y: moveE.clientY };
-      
-      const distance = Math.sqrt(
-        Math.pow(currentPos.x - newDragState.startPosition.x, 2) + 
-        Math.pow(currentPos.y - newDragState.startPosition.y, 2)
-      );
-      
-      // Always set dragging to true after any movement
-      setDragState(prev => ({ ...prev, isDragging: true }));
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
       
       setDragState(prev => ({
         ...prev,
         dragPosition: { x: moveE.clientX, y: moveE.clientY },
-        highlightedColumn: getColumnFromPosition(moveE.clientX, moveE.clientY)
+        highlightedColumn: targetColumn
       }));
     };
     
-    const upHandler = (upE) => {
-      document.removeEventListener('mousemove', moveHandler);
-      document.removeEventListener('mouseup', upHandler);
+    const handleEnd = (endE) => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
       
-      const targetColumn = getColumnFromPosition(upE.clientX, upE.clientY);
-      console.log('Target column:', targetColumn, 'Source:', newDragState.fromColumn);
-      // Always move if target is different from source
-      if (targetColumn && targetColumn !== newDragState.fromColumn) {
-        console.log('Moving cat from', newDragState.fromColumn, 'to', targetColumn);
-        moveCat(targetColumn, newDragState.draggedCat, newDragState.fromColumn);
+      const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
       }
       resetDragState();
     };
-    
-    document.addEventListener('mousemove', moveHandler);
-    document.addEventListener('mouseup', upHandler);
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
 
-  const handleMouseMove = (e) => {
-    if (!dragState.draggedCat) return;
-    const currentPos = { x: e.clientX, y: e.clientY };
-    
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: e.clientX, y: e.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-      }));
-    }
-  };
-
-  const handleMouseUp = (e) => {
-    if (!dragState.draggedCat) return;
-    
-    // Remove global mouse event listeners
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-        moveCat(targetColumn);
-      }
-    }
-    resetDragState();
-  };
-
-  const moveCat = (targetColumn) => {
-    if (!targetColumn || !dragState.draggedCat || !gameState.columns[targetColumn] || gameState.columns[targetColumn].length >= 6) return;
+  const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
+      
       // Remove cat from source column
-      if (newColumns[dragState.fromColumn]) {
-        newColumns[dragState.fromColumn] = newColumns[dragState.fromColumn].filter(
-          cat => cat.id !== dragState.draggedCat.id
+      if (newColumns[fromColumn]) {
+        newColumns[fromColumn] = newColumns[fromColumn].filter(
+          cat => cat.id !== draggedCat.id
         );
       }
-      // Add cat to top of target column
+      
+      // Add cat to target column  
       if (newColumns[targetColumn]) {
-        newColumns[targetColumn] = [...newColumns[targetColumn], dragState.draggedCat];
+        newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
+      
+      // Check matches
       const { updatedColumns, scoreGained } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
+      
       return {
         ...prev,
         columns: updatedColumns,
@@ -405,32 +324,12 @@ function App() {
     });
   };
 
-  // Remove the conflicting useEffect for mouse events - now handled manually
-  /*
-  useEffect(() => {
-    const handleGlobalMouseMove = (e) => handleMouseMove(e);
-    const handleGlobalMouseUp = (e) => handleMouseUp(e);
-
-    if (dragState.draggedCat) {
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('mouseup', handleGlobalMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-  }, [dragState.draggedCat]);
-  */
-
   const DraggableCat = ({ cat, columnId, index }) => {
     
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
@@ -467,7 +366,7 @@ function App() {
         )}
         
         {isFull && (
-          <div className="text-red-400 text-xs text-center font-bold mt-2">FULL</div>
+          <div className="text-red-400 text-xs text-center font-bold">FULL</div>
         )}
       </div>
     );
