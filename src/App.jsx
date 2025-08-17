@@ -184,20 +184,26 @@ function App() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
+  const [touchState, setTouchState] = useState({
+    touching: false,
+    startTime: 0,
+    startPos: { x: 0, y: 0 }
+  });
+
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    
-    // Prevent multiple triggers
-    if (dragState.isDragging) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
     
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
+    setTouchState({
+      touching: true,
+      startTime: Date.now(),
+      startPos: { x: touch.clientX, y: touch.clientY }
+    });
+    
     setDragState({
-      isDragging: true,
+      isDragging: false,
       draggedCat: cat,
       fromColumn: fromColumn,
       dragPosition: { x: touch.clientX, y: touch.clientY },
@@ -205,60 +211,46 @@ function App() {
       highlightedColumn: null
     });
     
-    // Use Telegram haptic if available, otherwise vibrate
     if (window.Telegram?.WebApp?.HapticFeedback) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
     } else if (navigator.vibrate) {
-      navigator.vibrate(50);
+      navigator.vibrate(30);
     }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchState.touching || !dragState.draggedCat) return;
     
-    // Add touch event listeners
-    const handleMove = (moveE) => {
-      moveE.preventDefault();
-      moveE.stopPropagation();
-      
-      if (!moveE.touches || moveE.touches.length === 0) return;
-      
-      const touchMove = moveE.touches[0];
-      const targetColumn = getColumnFromPosition(touchMove.clientX, touchMove.clientY);
-      
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: touchMove.clientX, y: touchMove.clientY },
-        highlightedColumn: targetColumn
-      }));
-    };
+    const touch = e.touches[0];
+    const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
     
-    const handleEnd = (endE) => {
-      endE.preventDefault();
-      endE.stopPropagation();
+    setDragState(prev => ({
+      ...prev,
+      isDragging: true,
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      highlightedColumn: targetColumn
+    }));
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchState.touching || !dragState.draggedCat) return;
+    
+    const touch = e.changedTouches?.[0];
+    if (touch) {
+      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
       
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('touchend', handleEnd);
-      
-      let clientX = touch.clientX;
-      
-      if (endE.changedTouches && endE.changedTouches.length > 0) {
-        clientX = endE.changedTouches[0].clientX;
-      }
-      
-      const targetColumn = getColumnFromPosition(clientX, clientX);
-      
-      // Allow move even without movement (just touch and release on different column)
-      if (targetColumn && targetColumn !== fromColumn) {
-        moveCat(targetColumn, cat, fromColumn);
+      if (targetColumn && targetColumn !== dragState.fromColumn) {
+        moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         } else if (navigator.vibrate) {
-          navigator.vibrate(100);
+          navigator.vibrate(50);
         }
       }
-      
-      resetDragState();
-    };
-
-    document.addEventListener('touchmove', handleMove, { passive: false });
-    document.addEventListener('touchend', handleEnd, { passive: false });
+    }
+    
+    setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
+    resetDragState();
   };
 
 
@@ -354,6 +346,8 @@ function App() {
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
