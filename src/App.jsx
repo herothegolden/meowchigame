@@ -165,17 +165,33 @@ function App() {
     return { updatedColumns, scoreGained };
   };
 
+  // Alternative column detection for Telegram
+  const getColumnFromPositionSimple = (x) => {
+    const screenWidth = window.innerWidth;
+    const columnWidth = screenWidth / 3;
+    
+    if (x < columnWidth) return 'left';
+    if (x < columnWidth * 2) return 'center';
+    return 'right';
+  };
+
   const getColumnFromPosition = (x, y) => {
-    if (!boardRef.current) return null;
-    const columns = boardRef.current.querySelectorAll('[data-column]');
-    for (let i = 0; i < columns.length; i++) {
-      const column = columns[i];
-      const rect = column.getBoundingClientRect();
-      if (x >= rect.left && x <= rect.right) {
-        return column.getAttribute('data-column');
+    if (isInTelegram) {
+      // Use simple screen division for Telegram
+      return getColumnFromPositionSimple(x);
+    } else {
+      // Use precise detection for regular browsers
+      if (!boardRef.current) return null;
+      const columns = boardRef.current.querySelectorAll('[data-column]');
+      for (let i = 0; i < columns.length; i++) {
+        const column = columns[i];
+        const rect = column.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right) {
+          return column.getAttribute('data-column');
+        }
       }
+      return null;
     }
-    return null;
   };
 
   const getDistanceMoved = (startPos, currentPos) => {
@@ -274,9 +290,10 @@ function App() {
       // Telegram handling
       if (!dragState.draggedCat) return;
       
-      const touch = e.changedTouches?.[0];
+      const touch = e.changedTouches?.[0] || e.touches?.[0];
       if (touch) {
         const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+        console.log('Telegram drop - Target:', targetColumn, 'Source:', dragState.fromColumn);
         
         if (targetColumn && targetColumn !== dragState.fromColumn) {
           moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
