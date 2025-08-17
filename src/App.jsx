@@ -5,6 +5,10 @@ const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
 
+// Fixed reference canvas dimensions
+const REFERENCE_WIDTH = 393;
+const REFERENCE_HEIGHT = 852;
+
 // API helper functions
 const API_BASE = window.location.origin;
 
@@ -22,6 +26,101 @@ const apiCall = async (endpoint, options = {}) => {
     console.error('API call failed:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Viewport Container Component
+const ViewportContainer = ({ children }) => {
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef(null);
+
+  const computeScale = () => {
+    // Get available viewport dimensions
+    let availableWidth = window.innerWidth;
+    let availableHeight = window.innerHeight;
+
+    // Use Telegram's stable height if available
+    if (window.Telegram?.WebApp?.viewportStableHeight) {
+      availableHeight = window.Telegram.WebApp.viewportStableHeight;
+    } else if (window.visualViewport) {
+      availableHeight = window.visualViewport.height;
+    }
+
+    // Deduct safe area insets if available
+    const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0;
+    const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')) || 0;
+    
+    availableHeight -= (safeAreaTop + safeAreaBottom);
+
+    // Compute scale to fit reference canvas
+    const scaleX = availableWidth / REFERENCE_WIDTH;
+    const scaleY = availableHeight / REFERENCE_HEIGHT;
+    const newScale = Math.min(scaleX, scaleY);
+
+    setScale(newScale);
+  };
+
+  useEffect(() => {
+    // Initial scale computation
+    computeScale();
+
+    // Recompute on viewport changes
+    const handleResize = () => {
+      computeScale();
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    // Visual viewport changes (keyboard, etc.)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
+
+    // Telegram viewport changes
+    if (window.Telegram?.WebApp?.onEvent) {
+      window.Telegram.WebApp.onEvent('viewportChanged', handleResize);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: '100vw',
+        height: '100dvh',
+        overflow: 'hidden',
+        overscrollBehavior: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f3f4f6', // Gray background for letterboxing
+        position: 'fixed',
+        top: 0,
+        left: 0
+      }}
+    >
+      <div
+        style={{
+          width: REFERENCE_WIDTH,
+          height: REFERENCE_HEIGHT,
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          overflow: 'hidden',
+          position: 'relative'
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 };
 
 function App() {
@@ -483,7 +582,7 @@ function App() {
   const DraggableCat = ({ cat, columnId }) => {
     return (
       <div
-        className="text-4xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
         onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
@@ -626,7 +725,7 @@ function App() {
   };
 
   const TasksScreen = () => (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="w-full h-full bg-white pb-20">
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
         <h1 className="text-lg font-semibold">Tasks</h1>
@@ -658,7 +757,7 @@ function App() {
   );
 
   const LeaderboardScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
         <h1 className="text-lg font-semibold">Leaderboard</h1>
@@ -701,7 +800,7 @@ function App() {
   );
 
   const BonusScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
         <h1 className="text-lg font-semibold">Bonus Time</h1>
@@ -717,7 +816,7 @@ function App() {
   );
 
   const AccountScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="w-full h-full bg-gray-100 pb-20">
       <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
         <h1 className="text-lg font-semibold">Account</h1>
@@ -765,53 +864,71 @@ function App() {
     </div>
   );
 
-  if (gameState.currentTab === 'tasks') return <TasksScreen />;
-  if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
-  if (gameState.currentTab === 'bonus') return <BonusScreen />;
-  if (gameState.currentTab === 'account') return <AccountScreen />;
+  if (gameState.currentTab === 'tasks') return (
+    <ViewportContainer>
+      <TasksScreen />
+    </ViewportContainer>
+  );
+  if (gameState.currentTab === 'leaderboard') return (
+    <ViewportContainer>
+      <LeaderboardScreen />
+    </ViewportContainer>
+  );
+  if (gameState.currentTab === 'bonus') return (
+    <ViewportContainer>
+      <BonusScreen />
+    </ViewportContainer>
+  );
+  if (gameState.currentTab === 'account') return (
+    <ViewportContainer>
+      <AccountScreen />
+    </ViewportContainer>
+  );
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
-          <p className="text-black text-xl font-bold mb-8">
-            Drop cats. Cause mayhem. Match 3 before they scream.
-          </p>
-          
-          <div className="mb-8">
-            <div className="flex justify-center gap-3 mb-4">
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+      <ViewportContainer>
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
+          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+            <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
+            <p className="text-black text-xl font-bold mb-8">
+              Drop cats. Cause mayhem. Match 3 before they scream.
+            </p>
+            
+            <div className="mb-8">
+              <div className="flex justify-center gap-3 mb-4">
+                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
+                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
+                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
+                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
+                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+              </div>
+              <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
             </div>
-            <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
-          </div>
-          
-          <div className="mb-8 text-lg text-black font-bold leading-relaxed">
-            <div>⏱ 60 seconds of panic</div>
-            <div>🐾 +1000 purr-points</div>
-            <div>🔥 Combos = Catnado</div>
-          </div>
+            
+            <div className="mb-8 text-lg text-black font-bold leading-relaxed">
+              <div>⏱ 60 seconds of panic</div>
+              <div>🐾 +1000 purr-points</div>
+              <div>🔥 Combos = Catnado</div>
+            </div>
 
-          {userState.bestScore && (
-            <div className="mb-6 p-3 bg-black bg-opacity-10 rounded-lg">
-              <div className="text-sm text-black font-bold">Your Best Score</div>
-              <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
-            </div>
-          )}
-          
-          <button
-            onClick={startGame}
-            className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
-          >
-            ▶️ LET'S GOOO!
-          </button>
+            {userState.bestScore && (
+              <div className="mb-6 p-3 bg-black bg-opacity-10 rounded-lg">
+                <div className="text-sm text-black font-bold">Your Best Score</div>
+                <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+              </div>
+            )}
+            
+            <button
+              onClick={startGame}
+              className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
+            >
+              ▶️ LET'S GOOO!
+            </button>
+          </div>
+          <BottomNavBar />
         </div>
-        <BottomNavBar />
-      </div>
+      </ViewportContainer>
     );
   }
 
@@ -826,21 +943,65 @@ function App() {
     const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
     
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
-          
-          {isNewBest && (
-            <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4">
-              <div className="text-2xl">🏆</div>
-              <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
+      <ViewportContainer>
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
+          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+            <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+            
+            {isNewBest && (
+              <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4">
+                <div className="text-2xl">🏆</div>
+                <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
+              </div>
+            )}
+            
+            <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
+            <p className="text-black text-xl font-bold mb-4">Final Score</p>
+            
+            <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between">
+                <span>Matches:</span>
+                <span className="font-bold">{gameState.matchesMade}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Best Combo:</span>
+                <span className="font-bold">{gameState.maxCombo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time Played:</span>
+                <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
+              </div>
             </div>
-          )}
-          
-          <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
-          <p className="text-black text-xl font-bold mb-4">Final Score</p>
-          
-          <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
+            
+            <p className="text-lg text-black font-bold mb-4">
+              😿 "Meowchi is disappointed but still cute."
+            </p>
+            <p className="text-base text-black font-bold mb-8">
+              {flavorText}
+            </p>
+            
+            <div className="space-y-4">
+              <button
+                onClick={startGame}
+                className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
+              >
+                😺 PLAY AGAIN
+              </button>
+              
+              <button
+                onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
+                className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
+                style={{backgroundColor: '#FFD700'}}
+              >
+                📊 LEADERBOARD
+              </button>
+            </div>
+          </div>
+          <BottomNavBar />
+        </div>
+      </ViewportContainer>
+    );
+  }<div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
             <div className="flex justify-between">
               <span>Matches:</span>
               <span className="font-bold">{gameState.matchesMade}</span>
@@ -885,113 +1046,115 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden">
-      {animations.map((animation) => (
-        <ExplosionAnimation key={animation.id} animation={animation} />
-      ))}
+    <ViewportContainer>
+      <div className="w-full h-full bg-gray-100 flex flex-col relative overflow-hidden">
+        {animations.map((animation) => (
+          <ExplosionAnimation key={animation.id} animation={animation} />
+        ))}
 
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
+        {dragState.isDragging && dragState.draggedCat && (
+          <div
+            className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
+            style={{
+              left: dragState.dragPosition.x,
+              top: dragState.dragPosition.y,
+            }}
+          >
+            {dragState.draggedCat.emoji}
+          </div>
+        )}
+
+        <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
+          <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
         </div>
-      )}
 
-      <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
-        <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
-      </div>
-
-      <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">⏱</span>
-          <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
-            {gameState.timeLeft}s
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🐾</span>
-          <span className="text-2xl font-black text-purple-600">{gameState.score.toLocaleString()}</span>
-        </div>
-      </div>
-
-      <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
-        <div className="flex items-center justify-center gap-3 text-white">
-          <span className="font-semibold">NEXT:</span>
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-            <span className="text-6xl">{gameState.nextCat}</span>
+        <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">⏱</span>
+            <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
+              {gameState.timeLeft}s
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🐾</span>
+            <span className="text-2xl font-black text-purple-600">{gameState.score.toLocaleString()}</span>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 p-3 min-h-0">
-        <div 
-          ref={boardRef} 
-          className="flex justify-center gap-3 h-full"
-          style={{
-            touchAction: 'none',
-            overscrollBehavior: 'contain'
-          }}
-        >
-          <GameColumn columnId="left" cats={gameState.columns.left} />
-          <GameColumn columnId="center" cats={gameState.columns.center} />
-          <GameColumn columnId="right" cats={gameState.columns.right} />
+        <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
+          <div className="flex items-center justify-center gap-3 text-white">
+            <span className="font-semibold">NEXT:</span>
+            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+              <span className="text-6xl">{gameState.nextCat}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="p-3 bg-white border-t mb-20">
-        <div className="flex gap-2 mb-2">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
+        <div className="flex-1 p-3 min-h-0">
+          <div 
+            ref={boardRef} 
+            className="flex justify-center gap-3 h-full"
+            style={{
+              touchAction: 'none',
+              overscrollBehavior: 'contain'
+            }}
           >
-            <span className="text-2xl">🔽</span>
-            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-2xl">🔽</span>
-            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-2xl">🔽</span>
-            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
+            <GameColumn columnId="left" cats={gameState.columns.left} />
+            <GameColumn columnId="center" cats={gameState.columns.center} />
+            <GameColumn columnId="right" cats={gameState.columns.right} />
+          </div>
         </div>
-        
-        <p className="text-center text-gray-500 text-sm font-medium">
-          💡 Tip: Drag top cats between columns or use drop buttons!
-        </p>
-      </div>
 
-      <BottomNavBar />
-    </div>
+        <div className="p-3 bg-white border-t mb-20">
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => dropNewCat('left')}
+              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-2xl">🔽</span>
+              <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+            </button>
+            
+            <button
+              onClick={() => dropNewCat('center')}
+              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-2xl">🔽</span>
+              <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
+            </button>
+            
+            <button
+              onClick={() => dropNewCat('right')}
+              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-2xl">🔽</span>
+              <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
+            </button>
+          </div>
+          
+          <p className="text-center text-gray-500 text-sm font-medium">
+            💡 Tip: Drag top cats between columns or use drop buttons!
+          </p>
+        </div>
+
+        <BottomNavBar />
+      </div>
+    </ViewportContainer>
   );
 }
 
