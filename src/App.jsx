@@ -36,7 +36,7 @@ function MeowChiGame() {
   
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
-  const dragThreshold = 15;
+  const dragThreshold = 8;
 
   // Initialize Telegram Web App
   useEffect(() => {
@@ -462,8 +462,8 @@ function MeowChiGame() {
         data-cat-id={cat.id}
         data-column={columnId}
         data-is-top={isTopCat}
-        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
-        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
+        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -817,7 +817,7 @@ function MeowChiGame() {
       </div>
 
       <div className="flex-1 p-3 min-h-0">
-        <div ref={boardRef} className="flex justify-center gap-3 h-full">
+        <div ref={boardRef} className="flex justify-center gap-3 h-full" style={{ touchAction: 'none', overscrollBehavior: 'contain' }}>
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
