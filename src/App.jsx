@@ -17,15 +17,6 @@ function MeowChiGame() {
     currentTab: 'play'
   });
 
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    draggedCat: null,
-    fromColumn: null,
-    dragPosition: { x: 0, y: 0 },
-    highlightedColumn: null,
-    startPosition: { x: 0, y: 0 }
-  });
-
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
   const taglines = [
@@ -36,7 +27,6 @@ function MeowChiGame() {
   
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
-  const dragThreshold = 15;
 
   // Initialize Telegram Web App
   useEffect(() => {
@@ -116,7 +106,7 @@ function MeowChiGame() {
   };
 
   const dropNewCat = (column) => {
-    if (!gameState.isActive || dragState.isDragging) return;
+    if (!gameState.isActive) return;
     if (gameState.columns[column].length >= 6) return;
 
     const newCat = { id: generateCatId(), emoji: gameState.nextCat };
@@ -163,164 +153,12 @@ function MeowChiGame() {
     return { updatedColumns, scoreGained };
   };
 
-  const getColumnFromPosition = (x, y) => {
-    if (!boardRef.current) return null;
-    const columns = boardRef.current.querySelectorAll('[data-column]');
-    for (let i = 0; i < columns.length; i++) {
-      const column = columns[i];
-      const rect = column.getBoundingClientRect();
-      if (x >= rect.left - 20 && x <= rect.right + 20) {
-        return column.getAttribute('data-column');
-      }
-    }
-    return null;
-  };
-
-  const getDistanceMoved = (startPos, currentPos) => {
-    const dx = currentPos.x - startPos.x;
-    const dy = currentPos.y - startPos.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  const handleTouchStart = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches[0];
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    setDragState({
-      isDragging: false,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: touch.clientX, y: touch.clientY },
-      startPosition: { x: touch.clientX, y: touch.clientY },
-      highlightedColumn: null
-    });
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches[0];
-    const currentPos = { x: touch.clientX, y: touch.clientY };
-    
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-      }));
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (dragState.isDragging) {
-      const touch = e.changedTouches[0];
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-        moveCat(targetColumn);
-        if (navigator.vibrate) {
-          navigator.vibrate(100);
-        }
-      }
-    }
-    resetDragState();
-  };
-
-  const handleMouseDown = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    setDragState({
-      isDragging: false,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      startPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: null
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!dragState.draggedCat) return;
-    const currentPos = { x: e.clientX, y: e.clientY };
-    
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: e.clientX, y: e.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-      }));
-    }
-  };
-
-  const handleMouseUp = (e) => {
-    if (!dragState.draggedCat) return;
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
-        moveCat(targetColumn);
-      }
-    }
-    resetDragState();
-  };
-
-  const moveCat = (targetColumn) => {
-    if (gameState.columns[targetColumn].length >= 6) return;
-    setGameState(prev => {
-      const newColumns = { ...prev.columns };
-      newColumns[dragState.fromColumn] = newColumns[dragState.fromColumn].filter(
-        cat => cat.id !== dragState.draggedCat.id
-      );
-      newColumns[targetColumn] = [...newColumns[targetColumn], dragState.draggedCat];
-      const { updatedColumns, scoreGained } = checkMatches(newColumns, targetColumn);
-      return {
-        ...prev,
-        columns: updatedColumns,
-        score: prev.score + scoreGained,
-        consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
-      };
-    });
-  };
-
-  const resetDragState = () => {
-    setDragState({
-      isDragging: false,
-      draggedCat: null,
-      fromColumn: null,
-      dragPosition: { x: 0, y: 0 },
-      startPosition: { x: 0, y: 0 },
-      highlightedColumn: null
-    });
-  };
-
-  // No complex event listeners needed for click-based approach
-
   const DraggableCat = ({ cat, columnId, index }) => {
     const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
-        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        className="text-6xl select-none transition-all duration-200 p-1 hover:scale-105"
         onTouchStart={() => {
           if (isTopCat && navigator.vibrate) {
             navigator.vibrate(50);
@@ -342,50 +180,9 @@ function MeowChiGame() {
 
   const GameColumn = ({ columnId, cats }) => {
     const isFull = cats.length >= 6;
-    const canDrop = isDragging && draggedCat && draggedCat.fromColumn !== columnId && !isFull;
-    
-    const handleDrop = (e) => {
-      e.preventDefault();
-      if (!draggedCat || !isDragging) return;
-      
-      if (draggedCat.fromColumn !== columnId && !isFull) {
-        // Move the cat
-        setGameState(prev => {
-          const newColumns = { ...prev.columns };
-          // Remove from source
-          newColumns[draggedCat.fromColumn] = newColumns[draggedCat.fromColumn].filter(
-            cat => cat.id !== draggedCat.id
-          );
-          // Add to target
-          newColumns[columnId] = [...newColumns[columnId], { id: draggedCat.id, emoji: draggedCat.emoji }];
-          
-          // Check for matches
-          const { updatedColumns, scoreGained } = checkMatches(newColumns, columnId);
-          
-          return {
-            ...prev,
-            columns: updatedColumns,
-            score: prev.score + scoreGained,
-            consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
-          };
-        });
-        
-        if (navigator.vibrate) navigator.vibrate(100);
-      }
-      
-      // Reset drag state
-      setIsDragging(false);
-      setDraggedCat(null);
-    };
     
     return (
-      <div
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
-          canDrop ? 'border-green-400 bg-green-50' : 'border-gray-300'
-        }`}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-      >
+      <div className="flex-1 max-w-20 border-2 border-gray-300 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full">
         {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
         ))}
@@ -503,27 +300,8 @@ function MeowChiGame() {
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
         <h1 className="text-lg font-semibold">Tasks</h1>
       </div>
-      <div className="p-4 space-y-6">
-        <div>
-          <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="text-4xl">🐱</div>
-                <div>
-                  <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
-                  <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-sm">🪙 1,000</span>
-                    <span className="text-sm">⏰ +5s</span>
-                  </div>
-                </div>
-              </div>
-              <button className="bg-gray-300 text-gray-500 px-6 py-2 rounded-full font-semibold">
-                Claim
-              </button>
-            </div>
-          </div>
-        </div>
+      <div className="p-4">
+        <p>Tasks coming soon!</p>
       </div>
       <BottomNavBar />
     </div>
@@ -535,16 +313,8 @@ function MeowChiGame() {
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
         <h1 className="text-lg font-semibold">Leaderboard</h1>
       </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>🥇 @player1</span>
-              <span className="font-bold text-yellow-600">15,000 pts</span>
-            </div>
-          </div>
-        </div>
+      <div className="p-4">
+        <p>Leaderboard coming soon!</p>
       </div>
       <BottomNavBar />
     </div>
@@ -556,11 +326,8 @@ function MeowChiGame() {
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
         <h1 className="text-lg font-semibold">Bonus Time</h1>
       </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
-        </div>
+      <div className="p-4">
+        <p>Bonus features coming soon!</p>
       </div>
       <BottomNavBar />
     </div>
@@ -572,11 +339,8 @@ function MeowChiGame() {
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
         <h1 className="text-lg font-semibold">Account</h1>
       </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800">@username</h3>
-        </div>
+      <div className="p-4">
+        <p>Account features coming soon!</p>
       </div>
       <BottomNavBar />
     </div>
@@ -674,18 +438,6 @@ function MeowChiGame() {
         <ExplosionAnimation key={animation.id} animation={animation} />
       ))}
 
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
-        </div>
-      )}
-
       <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
         <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
       </div>
@@ -724,9 +476,9 @@ function MeowChiGame() {
         <div className="flex gap-2 mb-2">
           <button
             onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+            disabled={!gameState.isActive || gameState.columns.left.length >= 6}
             className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+              gameState.isActive && gameState.columns.left.length < 6
                 ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
@@ -737,9 +489,9 @@ function MeowChiGame() {
           
           <button
             onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+            disabled={!gameState.isActive || gameState.columns.center.length >= 6}
             className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+              gameState.isActive && gameState.columns.center.length < 6
                 ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
@@ -750,56 +502,9 @@ function MeowChiGame() {
           
           <button
             onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+            disabled={!gameState.isActive || gameState.columns.right.length >= 6}
             className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-red-500">🔽</span>
-            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-        </div>
-        
-        <p className="text-center text-gray-500 text-xs">
-          💡 Tip: Drag top cats between columns!
-        </p>
-      </div>
-
-      <div className="p-3 bg-white border-t">
-        <div className="flex gap-2 mb-2">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-red-500">🔽</span>
-            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-red-500">🔽</span>
-            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-            className={`flex-1 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-sm ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+              gameState.isActive && gameState.columns.right.length < 6
                 ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
