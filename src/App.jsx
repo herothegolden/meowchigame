@@ -210,6 +210,8 @@ function App() {
   const isInTelegram = window.Telegram?.WebApp?.initData;
 
   const handleTouchStart = (e, catId, fromColumn) => {
+    e.preventDefault(); // stop UA gestures early
+    e.stopPropagation();
     if (!gameState.isActive) return;
     
     // Different handling for Telegram vs regular browser
@@ -257,6 +259,7 @@ function App() {
   };
 
   const handleTouchMove = (e) => {
+    e.preventDefault(); // keep the gesture ours
     if (isInTelegram) {
       // Telegram handling
       if (!dragState.draggedCat || !dragState.isDragging) return;
@@ -286,6 +289,7 @@ function App() {
   };
 
   const handleTouchEnd = (e) => {
+    e.preventDefault();
     if (isInTelegram) {
       // Telegram handling
       if (!dragState.draggedCat) return;
@@ -322,6 +326,12 @@ function App() {
       setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
       resetDragState();
     }
+  };
+
+  const handleTouchCancel = () => {
+    // Telegram/iOS will fire this if the webview started scrolling or interrupted the gesture
+    setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
+    resetDragState();
   };
 
 
@@ -419,6 +429,7 @@ function App() {
         onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
@@ -773,7 +784,11 @@ function App() {
       </div>
 
       <div className="flex-1 p-3 min-h-0">
-        <div ref={boardRef} className="flex justify-center gap-3 h-full">
+        <div 
+          ref={boardRef} 
+          className="flex justify-center gap-3 h-full"
+          style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
+        >
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
