@@ -1,59 +1,4 @@
-const handlePointerDown = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    // lock the pointer to this element for the whole drag
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-
-    setDragState({
-      isDragging: true,
-      draggedCat: cat,
-      fromColumn,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      startPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: getColumnFromPosition(e.clientX, e.clientY)
-    });
-
-    // haptics if available (Telegram or native)
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-    } else if (navigator.vibrate) {
-      navigator.vibrate(15);
-    }
-  };
-
-  const handlePointerMove = (e) => {
-    if (!dragState.isDragging || !dragState.draggedCat) return;
-    e.preventDefault();
-    const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-    setDragState(prev => ({
-      ...prev,
-      dragPosition: { x: e.clientX, y: e.clientY },
-      highlightedColumn: targetColumn
-    }));
-  };
-
-  const handlePointerUp = (e) => {
-    e.preventDefault();
-    if (dragState.draggedCat) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
-        moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        } else if (navigator.vibrate) {
-          navigator.vibrate(30);
-        }
-      }
-    }
-    resetDragState();
-  };
-
-  const handlePointerCancel = () => {
-    resetDragState();
-  };import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
@@ -220,33 +165,17 @@ function App() {
     return { updatedColumns, scoreGained };
   };
 
-  // Alternative column detection for Telegram
-  const getColumnFromPositionSimple = (x) => {
-    const screenWidth = window.innerWidth;
-    const columnWidth = screenWidth / 3;
-    
-    if (x < columnWidth) return 'left';
-    if (x < columnWidth * 2) return 'center';
-    return 'right';
-  };
-
   const getColumnFromPosition = (x, y) => {
-    if (isInTelegram) {
-      // Use simple screen division for Telegram
-      return getColumnFromPositionSimple(x);
-    } else {
-      // Use precise detection for regular browsers
-      if (!boardRef.current) return null;
-      const columns = boardRef.current.querySelectorAll('[data-column]');
-      for (let i = 0; i < columns.length; i++) {
-        const column = columns[i];
-        const rect = column.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right) {
-          return column.getAttribute('data-column');
-        }
+    if (!boardRef.current) return null;
+    const columns = boardRef.current.querySelectorAll('[data-column]');
+    for (let i = 0; i < columns.length; i++) {
+      const column = columns[i];
+      const rect = column.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right) {
+        return column.getAttribute('data-column');
       }
-      return null;
     }
+    return null;
   };
 
   const getDistanceMoved = (startPos, currentPos) => {
@@ -255,138 +184,61 @@ function App() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  const [touchState, setTouchState] = useState({
-    touching: false,
-    startTime: 0,
-    startPos: { x: 0, y: 0 }
-  });
-
-  // Detect if running in Telegram
-  const isInTelegram = window.Telegram?.WebApp?.initData;
-
   const handleTouchStart = (e, catId, fromColumn) => {
-    e.preventDefault(); // stop UA gestures early
-    e.stopPropagation();
     if (!gameState.isActive) return;
-    
-    // Different handling for Telegram vs regular browser
-    if (isInTelegram) {
-      // Telegram-specific handling
-      const touch = e.touches[0];
-      const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-      
-      setDragState({
-        isDragging: true,
-        draggedCat: cat,
-        fromColumn: fromColumn,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        startPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: null
-      });
-      
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-      }
-    } else {
-      // Regular browser handling (like the preview)
-      const touch = e.touches[0];
-      const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-      
-      setTouchState({
-        touching: true,
-        startTime: Date.now(),
-        startPos: { x: touch.clientX, y: touch.clientY }
-      });
-      
-      setDragState({
-        isDragging: false,
-        draggedCat: cat,
-        fromColumn: fromColumn,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        startPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: null
-      });
-      
-      if (navigator.vibrate) {
-        navigator.vibrate(30);
-      }
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    e.preventDefault(); // keep the gesture ours
-    if (isInTelegram) {
-      // Telegram handling
-      if (!dragState.draggedCat || !dragState.isDragging) return;
-      
-      const touch = e.touches[0];
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: targetColumn
-      }));
-    } else {
-      // Regular browser handling
-      if (!touchState.touching || !dragState.draggedCat) return;
-      
-      const touch = e.touches[0];
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      
-      setDragState(prev => ({
-        ...prev,
-        isDragging: true,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: targetColumn
-      }));
-    }
-  };
-
-  const handleTouchEnd = (e) => {
     e.preventDefault();
-    if (isInTelegram) {
-      // Telegram handling
-      if (!dragState.draggedCat) return;
-      
-      const touch = e.changedTouches?.[0] || e.touches?.[0];
-      if (touch) {
-        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-        console.log('Telegram drop - Target:', targetColumn, 'Source:', dragState.fromColumn);
-        
-        if (targetColumn && targetColumn !== dragState.fromColumn) {
-          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-          }
-        }
-      }
-      resetDragState();
-    } else {
-      // Regular browser handling
-      if (!touchState.touching || !dragState.draggedCat) return;
-      
-      const touch = e.changedTouches?.[0];
-      if (touch) {
-        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-        
-        if (targetColumn && targetColumn !== dragState.fromColumn) {
-          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-          if (navigator.vibrate) {
-            navigator.vibrate(50);
-          }
-        }
-      }
-      
-      setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
-      resetDragState();
+    e.stopPropagation();
+    const touch = e.touches[0];
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      startPosition: { x: touch.clientX, y: touch.clientY },
+      highlightedColumn: null
+    });
+    
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
     }
-  };
+    
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const clientX = moveE.touches ? moveE.touches[0].clientX : moveE.clientX;
+      const clientY = moveE.touches ? moveE.touches[0].clientY : moveE.clientY;
+      const targetColumn = getColumnFromPosition(clientX, clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: clientX, y: clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+    
+    const handleEnd = (endE) => {
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const clientX = endE.changedTouches ? endE.changedTouches[0].clientX : endE.clientX;
+      const targetColumn = getColumnFromPosition(clientX, clientX);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+      }
+      resetDragState();
+    };
 
-  const handleTouchCancel = () => {
-    // Telegram/iOS will fire this if the webview started scrolling or interrupted the gesture
-    setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
-    resetDragState();
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: false });
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
 
 
@@ -434,10 +286,6 @@ function App() {
   };
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
-    // Prevent multiple calls
-    if (!targetColumn || !draggedCat || !fromColumn) return;
-    if (targetColumn === fromColumn) return;
-    
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
@@ -476,59 +324,13 @@ function App() {
     });
   };
 
-  // Document-level touch listeners for Telegram compatibility
-  useEffect(() => {
-    if (!dragState.draggedCat) return;
-
-    const onMove = (e) => {
-      // mirror handleTouchMove
-      e.preventDefault();
-      const t = e.touches && e.touches[0];
-      if (!t) return;
-      const targetColumn = getColumnFromPosition(t.clientX, t.clientY);
-      setDragState(prev => ({
-        ...prev,
-        isDragging: true,
-        dragPosition: { x: t.clientX, y: t.clientY },
-        highlightedColumn: targetColumn
-      }));
-    };
-
-    const onEnd = (e) => {
-      e.preventDefault();
-      const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
-      if (t && dragState.draggedCat) {
-        const targetColumn = getColumnFromPosition(t.clientX, t.clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn) {
-          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-        }
-      }
-      resetDragState();
-    };
-
-    const onCancel = () => {
-      resetDragState();
-    };
-
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd, { passive: false });
-    document.addEventListener('touchcancel', onCancel, { passive: false });
-    return () => {
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
-      document.removeEventListener('touchcancel', onCancel);
-    };
-  }, [dragState.draggedCat, dragState.fromColumn]);
-
   const DraggableCat = ({ cat, columnId, index }) => {
     
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onPointerDown={(e) => handlePointerDown(e, cat.id, columnId)}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
+        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -536,7 +338,6 @@ function App() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
@@ -883,11 +684,7 @@ function App() {
       </div>
 
       <div className="flex-1 p-3 min-h-0">
-        <div 
-          ref={boardRef} 
-          className="flex justify-center gap-3 h-full"
-          style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
-        >
+        <div ref={boardRef} className="flex justify-center gap-3 h-full">
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
