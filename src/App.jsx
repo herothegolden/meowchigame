@@ -923,7 +923,7 @@ function App() {
     return (
       <div
         data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col items-center gap-1 bg-white overflow-hidden ${
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col items-center gap-1 bg-white overflow-hidden relative ${
           isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
         }`}
         style={{ height: '100%' }}
