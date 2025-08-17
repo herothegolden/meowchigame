@@ -507,17 +507,21 @@ function App() {
     const isFull = cats.length >= 6;
     const isHighlighted = dragState.highlightedColumn === columnId;
     
-    // Reverse the cats array so newest cats appear at top (index 0 = top, last index = bottom)
-    const displayCats = [...cats].reverse();
-    
     return (
       <div
         data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col items-center gap-1 bg-white overflow-hidden h-full ${
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
           isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
         }`}
+        style={{
+          /* iOS-specific fixes */
+          WebkitFlexDirection: 'column-reverse',
+          flexDirection: 'column-reverse',
+          WebkitBoxOrient: 'vertical',
+          WebkitBoxDirection: 'reverse'
+        }}
       >
-        {displayCats.map((cat, index) => (
+        {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} />
         ))}
         
@@ -526,7 +530,7 @@ function App() {
         )}
         
         {isFull && (
-          <div className="text-red-400 text-xs text-center font-bold absolute bottom-1 left-1/2 transform -translate-x-1/2">FULL</div>
+          <div className="text-red-400 text-xs text-center font-bold">FULL</div>
         )}
       </div>
     );
