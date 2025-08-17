@@ -69,23 +69,32 @@ function App() {
     viewportMeta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
   }, []);
 
-  // Board height measurement and cell sizing
+  // Board height measurement and cell sizing with CSS variables
   useEffect(() => {
     const measureBoardHeight = () => {
       if (!boardRef.current) return;
       
+      // Use Telegram's viewportStableHeight first, then fallback chain
+      const viewportHeight = window.Telegram?.WebApp?.viewportStableHeight || 
+                            window.visualViewport?.height || 
+                            window.innerHeight;
+      
       const boardRect = boardRef.current.getBoundingClientRect();
-      const boardHeight = boardRect.height;
+      const boardHeight = boardRect.height || (viewportHeight * 0.6); // Fallback estimation
       
       if (boardHeight > 0) {
         // Calculate cell height for 6 rows + padding + gaps
-        // Account for column padding (p-2 = 16px total) and gaps (gap-1 = 4px × 5 = 20px)
+        // Account for column padding (p-2 = 16px total) and gaps (4px × 5 = 20px)
         const availableHeight = boardHeight - 16 - 20;
         const calculatedCellHeight = availableHeight / 6;
         
         // Clamp cell height to reasonable range (min 40px, max 80px)
         const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
-        const emojiSize = cellHeight * 0.8; // Emoji slightly smaller than cell
+        const emojiSize = Math.floor(cellHeight * 0.8); // Emoji slightly smaller than cell
+        
+        // Update CSS variables for immediate DOM updates
+        document.documentElement.style.setProperty('--cell-height', `${cellHeight}px`);
+        document.documentElement.style.setProperty('--emoji-size', `${emojiSize}px`);
         
         setBoardDimensions({
           height: boardHeight,
@@ -112,12 +121,16 @@ function App() {
       window.visualViewport.addEventListener('resize', handleResize);
     }
 
-    // Listen for Telegram viewport changes
+    // Listen for Telegram-specific viewport changes
     if (window.Telegram?.WebApp) {
       const handleTelegramViewport = () => {
         setTimeout(measureBoardHeight, 100);
       };
-      window.Telegram.WebApp.onEvent('viewportChanged', handleTelegramViewport);
+      
+      // Use Telegram's official viewport change event
+      if (window.Telegram.WebApp.onEvent) {
+        window.Telegram.WebApp.onEvent('viewportChanged', handleTelegramViewport);
+      }
     }
 
     return () => {
@@ -127,22 +140,32 @@ function App() {
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', handleResize);
       }
+      // Note: Telegram's onEvent doesn't have a direct removeEventListener equivalent
     };
   }, []);
 
-  // Re-measure when game starts (board becomes visible)
+  // Re-measure when game starts (board becomes visible) with CSS variables
   useEffect(() => {
     if (gameState.isActive) {
       const timeoutId = setTimeout(() => {
         if (boardRef.current) {
+          // Use Telegram's viewportStableHeight first
+          const viewportHeight = window.Telegram?.WebApp?.viewportStableHeight || 
+                                window.visualViewport?.height || 
+                                window.innerHeight;
+          
           const boardRect = boardRef.current.getBoundingClientRect();
-          const boardHeight = boardRect.height;
+          const boardHeight = boardRect.height || (viewportHeight * 0.6);
           
           if (boardHeight > 0) {
             const availableHeight = boardHeight - 16 - 20;
             const calculatedCellHeight = availableHeight / 6;
             const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
-            const emojiSize = cellHeight * 0.8;
+            const emojiSize = Math.floor(cellHeight * 0.8);
+            
+            // Update CSS variables immediately
+            document.documentElement.style.setProperty('--cell-height', `${cellHeight}px`);
+            document.documentElement.style.setProperty('--emoji-size', `${emojiSize}px`);
             
             setBoardDimensions({
               height: boardHeight,
@@ -421,7 +444,7 @@ function App() {
     });
   };
 
-  const DraggableCat = ({ cat, columnId, cellHeight, emojiSize }) => {
+  const DraggableCat = ({ cat, columnId }) => {
     return (
       <div
         className="select-none transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 flex items-center justify-center"
@@ -429,7 +452,8 @@ function App() {
         onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
         style={{
-          height: `${cellHeight}px`,
+          height: 'var(--cell-height)',
+          minHeight: 'var(--cell-height)',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           MozUserSelect: 'none',
@@ -442,7 +466,7 @@ function App() {
       >
         <span 
           style={{
-            fontSize: `${emojiSize}px`,
+            fontSize: 'var(--emoji-size)',
             lineHeight: 1
           }}
         >
@@ -452,7 +476,7 @@ function App() {
     );
   };
 
-  const GameColumn = ({ columnId, cats, cellHeight, emojiSize }) => {
+  const GameColumn = ({ columnId, cats }) => {
     const isFull = cats.length >= 6;
     const isHighlighted = dragState.highlightedColumn === columnId;
     
@@ -467,26 +491,31 @@ function App() {
     return (
       <div
         data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col items-center gap-1 bg-white overflow-hidden relative ${
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 bg-white overflow-hidden relative ${
           isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
         }`}
-        style={{ height: '100%' }}
+        style={{ 
+          height: '100%',
+          display: 'grid',
+          gridTemplateRows: 'repeat(6, var(--cell-height))',
+          gap: '4px',
+          alignItems: 'center',
+          justifyItems: 'center'
+        }}
       >
         {slots.map((cat, slotIndex) => (
           <div
             key={slotIndex}
-            className="flex items-center justify-center"
+            className="flex items-center justify-center w-full"
             style={{ 
-              height: `${cellHeight}px`,
-              minHeight: `${cellHeight}px`
+              height: 'var(--cell-height)',
+              minHeight: 'var(--cell-height)'
             }}
           >
             {cat ? (
               <DraggableCat 
                 cat={cat} 
-                columnId={columnId} 
-                cellHeight={cellHeight}
-                emojiSize={emojiSize}
+                columnId={columnId}
               />
             ) : (
               slotIndex === 5 && cats.length === 0 ? (
@@ -497,7 +526,9 @@ function App() {
         ))}
         
         {isFull && (
-          <div className="text-red-400 text-xs text-center font-bold absolute bottom-1">FULL</div>
+          <div className="text-red-400 text-xs text-center font-bold absolute bottom-1 left-1/2 transform -translate-x-1/2">
+            FULL
+          </div>
         )}
       </div>
     );
@@ -826,20 +857,14 @@ function App() {
           <GameColumn 
             columnId="left" 
             cats={gameState.columns.left}
-            cellHeight={boardDimensions.cellHeight}
-            emojiSize={boardDimensions.emojiSize}
           />
           <GameColumn 
             columnId="center" 
             cats={gameState.columns.center}
-            cellHeight={boardDimensions.cellHeight}
-            emojiSize={boardDimensions.emojiSize}
           />
           <GameColumn 
             columnId="right" 
             cats={gameState.columns.right}
-            cellHeight={boardDimensions.cellHeight}
-            emojiSize={boardDimensions.emojiSize}
           />
         </div>
       </div>
