@@ -76,6 +76,93 @@ function MeowChiGame() {
     }
   }, [gameState.isActive]);
 
+  // Add global event listeners for drag
+  useEffect(() => {
+    const handleGlobalTouchMove = (e) => {
+      if (dragState.draggedCat) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const currentPos = { x: touch.clientX, y: touch.clientY };
+        
+        if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
+          setDragState(prev => ({ ...prev, isDragging: true }));
+        }
+        
+        if (dragState.isDragging) {
+          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+          setDragState(prev => ({
+            ...prev,
+            dragPosition: { x: touch.clientX, y: touch.clientY },
+            highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
+          }));
+        }
+      }
+    };
+
+    const handleGlobalTouchEnd = (e) => {
+      if (dragState.draggedCat) {
+        e.preventDefault();
+        
+        if (dragState.isDragging) {
+          const touch = e.changedTouches[0];
+          const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+          if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
+            moveCat(targetColumn);
+            if (navigator.vibrate) {
+              navigator.vibrate(100);
+            }
+          }
+        }
+        resetDragState();
+      }
+    };
+
+    const handleGlobalMouseMove = (e) => {
+      if (dragState.draggedCat) {
+        const currentPos = { x: e.clientX, y: e.clientY };
+        
+        if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
+          setDragState(prev => ({ ...prev, isDragging: true }));
+        }
+        
+        if (dragState.isDragging) {
+          const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+          setDragState(prev => ({
+            ...prev,
+            dragPosition: { x: e.clientX, y: e.clientY },
+            highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
+          }));
+        }
+      }
+    };
+
+    const handleGlobalMouseUp = (e) => {
+      if (dragState.draggedCat) {
+        if (dragState.isDragging) {
+          const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
+          if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
+            moveCat(targetColumn);
+          }
+        }
+        resetDragState();
+      }
+    };
+
+    if (dragState.draggedCat) {
+      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+      document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+
+      return () => {
+        document.removeEventListener('touchmove', handleGlobalTouchMove);
+        document.removeEventListener('touchend', handleGlobalTouchEnd);
+        document.removeEventListener('mousemove', handleGlobalMouseMove);
+        document.removeEventListener('mouseup', handleGlobalMouseUp);
+      };
+    }
+  }, [dragState.draggedCat, dragState.isDragging, dragState.startPosition]);
+
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
   const startGame = () => {
@@ -91,7 +178,7 @@ function MeowChiGame() {
       nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
     }));
     setAnimations([]);
-    setDragData(null); // Clear any drag state
+    resetDragState();
   };
 
   const endGame = () => {
@@ -202,45 +289,6 @@ function MeowChiGame() {
     }
   };
 
-  const handleTouchMove = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches[0];
-    const currentPos = { x: touch.clientX, y: touch.clientY };
-    
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: touch.clientX, y: touch.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-      }));
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!dragState.draggedCat) return;
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (dragState.isDragging) {
-      const touch = e.changedTouches[0];
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn && gameState.columns[targetColumn].length < 6) {
-        moveCat(targetColumn);
-        if (navigator.vibrate) {
-          navigator.vibrate(100);
-        }
-      }
-    }
-    resetDragState();
-  };
-
   const handleMouseDown = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     e.preventDefault();
@@ -254,35 +302,6 @@ function MeowChiGame() {
       startPosition: { x: e.clientX, y: e.clientY },
       highlightedColumn: null
     });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!dragState.draggedCat) return;
-    const currentPos = { x: e.clientX, y: e.clientY };
-    
-    if (!dragState.isDragging && getDistanceMoved(dragState.startPosition, currentPos) > dragThreshold) {
-      setDragState(prev => ({ ...prev, isDragging: true }));
-    }
-    
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      setDragState(prev => ({
-        ...prev,
-        dragPosition: { x: e.clientX, y: e.clientY },
-        highlightedColumn: targetColumn && targetColumn !== prev.fromColumn ? targetColumn : null
-      }));
-    }
-  };
-
-  const handleMouseUp = (e) => {
-    if (!dragState.draggedCat) return;
-    if (dragState.isDragging) {
-      const targetColumn = getColumnFromPosition(e.clientX, e.clientY);
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
-        moveCat(targetColumn);
-      }
-    }
-    resetDragState();
   };
 
   const moveCat = (targetColumn) => {
@@ -314,26 +333,24 @@ function MeowChiGame() {
     });
   };
 
-  // No complex event listeners needed for click-based approach
-
   const DraggableCat = ({ cat, columnId, index }) => {
     const isTopCat = index === gameState.columns[columnId].length - 1;
     
     return (
       <div
-        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onTouchStart={() => {
-          if (isTopCat && navigator.vibrate) {
-            navigator.vibrate(50);
-          }
-        }}
+        className={`text-6xl select-none transition-all duration-200 p-1 ${
+          isTopCat ? 'cursor-grab active:cursor-grabbing hover:scale-105' : 'cursor-default'
+        }`}
+        onTouchStart={isTopCat ? (e) => handleTouchStart(e, cat.id, columnId) : undefined}
+        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
           MozUserSelect: 'none',
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent'
+          WebkitTapHighlightColor: 'transparent',
+          opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.3 : 1
         }}
       >
         {cat.emoji}
@@ -343,10 +360,14 @@ function MeowChiGame() {
 
   const GameColumn = ({ columnId, cats }) => {
     const isFull = cats.length >= 6;
+    const isHighlighted = dragState.highlightedColumn === columnId;
     
     return (
       <div
-        className="flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full border-gray-300"
+        data-column={columnId}
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
+          isHighlighted ? 'border-green-400 bg-green-50 shadow-lg' : 'border-gray-300'
+        }`}
       >
         {cats.map((cat, index) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
