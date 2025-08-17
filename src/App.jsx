@@ -42,11 +42,31 @@ function App() {
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
+      
+      // CRITICAL: Disable vertical swipes to prevent interference with touch events
+      if (window.Telegram.WebApp.disableVerticalSwipes) {
+        window.Telegram.WebApp.disableVerticalSwipes();
+      }
+      
       const tg = window.Telegram.WebApp;
       if (tg.backgroundColor) {
         document.body.style.backgroundColor = tg.backgroundColor;
       }
     }
+
+    // Prevent Telegram Web App from interfering with touch events
+    const preventTelegramTouch = (event) => {
+      // Only prevent if we're on draggable elements
+      if (event.target.closest('[data-draggable]')) {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchmove', preventTelegramTouch, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchmove', preventTelegramTouch);
+    };
   }, []);
 
   // Game timer
@@ -196,13 +216,16 @@ function App() {
 
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
+    
+    // CRITICAL: Prevent all default behaviors immediately
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
     
     const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
-    // Set drag state immediately - no delays
+    // Set drag state immediately
     setDragState({
       isDragging: true,
       draggedCat: cat,
@@ -220,8 +243,11 @@ function App() {
 
   const handleTouchMove = (e) => {
     if (!dragState.isDragging) return;
+    
+    // CRITICAL: Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
     
     const touch = e.touches[0];
     const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
@@ -235,8 +261,11 @@ function App() {
 
   const handleTouchEnd = (e) => {
     if (!dragState.isDragging) return;
+    
+    // CRITICAL: Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
     
     const touch = e.changedTouches[0];
     const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
@@ -334,6 +363,7 @@ function App() {
   const DraggableCat = ({ cat, columnId, index }) => {
     return (
       <div
+        data-draggable="true"
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
         onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
