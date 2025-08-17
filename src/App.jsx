@@ -323,11 +323,7 @@ function MeowChiGame() {
         className={`text-6xl select-none transition-all duration-200 p-1 ${
           isTopCat ? 'cursor-grab active:cursor-grabbing hover:scale-105' : 'cursor-default'
         }`}
-        onTouchStart={isTopCat ? (e) => {
-          console.log('Cat touched:', cat.emoji, columnId); // Debug log
-          handleTouchStart(e, cat.id, columnId);
-        } : undefined}
-        onMouseDown={isTopCat ? (e) => handleMouseDown(e, cat.id, columnId) : undefined}
+        onTouchStart={isTopCat ? (e) => handleCatTouch(e, cat.id, columnId) : undefined}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
