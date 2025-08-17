@@ -5,6 +5,25 @@ const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
 
+// API helper functions
+const API_BASE = window.location.origin;
+
+const apiCall = async (endpoint, options = {}) => {
+  try {
+    const response = await fetch(`${API_BASE}/api${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('API call failed:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 function App() {
   const [gameState, setGameState] = useState({
     timeLeft: INITIAL_TIME,
@@ -14,8 +33,19 @@ function App() {
     consecutiveMatches: 0,
     gameStarted: false,
     nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-    currentTab: 'play'
+    currentTab: 'play',
+    matchesMade: 0,
+    maxCombo: 0
   });
+
+  const [userState, setUserState] = useState({
+    telegramUser: null,
+    bestScore: null,
+    stats: null,
+    isLoading: true
+  });
+
+  const [leaderboard, setLeaderboard] = useState([]);
 
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -24,12 +54,6 @@ function App() {
     dragPosition: { x: 0, y: 0 },
     highlightedColumn: null,
     startPosition: { x: 0, y: 0 }
-  });
-
-  const [boardDimensions, setBoardDimensions] = useState({
-    height: 0,
-    cellHeight: 60,
-    emojiSize: 48
   });
 
   const [animations, setAnimations] = useState([]);
@@ -42,142 +66,113 @@ function App() {
   
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
+  const dragThreshold = 15;
 
-  // Initialize Telegram Web App with proper viewport
+  // Initialize Telegram Web App and user
   useEffect(() => {
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
-      
-      if (window.Telegram.WebApp.disableVerticalSwipes) {
-        window.Telegram.WebApp.disableVerticalSwipes();
-      }
-      
       const tg = window.Telegram.WebApp;
+      
       if (tg.backgroundColor) {
         document.body.style.backgroundColor = tg.backgroundColor;
       }
-    }
 
-    // Set proper viewport for WebView
-    let viewportMeta = document.querySelector('meta[name="viewport"]');
-    if (!viewportMeta) {
-      viewportMeta = document.createElement('meta');
-      viewportMeta.name = 'viewport';
-      document.head.appendChild(viewportMeta);
-    }
-    viewportMeta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
-  }, []);
-
-  // Board height measurement and cell sizing with CSS variables
-  useEffect(() => {
-    const measureBoardHeight = () => {
-      if (!boardRef.current) return;
-      
-      // Use Telegram's viewportStableHeight first, then fallback chain
-      const viewportHeight = window.Telegram?.WebApp?.viewportStableHeight || 
-                            window.visualViewport?.height || 
-                            window.innerHeight;
-      
-      const boardRect = boardRef.current.getBoundingClientRect();
-      const boardHeight = boardRect.height || (viewportHeight * 0.6); // Fallback estimation
-      
-      if (boardHeight > 0) {
-        // Calculate cell height for 6 rows + padding + gaps
-        // Account for column padding (p-2 = 16px total) and gaps (4px × 5 = 20px)
-        const availableHeight = boardHeight - 16 - 20;
-        const calculatedCellHeight = availableHeight / 6;
-        
-        // Clamp cell height to reasonable range (min 40px, max 80px)
-        const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
-        const emojiSize = Math.floor(cellHeight * 0.8); // Emoji slightly smaller than cell
-        
-        // Update CSS variables for immediate DOM updates
-        document.documentElement.style.setProperty('--cell-height', `${cellHeight}px`);
-        document.documentElement.style.setProperty('--emoji-size', `${emojiSize}px`);
-        
-        setBoardDimensions({
-          height: boardHeight,
-          cellHeight,
-          emojiSize
-        });
+      // Get Telegram user data
+      const user = tg.initDataUnsafe?.user;
+      if (user) {
+        setUserState(prev => ({ ...prev, telegramUser: user }));
+        initializeUser(user);
+      } else {
+        // Fallback for testing outside Telegram
+        const testUser = {
+          id: 123456789,
+          username: 'testuser',
+          first_name: 'Test',
+          last_name: 'User'
+        };
+        setUserState(prev => ({ ...prev, telegramUser: testUser }));
+        initializeUser(testUser);
       }
-    };
-
-    // Measure on initial render
-    const timeoutId = setTimeout(measureBoardHeight, 100);
-    
-    // Measure on viewport changes
-    const handleResize = () => {
-      measureBoardHeight();
-    };
-
-    // Listen for various viewport change events
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    
-    // Listen for visual viewport changes (keyboard, etc.)
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-    }
-
-    // Listen for Telegram-specific viewport changes
-    if (window.Telegram?.WebApp) {
-      const handleTelegramViewport = () => {
-        setTimeout(measureBoardHeight, 100);
+    } else {
+      // Fallback for development
+      const testUser = {
+        id: 123456789,
+        username: 'testuser',
+        first_name: 'Test',
+        last_name: 'User'
       };
-      
-      // Use Telegram's official viewport change event
-      if (window.Telegram.WebApp.onEvent) {
-        window.Telegram.WebApp.onEvent('viewportChanged', handleTelegramViewport);
-      }
+      setUserState(prev => ({ ...prev, telegramUser: testUser }));
+      initializeUser(testUser);
     }
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-      }
-      // Note: Telegram's onEvent doesn't have a direct removeEventListener equivalent
-    };
   }, []);
 
-  // Re-measure when game starts (board becomes visible) with CSS variables
-  useEffect(() => {
-    if (gameState.isActive) {
-      const timeoutId = setTimeout(() => {
-        if (boardRef.current) {
-          // Use Telegram's viewportStableHeight first
-          const viewportHeight = window.Telegram?.WebApp?.viewportStableHeight || 
-                                window.visualViewport?.height || 
-                                window.innerHeight;
-          
-          const boardRect = boardRef.current.getBoundingClientRect();
-          const boardHeight = boardRect.height || (viewportHeight * 0.6);
-          
-          if (boardHeight > 0) {
-            const availableHeight = boardHeight - 16 - 20;
-            const calculatedCellHeight = availableHeight / 6;
-            const cellHeight = Math.max(40, Math.min(80, calculatedCellHeight));
-            const emojiSize = Math.floor(cellHeight * 0.8);
-            
-            // Update CSS variables immediately
-            document.documentElement.style.setProperty('--cell-height', `${cellHeight}px`);
-            document.documentElement.style.setProperty('--emoji-size', `${emojiSize}px`);
-            
-            setBoardDimensions({
-              height: boardHeight,
-              cellHeight,
-              emojiSize
-            });
-          }
-        }
-      }, 100);
-      return () => clearTimeout(timeoutId);
+  // Initialize user in database
+  const initializeUser = async (user) => {
+    const result = await apiCall('/user', {
+      method: 'POST',
+      body: JSON.stringify({
+        telegram_id: user.id,
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name
+      })
+    });
+
+    if (result.success) {
+      loadUserData(user.id);
     }
-  }, [gameState.isActive]);
+  };
+
+  // Load user data
+  const loadUserData = async (telegramId) => {
+    try {
+      const [bestScoreResult, statsResult] = await Promise.all([
+        apiCall(`/user/${telegramId}/best-score`),
+        apiCall(`/user/${telegramId}/stats`)
+      ]);
+
+      setUserState(prev => ({
+        ...prev,
+        bestScore: bestScoreResult.success ? bestScoreResult.bestScore : null,
+        stats: statsResult.success ? statsResult.stats : null,
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setUserState(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  // Load leaderboard
+  const loadLeaderboard = async () => {
+    const result = await apiCall('/leaderboard?limit=50');
+    if (result.success) {
+      setLeaderboard(result.leaderboard);
+    }
+  };
+
+  // Save game score
+  const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
+    if (!userState.telegramUser) return;
+
+    const result = await apiCall('/score', {
+      method: 'POST',
+      body: JSON.stringify({
+        telegram_id: userState.telegramUser.id,
+        score: finalScore,
+        game_duration: duration,
+        matches_made: matches,
+        max_combo: maxCombo
+      })
+    });
+
+    if (result.success) {
+      // Refresh user data after saving score
+      loadUserData(userState.telegramUser.id);
+    }
+  };
 
   // Game timer
   useEffect(() => {
@@ -205,72 +200,12 @@ function App() {
     }
   }, [gameState.isActive]);
 
-  // Global drag event handlers for WebView
+  // Load leaderboard when leaderboard tab is opened
   useEffect(() => {
-    if (dragState.isDragging) {
-      const handleGlobalMove = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.touches) {
-          clientX = e.touches[0].clientX;
-          clientY = e.touches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        setDragState(prev => ({
-          ...prev,
-          dragPosition: { x: clientX, y: clientY },
-          highlightedColumn: targetColumn
-        }));
-      };
-
-      const handleGlobalEnd = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.changedTouches) {
-          clientX = e.changedTouches[0].clientX;
-          clientY = e.changedTouches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-          // Check if target column is full before allowing drop
-          if (gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-          }
-        }
-        resetDragState();
-      };
-
-      // Add global listeners
-      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
-      document.addEventListener('touchcancel', resetDragState, { passive: false });
-      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
-      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
-      document.addEventListener('pointercancel', resetDragState, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalMove);
-        document.removeEventListener('touchend', handleGlobalEnd);
-        document.removeEventListener('touchcancel', resetDragState);
-        document.removeEventListener('pointermove', handleGlobalMove);
-        document.removeEventListener('pointerup', handleGlobalEnd);
-        document.removeEventListener('pointercancel', resetDragState);
-      };
+    if (gameState.currentTab === 'leaderboard') {
+      loadLeaderboard();
     }
-  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
+  }, [gameState.currentTab]);
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -284,14 +219,24 @@ function App() {
       consecutiveMatches: 0,
       gameStarted: true,
       currentTab: 'play',
-      nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
+      nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
+      matchesMade: 0,
+      maxCombo: 0
     }));
     setAnimations([]);
     resetDragState();
   };
 
   const endGame = () => {
+    const finalScore = gameState.score;
+    const gameDuration = INITIAL_TIME - gameState.timeLeft;
+    const matches = gameState.matchesMade;
+    const maxCombo = gameState.maxCombo;
+
     setGameState(prev => ({ ...prev, isActive: false }));
+    
+    // Save score to database
+    saveGameScore(finalScore, gameDuration, matches, maxCombo);
   };
 
   const createExplosion = (x, y, emoji, scoreGained) => {
@@ -322,13 +267,19 @@ function App() {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       newColumns[column] = [...newColumns[column], newCat];
-      const { updatedColumns, scoreGained } = checkMatches(newColumns, column, prev.consecutiveMatches);
+      const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, column, prev.consecutiveMatches);
+      
+      const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
+      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
+      
       return {
         ...prev,
         columns: updatedColumns,
         score: prev.score + scoreGained,
-        consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0,
-        nextCat: nextNextCat
+        consecutiveMatches: newConsecutiveMatches,
+        nextCat: nextNextCat,
+        matchesMade: prev.matchesMade + (matchFound ? 1 : 0),
+        maxCombo: newMaxCombo
       };
     });
   };
@@ -336,19 +287,23 @@ function App() {
   const checkMatches = (columns, targetColumn, consecutiveMatches) => {
     const updatedColumns = { ...columns };
     let scoreGained = 0;
+    let matchFound = false;
     const column = updatedColumns[targetColumn];
     
     if (column.length >= 3) {
       for (let i = column.length - 1; i >= 2; i--) {
         if (column[i].emoji === column[i-1].emoji && column[i].emoji === column[i-2].emoji) {
           scoreGained = MATCH_SCORE + (consecutiveMatches * COMBO_BONUS);
+          matchFound = true;
           const matchedEmoji = column[i].emoji;
           
+          // Remove matched cats immediately
           updatedColumns[targetColumn] = [
             ...updatedColumns[targetColumn].slice(0, i-2),
             ...updatedColumns[targetColumn].slice(i+1)
           ];
           
+          // Create explosion effect
           setTimeout(() => {
             createExplosion(0, 0, matchedEmoji, scoreGained);
           }, 100);
@@ -356,7 +311,7 @@ function App() {
         }
       }
     }
-    return { updatedColumns, scoreGained };
+    return { updatedColumns, scoreGained, matchFound };
   };
 
   const getColumnFromPosition = (x, y) => {
@@ -372,63 +327,140 @@ function App() {
     return null;
   };
 
-  const handleDragStart = (e, catId, fromColumn) => {
+  const getDistanceMoved = (startPos, currentPos) => {
+    const dx = currentPos.x - startPos.x;
+    const dy = currentPos.y - startPos.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    
     e.preventDefault();
     e.stopPropagation();
-
-    // Set pointer capture if available
-    if (e.pointerId && e.currentTarget.setPointerCapture) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
-    
-    let clientX, clientY;
-    if (e.touches) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
+    const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
     setDragState({
       isDragging: true,
       draggedCat: cat,
       fromColumn: fromColumn,
-      dragPosition: { x: clientX, y: clientY },
-      startPosition: { x: clientX, y: clientY },
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      startPosition: { x: touch.clientX, y: touch.clientY },
       highlightedColumn: null
     });
     
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
+    
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const clientX = moveE.touches ? moveE.touches[0].clientX : moveE.clientX;
+      const clientY = moveE.touches ? moveE.touches[0].clientY : moveE.clientY;
+      const targetColumn = getColumnFromPosition(clientX, clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: clientX, y: clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+    
+    const handleEnd = (endE) => {
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const clientX = endE.changedTouches ? endE.changedTouches[0].clientX : endE.clientX;
+      const targetColumn = getColumnFromPosition(clientX, clientX);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+      }
+      resetDragState();
+    };
+
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: false });
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+  };
+
+  const handleMouseDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: null
+    });
+    
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: moveE.clientX, y: moveE.clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+    
+    const handleEnd = (endE) => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+      }
+      resetDragState();
+    };
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
+      // Remove cat from source column
       if (newColumns[fromColumn]) {
         newColumns[fromColumn] = newColumns[fromColumn].filter(
           cat => cat.id !== draggedCat.id
         );
       }
       
+      // Add cat to target column  
       if (newColumns[targetColumn]) {
         newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
       
-      const { updatedColumns, scoreGained } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
+      // Check matches
+      const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
+      
+      const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
+      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
       
       return {
         ...prev,
         columns: updatedColumns,
         score: prev.score + scoreGained,
-        consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
+        consecutiveMatches: newConsecutiveMatches,
+        matchesMade: prev.matchesMade + (matchFound ? 1 : 0),
+        maxCombo: newMaxCombo
       };
     });
   };
@@ -444,34 +476,24 @@ function App() {
     });
   };
 
-  const DraggableCat = ({ cat, columnId }) => {
+  const DraggableCat = ({ cat, columnId, index }) => {
+    
     return (
       <div
-        className="select-none transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 flex items-center justify-center"
-        onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
-        onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
-        onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
+        className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
-          height: 'var(--cell-height)',
-          minHeight: 'var(--cell-height)',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           MozUserSelect: 'none',
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
-        <span 
-          style={{
-            fontSize: 'var(--emoji-size)',
-            lineHeight: 1
-          }}
-        >
-          {cat.emoji}
-        </span>
+        {cat.emoji}
       </div>
     );
   };
@@ -480,55 +502,23 @@ function App() {
     const isFull = cats.length >= 6;
     const isHighlighted = dragState.highlightedColumn === columnId;
     
-    // Create array of 6 slots, filling from bottom (newest at top visually)
-    const slots = Array(6).fill(null);
-    
-    // Fill slots from the end (bottom) with cats, so newest appears at top
-    for (let i = 0; i < Math.min(cats.length, 6); i++) {
-      slots[5 - i] = cats[cats.length - 1 - i];
-    }
-    
     return (
       <div
         data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 bg-white overflow-hidden relative ${
+        className={`flex-1 max-w-20 border-2 rounded-lg p-2 transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
           isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
         }`}
-        style={{ 
-          height: '100%',
-          display: 'grid',
-          gridTemplateRows: 'repeat(6, var(--cell-height))',
-          gap: '4px',
-          alignItems: 'center',
-          justifyItems: 'center'
-        }}
       >
-        {slots.map((cat, slotIndex) => (
-          <div
-            key={slotIndex}
-            className="flex items-center justify-center w-full"
-            style={{ 
-              height: 'var(--cell-height)',
-              minHeight: 'var(--cell-height)'
-            }}
-          >
-            {cat ? (
-              <DraggableCat 
-                cat={cat} 
-                columnId={columnId}
-              />
-            ) : (
-              slotIndex === 5 && cats.length === 0 ? (
-                <div className="text-gray-300 text-xs text-center">Empty</div>
-              ) : null
-            )}
-          </div>
+        {cats.map((cat, index) => (
+          <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
         ))}
         
+        {cats.length === 0 && (
+          <div className="text-gray-300 text-xs text-center mt-8">Empty</div>
+        )}
+        
         {isFull && (
-          <div className="text-red-400 text-xs text-center font-bold absolute bottom-1 left-1/2 transform -translate-x-1/2">
-            FULL
-          </div>
+          <div className="text-red-400 text-xs text-center font-bold">FULL</div>
         )}
       </div>
     );
@@ -642,7 +632,7 @@ function App() {
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="text-4xl">🐱</div>
+                <div className="text-4xl">🱝</div>
                 <div>
                   <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
                   <div className="flex items-center gap-2 text-yellow-600">
@@ -671,11 +661,33 @@ function App() {
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm">
           <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>🥇 @player1</span>
-              <span className="font-bold text-yellow-600">15,000 pts</span>
-            </div>
+          <div className="space-y-3">
+            {leaderboard.length > 0 ? (
+              leaderboard.map((player, index) => (
+                <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                    </span>
+                    <div>
+                      <div className="font-semibold text-gray-800">
+                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
+                      </div>
+                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500">best score</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-gray-500 py-4">
+                <div className="text-4xl mb-2">🐾</div>
+                <div>No scores yet! Be the first to play!</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -707,8 +719,41 @@ function App() {
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800">@username</h3>
+          <div className="text-4xl mb-2">🱝</div>
+          <h3 className="font-semibold text-gray-800">
+            {userState.telegramUser ? 
+              (userState.telegramUser.username ? 
+                `@${userState.telegramUser.username}` : 
+                `${userState.telegramUser.first_name} ${userState.telegramUser.last_name || ''}`.trim()
+              ) : 
+              'Loading...'
+            }
+          </h3>
+          
+          {userState.stats && (
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Games Played:</span>
+                <span className="font-semibold">{userState.stats.total_games || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Best Score:</span>
+                <span className="font-semibold text-yellow-600">{userState.stats.best_score || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Average Score:</span>
+                <span className="font-semibold">{userState.stats.average_score || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Matches:</span>
+                <span className="font-semibold">{userState.stats.total_matches || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Best Combo:</span>
+                <span className="font-semibold">{userState.stats.best_combo || 0}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <BottomNavBar />
@@ -745,6 +790,13 @@ function App() {
             <div>🐾 +1000 purr-points</div>
             <div>🔥 Combos = Catnado</div>
           </div>
+
+          {userState.bestScore && (
+            <div className="mb-6 p-3 bg-black bg-opacity-10 rounded-lg">
+              <div className="text-sm text-black font-bold">Your Best Score</div>
+              <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+            </div>
+          )}
           
           <button
             onClick={startGame}
@@ -765,13 +817,39 @@ function App() {
     } else if (gameState.score > 2000) {
       flavorText = "😼 Not bad. You may live another round.";
     }
+
+    const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
     
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
         <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
           <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
-          <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
+          
+          {isNewBest && (
+            <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4">
+              <div className="text-2xl">🏆</div>
+              <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
+            </div>
+          )}
+          
+          <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
           <p className="text-black text-xl font-bold mb-4">Final Score</p>
+          
+          <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
+            <div className="flex justify-between">
+              <span>Matches:</span>
+              <span className="font-bold">{gameState.matchesMade}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Best Combo:</span>
+              <span className="font-bold">{gameState.maxCombo}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Time Played:</span>
+              <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
+            </div>
+          </div>
+          
           <p className="text-lg text-black font-bold mb-4">
             😿 "Meowchi is disappointed but still cute."
           </p>
@@ -788,11 +866,11 @@ function App() {
             </button>
             
             <button
-              onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
+              onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
               className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
               style={{backgroundColor: '#FFD700'}}
             >
-              📊 BOARD
+              📊 LEADERBOARD
             </button>
           </div>
         </div>
@@ -832,7 +910,7 @@ function App() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-2xl">🐾</span>
-          <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
+          <span className="text-2xl font-black text-purple-600">{gameState.score.toLocaleString()}</span>
         </div>
       </div>
 
@@ -846,26 +924,10 @@ function App() {
       </div>
 
       <div className="flex-1 p-3 min-h-0">
-        <div 
-          ref={boardRef} 
-          className="flex justify-center gap-3 h-full"
-          style={{
-            touchAction: 'none',
-            overscrollBehavior: 'contain'
-          }}
-        >
-          <GameColumn 
-            columnId="left" 
-            cats={gameState.columns.left}
-          />
-          <GameColumn 
-            columnId="center" 
-            cats={gameState.columns.center}
-          />
-          <GameColumn 
-            columnId="right" 
-            cats={gameState.columns.right}
-          />
+        <div ref={boardRef} className="flex justify-center gap-3 h-full">
+          <GameColumn columnId="left" cats={gameState.columns.left} />
+          <GameColumn columnId="center" cats={gameState.columns.center} />
+          <GameColumn columnId="right" cats={gameState.columns.right} />
         </div>
       </div>
 
