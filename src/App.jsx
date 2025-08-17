@@ -5,116 +5,6 @@ const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
 
-// Fixed reference canvas dimensions
-const REFERENCE_WIDTH = 393;
-const REFERENCE_HEIGHT = 852;
-
-// API helper functions
-const API_BASE = window.location.origin;
-
-const apiCall = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(`${API_BASE}/api${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Viewport Container Component
-const ViewportContainer = ({ children }) => {
-  const [scale, setScale] = useState(1);
-  const containerRef = useRef(null);
-
-  const computeScale = () => {
-    let availableWidth = window.innerWidth;
-    let availableHeight = window.innerHeight;
-
-    if (window.Telegram?.WebApp?.viewportStableHeight) {
-      availableHeight = window.Telegram.WebApp.viewportStableHeight;
-    } else if (window.visualViewport) {
-      availableHeight = window.visualViewport.height;
-    }
-
-    const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0;
-    const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)')) || 0;
-    
-    availableHeight -= (safeAreaTop + safeAreaBottom);
-
-    const scaleX = availableWidth / REFERENCE_WIDTH;
-    const scaleY = availableHeight / REFERENCE_HEIGHT;
-    const newScale = Math.min(scaleX, scaleY);
-
-    setScale(newScale);
-  };
-
-  useEffect(() => {
-    computeScale();
-
-    const handleResize = () => {
-      computeScale();
-    };
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-    }
-
-    if (window.Telegram?.WebApp?.onEvent) {
-      window.Telegram.WebApp.onEvent('viewportChanged', handleResize);
-    }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-      }
-    };
-  }, []);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100vw',
-        height: '100dvh',
-        overflow: 'hidden',
-        overscrollBehavior: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#f3f4f6',
-        position: 'fixed',
-        top: 0,
-        left: 0
-      }}
-    >
-      <div
-        style={{
-          width: REFERENCE_WIDTH,
-          height: REFERENCE_HEIGHT,
-          transform: `scale(${scale})`,
-          transformOrigin: 'center center',
-          overflow: 'hidden',
-          position: 'relative'
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-};
-
 function App() {
   const [gameState, setGameState] = useState({
     timeLeft: INITIAL_TIME,
@@ -124,19 +14,8 @@ function App() {
     consecutiveMatches: 0,
     gameStarted: false,
     nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-    currentTab: 'play',
-    matchesMade: 0,
-    maxCombo: 0
+    currentTab: 'play'
   });
-
-  const [userState, setUserState] = useState({
-    telegramUser: null,
-    bestScore: null,
-    stats: null,
-    isLoading: true
-  });
-
-  const [leaderboard, setLeaderboard] = useState([]);
 
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -159,103 +38,17 @@ function App() {
   const boardRef = useRef(null);
   const dragThreshold = 15;
 
-  // Initialize Telegram Web App and user
+  // Initialize Telegram Web App
   useEffect(() => {
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
       const tg = window.Telegram.WebApp;
-      
       if (tg.backgroundColor) {
         document.body.style.backgroundColor = tg.backgroundColor;
       }
-
-      const user = tg.initDataUnsafe?.user;
-      if (user) {
-        setUserState(prev => ({ ...prev, telegramUser: user }));
-        initializeUser(user);
-      } else {
-        const testUser = {
-          id: 123456789,
-          username: 'testuser',
-          first_name: 'Test',
-          last_name: 'User'
-        };
-        setUserState(prev => ({ ...prev, telegramUser: testUser }));
-        initializeUser(testUser);
-      }
-    } else {
-      const testUser = {
-        id: 123456789,
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User'
-      };
-      setUserState(prev => ({ ...prev, telegramUser: testUser }));
-      initializeUser(testUser);
     }
   }, []);
-
-  const initializeUser = async (user) => {
-    const result = await apiCall('/user', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: user.id,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name
-      })
-    });
-
-    if (result.success) {
-      loadUserData(user.id);
-    }
-  };
-
-  const loadUserData = async (telegramId) => {
-    try {
-      const [bestScoreResult, statsResult] = await Promise.all([
-        apiCall(`/user/${telegramId}/best-score`),
-        apiCall(`/user/${telegramId}/stats`)
-      ]);
-
-      setUserState(prev => ({
-        ...prev,
-        bestScore: bestScoreResult.success ? bestScoreResult.bestScore : null,
-        stats: statsResult.success ? statsResult.stats : null,
-        isLoading: false
-      }));
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      setUserState(prev => ({ ...prev, isLoading: false }));
-    }
-  };
-
-  const loadLeaderboard = async () => {
-    const result = await apiCall('/leaderboard?limit=50');
-    if (result.success) {
-      setLeaderboard(result.leaderboard);
-    }
-  };
-
-  const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
-    if (!userState.telegramUser) return;
-
-    const result = await apiCall('/score', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: userState.telegramUser.id,
-        score: finalScore,
-        game_duration: duration,
-        matches_made: matches,
-        max_combo: maxCombo
-      })
-    });
-
-    if (result.success) {
-      loadUserData(userState.telegramUser.id);
-    }
-  };
 
   // Game timer
   useEffect(() => {
@@ -283,78 +76,6 @@ function App() {
     }
   }, [gameState.isActive]);
 
-  // Load leaderboard when leaderboard tab is opened
-  useEffect(() => {
-    if (gameState.currentTab === 'leaderboard') {
-      loadLeaderboard();
-    }
-  }, [gameState.currentTab]);
-
-  // Global drag event handlers for WebView
-  useEffect(() => {
-    if (dragState.isDragging) {
-      const handleGlobalMove = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.touches) {
-          clientX = e.touches[0].clientX;
-          clientY = e.touches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        setDragState(prev => ({
-          ...prev,
-          dragPosition: { x: clientX, y: clientY },
-          highlightedColumn: targetColumn
-        }));
-      };
-
-      const handleGlobalEnd = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.changedTouches) {
-          clientX = e.changedTouches[0].clientX;
-          clientY = e.changedTouches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-          if (gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
-          }
-        }
-        resetDragState();
-      };
-
-      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
-      document.addEventListener('touchcancel', resetDragState, { passive: false });
-      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
-      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
-      document.addEventListener('pointercancel', resetDragState, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalMove);
-        document.removeEventListener('touchend', handleGlobalEnd);
-        document.removeEventListener('touchcancel', resetDragState);
-        document.removeEventListener('pointermove', handleGlobalMove);
-        document.removeEventListener('pointerup', handleGlobalEnd);
-        document.removeEventListener('pointercancel', resetDragState);
-      };
-    }
-  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
-
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
   const startGame = () => {
@@ -367,23 +88,14 @@ function App() {
       consecutiveMatches: 0,
       gameStarted: true,
       currentTab: 'play',
-      nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-      matchesMade: 0,
-      maxCombo: 0
+      nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)]
     }));
     setAnimations([]);
     resetDragState();
   };
 
   const endGame = () => {
-    const finalScore = gameState.score;
-    const gameDuration = INITIAL_TIME - gameState.timeLeft;
-    const matches = gameState.matchesMade;
-    const maxCombo = gameState.maxCombo;
-
     setGameState(prev => ({ ...prev, isActive: false }));
-    
-    saveGameScore(finalScore, gameDuration, matches, maxCombo);
   };
 
   const createExplosion = (x, y, emoji, scoreGained) => {
@@ -414,19 +126,13 @@ function App() {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       newColumns[column] = [...newColumns[column], newCat];
-      const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, column, prev.consecutiveMatches);
-      
-      const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
-      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
-      
+      const { updatedColumns, scoreGained } = checkMatches(newColumns, column, prev.consecutiveMatches);
       return {
         ...prev,
         columns: updatedColumns,
         score: prev.score + scoreGained,
-        consecutiveMatches: newConsecutiveMatches,
-        nextCat: nextNextCat,
-        matchesMade: prev.matchesMade + (matchFound ? 1 : 0),
-        maxCombo: newMaxCombo
+        consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0,
+        nextCat: nextNextCat
       };
     });
   };
@@ -434,21 +140,21 @@ function App() {
   const checkMatches = (columns, targetColumn, consecutiveMatches) => {
     const updatedColumns = { ...columns };
     let scoreGained = 0;
-    let matchFound = false;
     const column = updatedColumns[targetColumn];
     
     if (column.length >= 3) {
       for (let i = column.length - 1; i >= 2; i--) {
         if (column[i].emoji === column[i-1].emoji && column[i].emoji === column[i-2].emoji) {
           scoreGained = MATCH_SCORE + (consecutiveMatches * COMBO_BONUS);
-          matchFound = true;
           const matchedEmoji = column[i].emoji;
           
+          // Remove matched cats immediately
           updatedColumns[targetColumn] = [
             ...updatedColumns[targetColumn].slice(0, i-2),
             ...updatedColumns[targetColumn].slice(i+1)
           ];
           
+          // Create explosion effect
           setTimeout(() => {
             createExplosion(0, 0, matchedEmoji, scoreGained);
           }, 100);
@@ -456,7 +162,7 @@ function App() {
         }
       }
     }
-    return { updatedColumns, scoreGained, matchFound };
+    return { updatedColumns, scoreGained };
   };
 
   const getColumnFromPosition = (x, y) => {
@@ -472,67 +178,135 @@ function App() {
     return null;
   };
 
-  const handleDragStart = (e, catId, fromColumn) => {
+  const getDistanceMoved = (startPos, currentPos) => {
+    const dx = currentPos.x - startPos.x;
+    const dy = currentPos.y - startPos.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
-    
     e.preventDefault();
     e.stopPropagation();
-
-    if (e.pointerId && e.currentTarget.setPointerCapture) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
-    
-    let clientX, clientY;
-    if (e.touches) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
+    const touch = e.touches[0];
     const cat = gameState.columns[fromColumn].find(c => c.id === catId);
     
     setDragState({
       isDragging: true,
       draggedCat: cat,
       fromColumn: fromColumn,
-      dragPosition: { x: clientX, y: clientY },
-      startPosition: { x: clientX, y: clientY },
+      dragPosition: { x: touch.clientX, y: touch.clientY },
+      startPosition: { x: touch.clientX, y: touch.clientY },
       highlightedColumn: null
     });
     
     if (navigator.vibrate) {
       navigator.vibrate(50);
     }
+    
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const clientX = moveE.touches ? moveE.touches[0].clientX : moveE.clientX;
+      const clientY = moveE.touches ? moveE.touches[0].clientY : moveE.clientY;
+      const targetColumn = getColumnFromPosition(clientX, clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: clientX, y: clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+    
+    const handleEnd = (endE) => {
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const clientX = endE.changedTouches ? endE.changedTouches[0].clientX : endE.clientX;
+      const targetColumn = getColumnFromPosition(clientX, clientX);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+      }
+      resetDragState();
+    };
+
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: false });
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+  };
+
+  const handleMouseDown = (e, catId, fromColumn) => {
+    if (!gameState.isActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+    
+    setDragState({
+      isDragging: true,
+      draggedCat: cat,
+      fromColumn: fromColumn,
+      dragPosition: { x: e.clientX, y: e.clientY },
+      startPosition: { x: e.clientX, y: e.clientY },
+      highlightedColumn: null
+    });
+    
+    // Add simple event listeners
+    const handleMove = (moveE) => {
+      const targetColumn = getColumnFromPosition(moveE.clientX, moveE.clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: moveE.clientX, y: moveE.clientY },
+        highlightedColumn: targetColumn
+      }));
+    };
+    
+    const handleEnd = (endE) => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      
+      const targetColumn = getColumnFromPosition(endE.clientX, endE.clientY);
+      
+      if (targetColumn && targetColumn !== fromColumn) {
+        moveCat(targetColumn, cat, fromColumn);
+      }
+      resetDragState();
+    };
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
+      // Remove cat from source column
       if (newColumns[fromColumn]) {
         newColumns[fromColumn] = newColumns[fromColumn].filter(
           cat => cat.id !== draggedCat.id
         );
       }
       
+      // Add cat to target column  
       if (newColumns[targetColumn]) {
         newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
       
-      const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
-      
-      const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
-      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
+      // Check matches
+      const { updatedColumns, scoreGained } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
       
       return {
         ...prev,
         columns: updatedColumns,
         score: prev.score + scoreGained,
-        consecutiveMatches: newConsecutiveMatches,
-        matchesMade: prev.matchesMade + (matchFound ? 1 : 0),
-        maxCombo: newMaxCombo
+        consecutiveMatches: scoreGained > 0 ? prev.consecutiveMatches + 1 : 0
       };
     });
   };
@@ -548,13 +322,12 @@ function App() {
     });
   };
 
-  const DraggableCat = ({ cat, columnId }) => {
+  const DraggableCat = ({ cat, columnId, index }) => {
     return (
       <div
         className="text-6xl select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
-        onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
-        onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
-        onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
+        onTouchStart={(e) => handleTouchStart(e, cat.id, columnId)}
+        onMouseDown={(e) => handleMouseDown(e, cat.id, columnId)}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -562,7 +335,6 @@ function App() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
           opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
         }}
       >
@@ -583,7 +355,7 @@ function App() {
         }`}
       >
         {cats.map((cat, index) => (
-          <DraggableCat key={cat.id} cat={cat} columnId={columnId} />
+          <DraggableCat key={cat.id} cat={cat} columnId={columnId} index={index} />
         ))}
         
         {cats.length === 0 && (
@@ -694,329 +466,12 @@ function App() {
   };
 
   const TasksScreen = () => (
-    <div className="w-full h-full bg-white pb-20">
+    <div className="min-h-screen bg-white pb-20">
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
         <h1 className="text-lg font-semibold">Tasks</h1>
       </div>
-  const BonusScreen = () => (
-    <div className="w-full h-full bg-gray-100 pb-20">
-      <div className="bg-green-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
-        <h1 className="text-lg font-semibold">Bonus Time</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
-        </div>
-      </div>
-      <BottomNavBar />
-    </div>
-  );
-
-  const AccountScreen = () => (
-    <div className="w-full h-full bg-gray-100 pb-20">
-      <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
-        <h1 className="text-lg font-semibold">Account</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800">
-            {userState.telegramUser ? 
-              (userState.telegramUser.username ? 
-                `@${userState.telegramUser.username}` : 
-                `${userState.telegramUser.first_name} ${userState.telegramUser.last_name || ''}`.trim()
-              ) : 
-              'Loading...'
-            }
-          </h3>
-          
-          {userState.stats && (
-            <div className="mt-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Games Played:</span>
-                <span className="font-semibold">{userState.stats.total_games || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Best Score:</span>
-                <span className="font-semibold text-yellow-600">{userState.stats.best_score || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Average Score:</span>
-                <span className="font-semibold">{userState.stats.average_score || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Matches:</span>
-                <span className="font-semibold">{userState.stats.total_matches || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Best Combo:</span>
-                <span className="font-semibold">{userState.stats.best_combo || 0}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      <BottomNavBar />
-    </div>
-  );
-
-  if (gameState.currentTab === 'tasks') return (
-    <ViewportContainer>
-      <TasksScreen />
-    </ViewportContainer>
-  );
-  if (gameState.currentTab === 'leaderboard') return (
-    <ViewportContainer>
-      <LeaderboardScreen />
-    </ViewportContainer>
-  );
-  if (gameState.currentTab === 'bonus') return (
-    <ViewportContainer>
-      <BonusScreen />
-    </ViewportContainer>
-  );
-  if (gameState.currentTab === 'account') return (
-    <ViewportContainer>
-      <AccountScreen />
-    </ViewportContainer>
-  );
-
-  if (!gameState.gameStarted && gameState.currentTab === 'play') {
-    return (
-      <ViewportContainer>
-        <div className="w-full h-full flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-            <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
-            <p className="text-black text-xl font-bold mb-8">
-              Drop cats. Cause mayhem. Match 3 before they scream.
-            </p>
-            
-            <div className="mb-8">
-              <div className="flex justify-center gap-3 mb-4">
-                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
-                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
-                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
-                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
-                <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
-              </div>
-              <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
-            </div>
-            
-            <div className="mb-8 text-lg text-black font-bold leading-relaxed">
-              <div>⏱ 60 seconds of panic</div>
-              <div>🐾 +1000 purr-points</div>
-              <div>🔥 Combos = Catnado</div>
-            </div>
-
-            {userState.bestScore && (
-              <div className="mb-6 p-3 bg-black bg-opacity-10 rounded-lg">
-                <div className="text-sm text-black font-bold">Your Best Score</div>
-                <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
-              </div>
-            )}
-            
-            <button
-              onClick={startGame}
-              className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
-            >
-              ▶️ LET'S GOOO!
-            </button>
-          </div>
-          <BottomNavBar />
-        </div>
-      </ViewportContainer>
-    );
-  }
-
-  if (!gameState.isActive && gameState.gameStarted) {
-    let flavorText = "🐾 That's tragic. Even my paw is better at this.";
-    if (gameState.score > 5000) {
-      flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
-    } else if (gameState.score > 2000) {
-      flavorText = "😼 Not bad. You may live another round.";
-    }
-
-    const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
-    
-    return (
-      <ViewportContainer>
-        <div className="w-full h-full flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-            <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
-            
-            {isNewBest && (
-              <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4">
-                <div className="text-2xl">🏆</div>
-                <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
-              </div>
-            )}
-            
-            <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
-            <p className="text-black text-xl font-bold mb-4">Final Score</p>
-            
-            <div className="bg-black bg-opacity-10 rounded-lg p-3 mb-4 text-sm">
-              <div className="flex justify-between">
-                <span>Matches:</span>
-                <span className="font-bold">{gameState.matchesMade}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Best Combo:</span>
-                <span className="font-bold">{gameState.maxCombo}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time Played:</span>
-                <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
-              </div>
-            </div>
-            
-            <p className="text-lg text-black font-bold mb-4">
-              😿 "Meowchi is disappointed but still cute."
-            </p>
-            <p className="text-base text-black font-bold mb-8">
-              {flavorText}
-            </p>
-            
-            <div className="space-y-4">
-              <button
-                onClick={startGame}
-                className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
-              >
-                😺 PLAY AGAIN
-              </button>
-              
-              <button
-                onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-                className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
-                style={{backgroundColor: '#FFD700'}}
-              >
-                📊 LEADERBOARD
-              </button>
-            </div>
-          </div>
-          <BottomNavBar />
-        </div>
-      </ViewportContainer>
-    );
-  }
-
-  return (
-    <ViewportContainer>
-      <div className="w-full h-full bg-gray-100 flex flex-col relative overflow-hidden">
-        {animations.map((animation) => (
-          <ExplosionAnimation key={animation.id} animation={animation} />
-        ))}
-
-        {dragState.isDragging && dragState.draggedCat && (
-          <div
-            className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
-            style={{
-              left: dragState.dragPosition.x,
-              top: dragState.dragPosition.y,
-            }}
-          >
-            {dragState.draggedCat.emoji}
-          </div>
-        )}
-
-        <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
-          <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
-        </div>
-
-        <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">⏱</span>
-            <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
-              {gameState.timeLeft}s
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🐾</span>
-            <span className="text-2xl font-black text-purple-600">{gameState.score.toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
-          <div className="flex items-center justify-center gap-3 text-white">
-            <span className="font-semibold">NEXT:</span>
-            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-6xl">{gameState.nextCat}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 p-3 min-h-0">
-          <div 
-            ref={boardRef} 
-            className="flex justify-center gap-3 h-full"
-            style={{
-              touchAction: 'none',
-              overscrollBehavior: 'contain'
-            }}
-          >
-            <GameColumn columnId="left" cats={gameState.columns.left} />
-            <GameColumn columnId="center" cats={gameState.columns.center} />
-            <GameColumn columnId="right" cats={gameState.columns.right} />
-          </div>
-        </div>
-
-        <div className="p-3 bg-white border-t mb-20">
-          <div className="flex gap-2 mb-2">
-            <button
-              onClick={() => dropNewCat('left')}
-              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-                gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <span className="text-2xl">🔽</span>
-              <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-            </button>
-            
-            <button
-              onClick={() => dropNewCat('center')}
-              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-                gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <span className="text-2xl">🔽</span>
-              <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
-            </button>
-            
-            <button
-              onClick={() => dropNewCat('right')}
-              disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-              className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-                gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <span className="text-2xl">🔽</span>
-              <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
-            </button>
-          </div>
-          
-          <p className="text-center text-gray-500 text-sm font-medium">
-            💡 Tip: Drag top cats between columns or use drop buttons!
-          </p>
-        </div>
-
-        <BottomNavBar />
-      </div>
-    </ViewportContainer>
-  );
-}
-
-export default App;y-6">
+      <div className="p-4 space-y-6">
         <div>
           <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
           <div className="space-y-4">
@@ -1043,7 +498,7 @@ export default App;y-6">
   );
 
   const LeaderboardScreen = () => (
-    <div className="w-full h-full bg-gray-100 pb-20">
+    <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
         <h1 className="text-lg font-semibold">Leaderboard</h1>
@@ -1051,33 +506,11 @@ export default App;y-6">
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm">
           <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
-          <div className="space-y-3">
-            {leaderboard.length > 0 ? (
-              leaderboard.map((player, index) => (
-                <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
-                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                    </span>
-                    <div>
-                      <div className="font-semibold text-gray-800">
-                        {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
-                      </div>
-                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">best score</div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-gray-500 py-4">
-                <div className="text-4xl mb-2">🐾</div>
-                <div>No scores yet! Be the first to play!</div>
-              </div>
-            )}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span>🥇 @player1</span>
+              <span className="font-bold text-yellow-600">15,000 pts</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1086,9 +519,225 @@ export default App;y-6">
   );
 
   const BonusScreen = () => (
-    <div className="w-full h-full bg-gray-100 pb-20">
+    <div className="min-h-screen bg-gray-100 pb-20">
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
         <h1 className="text-lg font-semibold">Bonus Time</h1>
       </div>
-      <div className="p-4 space-
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
+          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
+          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
+        </div>
+      </div>
+      <BottomNavBar />
+    </div>
+  );
+
+  const AccountScreen = () => (
+    <div className="min-h-screen bg-gray-100 pb-20">
+      <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
+        <h1 className="text-lg font-semibold">Account</h1>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
+          <div className="text-4xl mb-2">🐱</div>
+          <h3 className="font-semibold text-gray-800">@username</h3>
+        </div>
+      </div>
+      <BottomNavBar />
+    </div>
+  );
+
+  if (gameState.currentTab === 'tasks') return <TasksScreen />;
+  if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
+  if (gameState.currentTab === 'bonus') return <BonusScreen />;
+  if (gameState.currentTab === 'account') return <AccountScreen />;
+
+  if (!gameState.gameStarted && gameState.currentTab === 'play') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
+        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+          <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
+          <p className="text-black text-xl font-bold mb-8">
+            Drop cats. Cause mayhem. Match 3 before they scream.
+          </p>
+          
+          <div className="mb-8">
+            <div className="flex justify-center gap-3 mb-4">
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
+              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+            </div>
+            <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
+          </div>
+          
+          <div className="mb-8 text-lg text-black font-bold leading-relaxed">
+            <div>⏱ 60 seconds of panic</div>
+            <div>🐾 +1000 purr-points</div>
+            <div>🔥 Combos = Catnado</div>
+          </div>
+          
+          <button
+            onClick={startGame}
+            className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
+          >
+            ▶️ LET'S GOOO!
+          </button>
+        </div>
+        <BottomNavBar />
+      </div>
+    );
+  }
+
+  if (!gameState.isActive && gameState.gameStarted) {
+    let flavorText = "🐾 That's tragic. Even my paw is better at this.";
+    if (gameState.score > 5000) {
+      flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
+    } else if (gameState.score > 2000) {
+      flavorText = "😼 Not bad. You may live another round.";
+    }
+    
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
+        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+          <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+          <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
+          <p className="text-black text-xl font-bold mb-4">Final Score</p>
+          <p className="text-lg text-black font-bold mb-4">
+            😿 "Meowchi is disappointed but still cute."
+          </p>
+          <p className="text-base text-black font-bold mb-8">
+            {flavorText}
+          </p>
+          
+          <div className="space-y-4">
+            <button
+              onClick={startGame}
+              className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
+            >
+              😺 PLAY AGAIN
+            </button>
+            
+            <button
+              onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
+              className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
+              style={{backgroundColor: '#FFD700'}}
+            >
+              📊 BOARD
+            </button>
+          </div>
+        </div>
+        <BottomNavBar />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden">
+      {animations.map((animation) => (
+        <ExplosionAnimation key={animation.id} animation={animation} />
+      ))}
+
+      {dragState.isDragging && dragState.draggedCat && (
+        <div
+          className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
+          style={{
+            left: dragState.dragPosition.x,
+            top: dragState.dragPosition.y,
+          }}
+        >
+          {dragState.draggedCat.emoji}
+        </div>
+      )}
+
+      <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
+        <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
+      </div>
+
+      <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">⏱</span>
+          <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
+            {gameState.timeLeft}s
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">🐾</span>
+          <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
+        </div>
+      </div>
+
+      <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
+        <div className="flex items-center justify-center gap-3 text-white">
+          <span className="font-semibold">NEXT:</span>
+          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+            <span className="text-6xl">{gameState.nextCat}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 p-3 min-h-0">
+        <div ref={boardRef} className="flex justify-center gap-3 h-full">
+          <GameColumn columnId="left" cats={gameState.columns.left} />
+          <GameColumn columnId="center" cats={gameState.columns.center} />
+          <GameColumn columnId="right" cats={gameState.columns.right} />
+        </div>
+      </div>
+
+      <div className="p-3 bg-white border-t mb-20">
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => dropNewCat('left')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-2xl">🔽</span>
+            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+          
+          <button
+            onClick={() => dropNewCat('center')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-2xl">🔽</span>
+            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+          
+          <button
+            onClick={() => dropNewCat('right')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <span className="text-2xl">🔽</span>
+            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+        </div>
+        
+        <p className="text-center text-gray-500 text-sm font-medium">
+          💡 Tip: Drag top cats between columns or use drop buttons!
+        </p>
+      </div>
+
+      <BottomNavBar />
+    </div>
+  );
+}
+
+export default App;
