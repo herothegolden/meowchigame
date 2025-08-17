@@ -323,7 +323,9 @@ function MeowChiGame() {
         className={`text-6xl select-none transition-all duration-200 p-1 ${
           isTopCat ? 'cursor-grab active:cursor-grabbing hover:scale-105' : 'cursor-default'
         }`}
-        onTouchStart={isTopCat ? (e) => handleCatTouch(e, cat.id, columnId) : undefined}
+        data-cat-id={cat.id}
+        data-column-id={columnId}
+        data-is-top={isTopCat}
         style={{
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -331,7 +333,6 @@ function MeowChiGame() {
           msUserSelect: 'none',
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent',
-          touchAction: isTopCat ? 'none' : 'auto',
           opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.3 : 1
         }}
       >
