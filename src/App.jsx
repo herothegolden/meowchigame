@@ -190,67 +190,121 @@ function App() {
     startPos: { x: 0, y: 0 }
   });
 
+  // Detect if running in Telegram
+  const isInTelegram = window.Telegram?.WebApp?.initData;
+
   const handleTouchStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     
-    const touch = e.touches[0];
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    setTouchState({
-      touching: true,
-      startTime: Date.now(),
-      startPos: { x: touch.clientX, y: touch.clientY }
-    });
-    
-    setDragState({
-      isDragging: false,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: touch.clientX, y: touch.clientY },
-      startPosition: { x: touch.clientX, y: touch.clientY },
-      highlightedColumn: null
-    });
-    
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-    } else if (navigator.vibrate) {
-      navigator.vibrate(30);
+    // Different handling for Telegram vs regular browser
+    if (isInTelegram) {
+      // Telegram-specific handling
+      const touch = e.touches[0];
+      const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+      
+      setDragState({
+        isDragging: true,
+        draggedCat: cat,
+        fromColumn: fromColumn,
+        dragPosition: { x: touch.clientX, y: touch.clientY },
+        startPosition: { x: touch.clientX, y: touch.clientY },
+        highlightedColumn: null
+      });
+      
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+      }
+    } else {
+      // Regular browser handling (like the preview)
+      const touch = e.touches[0];
+      const cat = gameState.columns[fromColumn].find(c => c.id === catId);
+      
+      setTouchState({
+        touching: true,
+        startTime: Date.now(),
+        startPos: { x: touch.clientX, y: touch.clientY }
+      });
+      
+      setDragState({
+        isDragging: false,
+        draggedCat: cat,
+        fromColumn: fromColumn,
+        dragPosition: { x: touch.clientX, y: touch.clientY },
+        startPosition: { x: touch.clientX, y: touch.clientY },
+        highlightedColumn: null
+      });
+      
+      if (navigator.vibrate) {
+        navigator.vibrate(30);
+      }
     }
   };
 
   const handleTouchMove = (e) => {
-    if (!touchState.touching || !dragState.draggedCat) return;
-    
-    const touch = e.touches[0];
-    const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
-    
-    setDragState(prev => ({
-      ...prev,
-      isDragging: true,
-      dragPosition: { x: touch.clientX, y: touch.clientY },
-      highlightedColumn: targetColumn
-    }));
+    if (isInTelegram) {
+      // Telegram handling
+      if (!dragState.draggedCat || !dragState.isDragging) return;
+      
+      const touch = e.touches[0];
+      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        dragPosition: { x: touch.clientX, y: touch.clientY },
+        highlightedColumn: targetColumn
+      }));
+    } else {
+      // Regular browser handling
+      if (!touchState.touching || !dragState.draggedCat) return;
+      
+      const touch = e.touches[0];
+      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+      
+      setDragState(prev => ({
+        ...prev,
+        isDragging: true,
+        dragPosition: { x: touch.clientX, y: touch.clientY },
+        highlightedColumn: targetColumn
+      }));
+    }
   };
 
   const handleTouchEnd = (e) => {
-    if (!touchState.touching || !dragState.draggedCat) return;
-    
-    const touch = e.changedTouches?.[0];
-    if (touch) {
-      const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+    if (isInTelegram) {
+      // Telegram handling
+      if (!dragState.draggedCat) return;
       
-      if (targetColumn && targetColumn !== dragState.fromColumn) {
-        moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        } else if (navigator.vibrate) {
-          navigator.vibrate(50);
+      const touch = e.changedTouches?.[0];
+      if (touch) {
+        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+        
+        if (targetColumn && targetColumn !== dragState.fromColumn) {
+          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+          }
         }
       }
+      resetDragState();
+    } else {
+      // Regular browser handling
+      if (!touchState.touching || !dragState.draggedCat) return;
+      
+      const touch = e.changedTouches?.[0];
+      if (touch) {
+        const targetColumn = getColumnFromPosition(touch.clientX, touch.clientY);
+        
+        if (targetColumn && targetColumn !== dragState.fromColumn) {
+          moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
+          if (navigator.vibrate) {
+            navigator.vibrate(50);
+          }
+        }
+      }
+      
+      setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
+      resetDragState();
     }
-    
-    setTouchState({ touching: false, startTime: 0, startPos: { x: 0, y: 0 } });
-    resetDragState();
   };
 
 
