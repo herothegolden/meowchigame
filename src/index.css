@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Unified Responsive System - Like Hamster Kombat */
+:root {
+  --app-scale: clamp(0.8, calc(100vw / 375), 1.2);
+  --base-font: calc(16px * var(--app-scale));
+  --touch-min: 44px;
+  --spacing-xs: calc(0.25rem * var(--app-scale));
+  --spacing-sm: calc(0.5rem * var(--app-scale));
+  --spacing-md: calc(1rem * var(--app-scale));
+  --spacing-lg: calc(1.5rem * var(--app-scale));
+  --spacing-xl: calc(2rem * var(--app-scale));
+  
+  /* Game-specific responsive units */
+  --column-width: calc((100vw - 3rem) / 3);
+  --cat-size: clamp(1.5rem, 6vw, 2.5rem);
+  --game-padding: clamp(0.5rem, 2vw, 1rem);
+}
+
 /* Base setup */
 * {
   margin: 0;
@@ -13,7 +30,7 @@
 html, body {
   height: 100%;
   overscroll-behavior: none;
-  font-size: var(--base-font-size, 16px);
+  font-size: var(--base-font);
   -webkit-text-size-adjust: 100%;
 }
 
@@ -55,14 +72,14 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: clamp(1rem, 3vw, 2rem);
+  padding: var(--spacing-lg);
 }
 
 .tg-welcome-content {
   background-color: #FFD700;
-  border-radius: 1rem;
+  border-radius: var(--spacing-md);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  padding: clamp(1rem, 4vw, 2rem);
+  padding: var(--spacing-xl);
   max-width: 90vw;
   width: 100%;
   max-width: 400px;
@@ -70,43 +87,43 @@ body {
 }
 
 .tg-welcome-paws {
-  font-size: clamp(3rem, 8vw, 4rem);
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  font-size: calc(3rem * var(--app-scale));
+  margin-bottom: var(--spacing-lg);
 }
 
 .tg-welcome-title {
-  font-size: clamp(2.5rem, 8vw, 4rem);
+  font-size: calc(2.5rem * var(--app-scale));
   font-weight: 900;
   color: black;
-  margin-bottom: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: var(--spacing-sm);
   line-height: 0.9;
 }
 
 .tg-welcome-subtitle {
-  font-size: clamp(1rem, 4vw, 1.25rem);
+  font-size: calc(1rem * var(--app-scale));
   font-weight: bold;
   color: black;
-  margin-bottom: clamp(1.5rem, 4vw, 2rem);
+  margin-bottom: var(--spacing-xl);
   line-height: 1.3;
 }
 
 .tg-emoji-section {
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  margin-bottom: var(--spacing-lg);
 }
 
 .tg-emoji-row {
   display: flex;
   justify-content: center;
-  gap: clamp(0.5rem, 2vw, 1rem);
-  margin-bottom: clamp(0.75rem, 2vw, 1rem);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
 }
 
 .tg-welcome-emoji {
-  font-size: clamp(2.5rem, 6vw, 3rem);
+  font-size: calc(2.5rem * var(--app-scale));
   cursor: pointer;
   transition: transform 0.2s;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,34 +138,34 @@ body {
 }
 
 .tg-emoji-text {
-  font-size: clamp(0.875rem, 3vw, 1rem);
+  font-size: calc(0.875rem * var(--app-scale));
   font-weight: bold;
   color: black;
 }
 
 .tg-game-info {
-  font-size: clamp(0.875rem, 3vw, 1rem);
+  font-size: calc(0.875rem * var(--app-scale));
   font-weight: bold;
   color: black;
   line-height: 1.5;
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  margin-bottom: var(--spacing-lg);
 }
 
 .tg-best-score {
   background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  border-radius: var(--spacing-sm);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
 }
 
 .tg-best-score-label {
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
+  font-size: calc(0.75rem * var(--app-scale));
   font-weight: bold;
   color: black;
 }
 
 .tg-best-score-value {
-  font-size: clamp(1.25rem, 4vw, 1.5rem);
+  font-size: calc(1.25rem * var(--app-scale));
   font-weight: 900;
   color: black;
 }
@@ -157,13 +174,13 @@ body {
   background-color: black;
   color: white;
   font-weight: bold;
-  padding: clamp(0.75rem, 3vw, 1rem) clamp(1.5rem, 4vw, 2rem);
+  padding: var(--spacing-md) var(--spacing-xl);
   border-radius: 9999px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
   transition: all 0.2s;
-  font-size: clamp(1rem, 3vw, 1.25rem);
+  font-size: calc(1rem * var(--app-scale));
   width: 100%;
-  min-height: 44px;
+  min-height: var(--touch-min);
   border: none;
   cursor: pointer;
 }
@@ -177,19 +194,19 @@ body {
 .tg-game-header {
   background-color: #3b82f6;
   color: white;
-  padding: clamp(0.75rem, 2vw, 1rem);
+  padding: var(--spacing-md);
   text-align: center;
 }
 
 .tg-tagline {
-  font-size: clamp(0.875rem, 3vw, 1rem);
+  font-size: calc(0.875rem * var(--app-scale));
   font-weight: bold;
   animation: pulse 2s infinite;
 }
 
 .tg-score-bar {
   background-color: white;
-  padding: clamp(0.75rem, 2vw, 1rem);
+  padding: var(--spacing-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -200,8 +217,8 @@ body {
 .tg-timer, .tg-score {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: clamp(1rem, 4vw, 1.25rem);
+  gap: var(--spacing-sm);
+  font-size: calc(1rem * var(--app-scale));
   font-weight: 900;
 }
 
@@ -216,34 +233,36 @@ body {
 
 .tg-next-section {
   background: linear-gradient(to right, #7c3aed, #3b82f6);
-  padding: clamp(0.75rem, 2vw, 1rem);
+  padding: var(--spacing-md);
 }
 
 .tg-next-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(0.75rem, 2vw, 1rem);
+  gap: var(--spacing-md);
   color: white;
   font-weight: bold;
-  font-size: clamp(0.875rem, 3vw, 1rem);
+  font-size: calc(0.875rem * var(--app-scale));
 }
 
 .tg-next-cat {
-  width: clamp(2.5rem, 8vw, 3rem);
-  height: clamp(2.5rem, 8vw, 3rem);
+  width: calc(2.5rem * var(--app-scale));
+  height: calc(2.5rem * var(--app-scale));
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
   background-color: white;
-  border-radius: 0.5rem;
+  border-radius: var(--spacing-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-size: var(--cat-size);
 }
 
-/* Game Board */
+/* Game Board - Perfect 3-Column Layout */
 .tg-game-board {
   flex: 1;
-  padding: clamp(0.75rem, 2vw, 1rem);
+  padding: var(--game-padding);
   background-color: #f3f4f6;
   overflow: hidden;
 }
@@ -251,23 +270,26 @@ body {
 .tg-columns-container {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: clamp(0.5rem, 2vw, 0.75rem);
+  gap: var(--spacing-sm);
   height: 100%;
   max-height: calc(var(--app-height, 100vh) * 0.45);
+  max-width: 100%;
 }
 
 .tg-game-column {
   background-color: white;
   border: 2px solid #d1d5db;
-  border-radius: 0.5rem;
-  padding: clamp(0.5rem, 1.5vw, 0.75rem);
+  border-radius: var(--spacing-sm);
+  padding: var(--spacing-sm);
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
-  gap: clamp(0.25rem, 1vw, 0.5rem);
+  gap: var(--spacing-xs);
   overflow: hidden;
   transition: all 0.2s;
   position: relative;
+  width: 100%;
+  min-width: 0;
 }
 
 .tg-game-column.column-highlighted {
@@ -276,16 +298,16 @@ body {
 }
 
 .tg-cat-emoji {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-  padding: clamp(0.25rem, 1vw, 0.5rem);
+  font-size: var(--cat-size);
+  padding: var(--spacing-xs);
   cursor: grab;
   transition: transform 0.2s;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.25rem;
+  border-radius: var(--spacing-xs);
 }
 
 .tg-cat-emoji:active {
@@ -298,18 +320,18 @@ body {
 
 .column-empty-text {
   color: #d1d5db;
-  font-size: clamp(0.625rem, 2vw, 0.75rem);
+  font-size: calc(0.625rem * var(--app-scale));
   text-align: center;
-  margin-top: 2rem;
+  margin-top: var(--spacing-xl);
 }
 
 .column-full-text {
   color: #ef4444;
-  font-size: clamp(0.625rem, 2vw, 0.75rem);
+  font-size: calc(0.625rem * var(--app-scale));
   text-align: center;
   font-weight: bold;
   position: absolute;
-  top: 0.5rem;
+  top: var(--spacing-sm);
   left: 50%;
   transform: translateX(-50%);
 }
@@ -318,15 +340,15 @@ body {
 .tg-controls {
   background-color: white;
   border-top: 1px solid #e5e7eb;
-  padding: clamp(0.75rem, 2vw, 1rem);
+  padding: var(--spacing-md);
   margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
 }
 
 .tg-drop-buttons {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: clamp(0.5rem, 1.5vw, 0.75rem);
-  margin-bottom: clamp(0.5rem, 1.5vw, 0.75rem);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
 }
 
 .tg-drop-button {
@@ -334,15 +356,15 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  border-radius: 0.5rem;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border-radius: var(--spacing-sm);
   font-weight: bold;
   transition: all 0.2s;
-  min-height: 44px;
+  min-height: var(--touch-min);
   border: none;
   cursor: pointer;
-  font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+  font-size: calc(0.75rem * var(--app-scale));
 }
 
 .tg-drop-button.enabled {
@@ -365,7 +387,7 @@ body {
 .tg-tip {
   text-align: center;
   color: #6b7280;
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
+  font-size: calc(0.75rem * var(--app-scale));
   font-weight: 500;
 }
 
@@ -374,9 +396,34 @@ body {
   position: fixed;
   pointer-events: none;
   z-index: 40;
-  font-size: clamp(2rem, 6vw, 3rem);
+  font-size: calc(var(--cat-size) * 1.2);
   transform: translate(-50%, -50%) rotate(12deg) scale(1.1);
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* Bottom Navigation - Responsive */
+.fixed.bottom-0 {
+  padding: var(--spacing-md);
+}
+
+.fixed.bottom-0 .flex {
+  gap: var(--spacing-sm);
+}
+
+.fixed.bottom-0 button {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+  padding: var(--spacing-sm);
+  border-radius: var(--spacing-sm);
+  font-size: calc(0.75rem * var(--app-scale));
+}
+
+.fixed.bottom-0 .text-xl {
+  font-size: calc(1.25rem * var(--app-scale));
+}
+
+.fixed.bottom-0 .text-xs {
+  font-size: calc(0.75rem * var(--app-scale));
 }
 
 /* Animations */
@@ -390,404 +437,18 @@ body {
   50% { opacity: 0.7; }
 }
 
-/* Hide scrollbars but keep functionality */
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* Responsive breakpoints for extreme cases */
+@media (max-width: 320px) {
+  :root {
+    --app-scale: 0.7;
+    --cat-size: 1.2rem;
+  }
 }
 
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Base setup */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-html, body {
-  height: 100%;
-  overscroll-behavior: none;
-  font-size: var(--base-font-size, 16px);
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-  position: fixed;
-  width: 100%;
-  height: var(--app-height, 100vh);
-  touch-action: none;
-}
-
-#root {
-  width: 100%;
-  height: var(--app-height, 100vh);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Telegram WebApp Container */
-.tg-app-container {
-  min-height: var(--app-height, 100vh);
-  display: grid;
-  grid-template-rows: auto auto auto 1fr auto auto;
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-top: env(safe-area-inset-top);
-  position: relative;
-}
-
-/* Welcome Screen Styles */
-.tg-welcome-screen {
-  background-color: #FFD700;
-  min-height: var(--app-height, 100vh);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: clamp(1rem, 3vw, 2rem);
-}
-
-.tg-welcome-content {
-  background-color: #FFD700;
-  border-radius: 1rem;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  padding: clamp(1rem, 4vw, 2rem);
-  max-width: 90vw;
-  width: 100%;
-  max-width: 400px;
-  text-align: center;
-}
-
-.tg-welcome-paws {
-  font-size: clamp(3rem, 8vw, 4rem);
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
-}
-
-.tg-welcome-title {
-  font-size: clamp(2.5rem, 8vw, 4rem);
-  font-weight: 900;
-  color: black;
-  margin-bottom: clamp(0.5rem, 2vw, 1rem);
-  line-height: 0.9;
-}
-
-.tg-welcome-subtitle {
-  font-size: clamp(1rem, 4vw, 1.25rem);
-  font-weight: bold;
-  color: black;
-  margin-bottom: clamp(1.5rem, 4vw, 2rem);
-  line-height: 1.3;
-}
-
-.tg-emoji-section {
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
-}
-
-.tg-emoji-row {
-  display: flex;
-  justify-content: center;
-  gap: clamp(0.5rem, 2vw, 1rem);
-  margin-bottom: clamp(0.75rem, 2vw, 1rem);
-}
-
-.tg-welcome-emoji {
-  font-size: clamp(2.5rem, 6vw, 3rem);
-  cursor: pointer;
-  transition: transform 0.2s;
-  min-height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tg-welcome-emoji:hover {
-  transform: scale(1.1);
-}
-
-.tg-welcome-emoji.spinning {
-  animation: spin 1s ease-in-out;
-}
-
-.tg-emoji-text {
-  font-size: clamp(0.875rem, 3vw, 1rem);
-  font-weight: bold;
-  color: black;
-}
-
-.tg-game-info {
-  font-size: clamp(0.875rem, 3vw, 1rem);
-  font-weight: bold;
-  color: black;
-  line-height: 1.5;
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
-}
-
-.tg-best-score {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  margin-bottom: clamp(1rem, 3vw, 1.5rem);
-}
-
-.tg-best-score-label {
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
-  font-weight: bold;
-  color: black;
-}
-
-.tg-best-score-value {
-  font-size: clamp(1.25rem, 4vw, 1.5rem);
-  font-weight: 900;
-  color: black;
-}
-
-.tg-start-button {
-  background-color: black;
-  color: white;
-  font-weight: bold;
-  padding: clamp(0.75rem, 3vw, 1rem) clamp(1.5rem, 4vw, 2rem);
-  border-radius: 9999px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-  transition: all 0.2s;
-  font-size: clamp(1rem, 3vw, 1.25rem);
-  width: 100%;
-  min-height: 44px;
-  border: none;
-  cursor: pointer;
-}
-
-.tg-start-button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-}
-
-/* Game Screen Styles */
-.tg-game-header {
-  background-color: #3b82f6;
-  color: white;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  text-align: center;
-}
-
-.tg-tagline {
-  font-size: clamp(0.875rem, 3vw, 1rem);
-  font-weight: bold;
-  animation: pulse 2s infinite;
-}
-
-.tg-score-bar {
-  background-color: white;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.tg-timer, .tg-score {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: clamp(1rem, 4vw, 1.25rem);
-  font-weight: 900;
-}
-
-.timer-urgent {
-  color: #ef4444;
-  animation: pulse 1s infinite;
-}
-
-.tg-score {
-  color: #7c3aed;
-}
-
-.tg-next-section {
-  background: linear-gradient(to right, #7c3aed, #3b82f6);
-  padding: clamp(0.75rem, 2vw, 1rem);
-}
-
-.tg-next-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(0.75rem, 2vw, 1rem);
-  color: white;
-  font-weight: bold;
-  font-size: clamp(0.875rem, 3vw, 1rem);
-}
-
-.tg-next-cat {
-  width: clamp(2.5rem, 8vw, 3rem);
-  height: clamp(2.5rem, 8vw, 3rem);
-  background-color: white;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: clamp(1.5rem, 5vw, 2rem);
-}
-
-/* Game Board */
-.tg-game-board {
-  flex: 1;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  background-color: #f3f4f6;
-  overflow: hidden;
-}
-
-.tg-columns-container {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: clamp(0.5rem, 2vw, 0.75rem);
-  height: 100%;
-  max-height: calc(var(--app-height, 100vh) * 0.45);
-}
-
-.tg-game-column {
-  background-color: white;
-  border: 2px solid #d1d5db;
-  border-radius: 0.5rem;
-  padding: clamp(0.5rem, 1.5vw, 0.75rem);
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: clamp(0.25rem, 1vw, 0.5rem);
-  overflow: hidden;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.tg-game-column.column-highlighted {
-  border-color: #3b82f6;
-  background-color: #eff6ff;
-}
-
-.tg-cat-emoji {
-  font-size: clamp(1.5rem, 5vw, 2rem);
-  padding: clamp(0.25rem, 1vw, 0.5rem);
-  cursor: grab;
-  transition: transform 0.2s;
-  min-height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-}
-
-.tg-cat-emoji:active {
-  cursor: grabbing;
-}
-
-.tg-cat-emoji:hover {
-  transform: scale(1.05);
-}
-
-.column-empty-text {
-  color: #d1d5db;
-  font-size: clamp(0.625rem, 2vw, 0.75rem);
-  text-align: center;
-  margin-top: 2rem;
-}
-
-.column-full-text {
-  color: #ef4444;
-  font-size: clamp(0.625rem, 2vw, 0.75rem);
-  text-align: center;
-  font-weight: bold;
-  position: absolute;
-  top: 0.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Controls */
-.tg-controls {
-  background-color: white;
-  border-top: 1px solid #e5e7eb;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
-}
-
-.tg-drop-buttons {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: clamp(0.5rem, 1.5vw, 0.75rem);
-  margin-bottom: clamp(0.5rem, 1.5vw, 0.75rem);
-}
-
-.tg-drop-button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: clamp(0.75rem, 2vw, 1rem);
-  border-radius: 0.5rem;
-  font-weight: bold;
-  transition: all 0.2s;
-  min-height: 44px;
-  border: none;
-  cursor: pointer;
-  font-size: clamp(0.75rem, 2.5vw, 0.875rem);
-}
-
-.tg-drop-button.enabled {
-  background-color: #10b981;
-  color: white;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-}
-
-.tg-drop-button.enabled:hover {
-  background-color: #059669;
-  transform: translateY(-1px);
-}
-
-.tg-drop-button.disabled {
-  background-color: #d1d5db;
-  color: #6b7280;
-  cursor: not-allowed;
-}
-
-.tg-tip {
-  text-align: center;
-  color: #6b7280;
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
-  font-weight: 500;
-}
-
-/* Dragged cat */
-.tg-dragged-cat {
-  position: fixed;
-  pointer-events: none;
-  z-index: 40;
-  font-size: clamp(2rem, 6vw, 3rem);
-  transform: translate(-50%, -50%) rotate(12deg) scale(1.1);
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
-}
-
-/* Animations */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+@media (min-width: 500px) {
+  :root {
+    --app-scale: 1.1;
+  }
 }
 
 /* Hide scrollbars but keep functionality */
