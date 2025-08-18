@@ -1,1068 +1,567 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 
-const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
-const INITIAL_TIME = 60;
-const MATCH_SCORE = 1000;
-const COMBO_BONUS = 500;
-const API_BASE = window.location.origin;
+/* -------------------------------------------------
+   Candy-Cats – Match-3 (simplified) Telegram WebApp
+   ✦ Hamster-style shell (Home/Shop/Leaderboard/Daily/Invite/Settings/GameOver)
+   ✦ Mobile-first: tap + swipe to swap adjacent tiles
+   ✦ Mechanics: swap → match 3+ (row/col) → clear → gravity → refill → cascades
+   ✦ Extras: moves counter, hint, shuffle (no server yet), Telegram Back/Main, haptics
+   Notes: Dependency-free (React + inline CSS). Replace emojis later with sprites.
+-------------------------------------------------- */
 
-const apiCall = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(`${API_BASE}/api${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    return { success: false, error: error.message };
-  }
-};
+// ---------- Shared config ----------
+const COLS = 8;           // square-ish board
+const ROWS = 8;
+const CELL_MIN = 36;
+const CELL_MAX = 64;
 
-function App() {
-  const [gameState, setGameState] = useState({
-    timeLeft: INITIAL_TIME,
-    score: 0,
-    columns: { left: [], center: [], right: [] },
-    isActive: false,
-    consecutiveMatches: 0,
-    gameStarted: false,
-    nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-    currentTab: 'play',
-    matchesMade: 0,
-    maxCombo: 0
-  });
+const CAT_SET = ["😺", "😸", "😹", "😻", "😼", "🐱"]; // keep it tight for clarity
+const randEmoji = () => CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
 
-  const [userState, setUserState] = useState({
-    telegramUser: null,
-    bestScore: null,
-    stats: null,
-    isLoading: true
-  });
+const isCoarsePointer = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+const getTG = () => (typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined);
 
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    draggedCat: null,
-    fromColumn: null,
-    dragPosition: { x: 0, y: 0 },
-    highlightedColumn: null,
-    startPosition: { x: 0, y: 0 }
-  });
+// ---------- Root App (router) ----------
+export default function App() {
+  // Inject minimal CSS once
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      :root { --line:#243069; }
+      html, body, #root { height: 100%; }
+      .page { background:#0a0f23; color:#fff; height:100%; display:flex; align-items:center; justify-content:center; padding:16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+      .card { width:min(420px, 100%); display:flex; flex-direction:column; gap:12px; }
+      .panel { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 10px 28px rgba(0,0,0,.25); }
+      .section { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 10px 28px rgba(0,0,0,.15); }
+      .title { font-weight:700; font-size:16px; }
+      .muted { opacity:.7; }
+      .row { display:flex; align-items:center; justify-content:space-between; }
+      .grid { display:grid; gap:10px; }
+      .btn { background:#12183a; border:1px solid #1c244e; border-radius:14px; padding:10px 12px; color:#fff; cursor:pointer; }
+      .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:600; }
+      .btn.block { width:100%; }
+      .list > * { background:#12183a; border:1px solid #1c244e; border-radius:14px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; }
+      .tabs { display:flex; gap:8px; }
+      .tab { padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#12183a; cursor:pointer; font-size:12px; }
+      .tab.active { background:#132049; border-color:#1f2a5c; font-weight:600; }
+      .board { position:relative; background:#0f1533; border-radius:18px; outline:1px solid var(--line); box-shadow:0 10px 34px rgba(0,0,0,.35); touch-action:none; }
+      .gridlines { position:absolute; inset:0; opacity:.2; pointer-events:none; }
+      .tile { position:absolute; display:flex; align-items:center; justify-content:center; border-radius:12px; background:#151b46; outline:1px solid #26307a; transition: transform .18s ease, opacity .25s ease, background .15s ease, box-shadow .18s ease; }
+      .tile.sel { background:#1a2260; outline-color:#3a48a4; }
+      .tile.hint { box-shadow: 0 0 0 2px #7aa2ff inset; }
+      .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; }
+      .combo { position:absolute; left:50%; transform:translateX(-50%); top:6px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 8px; font-size:12px; }
+      @keyframes poof { from { opacity:1; transform: translate(var(--cx), var(--cy)) scale(.9) rotate(0deg); } to { opacity:0; transform: translate(var(--tx), var(--ty)) scale(.4) rotate(90deg); } }
+      .spark { position:absolute; font-size:18px; animation: poof .75s ease-out forwards; }
+      .pill { padding:2px 8px; border-radius:999px; border:1px solid var(--line); background:#0f1533; font-size:11px; }
+      .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border:1px solid var(--line); background:#0f1533; padding:2px 6px; border-radius:6px; font-size:11px; }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
-  const [animations, setAnimations] = useState([]);
-  const [currentTagline, setCurrentTagline] = useState(0);
-  const [spinningEmojis, setSpinningEmojis] = useState({});
-  const [isLayoutReady, setIsLayoutReady] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  
-  const taglines = [
-    "😼 Chaos Mode Activated",
-    "🐾 Don't Blink, Human", 
-    "🔥 Catnado Incoming"
-  ];
-  
-  const gameTimerRef = useRef(null);
-  const boardRef = useRef(null);
+  const [screen, setScreen] = useState('home');
+  const [coins, setCoins] = useState(500);
+  const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
 
-  const triggerHaptic = useCallback((type) => {
-    if (gameState.currentTab === 'account') {
+  // Settings
+  const [settings, setSettings] = useState({ haptics: true, sounds: false });
+
+  // Daily reward mock
+  const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
+
+  // Leaderboard mock data
+  const [lbScope, setLbScope] = useState('daily');
+  const leaders = {
+    daily: [ ['mira', 220], ['zeno', 180], ['kira', 150] ],
+    weekly: [ ['mira', 820], ['kira', 760], ['alex', 700] ],
+    all: [ ['neo', 4120], ['mira', 3880], ['alex', 3550] ],
+  };
+
+  function Header() {
     return (
-      <div className="hk-app-container">
-        <div className="hk-main-content">
-          <div className="hk-scrollable-content">
-            <div className="bg-gray-500 text-white p-6 text-center">
-              <h1 className="text-xl font-bold">Account</h1>
-            </div>
-            <div className="p-6">
-              <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
-                <div className="text-6xl mb-4">🐱</div>
-                <h3 className="font-bold text-gray-800 mb-6">
-                  {userState.telegramUser ? 
-                    (userState.telegramUser.username ? 
-                      `@${userState.telegramUser.username}` : 
-                      `${userState.telegramUser.first_name} ${userState.telegramUser.last_name || ''}`.trim()
-                    ) : 
-                    'Loading...'
-                  }
-                </h3>
-                
-                {userState.stats && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Games Played:</span>
-                      <span className="font-bold">{userState.stats.total_games || 0}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Best Score:</span>
-                      <span className="font-bold">{userState.stats.best_score || 0}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Average Score:</span>
-                      <span className="font-bold">{userState.stats.average_score || 0}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Total Matches:</span>
-                      <span className="font-bold">{userState.stats.total_matches || 0}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Best Combo:</span>
-                      <span className="font-bold">{userState.stats.best_combo || 0}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      <div className="panel">
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:22 }}>🍬</span>
+          <div style={{ fontWeight:700 }}>Candy-Cats</div>
+          <span className="pill" style={{ marginLeft:8 }}>{screen.toUpperCase()}</span>
         </div>
-        <BottomNavBar />
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <div><span className="muted" style={{ marginRight:6 }}>CatCoins</span><b>{coins}</b></div>
+          {screen !== 'home' && (<button className="btn" onClick={() => setScreen('home')}>Home</button>)}
+        </div>
       </div>
     );
   }
 
-  if (!gameState.gameStarted && gameState.currentTab === 'play') {
+  function Home() {
     return (
-      <div className="hk-app-container">
-        <LoadingOverlay />
-        
-        <div className="hk-welcome-screen">
-          <div className="hk-welcome-content">
-            <h1 className="hk-title">MEOWCHI</h1>
-            <h1 className="hk-title">CHAOS</h1>
-            
-            <p className="hk-subtitle">
-              Drop cats. Cause mayhem.<br/>
-              Match 3 before they scream.
-            </p>
-            
-            <div className="hk-emoji-showcase">
-              <div className="hk-emoji-row">
-                {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
-                  <span 
-                    key={index}
-                    className={`hk-emoji-item ${
-                      spinningEmojis[index] ? 'spinning' : ''
-                    }`}
-                    onClick={() => handleEmojiClick(index)}
-                  >
-                    {emoji}
-                  </span>
-                ))}
-              </div>
-              <p className="text-sm font-semibold text-gray-600">5 ridiculous cats to wrangle</p>
-            </div>
-            
-            <div className="hk-game-stats">
-              <div className="hk-stat">
-                <div className="hk-stat-icon">⏱</div>
-                <div className="hk-stat-text">60s panic</div>
-              </div>
-              <div className="hk-stat">
-                <div className="hk-stat-icon">🐾</div>
-                <div className="hk-stat-text">+1000 points</div>
-              </div>
-              <div className="hk-stat">
-                <div className="hk-stat-icon">🔥</div>
-                <div className="hk-stat-text">Combos = Catnado</div>
-              </div>
-            </div>
-
-            {userState.bestScore && (
-              <div className="hk-best-score">
-                <div className="hk-best-score-label">Your Best Score</div>
-                <div className="hk-best-score-value">{userState.bestScore.score.toLocaleString()}</div>
-              </div>
-            )}
-            
-            <button
-              onClick={startGame}
-              className="hk-start-button"
-            >
-              ▶️ LET'S GOOO!
-            </button>
+      <div className="grid" style={{ gridTemplateColumns:'1fr' }}>
+        <div className="section" style={{ display:'grid', gap:10 }}>
+          <div className="title">Match-3 with cats</div>
+          <button className="btn primary block" onClick={() => setScreen('game')}>▶️ Play</button>
+          <div className="row" style={{ gap:8 }}>
+            <button className="btn block" onClick={() => setScreen('shop')}>🛍 Shop</button>
+            <button className="btn block" onClick={() => setScreen('leaderboard')}>🏆 Leaderboard</button>
           </div>
+          <div className="row" style={{ gap:8 }}>
+            <button className="btn block" onClick={() => setScreen('daily')}>📆 Daily Reward</button>
+            <button className="btn block" onClick={() => setScreen('invite')}>🔗 Invite</button>
+          </div>
+          <button className="btn block" onClick={() => setScreen('settings')}>⚙️ Settings</button>
         </div>
-        
-        <BottomNavBar />
+        <div className="section" style={{ display:'grid', gap:8 }}>
+          <div className="title">How to play</div>
+          <div className="muted">Tap a tile, then swipe to a neighbor (or tap a neighbor) to swap. Make a line of 3+ identical cats to clear. Cascades give bonus points. You have limited moves—use <b>Hint</b> or <b>Shuffle</b> if stuck.</div>
+        </div>
       </div>
     );
   }
 
-  if (!gameState.isActive && gameState.gameStarted) {
-    let flavorText = "🐾 That's tragic. Even my paw is better at this.";
-    if (gameState.score > 5000) {
-      flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
-    } else if (gameState.score > 2000) {
-      flavorText = "😼 Not bad. You may live another round.";
+  function Shop() {
+    const items = [
+      { key:'hint', name:'Hint', desc:'Highlight a valid swap', price:20 },
+      { key:'shuffle', name:'Shuffle', desc:'Randomize board (keeps solvable)', price:40 },
+      { key:'hammer', name:'Cat Hammer', desc:'Break one tile', price:60 },
+    ];
+    return (
+      <div className="section">
+        <div className="title" style={{ marginBottom:10 }}>Shop</div>
+        <div className="list" style={{ display:'grid', gap:8 }}>
+          {items.map(it => (
+            <div key={it.key}>
+              <div>
+                <div style={{ fontWeight:600 }}>{it.name}</div>
+                <div className="muted" style={{ fontSize:12 }}>{it.desc}</div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div className="muted" style={{ fontSize:12 }}>{it.price} 🐾</div>
+                <button className="btn" onClick={() => setCoins(c => Math.max(0, c - it.price))} disabled={coins < it.price}>Buy</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function Leaderboard() {
+    const scopes = [ ['daily','Daily'], ['weekly','Weekly'], ['all','All-time'] ];
+    const rows = leaders[lbScope] || [];
+    return (
+      <div className="section" style={{ display:'grid', gap:10 }}>
+        <div className="row"><div className="title">Leaderboard</div><div className="tabs">{scopes.map(([k,label]) => (
+          <button key={k} className={`tab ${lbScope===k?'active':''}`} onClick={() => setLbScope(k)}>{label}</button>
+        ))}</div></div>
+        <div className="list" style={{ display:'grid', gap:6 }}>
+          {rows.map(([u,s], i) => (
+            <div key={u}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ opacity:.7, width:18, textAlign:'right' }}>{i+1}.</span>
+                <span style={{ fontWeight:600 }}>{u}</span>
+              </div>
+              <div style={{ fontWeight:700 }}>{s}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function Daily() {
+    const today = new Date().toISOString().slice(0,10);
+    const canClaim = daily.lastClaim !== today;
+    function claim(){
+      const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+      setDaily(d => ({ streak: d.lastClaim===yesterday ? d.streak+1 : 1, lastClaim: today }));
+      setCoins(c => c + 50);
     }
-
-    const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
-    
     return (
-      <div className="hk-app-container">
-        <div className="hk-welcome-screen">
-          <div className="hk-welcome-content">
-            <h2 className="text-4xl font-black text-black mb-6">🎉 GAME OVER!</h2>
-            
-            {isNewBest && (
-              <div className="bg-black bg-opacity-10 rounded-2xl p-4 mb-6">
-                <div className="text-3xl">🏆</div>
-                <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
-              </div>
-            )}
-            
-            <div className="text-6xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
-            <p className="text-black text-xl font-bold mb-6">Final Score</p>
-            
-            <div className="bg-black bg-opacity-10 rounded-2xl p-4 mb-6 space-y-2">
-              <div className="flex justify-between">
-                <span>Matches:</span>
-                <span className="font-bold">{gameState.matchesMade}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Best Combo:</span>
-                <span className="font-bold">{gameState.maxCombo}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time Played:</span>
-                <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
-              </div>
-            </div>
-            
-            <p className="text-lg text-black font-bold mb-4">
-              😿 "Meowchi is disappointed but still cute."
-            </p>
-            <p className="text-base text-black font-bold mb-8">
-              {flavorText}
-            </p>
-            
-            <div className="space-y-3">
-              <button
-                onClick={startGame}
-                className="hk-start-button"
-              >
-                😺 PLAY AGAIN
-              </button>
-              
-              <button
-                onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-                className="w-full bg-transparent border-2 border-black text-black font-bold py-4 px-6 rounded-2xl"
-              >
-                📊 LEADERBOARD
-              </button>
-            </div>
-          </div>
+      <div className="section" style={{ display:'grid', gap:10 }}>
+        <div className="title">Daily Reward</div>
+        <div className="muted">Streak: <b>{daily.streak}</b>{daily.lastClaim?` • last: ${daily.lastClaim}`:''}</div>
+        <button className="btn primary" onClick={claim} disabled={!canClaim}>{canClaim? 'Claim 50 🐾' : 'Come back tomorrow'}</button>
+        <div className="muted" style={{ fontSize:12 }}>Resets if you miss a day.</div>
+      </div>
+    );
+  }
+
+  function Invite() {
+    const link = 'https://t.me/candy_cats_bot?start=meow';
+    const [copied, setCopied] = useState(false);
+    async function copy(){ try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(()=>setCopied(false), 1200); } catch { /* ignore */ } }
+    return (
+      <div className="section" style={{ display:'grid', gap:10 }}>
+        <div className="title">Invite friends</div>
+        <div className="muted" style={{ fontSize:12 }}>Share this deep link. When your friend completes one level, you both get 200 🐾.</div>
+        <div className="row" style={{ gap:8 }}>
+          <div className="pill" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>{link}</div>
+          <button className="btn" onClick={copy}>{copied? 'Copied!' : 'Copy'}</button>
         </div>
-        <BottomNavBar />
+      </div>
+    );
+  }
+
+  function Settings() {
+    return (
+      <div className="section" style={{ display:'grid', gap:10 }}>
+        <div className="title">Settings</div>
+        <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>Haptics</div>
+          <input type="checkbox" checked={settings.haptics} onChange={e => setSettings(s => ({ ...s, haptics: e.target.checked }))} />
+        </label>
+        <label style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>Sounds (preview only)</div>
+          <input type="checkbox" checked={settings.sounds} onChange={e => setSettings(s => ({ ...s, sounds: e.target.checked }))} />
+        </label>
+      </div>
+    );
+  }
+
+  function GameOver() {
+    return (
+      <div className="section" style={{ display:'grid', gap:10 }}>
+        <div className="title">Level Over</div>
+        <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
+        <div className="row"><div className="muted">CatCoins earned</div><b>{lastRun.coins}</b></div>
+        <button className="btn primary" onClick={() => setScreen('game')}>Play again</button>
+        <div className="row" style={{ gap:8 }}>
+          <button className="btn block" onClick={() => setScreen('shop')}>Shop</button>
+          <button className="btn block" onClick={() => setScreen('leaderboard')}>Leaderboard</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="hk-app-container">
-      {animations.map((animation) => (
-        <ExplosionAnimation key={animation.id} animation={animation} />
-      ))}
-
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="hk-dragged-cat"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
-        </div>
-      )}
-
-      <div className="hk-game-screen">
-        <div className="hk-game-header">
-          <h1 className="hk-tagline">{taglines[currentTagline]}</h1>
-        </div>
-
-        <div className="hk-score-bar">
-          <div className={`hk-timer ${gameState.timeLeft <= 10 ? 'urgent' : ''}`}>
-            <span>⏱</span>
-            <span>{gameState.timeLeft}s</span>
-          </div>
-          <div className="hk-score">
-            <span>🐾</span>
-            <span>{gameState.score.toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div className="hk-next-section">
-          <div className="hk-next-content">
-            <span>NEXT:</span>
-            <div className="hk-next-cat">
-              <span>{gameState.nextCat}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="hk-game-board">
-          <div className="hk-columns-container" ref={boardRef}>
-            <GameColumn columnId="left" cats={gameState.columns.left} />
-            <GameColumn columnId="center" cats={gameState.columns.center} />
-            <GameColumn columnId="right" cats={gameState.columns.right} />
-          </div>
-        </div>
-
-        <div className="hk-game-controls">
-          <div className="hk-drop-buttons">
-            {['left', 'center', 'right'].map((column) => {
-              const isFull = gameState.columns[column].length >= 6;
-              const isEnabled = gameState.isActive && !dragState.isDragging && !isFull;
-              
-              return (
-                <button
-                  key={column}
-                  onClick={() => dropNewCat(column)}
-                  disabled={!isEnabled}
-                  className={`hk-drop-button ${
-                    isEnabled ? 'enabled' : 'disabled'
-                  }`}
-                >
-                  <span>🔽</span>
-                  <span>{isFull ? 'FULL' : 'Drop'}</span>
-                </button>
-              );
-            })}
-          </div>
-          
-          <p className="hk-tip">
-            💡 Drag cats between columns or use drop buttons!
-          </p>
-        </div>
+    <div className="page">
+      <div className="card">
+        <Header />
+        {screen === 'home' && <Home />}
+        {screen === 'shop' && <Shop />}
+        {screen === 'leaderboard' && <Leaderboard />}
+        {screen === 'daily' && <Daily />}
+        {screen === 'invite' && <Invite />}
+        {screen === 'settings' && <Settings />}
+        {screen === 'game' && (
+          <GameView
+            onExit={(run)=>{ setLastRun(run); setScreen('gameover'); }}
+            onBack={()=> setScreen('home')}
+            onCoins={(d)=> setCoins(c=> c + d)}
+          />
+        )}
+        {screen === 'gameover' && <GameOver />}
       </div>
-
-      <BottomNavBar />
     </div>
   );
 }
 
-export default App;window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
-      const tg = window.Telegram.WebApp;
-      if (type === 'light') {
-        tg.HapticFeedback.impactOccurred('light');
-      } else if (type === 'medium') {
-        tg.HapticFeedback.impactOccurred('medium');
-      } else if (type === 'heavy') {
-        tg.HapticFeedback.impactOccurred('heavy');
-      } else if (type === 'success') {
-        tg.HapticFeedback.notificationOccurred('success');
-      } else if (type === 'error') {
-        tg.HapticFeedback.notificationOccurred('error');
-      }
-    } else if (navigator.vibrate) {
-      if (type === 'light') {
-        navigator.vibrate([10]);
-      } else if (type === 'medium') {
-        navigator.vibrate([20]);
-      } else if (type === 'heavy') {
-        navigator.vibrate([50]);
-      } else if (type === 'success') {
-        navigator.vibrate([10, 50, 10]);
-      } else if (type === 'error') {
-        navigator.vibrate([50, 100, 50]);
-      }
-    }
+// ---------- Game View (Match-3) ----------
+function GameView({ onExit, onBack, onCoins }){
+  const containerRef = useRef(null);
+  const boardRef = useRef(null);
+  const [cell, setCell] = useState(48);
+  useResizeCell(containerRef, setCell);
+
+  // Board state
+  const [grid, setGrid] = useState(() => initSolvableGrid());
+  const gridRef = useRef(grid); gridRef.current = grid;
+
+  // Selection + hint
+  const [sel, setSel] = useState(null); // {r,c}
+  const [hint, setHint] = useState(null); // [[r1,c1],[r2,c2]]
+
+  // Score / moves / combo FX
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(20);
+  const [combo, setCombo] = useState(0);
+  const [fx, setFx] = useState([]);
+  const [blast, setBlast] = useState(new Set());
+  const [paused, setPaused] = useState(false);
+
+  // Telegram WebApp
+  useEffect(() => {
+    const tg = getTG(); if (!tg) return;
+    try { tg.ready(); tg.expand(); tg.BackButton.show(); } catch {}
+    const onBackBtn = () => setPaused(p => !p);
+    tg?.onEvent?.('backButtonClicked', onBackBtn);
+    return () => { tg?.offEvent?.('backButtonClicked', onBackBtn); try{tg.BackButton.hide();}catch{} };
   }, []);
 
+  // MainButton = Hint
   useEffect(() => {
-    const initializeTelegramWebApp = () => {
-      if (window.Telegram && window.Telegram.WebApp) {
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        
-        const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
-        if (user) {
-          setUserState(prev => ({ ...prev, telegramUser: user }));
-          initializeUser(user);
-        } else {
-          const testUser = {
-            id: Date.now(),
-            username: 'testuser',
-            first_name: 'Test',
-            last_name: 'User'
-          };
-          setUserState(prev => ({ ...prev, telegramUser: testUser }));
-          initializeUser(testUser);
-        }
-      } else {
-        const testUser = {
-          id: Date.now(),
-          username: 'testuser',
-          first_name: 'Test',
-          last_name: 'User'
-        };
-        setUserState(prev => ({ ...prev, telegramUser: testUser }));
-        initializeUser(testUser);
-      }
-    };
-
-    initializeTelegramWebApp();
+    const tg = getTG(); if (!tg) return;
+    try { tg.MainButton.setText('Hint 🔍'); tg.MainButton.show(); } catch {}
+    const handler = () => doHint();
+    tg?.onEvent?.('mainButtonClicked', handler);
+    return () => { tg?.offEvent?.('mainButtonClicked', handler); try{tg.MainButton.hide();}catch{} };
   }, []);
 
-  const initializeUser = async (user) => {
-    const result = await apiCall('/user', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: user.id,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name
-      })
-    });
+  function haptic(ms=12){ try { getTG()?.HapticFeedback?.impactOccurred('light'); } catch {} try{ navigator.vibrate?.(ms); }catch{} }
 
-    if (result.success) {
-      loadUserData(user.id);
-    }
-  };
-
-  const loadUserData = async (telegramId) => {
-    try {
-      const bestScoreResult = await apiCall(`/user/${telegramId}/best-score`);
-      const statsResult = await apiCall(`/user/${telegramId}/stats`);
-
-      setUserState(prev => ({
-        ...prev,
-        bestScore: bestScoreResult.success ? bestScoreResult.bestScore : null,
-        stats: statsResult.success ? statsResult.stats : null,
-        isLoading: false
-      }));
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      setUserState(prev => ({ ...prev, isLoading: false }));
-    }
-  };
-
-  const loadLeaderboard = async () => {
-    const result = await apiCall('/leaderboard?limit=50');
-    if (result.success) {
-      setLeaderboard(result.leaderboard);
-    }
-  };
-
-  const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
-    if (!userState.telegramUser) return;
-
-    const result = await apiCall('/score', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: userState.telegramUser.id,
-        score: finalScore,
-        game_duration: duration,
-        matches_made: matches,
-        max_combo: maxCombo
-      })
-    });
-
-    if (result.success) {
-      triggerHaptic('success');
-      loadUserData(userState.telegramUser.id);
-    }
-  };
-
+  // Input handlers (tap + swipe + mouse click-to-swap)
   useEffect(() => {
-    if (gameState.isActive && gameState.timeLeft > 0) {
-      gameTimerRef.current = setTimeout(() => {
-        setGameState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
-        
-        if (gameState.timeLeft <= 10) {
-          triggerHaptic('light');
-        }
-      }, 1000);
-    } else if (gameState.timeLeft === 0 && gameState.isActive) {
-      endGame();
-    }
-    return () => {
-      if (gameTimerRef.current) {
-        clearTimeout(gameTimerRef.current);
+    const el = boardRef.current; if (!el) return;
+    let start = null; // {r,c,x,y}
+    const thresh = 6; // px minimum to consider swipe
+    const rcFromEvent = (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
+      const c = Math.floor(x / cell); const r = Math.floor(y / cell);
+      return { r, c, x, y };
+    };
+
+    const onDown = (e) => {
+      if (paused) return;
+      const p = rcFromEvent(e);
+      // Desktop convenience: if something is already selected and this is an adjacent tile, swap immediately
+      if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
+        trySwap(sel.r, sel.c, p.r, p.c);
+        setSel(null);
+        start = null;
+        e.target.setPointerCapture?.(e.pointerId);
+        return;
       }
+      start = p; setSel({ r:p.r, c:p.c });
+      e.target.setPointerCapture?.(e.pointerId);
     };
-  }, [gameState.timeLeft, gameState.isActive, triggerHaptic]);
 
-  useEffect(() => {
-    if (gameState.isActive) {
-      const taglineTimer = setInterval(() => {
-        setCurrentTagline(prev => (prev + 1) % taglines.length);
-      }, 2000);
-      return () => clearInterval(taglineTimer);
-    }
-  }, [gameState.isActive]);
-
-  useEffect(() => {
-    if (gameState.currentTab === 'leaderboard') {
-      loadLeaderboard();
-    }
-  }, [gameState.currentTab]);
-
-  useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play') {
-      setIsLayoutReady(false);
-      setLoadingProgress(0);
-
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 4;
-        setLoadingProgress(progress);
-      }, 80);
-
-      setTimeout(() => {
-        setIsLayoutReady(true);
-        clearInterval(progressInterval);
-      }, 2500);
-
-      return () => {
-        clearInterval(progressInterval);
-      };
-    }
-  }, [gameState.gameStarted, gameState.currentTab]);
-
-  useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play' && isLayoutReady) {
-      setTimeout(() => {
-        const emojiIndices = [0, 1, 2, 3, 4];
-        emojiIndices.forEach((index, i) => {
-          setTimeout(() => {
-            setSpinningEmojis(prev => ({
-              ...prev,
-              [index]: true
-            }));
-            
-            triggerHaptic('light');
-            
-            setTimeout(() => {
-              setSpinningEmojis(prev => ({
-                ...prev,
-                [index]: false
-              }));
-            }, 1000);
-          }, i * 150);
-        });
-      }, 800);
-    }
-  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady, triggerHaptic]);
-
-  const handleEmojiClick = (emojiIndex) => {
-    setSpinningEmojis(prev => ({
-      ...prev,
-      [emojiIndex]: true
-    }));
-    
-    triggerHaptic('light');
-    
-    setTimeout(() => {
-      setSpinningEmojis(prev => ({
-        ...prev,
-        [emojiIndex]: false
-      }));
-    }, 1000);
-  };
-
-  const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
-
-  const startGame = () => {
-    triggerHaptic('medium');
-    setGameState(prev => ({
-      ...prev,
-      timeLeft: INITIAL_TIME,
-      score: 0,
-      columns: { left: [], center: [], right: [] },
-      isActive: true,
-      consecutiveMatches: 0,
-      gameStarted: true,
-      currentTab: 'play',
-      nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-      matchesMade: 0,
-      maxCombo: 0
-    }));
-    setAnimations([]);
-    resetDragState();
-  };
-
-  const endGame = () => {
-    const finalScore = gameState.score;
-    const gameDuration = INITIAL_TIME - gameState.timeLeft;
-    const matches = gameState.matchesMade;
-    const maxCombo = gameState.maxCombo;
-
-    setGameState(prev => ({ ...prev, isActive: false }));
-    triggerHaptic('heavy');
-    
-    saveGameScore(finalScore, gameDuration, matches, maxCombo);
-  };
-
-  const createExplosion = (x, y, emoji, scoreGained) => {
-    const explosionId = `explosion_${Date.now()}_${Math.random()}`;
-    const screenCenterX = window.innerWidth / 2;
-    const screenCenterY = window.innerHeight / 2;
-    const newAnimation = {
-      id: explosionId,
-      x: screenCenterX,
-      y: screenCenterY,
-      emoji,
-      scoreGained,
-      timestamp: Date.now()
+    const onUp = (e) => {
+      if (paused || !start) return; const end = rcFromEvent(e);
+      // If ended on adjacent cell, use that. Else infer from swipe direction.
+      let dr = end.r - start.r, dc = end.c - start.c;
+      const dx = end.x - start.x, dy = end.y - start.y;
+      if (Math.abs(dr)+Math.abs(dc) !== 1){
+        if (Math.abs(dx) < thresh && Math.abs(dy) < thresh) { setSel(null); start = null; return; }
+        if (Math.abs(dx) > Math.abs(dy)) { dr = 0; dc = dx > 0 ? 1 : -1; }
+        else { dc = 0; dr = dy > 0 ? 1 : -1; }
+      }
+      const r2 = start.r + dr, c2 = start.c + dc;
+      if (!inBounds(r2, c2)) { setSel(null); start = null; return; }
+      trySwap(start.r, start.c, r2, c2);
+      setSel(null); start = null;
     };
-    setAnimations(prev => [...prev, newAnimation]);
-    triggerHaptic('success');
-    
-    setTimeout(() => {
-      setAnimations(prev => prev.filter(anim => anim.id !== explosionId));
-    }, 2000);
-  };
 
-  const dropNewCat = (column) => {
-    if (!gameState.isActive || dragState.isDragging) return;
-    if (gameState.columns[column].length >= 6) {
-      triggerHaptic('error');
+    el.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    return () => { el.removeEventListener('pointerdown', onDown); window.removeEventListener('pointerup', onUp); };
+  }, [cell, paused, sel]);
+
+  // Swap logic
+  function trySwap(r1, c1, r2, c2){
+    if (Math.abs(r1-r2)+Math.abs(c1-c2) !== 1) return;
+    const g = cloneGrid(gridRef.current);
+    [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+    const matches = findMatches(g);
+    if (matches.length === 0){ // invalid → revert
+      haptic(8);
+      // brief visual nudge by toggling selection
+      setSel({ r:r1, c:c1 }); setTimeout(()=> setSel(null), 120);
       return;
     }
-
-    triggerHaptic('light');
-    const newCat = { id: generateCatId(), emoji: gameState.nextCat };
-    const nextNextCat = CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)];
-
-    setGameState(prev => {
-      const newColumns = { ...prev.columns };
-      newColumns[column] = [...newColumns[column], newCat];
-      const result = checkMatches(newColumns, column, prev.consecutiveMatches);
-      
-      const newConsecutiveMatches = result.scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
-      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
-      
-      return {
-        ...prev,
-        columns: result.updatedColumns,
-        score: prev.score + result.scoreGained,
-        consecutiveMatches: newConsecutiveMatches,
-        nextCat: nextNextCat,
-        matchesMade: prev.matchesMade + (result.matchFound ? 1 : 0),
-        maxCombo: newMaxCombo
-      };
+    // valid
+    setGrid(g); setMoves(m => Math.max(0, m-1));
+    resolveCascades(g, () => {
+      if (movesRef.current === 0) finish();
     });
-  };
+  }
 
-  const checkMatches = (columns, targetColumn, consecutiveMatches) => {
-    const updatedColumns = { ...columns };
-    let scoreGained = 0;
-    let matchFound = false;
-    const column = updatedColumns[targetColumn];
-    
-    if (column.length >= 3) {
-      for (let i = column.length - 1; i >= 2; i--) {
-        if (column[i].emoji === column[i-1].emoji && column[i].emoji === column[i-2].emoji) {
-          scoreGained = MATCH_SCORE + (consecutiveMatches * COMBO_BONUS);
-          matchFound = true;
-          const matchedEmoji = column[i].emoji;
-          
-          updatedColumns[targetColumn] = [
-            ...updatedColumns[targetColumn].slice(0, i-2),
-            ...updatedColumns[targetColumn].slice(i+1)
-          ];
-          
-          setTimeout(() => {
-            createExplosion(0, 0, matchedEmoji, scoreGained);
-          }, 100);
-          break;
-        }
-      }
-    }
-    return { updatedColumns, scoreGained, matchFound };
-  };
+  const movesRef = useRef(moves); movesRef.current = moves;
 
-  const getColumnFromPosition = (x, y) => {
-    if (!boardRef.current) return null;
-    const columns = boardRef.current.querySelectorAll('[data-column]');
-    for (let i = 0; i < columns.length; i++) {
-      const column = columns[i];
-      const rect = column.getBoundingClientRect();
-      if (x >= rect.left && x <= rect.right) {
-        return column.getAttribute('data-column');
-      }
-    }
-    return null;
-  };
-
-  const handleDragStart = (e, catId, fromColumn) => {
-    if (!gameState.isActive) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-
-    triggerHaptic('light');
-    
-    let clientX, clientY;
-    if (e.touches) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
-    const cat = gameState.columns[fromColumn].find(c => c.id === catId);
-    
-    setDragState({
-      isDragging: true,
-      draggedCat: cat,
-      fromColumn: fromColumn,
-      dragPosition: { x: clientX, y: clientY },
-      startPosition: { x: clientX, y: clientY },
-      highlightedColumn: null
-    });
-  };
-
-  useEffect(() => {
-    if (dragState.isDragging) {
-      const handleGlobalMove = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.touches) {
-          clientX = e.touches[0].clientX;
-          clientY = e.touches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        setDragState(prev => {
-          if (prev.highlightedColumn !== targetColumn && targetColumn) {
-            triggerHaptic('light');
-          }
-          
-          return {
-            ...prev,
-            dragPosition: { x: clientX, y: clientY },
-            highlightedColumn: targetColumn
-          };
-        });
-      };
-
-      const handleGlobalEnd = (e) => {
-        e.preventDefault();
-        let clientX, clientY;
-        
-        if (e.changedTouches) {
-          clientX = e.changedTouches[0].clientX;
-          clientY = e.changedTouches[0].clientY;
-        } else {
-          clientX = e.clientX;
-          clientY = e.clientY;
-        }
-        
-        const targetColumn = getColumnFromPosition(clientX, clientY);
-        if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-          if (gameState.columns[targetColumn].length < 6) {
-            moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-            triggerHaptic('medium');
-          } else {
-            triggerHaptic('error');
-          }
-        }
-        resetDragState();
-      };
-
-      document.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalEnd, { passive: false });
-      document.addEventListener('touchcancel', resetDragState, { passive: false });
-      document.addEventListener('pointermove', handleGlobalMove, { passive: false });
-      document.addEventListener('pointerup', handleGlobalEnd, { passive: false });
-      document.addEventListener('pointercancel', resetDragState, { passive: false });
-      
-      return () => {
-        document.removeEventListener('touchmove', handleGlobalMove);
-        document.removeEventListener('touchend', handleGlobalEnd);
-        document.removeEventListener('touchcancel', resetDragState);
-        document.removeEventListener('pointermove', handleGlobalMove);
-        document.removeEventListener('pointerup', handleGlobalEnd);
-        document.removeEventListener('pointercancel', resetDragState);
-      };
-    }
-  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns, triggerHaptic]);
-
-  const moveCat = (targetColumn, draggedCat, fromColumn) => {
-    setGameState(prev => {
-      const newColumns = { ...prev.columns };
-      
-      if (newColumns[fromColumn]) {
-        newColumns[fromColumn] = newColumns[fromColumn].filter(
-          cat => cat.id !== draggedCat.id
-        );
-      }
-      
-      if (newColumns[targetColumn]) {
-        newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
-      }
-      
-      const result = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
-      
-      const newConsecutiveMatches = result.scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
-      const newMaxCombo = Math.max(prev.maxCombo, newConsecutiveMatches);
-      
-      return {
-        ...prev,
-        columns: result.updatedColumns,
-        score: prev.score + result.scoreGained,
-        consecutiveMatches: newConsecutiveMatches,
-        matchesMade: prev.matchesMade + (result.matchFound ? 1 : 0),
-        maxCombo: newMaxCombo
-      };
-    });
-  };
-
-  const resetDragState = () => {
-    setDragState({
-      isDragging: false,
-      draggedCat: null,
-      fromColumn: null,
-      dragPosition: { x: 0, y: 0 },
-      startPosition: { x: 0, y: 0 },
-      highlightedColumn: null
-    });
-  };
-
-  const LoadingOverlay = () => (
-    <div className={`hk-loading-overlay ${isLayoutReady ? 'hidden' : ''}`}>
-      <div className="text-center relative w-full h-full flex flex-col items-center justify-center">
-        <div className="mb-8 relative">
-          <div className="text-6xl">😽</div>
-          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-2xl text-blue-300 animate-pulse">
-            Zzz
-          </div>
-        </div>
-        
-        <h2 className="text-2xl font-bold text-yellow-400 mb-6">
-          Waking up cats...
-        </h2>
-        
-        <div className="w-64 h-1 bg-gray-800 rounded-full mb-8 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full transition-all duration-100"
-            style={{ width: `${Math.min(loadingProgress, 100)}%` }}
-          />
-        </div>
-        
-        <div className="flex space-x-2">
-          {[1, 2, 3].map((dot) => (
-            <div
-              key={dot}
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                loadingProgress > dot * 25 ? 'bg-yellow-400 scale-110' : 'bg-gray-600'
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const DraggableCat = ({ cat, columnId }) => (
-    <div
-      className="hk-cat-emoji"
-      onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
-      onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
-      onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
-      style={{
-        opacity: dragState.draggedCat && dragState.draggedCat.id === cat.id && dragState.isDragging ? 0.5 : 1
-      }}
-    >
-      {cat.emoji}
-    </div>
-  );
-
-  const GameColumn = ({ columnId, cats }) => {
-    const isFull = cats.length >= 6;
-    const isHighlighted = dragState.highlightedColumn === columnId;
-    
-    return (
-      <div
-        data-column={columnId}
-        className={`hk-game-column ${isHighlighted ? 'highlighted' : ''}`}
-      >
-        {cats.map((cat) => (
-          <DraggableCat key={cat.id} cat={cat} columnId={columnId} />
-        ))}
-        
-        {cats.length === 0 && (
-          <div className="text-gray-400 text-xs text-center mt-4">Empty</div>
-        )}
-        
-        {isFull && (
-          <div className="text-red-500 text-xs text-center font-bold absolute top-2">FULL</div>
-        )}
-      </div>
-    );
-  };
-
-  const ExplosionAnimation = ({ animation }) => (
-    <div
-      className="fixed pointer-events-none z-[200] animate-ping"
-      style={{
-        left: animation.x - 50,
-        top: animation.y - 50,
-        transform: 'translate(-50%, -50%)'
-      }}
-    >
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-6xl animate-bounce">{animation.emoji}</div>
-        </div>
-        
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping"
-            style={{
-              left: 50 + Math.cos(i * Math.PI / 4) * 40,
-              top: 50 + Math.sin(i * Math.PI / 4) * 40,
-              animationDelay: `${i * 50}ms`,
-              animationDuration: '1s'
-            }}
-          />
-        ))}
-        
-        <div className="absolute left-1/2 transform -translate-x-1/2 -translate-y-8 text-2xl font-bold text-yellow-400 animate-bounce">
-          +{animation.scoreGained}
-        </div>
-      </div>
-    </div>
-  );
-
-  const BottomNavBar = () => {
-    const navItems = [
-      { id: 'play', icon: '🎮', label: 'Play' },
-      { id: 'tasks', icon: '✅', label: 'Tasks' },
-      { id: 'leaderboard', icon: '📊', label: 'Board' },
-      { id: 'bonus', icon: '🎁', label: 'Bonus' },
-      { id: 'account', icon: '👤', label: 'Account' }
-    ];
-
-    const handleTabClick = (tabId) => {
-      triggerHaptic('light');
-      setGameState(prev => ({ ...prev, currentTab: tabId }));
+  function resolveCascades(startGrid, done){
+    let g = cloneGrid(startGrid); let comboCount = 0;
+    const step = () => {
+      const matches = findMatches(g);
+      if (matches.length === 0){ setGrid(g); if (comboCount>0){ setCombo(comboCount); haptic(15); setTimeout(()=> setCombo(0), 900); } ensureSolvable(); done && done(); return; }
+      // FX + scoring
+      const fxId = Date.now();
+      setFx(prev => [...prev, ...matches.map((m,i)=>({ id:fxId+i, x:m[1]*cell, y:m[0]*cell }))]);
+      setTimeout(()=> setFx(prev => prev.filter(p=>p.id<fxId)), 900);
+      // highlight blast tiles briefly for visibility
+      const keys = matches.map(([r,c])=>`${r}:${c}`);
+      setBlast(new Set(keys));
+      setTimeout(()=> setBlast(new Set()), 500);
+      setScore(s => s + 10 * matches.length * Math.max(1, comboCount+1));
+      onCoins(Math.ceil(matches.length/4));
+      // clear
+      matches.forEach(([r,c]) => { g[r][c] = null; });
+      // gravity
+      applyGravity(g);
+      // refill
+      refill(g);
+      comboCount++;
+      setTimeout(step, 90);
     };
+    step();
+  }
 
-    return (
-      <div className="hk-bottom-nav">
-        <div className="hk-nav-container">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleTabClick(item.id)}
-              className={`hk-nav-item ${
-                gameState.currentTab === item.id ? 'active' : ''
-              }`}
-            >
-              <span className="hk-nav-icon">{item.icon}</span>
-              <span className="hk-nav-label">{item.label}</span>
-            </button>
-          ))}
-        </div>
+  function doHint(){
+    const m = findFirstMove(gridRef.current);
+    if (!m){ shuffleBoard(); return; }
+    setHint(m);
+    setTimeout(()=> setHint(null), 1500);
+    haptic(10);
+  }
+
+  function shuffleBoard(){ const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
+
+  function ensureSolvable(){ if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current)); }
+
+  function finish(){ onExit({ score, coins: Math.floor(score*0.15) }); }
+
+  const boardW = cell * COLS, boardH = cell * ROWS;
+  const tg = getTG();
+
+  return (
+    <div className="section" ref={containerRef} style={{ display:'grid', gap:10 }}>
+      <div className="row" style={{ gap:8 }}>
+        <button className="btn" onClick={onBack}>Back</button>
+        <div className="muted">{tg? 'Back button pauses' : 'Tap a tile then swipe to a neighbor (mobile) — or **click a tile then click/drag to a neighbor** (desktop) to swap'}</div>
       </div>
-    );
-  };
 
-  if (gameState.currentTab === 'tasks') {
-    return (
-      <div className="hk-app-container">
-        <div className="hk-main-content">
-          <div className="hk-scrollable-content">
-            <div className="bg-blue-500 text-white p-6 text-center">
-              <h1 className="text-xl font-bold">Tasks</h1>
-            </div>
-            <div className="p-6">
-              <div className="bg-white rounded-2xl p-4 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl">🐱</div>
-                  <div className="flex-1">
-                    <div className="font-bold text-gray-800">Join Telegram Channel</div>
-                    <div className="text-yellow-600 text-sm">🪙 1,000 + ⏰ +5s</div>
-                  </div>
-                  <button className="bg-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold">
-                    Claim
-                  </button>
-                </div>
+      {/* HUD */}
+      <div className="row">
+        <div><span className="muted">Score</span> <b>{score}</b></div>
+        <div><span className="muted">Moves</span> <b>{moves}</b></div>
+        <div><span className="muted">Combo</span> <b>{combo>0? `x${combo+1}` : '-'}</b></div>
+      </div>
+
+      {/* Board */}
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+        <div className="gridlines" style={{ backgroundImage: `linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)`, backgroundSize: `${cell}px ${cell}px` }} />
+
+        {/* Tiles */}
+        {grid.map((row, r) => row.map((v, c) => (
+          <div key={`t-${r}-${c}-${v}-${score}`} className={`tile ${sel&&sel.r===r&&sel.c===c?'sel':''} ${hint && ((hint[0][0]===r&&hint[0][1]===c)||(hint[1][0]===r&&hint[1][1]===c))?'hint':''}`}
+            style={{ left: c*cell, top: r*cell, width: cell, height: cell, transform: blast.has(`${r}:${c}`)? 'scale(1.18)' : undefined, boxShadow: blast.has(`${r}:${c}`)? '0 0 0 3px #ffd166 inset, 0 0 16px 4px rgba(255,209,102,.6)' : undefined, background: blast.has(`${r}:${c}`)? '#1f2568' : undefined }}>
+            <span style={{ fontSize: Math.floor(cell*0.72) }}>{v}</span>
+          </div>
+        )))}
+
+        {/* particles */}
+        {fx.map(p => <Poof key={p.id} id={p.id} x={p.x} y={p.y} size={cell} />)}
+
+        {/* combo */}
+        {combo>0 && (<div className="combo">Combo x{combo+1}!</div>)}
+
+        {/* Pause overlay */}
+        {paused && (
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.35)', display:'flex', alignItems:'center', justifyContent:'center', borderRadius:18 }}>
+            <div className="section" style={{ textAlign:'center' }}>
+              <div className="title" style={{ marginBottom:8 }}>Paused</div>
+              <div className="muted" style={{ marginBottom:12 }}>Tap Resume</div>
+              <div className="row" style={{ gap:8 }}>
+                <button className="btn primary" onClick={()=> setPaused(false)}>Resume</button>
+                <button className="btn" onClick={()=> finish()}>End Level</button>
               </div>
             </div>
           </div>
-        </div>
-        <BottomNavBar />
+        )}
       </div>
-    );
-  }
 
-  if (gameState.currentTab === 'leaderboard') {
-    return (
-      <div className="hk-app-container">
-        <div className="hk-main-content">
-          <div className="hk-scrollable-content">
-            <div className="bg-purple-500 text-white p-6 text-center">
-              <h1 className="text-xl font-bold">Leaderboard</h1>
-            </div>
-            <div className="p-6 space-y-4">
-              {leaderboard.length > 0 ? (
-                leaderboard.map((player, index) => (
-                  <div key={index} className="bg-white rounded-2xl p-4 shadow-lg flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                      <span className="text-2xl">
-                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                      </span>
-                      <div>
-                        <div className="font-bold text-gray-800">
-                          {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
-                        </div>
-                        <div className="text-sm text-gray-500">{player.games_played} games</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
-                      <div className="text-xs text-gray-500">best</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">🐾</div>
-                  <div className="text-gray-500">No scores yet!</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        <BottomNavBar />
+      {/* Controls */}
+      <div className="controls">
+        <button className="btn" onClick={()=> setPaused(p=>!p)}>{paused? 'Resume' : 'Pause'}</button>
+        <button className="btn" onClick={()=> { setGrid(initSolvableGrid()); setScore(0); setMoves(20); setCombo(0); setSel(null); setHint(null); }}>Reset</button>
+        <button className="btn" onClick={doHint}>Hint 🔍</button>
+        <button className="btn primary" onClick={shuffleBoard}>Shuffle 🔀</button>
+        <div style={{ gridColumn:'span 1', opacity:.7, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12 }}>8×8</div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (gameState.currentTab === 'bonus') {
-    return (
-      <div className="hk-app-container">
-        <div className="hk-main-content">
-          <div className="hk-scrollable-content">
-            <div className="bg-green-500 text-white p-6 text-center">
-              <h1 className="text-xl font-bold">Bonus Time</h1>
-            </div>
-            <div className="p-6">
-              <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
-                <h3 className="font-bold text-gray-800 mb-4">Your Bonus Time</h3>
-                <div className="text-4xl font-bold text-green-600">+25s</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <BottomNavBar />
-      </div>
-    );
-  }
+// ---------- Helpers (grid, matching, refill, solvability) ----------
+const makeGrid = (rows, cols) => Array.from({ length: rows }, () => Array(cols).fill(null));
+const cloneGrid = (g) => g.map((r) => r.slice());
+const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
 
-  if (
+function findMatches(g){
+  const hits = new Set();
+  // Horizontal
+  for (let r=0; r<ROWS; r++){
+    let c=0; while(c<COLS){ const v=g[r][c]; if(!v){ c++; continue; } let len=1; while(c+len<COLS && g[r][c+len]===v) len++; if(len>=3) for(let k=0;k<len;k++) hits.add(`${r}:${c+k}`); c+=len; }
+  }
+  // Vertical
+  for (let c=0; c<COLS; c++){
+    let r=0; while(r<ROWS){ const v=g[r][c]; if(!v){ r++; continue; } let len=1; while(r+len<ROWS && g[r+len][c]===v) len++; if(len>=3) for(let k=0;k<len;k++) hits.add(`${r+k}:${c}`); r+=len; }
+  }
+  return Array.from(hits).map(k=>k.split(':').map(n=>parseInt(n,10)));
+}
+
+function applyGravity(g){
+  for (let c=0; c<COLS; c++){
+    let write = ROWS-1;
+    for (let r=ROWS-1; r>=0; r--){ if (g[r][c]!=null){ const v=g[r][c]; g[r][c]=null; g[write][c]=v; write--; } }
+    while(write>=0){ g[write][c] = null; write--; }
+  }
+}
+
+function refill(g){ for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(g[r][c]==null) g[r][c]=randEmoji(); }
+
+function hasAnyMove(g){ return !!findFirstMove(g); }
+
+function findFirstMove(g){
+  // Check swaps right and down for a created match
+  for (let r=0;r<ROWS;r++){
+    for (let c=0;c<COLS;c++){
+      if (c+1<COLS){ const t=cloneGrid(g); [t[r][c], t[r][c+1]]=[t[r][c+1], t[r][c]]; if (findMatches(t).length>0) return [[r,c],[r,c+1]]; }
+      if (r+1<ROWS){ const t=cloneGrid(g); [t[r][c], t[r+1][c]]=[t[r+1][c], t[r][c]]; if (findMatches(t).length>0) return [[r,c],[r+1,c]]; }
+    }
+  }
+  return null;
+}
+
+function initSolvableGrid(){
+  let g; let tries=0;
+  do { g = makeGrid(ROWS, COLS); for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) g[r][c]=randEmoji(); removeAllMatches(g); tries++; if (tries>50) break; } while(!hasAnyMove(g));
+  return g;
+}
+
+function removeAllMatches(g){
+  // Reroll any existing matches to start without clears
+  while(true){ const m=findMatches(g); if(m.length===0) break; m.forEach(([r,c])=>{ g[r][c]=randEmoji(); }); }
+}
+
+function shuffleToSolvable(g){
+  const flat = []; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) flat.push(g[r][c]);
+  let attempts=0; while(attempts<100){
+    // Fisher-Yates
+    for(let i=flat.length-1;i>0;i--){ const j=(Math.random()* (i+1))|0; [flat[i],flat[j]]=[flat[j],flat[i]]; }
+    const t = makeGrid(ROWS, COLS);
+    let idx=0; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS)c++) t[r][c]=flat[idx++];
+    removeAllMatches(t);
+    if (hasAnyMove(t)) return t; attempts++;
+  }
+  return initSolvableGrid();
+}
+
+function Poof({ x, y, size }){
+  const sparks = Array.from({ length: 10 });
+  return (
+    <>
+      {sparks.map((_,i)=>{
+        const angle=(i/10)*Math.PI*2; const tx = size/2 + Math.cos(angle) * (size*0.9); const ty = size/2 + Math.sin(angle) * (size*0.9);
+        const style={ left:x, top:y, ['--cx']: size/2+'px', ['--cy']: size/2+'px', ['--tx']: tx+'px', ['--ty']: ty+'px', position:'absolute' };
+        return <span key={i} className="spark" style={style}>✨</span>;
+      })}
+    </>
+  );
+}
+
+function useResizeCell(containerRef, setCell) {
+  useEffect(() => {
+    const compute = () => {
+      const el = containerRef.current; if (!el) return;
+      const pad = 24; const w = el.clientWidth - pad * 2; const h = el.clientHeight - 180;
+      const size = Math.floor(Math.min(w / COLS, h / ROWS));
+      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
+    };
+    compute();
+    let ro;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) { ro = new ResizeObserver(compute); ro.observe(containerRef.current); }
+    window.addEventListener('resize', compute);
+    return () => { ro?.disconnect(); window.removeEventListener('resize', compute); };
+  }, [containerRef, setCell]);
+}
