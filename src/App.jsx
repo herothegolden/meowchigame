@@ -1,4 +1,83 @@
-// Initialize Telegram Web App and user
+import React, { useState, useEffect, useRef } from 'react';
+
+const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
+const INITIAL_TIME = 60;
+const MATCH_SCORE = 1000;
+const COMBO_BONUS = 500;
+
+// API helper functions
+const API_BASE = window.location.origin;
+
+const apiCall = async (endpoint, options = {}) => {
+  try {
+    const response = await fetch(`${API_BASE}/api${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('API call failed:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+function App() {
+  const [gameState, setGameState] = useState({
+    timeLeft: INITIAL_TIME,
+    score: 0,
+    columns: { left: [], center: [], right: [] },
+    isActive: false,
+    consecutiveMatches: 0,
+    gameStarted: false,
+    nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
+    currentTab: 'play',
+    matchesMade: 0,
+    maxCombo: 0
+  });
+
+  const [userState, setUserState] = useState({
+    telegramUser: null,
+    bestScore: null,
+    stats: null,
+    isLoading: true
+  });
+
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    draggedCat: null,
+    fromColumn: null,
+    dragPosition: { x: 0, y: 0 },
+    highlightedColumn: null,
+    startPosition: { x: 0, y: 0 }
+  });
+
+  const [animations, setAnimations] = useState([]);
+  const [currentTagline, setCurrentTagline] = useState(0);
+  const [spinningEmojis, setSpinningEmojis] = useState({});
+  const [isLayoutReady, setIsLayoutReady] = useState(false);
+  const [telegramViewport, setTelegramViewport] = useState({
+    height: window.innerHeight,
+    stableHeight: window.innerHeight
+  });
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [pawPositions, setPawPositions] = useState([]);
+  
+  const taglines = [
+    "😼 Chaos Mode Activated",
+    "🐾 Don't Blink, Human", 
+    "🔥 Catnado Incoming"
+  ];
+  
+  const gameTimerRef = useRef(null);
+  const boardRef = useRef(null);
+  const dragThreshold = 15;
+
+  // Initialize Telegram Web App and user
   useEffect(() => {
     // Enhanced responsive system - like Hamster Kombat
     const setResponsiveScale = () => {
@@ -88,144 +167,6 @@
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, []);import React, { useState, useEffect, useRef } from 'react';
-
-const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
-const INITIAL_TIME = 60;
-const MATCH_SCORE = 1000;
-const COMBO_BONUS = 500;
-
-// API helper functions
-const API_BASE = window.location.origin;
-
-const apiCall = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(`${API_BASE}/api${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-function App() {
-  const [gameState, setGameState] = useState({
-    timeLeft: INITIAL_TIME,
-    score: 0,
-    columns: { left: [], center: [], right: [] },
-    isActive: false,
-    consecutiveMatches: 0,
-    gameStarted: false,
-    nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-    currentTab: 'play',
-    matchesMade: 0,
-    maxCombo: 0
-  });
-
-  const [userState, setUserState] = useState({
-    telegramUser: null,
-    bestScore: null,
-    stats: null,
-    isLoading: true
-  });
-
-  const [leaderboard, setLeaderboard] = useState([]);
-
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    draggedCat: null,
-    fromColumn: null,
-    dragPosition: { x: 0, y: 0 },
-    highlightedColumn: null,
-    startPosition: { x: 0, y: 0 }
-  });
-
-  const [animations, setAnimations] = useState([]);
-  const [currentTagline, setCurrentTagline] = useState(0);
-  const [spinningEmojis, setSpinningEmojis] = useState({});
-  const [isLayoutReady, setIsLayoutReady] = useState(false);
-  const [telegramViewport, setTelegramViewport] = useState({
-    height: window.innerHeight,
-    stableHeight: window.innerHeight
-  });
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [pawPositions, setPawPositions] = useState([]);
-  const taglines = [
-    "😼 Chaos Mode Activated",
-    "🐾 Don't Blink, Human", 
-    "🔥 Catnado Incoming"
-  ];
-  
-  const gameTimerRef = useRef(null);
-  const boardRef = useRef(null);
-  const dragThreshold = 15;
-
-  // Initialize Telegram Web App and user
-  useEffect(() => {
-    if (window.Telegram?.WebApp) {
-      const tg = window.Telegram.WebApp;
-      tg.ready();
-      tg.expand(); // Get maximum stable height
-      
-      // Set up viewport handling
-      const updateViewport = () => {
-        setTelegramViewport({
-          height: tg.viewportHeight || window.innerHeight,
-          stableHeight: tg.viewportStableHeight || window.innerHeight
-        });
-      };
-      
-      updateViewport();
-      tg.onEvent?.('viewportChanged', updateViewport);
-      
-      // Set CSS custom properties for consistent sizing
-      const screenWidth = window.innerWidth;
-      const baseFontSize = Math.min(Math.max(screenWidth / 375 * 16, 12), 20);
-      document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}px`);
-      document.documentElement.style.setProperty('--app-height', `${tg.viewportStableHeight || window.innerHeight}px`);
-      
-      if (tg.backgroundColor) {
-        document.body.style.backgroundColor = tg.backgroundColor;
-      }
-
-      // Get Telegram user data
-      const user = tg.initDataUnsafe?.user;
-      if (user) {
-        setUserState(prev => ({ ...prev, telegramUser: user }));
-        initializeUser(user);
-      } else {
-        // Fallback for testing outside Telegram
-        const testUser = {
-          id: 123456789,
-          username: 'testuser',
-          first_name: 'Test',
-          last_name: 'User'
-        };
-        setUserState(prev => ({ ...prev, telegramUser: testUser }));
-        initializeUser(testUser);
-      }
-    } else {
-      // Fallback for development
-      const screenWidth = window.innerWidth;
-      const baseFontSize = Math.min(Math.max(screenWidth / 375 * 16, 12), 20);
-      document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}px`);
-      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
-      
-      const testUser = {
-        id: 123456789,
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User'
-      };
-      setUserState(prev => ({ ...prev, telegramUser: testUser }));
-      initializeUser(testUser);
-    }
   }, []);
 
   // Initialize user in database
@@ -548,12 +489,6 @@ function App() {
     return null;
   };
 
-  const getDistanceMoved = (startPos, currentPos) => {
-    const dx = currentPos.x - startPos.x;
-    const dy = currentPos.y - startPos.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
   const handleDragStart = (e, catId, fromColumn) => {
     if (!gameState.isActive) return;
     
@@ -702,31 +637,22 @@ function App() {
   };
 
   const LoadingOverlay = () => {
-    const [zzzVisible, setZzzVisible] = useState(true); // Start visible
+    const [zzzVisible, setZzzVisible] = useState(true);
     const [activeDots, setActiveDots] = useState(1);
 
     // Zzz animation effect - simple toggle every 2 seconds
     useEffect(() => {
       const zzzTimer = setInterval(() => {
-        setZzzVisible(prev => {
-          console.log('Zzz toggle:', !prev);
-          return !prev;
-        });
+        setZzzVisible(prev => !prev);
       }, 2000);
-
       return () => clearInterval(zzzTimer);
     }, []);
 
     // Progressive dots animation - 1, 2, 3, repeat
     useEffect(() => {
       const dotsTimer = setInterval(() => {
-        setActiveDots(prev => {
-          const next = prev >= 3 ? 1 : prev + 1;
-          console.log(`Dots changing: ${prev} -> ${next}`);
-          return next;
-        });
-      }, 1000); // Slower for easier debugging
-
+        setActiveDots(prev => prev >= 3 ? 1 : prev + 1);
+      }, 1000);
       return () => clearInterval(dotsTimer);
     }, []);
 
@@ -788,11 +714,6 @@ function App() {
               <div className={`w-4 h-4 rounded-full ${activeDots >= 1 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
               <div className={`w-4 h-4 rounded-full ${activeDots >= 2 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
               <div className={`w-4 h-4 rounded-full ${activeDots >= 3 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
-            </div>
-            
-            {/* Debug info */}
-            <div className="mt-4 text-sm text-gray-400">
-              Dots: {activeDots} | Zzz: {zzzVisible ? 'ON' : 'OFF'}
             </div>
           </div>
         </div>
@@ -861,7 +782,7 @@ function App() {
       >
         <div className="relative">
           <div className="absolute inset-0 flex items-center justify-center z-[110]">
-            <div className="cat-emoji-xl animate-bounce">{animation.emoji}</div>
+            <div className="text-6xl animate-bounce">{animation.emoji}</div>
           </div>
           
           {[...Array(8)].map((_, i) => (
