@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
-   Candy-Cats – Match-3 (Telegram WebApp)
-   (Top section cleaned: no duplicate App component,
-   no duplicate splash/styles. The main App is defined
-   later in the file — keep that one.)
+   Meowchi (Candy-Cats) – Match-3 (Telegram WebApp)
+   ✦ HK-like full-screen shell (Header / Content)
+   ✦ Stable 100vh via Telegram viewportStableHeight
+   ✦ Wallpaper splash that holds ≥ 3s
+   ✦ Mechanics: swap → match 3+ → clear → gravity → refill
 -------------------------------------------------- */
 
 // ---------- Shared config ----------
@@ -16,108 +17,28 @@ const CELL_MAX = 64;
 const CAT_SET = ["😺", "😸", "😹", "😻", "😼", "🐱"];
 const randEmoji = () => CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
 
-const isCoarsePointer = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia &&
-  window.matchMedia("(pointer:coarse)").matches;
-
 const getTG = () =>
-  typeof window !== "undefined" ? window.Telegram?.WebApp: undefined;
+  (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
-const SPLASH_URL = "/splash.jpg"; // put your wallpaper in /public/splash.jpg
+const SPLASH_URL = "/splash.jpg"; // place image in /public/splash.jpg
 
+// ---------- Root App ----------
 export default function App() {
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.innerHTML = `
-      :root { --line:#243069; }
-      html, body, #root { height: 100%; }
-      .page { background:#0a0f23; color:#fff; height:100%; display:flex; align-items:center; justify-content:center; }
-
-      /* 2. Splash CSS */
-      .splash {
-        position: fixed; inset: 0; z-index: 9999;
-        display: grid; place-items: center;
-      }
-      .splash::before {
-        content: ""; position: absolute; inset: 0;
-        background: url('${SPLASH_URL}') center/cover no-repeat;
-      }
-      .loader-ring {
-        width: 64px; height: 64px; border-radius: 50%;
-        border: 3px solid rgba(255,255,255,.25);
-        border-top-color: #bdaaff;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-    `;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
-
-  // 3. Add splash states
-  const [showSplash, setShowSplash] = useState(true);
-  const [tgReady, setTgReady] = useState(false);
-  const [minElapsed, setMinElapsed] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-
-  useEffect(() => {
-    const tg = getTG();
-    try { tg?.ready(); tg?.expand(); } catch {}
-    setTgReady(true);
-  }, []);
-  useEffect(() => {
-    const t = setTimeout(() => setMinElapsed(true), 3000);
-    return () => clearTimeout(t);
-  }, []);
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => setImgLoaded(true);
-    img.onerror = () => setImgLoaded(true);
-    img.src = SPLASH_URL;
-  }, []);
-  useEffect(() => {
-    if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
-  }, [tgReady, minElapsed, imgLoaded]);
-
-  // 4. Wrap return
-  return (
-    <>
-      {showSplash && (
-        <div className="splash">
-          <div style={{ zIndex: 1, color: "#fff", textAlign: "center" }}>
-            <div style={{ fontSize: 40 }}>🐱</div>
-            <div style={{ fontWeight: "bold" }}>Meowchi Game</div>
-            <div className="loader-ring" />
-            <div>Loading the CatVerse…</div>
-          </div>
-        </div>
-      )}
-      <div className="page" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        {/* your existing game screens here */}
-      </div>
-    </>
-  );
-}
-
-// ---------- Root App (router) ----------
-export default function App() {
-  // Inject minimal CSS once (full-screen shell)
+  // Inject CSS once
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
       :root { --line:#243069; --vh: 1vh; }
       html, body, #root { height: 100%; }
-      body { background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+      body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
 
-      /* Full-screen shell (like HK) */
+      /* Full-screen shell (Hamster Kombat style) */
       .shell {
         height: calc(var(--vh, 1vh) * 100);
         display: grid;
         grid-template-rows: auto 1fr;
         width: 100%;
       }
-
       .header {
         display:flex; align-items:center; justify-content:space-between;
         padding:12px 16px;
@@ -133,6 +54,7 @@ export default function App() {
         height: 100%; width: 100%;
         padding: 12px 16px 16px 16px;
         display: grid; align-content:start; gap: 12px;
+        overflow:auto;
       }
 
       .section {
@@ -168,7 +90,6 @@ export default function App() {
         margin: 0 auto;
       }
       .gridlines { position:absolute; inset:0; opacity:.2; pointer-events:none; }
-
       .tile {
         position:absolute; display:flex; align-items:center; justify-content:center;
         border-radius:12px; background:#151b46; outline:1px solid #26307a;
@@ -181,37 +102,41 @@ export default function App() {
       @keyframes poof { from { opacity:1; transform: translate(var(--cx), var(--cy)) scale(.9) rotate(0deg); } to { opacity:0; transform: translate(var(--tx), var(--ty)) scale(.4) rotate(90deg); } }
       .spark { position:absolute; font-size:18px; animation: poof .75s ease-out forwards; }
 
-      /* Splash */
+      /* Splash (wallpaper) */
       .splash {
-        position: fixed; inset:0; display:grid; place-items:center;
-        background: radial-gradient(120% 120% at 50% -10%, #102058 0%, #091028 60%);
-        z-index: 999;
+        position: fixed; inset: 0; z-index: 9999;
+        display: grid; place-items: center; overflow: hidden; color: #fff;
       }
-      .splash-card {
-        display:grid; gap:14px; place-items:center;
-        padding:22px 24px; border-radius:18px;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(122,162,255,.22);
+      .splash::before {
+        content: ""; position: absolute; inset: 0;
+        background: url('${SPLASH_URL}') center/cover no-repeat;
+        transform: scale(1.02);
+      }
+      .splash::after {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(120% 100% at 50% 0%, rgba(0,0,0,.25) 0%, rgba(0,0,0,.55) 65%, rgba(0,0,0,.75) 100%);
+      }
+      .splash-content {
+        position: relative; z-index: 1;
+        display: grid; gap: 12px; place-items: center; text-align: center;
+        padding: 20px 24px; border-radius: 18px;
+        background: rgba(15, 20, 48, .35);
+        border: 1px solid rgba(122,162,255,.25);
         box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 0 80px rgba(122,162,255,.08);
-        text-align:center;
       }
-      .splash-title { font-size:20px; font-weight:900; letter-spacing:.3px }
-      .splash-sub { opacity:.75; font-size:13px }
       .loader-ring {
         width: 64px; height: 64px; border-radius: 50%;
-        border: 3px solid rgba(255,255,255,.15);
-        border-top-color: #bdaaff; animation: spin 1s linear infinite;
+        border: 3px solid rgba(255,255,255,.25);
+        border-top-color: #bdaaff;
+        animation: spin 1s linear infinite;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
-
-      /* Small helpers */
-      .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; border:1px solid var(--line); background:#0f1533; padding:2px 6px; border-radius:6px; font-size:11px; }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
   }, []);
 
-  // Telegram viewport → --vh for stable 100vh inside WebView
+  // Stable vh (Telegram provides viewportStableHeight)
   useEffect(() => {
     const tg = getTG();
     const setVH = () => {
@@ -230,50 +155,45 @@ export default function App() {
     };
   }, []);
 
-  // Splash / loading
-  const [loaded, setLoaded] = useState(false);
+  // Splash gating (3s + tg.ready + image loaded)
+  const [showSplash, setShowSplash] = useState(true);
+  const [tgReady, setTgReady] = useState(false);
+  const [minElapsed, setMinElapsed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
   useEffect(() => {
-    let t;
     const tg = getTG();
-    try {
-      tg?.ready();
-      tg?.expand();
-    } catch {}
-    // Tiny delay to let fonts/layout paint smoothly
-    t = setTimeout(() => setLoaded(true), 650);
+    try { tg?.ready(); tg?.expand(); } catch {}
+    setTgReady(true);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 3000);
     return () => clearTimeout(t);
   }, []);
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setImgLoaded(true);
+    img.onerror = () => setImgLoaded(true);
+    img.src = SPLASH_URL;
+  }, []);
+  useEffect(() => {
+    if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
+  }, [tgReady, minElapsed, imgLoaded]);
 
+  // Navigation / state
   const [screen, setScreen] = useState("home");
   const [coins, setCoins] = useState(500);
   const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
-
-  // Settings
   const [settings, setSettings] = useState({ haptics: true, sounds: false });
-
-  // Daily reward mock
   const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
-
-  // Leaderboard mock data
   const [lbScope, setLbScope] = useState("daily");
   const leaders = {
-    daily: [
-      ["mira", 220],
-      ["zeno", 180],
-      ["kira", 150],
-    ],
-    weekly: [
-      ["mira", 820],
-      ["kira", 760],
-      ["alex", 700],
-    ],
-    all: [
-      ["neo", 4120],
-      ["mira", 3880],
-      ["alex", 3550],
-    ],
+    daily: [["mira", 220], ["zeno", 180], ["kira", 150]],
+    weekly: [["mira", 820], ["kira", 760], ["alex", 700]],
+    all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
   };
 
+  // UI sections
   function Header() {
     return (
       <div className="header">
@@ -308,26 +228,15 @@ export default function App() {
             ▶️ Play
           </button>
           <div className="row">
-            <button className="btn block" onClick={() => setScreen("shop")}>
-              🛍 Shop
-            </button>
-            <button className="btn block" onClick={() => setScreen("leaderboard")}>
-              🏆 Leaderboard
-            </button>
+            <button className="btn block" onClick={() => setScreen("shop")}>🛍 Shop</button>
+            <button className="btn block" onClick={() => setScreen("leaderboard")}>🏆 Leaderboard</button>
           </div>
           <div className="row">
-            <button className="btn block" onClick={() => setScreen("daily")}>
-              📆 Daily Reward
-            </button>
-            <button className="btn block" onClick={() => setScreen("invite")}>
-              🔗 Invite
-            </button>
+            <button className="btn block" onClick={() => setScreen("daily")}>📆 Daily Reward</button>
+            <button className="btn block" onClick={() => setScreen("invite")}>🔗 Invite</button>
           </div>
-          <button className="btn block" onClick={() => setScreen("settings")}>
-            ⚙️ Settings
-          </button>
+          <button className="btn block" onClick={() => setScreen("settings")}>⚙️ Settings</button>
         </div>
-
         <div className="section" style={{ display: "grid", gap: 8 }}>
           <div className="title">How to play</div>
           <div className="muted">
@@ -348,22 +257,16 @@ export default function App() {
     ];
     return (
       <div className="section">
-        <div className="title" style={{ marginBottom: 10 }}>
-          Shop
-        </div>
+        <div className="title" style={{ marginBottom: 10 }}>Shop</div>
         <div className="list" style={{ display: "grid", gap: 8 }}>
           {items.map((it) => (
             <div key={it.key}>
               <div>
                 <div style={{ fontWeight: 600 }}>{it.name}</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {it.desc}
-                </div>
+                <div className="muted" style={{ fontSize: 12 }}>{it.desc}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {it.price} 🐾
-                </div>
+                <div className="muted" style={{ fontSize: 12 }}>{it.price} 🐾</div>
                 <button
                   className="btn"
                   onClick={() => setCoins((c) => Math.max(0, c - it.price))}
@@ -380,11 +283,7 @@ export default function App() {
   }
 
   function Leaderboard() {
-    const scopes = [
-      ["daily", "Daily"],
-      ["weekly", "Weekly"],
-      ["all", "All‑time"],
-    ];
+    const scopes = [["daily", "Daily"], ["weekly", "Weekly"], ["all", "All‑time"]];
     const rows = leaders[lbScope] || [];
     return (
       <div className="section" style={{ display: "grid", gap: 10 }}>
@@ -422,7 +321,10 @@ export default function App() {
     const canClaim = daily.lastClaim !== today;
     function claim() {
       const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      setDaily((d) => ({ streak: d.lastClaim === yesterday ? d.streak + 1 : 1, lastClaim: today }));
+      setDaily((d) => ({
+        streak: d.lastClaim === yesterday ? d.streak + 1 : 1,
+        lastClaim: today
+      }));
       setCoins((c) => c + 50);
     }
     return (
@@ -450,9 +352,7 @@ export default function App() {
         await navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 1200);
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
     return (
       <div className="section" style={{ display: "grid", gap: 10 }}>
@@ -464,9 +364,7 @@ export default function App() {
           <div
             className="pill"
             style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               maxWidth: "70%",
             }}
           >
@@ -509,23 +407,17 @@ export default function App() {
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">Level Over</div>
         <div className="row">
-          <div className="muted">Score</div>
-          <b>{lastRun.score}</b>
+          <div className="muted">Score</div><b>{lastRun.score}</b>
         </div>
         <div className="row">
-          <div className="muted">CatCoins earned</div>
-          <b>{lastRun.coins}</b>
+          <div className="muted">CatCoins earned</div><b>{lastRun.coins}</b>
         </div>
         <button className="btn primary" onClick={() => setScreen("game")}>
           Play again
         </button>
         <div className="row">
-          <button className="btn block" onClick={() => setScreen("shop")}>
-            Shop
-          </button>
-          <button className="btn block" onClick={() => setScreen("leaderboard")}>
-            Leaderboard
-          </button>
+          <button className="btn block" onClick={() => setScreen("shop")}>Shop</button>
+          <button className="btn block" onClick={() => setScreen("leaderboard")}>Leaderboard</button>
         </div>
       </div>
     );
@@ -533,19 +425,18 @@ export default function App() {
 
   return (
     <>
-      {/* Splash / loading */}
-      {!loaded && (
-        <div className="splash">
-          <div className="splash-card">
-            <div className="logo" style={{ fontSize: 42 }}>🐱</div>
-            <div className="splash-title">Meowchi Game</div>
+      {showSplash && (
+        <div className="splash" role="status" aria-live="polite">
+          <div className="splash-content">
+            <div style={{ fontSize: 40 }}>🐱</div>
+            <div style={{ fontWeight: 900, letterSpacing: ".3px" }}>Meowchi Game</div>
             <div className="loader-ring" />
-            <div className="splash-sub">Loading the CatVerse…</div>
+            <div style={{ opacity: .85, fontSize: 13 }}>Loading the CatVerse…</div>
           </div>
         </div>
       )}
 
-      <div className="shell">
+      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
         <Header />
         <div className="content">
           {screen === "home" && <Home />}
@@ -556,10 +447,7 @@ export default function App() {
           {screen === "settings" && <Settings />}
           {screen === "game" && (
             <GameView
-              onExit={(run) => {
-                setLastRun(run);
-                setScreen("gameover");
-              }}
+              onExit={(run) => { setLastRun(run); setScreen("gameover"); }}
               onBack={() => setScreen("home")}
               onCoins={(d) => setCoins((c) => c + d)}
             />
@@ -608,9 +496,7 @@ function GameView({ onExit, onBack, onCoins }) {
     tg?.onEvent?.("backButtonClicked", onBackBtn);
     return () => {
       tg?.offEvent?.("backButtonClicked", onBackBtn);
-      try {
-        tg.BackButton.hide();
-      } catch {}
+      try { tg.BackButton.hide(); } catch {}
     };
   }, []);
 
@@ -626,19 +512,13 @@ function GameView({ onExit, onBack, onCoins }) {
     tg?.onEvent?.("mainButtonClicked", handler);
     return () => {
       tg?.offEvent?.("mainButtonClicked", handler);
-      try {
-        tg.MainButton.hide();
-      } catch {}
+      try { tg.MainButton.hide(); } catch {}
     };
   }, []);
 
   function haptic(ms = 12) {
-    try {
-      getTG()?.HapticFeedback?.impactOccurred("light");
-    } catch {}
-    try {
-      navigator.vibrate?.(ms);
-    } catch {}
+    try { getTG()?.HapticFeedback?.impactOccurred("light"); } catch {}
+    try { navigator.vibrate?.(ms); } catch {}
   }
 
   // Input handlers (tap + swipe + mouse click-to-swap)
@@ -659,7 +539,7 @@ function GameView({ onExit, onBack, onCoins }) {
     const onDown = (e) => {
       if (paused) return;
       const p = rcFromEvent(e);
-      // Desktop convenience: if already selected and adjacent, swap
+      // Desktop convenience: if already selected and adjacent, swap immediately
       if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
         trySwap(sel.r, sel.c, p.r, p.c);
         setSel(null);
@@ -676,31 +556,19 @@ function GameView({ onExit, onBack, onCoins }) {
       if (paused || !start) return;
       const end = rcFromEvent(e);
       // If ended on adjacent cell, use that. Else infer from swipe direction.
-      let dr = end.r - start.r,
-        dc = end.c - start.c;
-      const dx = end.x - start.x,
-        dy = end.y - start.y;
+      let dr = end.r - start.r, dc = end.c - start.c;
+      const dx = end.x - start.x, dy = end.y - start.y;
       if (Math.abs(dr) + Math.abs(dc) !== 1) {
         if (Math.abs(dx) < thresh && Math.abs(dy) < thresh) {
           setSel(null);
           start = null;
           return;
         }
-        if (Math.abs(dx) > Math.abs(dy)) {
-          dr = 0;
-          dc = dx > 0 ? 1 : -1;
-        } else {
-          dc = 0;
-          dr = dy > 0 ? 1 : -1;
-        }
+        if (Math.abs(dx) > Math.abs(dy)) { dr = 0; dc = dx > 0 ? 1 : -1; }
+        else { dc = 0; dr = dy > 0 ? 1 : -1; }
       }
-      const r2 = start.r + dr,
-        c2 = start.c + dc;
-      if (!inBounds(r2, c2)) {
-        setSel(null);
-        start = null;
-        return;
-      }
+      const r2 = start.r + dr, c2 = start.c + dc;
+      if (!inBounds(r2, c2)) { setSel(null); start = null; return; }
       trySwap(start.r, start.c, r2, c2);
       setSel(null);
       start = null;
@@ -721,13 +589,11 @@ function GameView({ onExit, onBack, onCoins }) {
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
     const matches = findMatches(g);
     if (matches.length === 0) {
-      // invalid → revert
       haptic(8);
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 120);
       return;
     }
-    // valid
     setGrid(g);
     setMoves((m) => Math.max(0, m - 1));
     resolveCascades(g, () => {
@@ -766,13 +632,9 @@ function GameView({ onExit, onBack, onCoins }) {
       setTimeout(() => setBlast(new Set()), 500);
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
-      // clear
-      matches.forEach(([r, c]) => {
-        g[r][c] = null;
-      });
-      // gravity
+      // clear → gravity → refill
+      matches.forEach(([r, c]) => { g[r][c] = null; });
       applyGravity(g);
-      // refill
       refill(g);
       comboCount++;
       setTimeout(step, 90);
@@ -782,10 +644,7 @@ function GameView({ onExit, onBack, onCoins }) {
 
   function doHint() {
     const m = findFirstMove(gridRef.current);
-    if (!m) {
-      shuffleBoard();
-      return;
-    }
+    if (!m) { shuffleBoard(); return; }
     setHint(m);
     setTimeout(() => setHint(null), 1500);
     haptic(10);
@@ -801,20 +660,15 @@ function GameView({ onExit, onBack, onCoins }) {
     if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current));
   }
 
-  function finish() {
-    onExit({ score, coins: Math.floor(score * 0.15) });
-  }
+  function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
 
-  const boardW = cell * COLS,
-    boardH = cell * ROWS;
+  const boardW = cell * COLS, boardH = cell * ROWS;
   const tg = getTG();
 
   return (
     <div className="section board-wrap" ref={containerRef}>
       <div className="row">
-        <button className="btn" onClick={onBack}>
-          Back
-        </button>
+        <button className="btn" onClick={onBack}>Back</button>
         <div className="muted">
           {tg
             ? "Back button pauses"
@@ -824,23 +678,13 @@ function GameView({ onExit, onBack, onCoins }) {
 
       {/* HUD */}
       <div className="row">
-        <div>
-          <span className="muted">Score</span> <b>{score}</b>
-        </div>
-        <div>
-          <span className="muted">Moves</span> <b>{moves}</b>
-        </div>
-        <div>
-          <span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b>
-        </div>
+        <div><span className="muted">Score</span> <b>{score}</b></div>
+        <div><span className="muted">Moves</span> <b>{moves}</b></div>
+        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
       </div>
 
       {/* Board */}
-      <div
-        ref={boardRef}
-        className="board"
-        style={{ width: boardW, height: boardH }}
-      >
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
         <div
           className="gridlines"
           style={{
@@ -940,12 +784,8 @@ function GameView({ onExit, onBack, onCoins }) {
         >
           Reset
         </button>
-        <button className="btn" onClick={doHint}>
-          Hint 🔍
-        </button>
-        <button className="btn primary" onClick={shuffleBoard}>
-          Shuffle 🔀
-        </button>
+        <button className="btn" onClick={doHint}>Hint 🔍</button>
+        <button className="btn primary" onClick={shuffleBoard}>Shuffle 🔀</button>
         <div
           style={{
             gridColumn: "span 1",
@@ -963,7 +803,7 @@ function GameView({ onExit, onBack, onCoins }) {
   );
 }
 
-// ---------- Helpers (grid, matching, refill, solvability) ----------
+// ---------- Helpers ----------
 const makeGrid = (rows, cols) =>
   Array.from({ length: rows }, () => Array(cols).fill(null));
 const cloneGrid = (g) => g.map((r) => r.slice());
@@ -976,10 +816,7 @@ function findMatches(g) {
     let c = 0;
     while (c < COLS) {
       const v = g[r][c];
-      if (!v) {
-        c++;
-        continue;
-      }
+      if (!v) { c++; continue; }
       let len = 1;
       while (c + len < COLS && g[r][c + len] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
@@ -991,10 +828,7 @@ function findMatches(g) {
     let r = 0;
     while (r < ROWS) {
       const v = g[r][c];
-      if (!v) {
-        r++;
-        continue;
-      }
+      if (!v) { r++; continue; }
       let len = 1;
       while (r + len < ROWS && g[r + len][c] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
@@ -1015,21 +849,17 @@ function applyGravity(g) {
         write--;
       }
     }
-    while (write >= 0) {
-      g[write][c] = null;
-      write--;
-    }
+    while (write >= 0) { g[write][c] = null; write--; }
   }
 }
 
 function refill(g) {
   for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++) if (g[r][c] == null) g[r][c] = randEmoji();
+    for (let c = 0; c < COLS; c++)
+      if (g[r][c] == null) g[r][c] = randEmoji();
 }
 
-function hasAnyMove(g) {
-  return !!findFirstMove(g);
-}
+function hasAnyMove(g) { return !!findFirstMove(g); }
 
 function findFirstMove(g) {
   // Check swaps right and down for a created match
@@ -1038,18 +868,12 @@ function findFirstMove(g) {
       if (c + 1 < COLS) {
         const t = cloneGrid(g);
         [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]];
-        if (findMatches(t).length > 0) return [
-          [r, c],
-          [r, c + 1],
-        ];
+        if (findMatches(t).length > 0) return [[r, c], [r, c + 1]];
       }
       if (r + 1 < ROWS) {
         const t = cloneGrid(g);
         [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]];
-        if (findMatches(t).length > 0) return [
-          [r, c],
-          [r + 1, c],
-        ];
+        if (findMatches(t).length > 0) return [[r, c], [r + 1, c]];
       }
     }
   }
@@ -1057,11 +881,12 @@ function findFirstMove(g) {
 }
 
 function initSolvableGrid() {
-  let g;
-  let tries = 0;
+  let g; let tries = 0;
   do {
     g = makeGrid(ROWS, COLS);
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) g[r][c] = randEmoji();
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        g[r][c] = randEmoji();
     removeAllMatches(g);
     tries++;
     if (tries > 50) break;
@@ -1074,17 +899,13 @@ function removeAllMatches(g) {
   while (true) {
     const m = findMatches(g);
     if (m.length === 0) break;
-    m.forEach(([r, c]) => {
-      g[r][c] = randEmoji();
-    });
+    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
   }
 }
 
 function shuffleToSolvable(g) {
   const flat = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
-  }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
 
   let attempts = 0;
   while (attempts < 100) {
@@ -1096,9 +917,7 @@ function shuffleToSolvable(g) {
 
     const t = makeGrid(ROWS, COLS);
     let idx = 0;
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-    }
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
 
     removeAllMatches(t);
     if (hasAnyMove(t)) return t;
@@ -1116,8 +935,7 @@ function Poof({ x, y, size }) {
         const tx = size / 2 + Math.cos(angle) * (size * 0.9);
         const ty = size / 2 + Math.sin(angle) * (size * 0.9);
         const style = {
-          left: x,
-          top: y,
+          left: x, top: y,
           ["--cx"]: size / 2 + "px",
           ["--cy"]: size / 2 + "px",
           ["--tx"]: tx + "px",
@@ -1139,7 +957,6 @@ function useResizeCell(containerRef, setCell) {
     const compute = () => {
       const el = containerRef.current;
       if (!el) return;
-      // Use maximum available height in the content area for the board.
       // Reserve space for HUD + controls (~180px), then fill the rest.
       const pad = 24;
       const w = el.clientWidth - pad * 2;
