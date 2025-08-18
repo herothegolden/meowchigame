@@ -1,4 +1,94 @@
-import React, { useState, useEffect, useRef } from 'react';
+// Initialize Telegram Web App and user
+  useEffect(() => {
+    // Enhanced responsive system - like Hamster Kombat
+    const setResponsiveScale = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      // Calculate optimal scale based on screen size
+      const widthScale = width / 375; // Base width (iPhone 6/7/8)
+      const heightScale = height / 667; // Base height (iPhone 6/7/8)
+      const optimalScale = Math.min(widthScale, heightScale, 1.3); // Max 1.3x scale
+      
+      // Set CSS custom properties for unified responsive system
+      document.documentElement.style.setProperty('--app-scale', Math.max(optimalScale, 0.7).toString());
+      document.documentElement.style.setProperty('--screen-width', `${width}px`);
+      document.documentElement.style.setProperty('--screen-height', `${height}px`);
+    };
+
+    if (window.Telegram?.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand(); // Get maximum stable height
+      
+      // Set up viewport handling with enhanced responsive scaling
+      const updateViewport = () => {
+        setTelegramViewport({
+          height: tg.viewportHeight || window.innerHeight,
+          stableHeight: tg.viewportStableHeight || window.innerHeight
+        });
+        
+        // Update responsive scaling when viewport changes
+        setResponsiveScale();
+      };
+      
+      updateViewport();
+      tg.onEvent?.('viewportChanged', updateViewport);
+      
+      // Set CSS custom properties for consistent sizing
+      document.documentElement.style.setProperty('--app-height', `${tg.viewportStableHeight || window.innerHeight}px`);
+      
+      if (tg.backgroundColor) {
+        document.body.style.backgroundColor = tg.backgroundColor;
+      }
+
+      // Get Telegram user data
+      const user = tg.initDataUnsafe?.user;
+      if (user) {
+        setUserState(prev => ({ ...prev, telegramUser: user }));
+        initializeUser(user);
+      } else {
+        // Fallback for testing outside Telegram
+        const testUser = {
+          id: 123456789,
+          username: 'testuser',
+          first_name: 'Test',
+          last_name: 'User'
+        };
+        setUserState(prev => ({ ...prev, telegramUser: testUser }));
+        initializeUser(testUser);
+      }
+    } else {
+      // Fallback for development with responsive scaling
+      setResponsiveScale();
+      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+      
+      const testUser = {
+        id: 123456789,
+        username: 'testuser',
+        first_name: 'Test',
+        last_name: 'User'
+      };
+      setUserState(prev => ({ ...prev, telegramUser: testUser }));
+      initializeUser(testUser);
+    }
+
+    // Listen for resize events and update scaling
+    const handleResize = () => {
+      setResponsiveScale();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    // Initial scale setting
+    setResponsiveScale();
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);import React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
