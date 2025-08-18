@@ -238,29 +238,38 @@ function App() {
     if (!gameState.gameStarted && gameState.currentTab === 'play') {
       setIsLayoutReady(false);
       
-      // Use multiple checks to ensure layout is truly ready
-      const checkLayout = () => {
-        // Check if DOM elements are properly sized
-        const container = document.querySelector('[data-welcome-container]');
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          if (rect.height > 0 && rect.width > 0) {
-            // Add a small delay to ensure all dynamic calculations are complete
-            setTimeout(() => {
-              setIsLayoutReady(true);
-            }, 500);
-          } else {
-            // Retry if not ready
-            setTimeout(checkLayout, 100);
-          }
-        } else {
-          // Retry if container not found
-          setTimeout(checkLayout, 100);
-        }
-      };
+      // Wait for next frame to ensure DOM is rendered
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const checkLayout = () => {
+            const container = document.querySelector('[data-welcome-container]');
+            const button = document.querySelector('[data-welcome-button]');
+            
+            if (container && button) {
+              const containerRect = container.getBoundingClientRect();
+              const buttonRect = button.getBoundingClientRect();
+              
+              // Check if elements are properly sized and positioned
+              if (containerRect.height > 0 && containerRect.width > 0 && 
+                  buttonRect.height > 0 && buttonRect.width > 0 &&
+                  buttonRect.bottom <= window.innerHeight) {
+                // Layout is ready and button is visible
+                setTimeout(() => {
+                  setIsLayoutReady(true);
+                }, 300); // Small delay for safety
+              } else {
+                // Retry if not ready
+                setTimeout(checkLayout, 50);
+              }
+            } else {
+              // Retry if elements not found
+              setTimeout(checkLayout, 50);
+            }
+          };
 
-      // Start checking after initial render
-      setTimeout(checkLayout, 100);
+          checkLayout();
+        }, 100);
+      });
     }
   }, [gameState.gameStarted, gameState.currentTab]);
 
@@ -553,10 +562,14 @@ function App() {
     });
   };
 
-  const LoadingScreen = () => {
+  const LoadingOverlay = () => {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-black text-white"
-           style={{ height: '100dvh' }}>
+      <div 
+        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500 ${
+          isLayoutReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+        style={{ height: '100dvh' }}
+      >
         <div className="text-center">
           <div className="mb-8 relative">
             {/* Walking paw prints animation */}
@@ -877,75 +890,76 @@ function App() {
   if (gameState.currentTab === 'account') return <AccountScreen />;
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
-    // Show loading screen while layout is calculating
-    if (!isLayoutReady) {
-      return <LoadingScreen />;
-    }
-
-    // Show welcome screen with smooth fade-in once layout is ready
     return (
-      <div 
-        className="h-screen flex flex-col p-2 transition-opacity duration-500 ease-in-out"
-        style={{backgroundColor: '#FFD700', height: '100dvh', opacity: isLayoutReady ? 1 : 0}}
-        data-welcome-container
-      >
-        <div className="flex-1 flex flex-col justify-center items-center">
-          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
-            <div className="text-6xl mb-4">🐾</div>
-            <h1 className="text-5xl font-black text-black mb-2">MEOWCHI</h1>
-            <h1 className="text-5xl font-black text-black mb-4">CHAOS</h1>
-            <div className="mb-6">
-              <p className="text-black text-xl font-bold mb-2">
-                Drop cats. Cause mayhem.
-              </p>
-              <p className="text-black text-xl font-bold mb-4">
-                Match 3 before they scream.
-              </p>
-            </div>
-            
-            <div className="mb-4">
-              <div className="flex justify-center gap-3 mb-3">
-                {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
-                  <span 
-                    key={index}
-                    className={`text-5xl cursor-pointer transition-transform hover:scale-110 ${
-                      spinningEmojis[index] ? 'animate-spin' : ''
-                    }`}
-                    onClick={() => handleEmojiClick(index)}
-                    style={{
-                      animation: spinningEmojis[index] ? 'spin 1s ease-in-out' : 'none',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {emoji}
-                  </span>
-                ))}
+      <div className="relative">
+        {/* Welcome screen - always rendered */}
+        <div 
+          className="h-screen flex flex-col p-2"
+          style={{backgroundColor: '#FFD700', height: '100dvh'}}
+          data-welcome-container
+        >
+          <div className="flex-1 flex flex-col justify-center items-center">
+            <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
+              <div className="text-6xl mb-4">🐾</div>
+              <h1 className="text-5xl font-black text-black mb-2">MEOWCHI</h1>
+              <h1 className="text-5xl font-black text-black mb-4">CHAOS</h1>
+              <div className="mb-6">
+                <p className="text-black text-xl font-bold mb-2">
+                  Drop cats. Cause mayhem.
+                </p>
+                <p className="text-black text-xl font-bold mb-4">
+                  Match 3 before they scream.
+                </p>
               </div>
-              <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
-            </div>
-            
-            <div className="mb-4 text-lg text-black font-bold leading-relaxed space-y-1">
-              <div>⏱ 60 seconds of panic</div>
-              <div>🐾 +1000 purr-points</div>
-              <div>🔥 Combos = Catnado</div>
-            </div>
+              
+              <div className="mb-4">
+                <div className="flex justify-center gap-3 mb-3">
+                  {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
+                    <span 
+                      key={index}
+                      className={`text-5xl cursor-pointer transition-transform hover:scale-110 ${
+                        spinningEmojis[index] ? 'animate-spin' : ''
+                      }`}
+                      onClick={() => handleEmojiClick(index)}
+                      style={{
+                        animation: spinningEmojis[index] ? 'spin 1s ease-in-out' : 'none',
+                        display: 'inline-block'
+                      }}
+                    >
+                      {emoji}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
+              </div>
+              
+              <div className="mb-4 text-lg text-black font-bold leading-relaxed space-y-1">
+                <div>⏱ 60 seconds of panic</div>
+                <div>🐾 +1000 purr-points</div>
+                <div>🔥 Combos = Catnado</div>
+              </div>
 
-            {userState.bestScore && (
-              <div className="mb-4 p-3 bg-black bg-opacity-10 rounded-lg">
-                <div className="text-sm text-black font-bold">Your Best Score</div>
-                <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
-              </div>
-            )}
-            
-            <button
-              onClick={startGame}
-              className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl w-full"
-            >
-              ▶️ LET'S GOOO!
-            </button>
+              {userState.bestScore && (
+                <div className="mb-4 p-3 bg-black bg-opacity-10 rounded-lg">
+                  <div className="text-sm text-black font-bold">Your Best Score</div>
+                  <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+                </div>
+              )}
+              
+              <button
+                onClick={startGame}
+                className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl w-full"
+                data-welcome-button
+              >
+                ▶️ LET'S GOOO!
+              </button>
+            </div>
           </div>
+          <BottomNavBar />
         </div>
-        <BottomNavBar />
+        
+        {/* Loading overlay - fades out when ready */}
+        <LoadingOverlay />
       </div>
     );
   }
