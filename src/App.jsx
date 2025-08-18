@@ -102,35 +102,24 @@ export default function App() {
       @keyframes poof { from { opacity:1; transform: translate(var(--cx), var(--cy)) scale(.9) rotate(0deg); } to { opacity:0; transform: translate(var(--tx), var(--ty)) scale(.4) rotate(90deg); } }
       .spark { position:absolute; font-size:18px; animation: poof .75s ease-out forwards; }
 
-      /* Splash (wallpaper) */
+      /* Splash (clean wallpaper, no dim/box) */
       .splash {
         position: fixed; inset: 0; z-index: 9999;
-        display: grid; place-items: center; overflow: hidden; color: #fff;
+        display: grid; place-items: center; overflow: hidden;
+        background: url('/splash.jpg') center/cover no-repeat;
       }
-      .splash::before {
-        content: ""; position: absolute; inset: 0;
-        background: url('${SPLASH_URL}') center/cover no-repeat;
-        transform: scale(1.02);
-      }
-      .splash::after {
-        content: ""; position: absolute; inset: 0;
-        background: radial-gradient(120% 100% at 50% 0%, rgba(0,0,0,.25) 0%, rgba(0,0,0,.55) 65%, rgba(0,0,0,.75) 100%);
-      }
-      .splash-content {
-        position: relative; z-index: 1;
-        display: grid; gap: 12px; place-items: center; text-align: center;
-        padding: 20px 24px; border-radius: 18px;
-        background: rgba(15, 20, 48, .35);
-        border: 1px solid rgba(122,162,255,.25);
-        box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 0 80px rgba(122,162,255,.08);
+      .splash-min {
+        position: relative;
+        display: grid; gap: 10px; place-items: center; text-align: center;
       }
       .loader-ring {
-        width: 64px; height: 64px; border-radius: 50%;
+        width: 56px; height: 56px; border-radius: 50%;
         border: 3px solid rgba(255,255,255,.25);
-        border-top-color: #bdaaff;
+        border-top-color: #ffffff;
         animation: spin 1s linear infinite;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
+      .splash-text { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
