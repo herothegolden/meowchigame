@@ -58,6 +58,7 @@ function App() {
 
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
+  const [spinningEmojis, setSpinningEmojis] = useState({});
   const taglines = [
     "😼 Chaos Mode Activated",
     "🐾 Don't Blink, Human", 
@@ -206,6 +207,22 @@ function App() {
       loadLeaderboard();
     }
   }, [gameState.currentTab]);
+
+  // Handle emoji spinning
+  const handleEmojiClick = (emojiIndex) => {
+    setSpinningEmojis(prev => ({
+      ...prev,
+      [emojiIndex]: true
+    }));
+    
+    // Remove spinning state after animation completes
+    setTimeout(() => {
+      setSpinningEmojis(prev => ({
+        ...prev,
+        [emojiIndex]: false
+      }));
+    }, 1000);
+  };
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
@@ -772,44 +789,56 @@ function App() {
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-responsive" 
-           style={{backgroundColor: '#FFD700', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-responsive max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h1 className="text-responsive-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
-          <p className="text-black text-responsive-xl font-bold mb-8">
-            Drop cats. Cause mayhem. Match 3 before they scream.
-          </p>
-          
-          <div className="mb-8">
-            <div className="flex justify-center gap-responsive mb-4">
-              <span className="cat-emoji-xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
-              <span className="cat-emoji-xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
-              <span className="cat-emoji-xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
-              <span className="cat-emoji-xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
-              <span className="cat-emoji-xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+      <div className="h-screen flex flex-col p-2" 
+           style={{backgroundColor: '#FFD700', height: '100dvh'}}>
+        <div className="flex-1 flex flex-col justify-center items-center">
+          <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
+            <h1 className="text-responsive-5xl font-black text-black mb-3">🐾 MEOWCHI CHAOS</h1>
+            <p className="text-black text-responsive-base font-bold mb-4">
+              Drop cats. Cause mayhem. Match 3 before they scream.
+            </p>
+            
+            <div className="mb-4">
+              <div className="flex justify-center gap-2 mb-3">
+                {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
+                  <span 
+                    key={index}
+                    className={`text-responsive-3xl cursor-pointer transition-transform hover:scale-110 ${
+                      spinningEmojis[index] ? 'animate-spin' : ''
+                    }`}
+                    onClick={() => handleEmojiClick(index)}
+                    style={{
+                      animation: spinningEmojis[index] ? 'spin 1s ease-in-out' : 'none',
+                      display: 'inline-block'
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ))}
+              </div>
+              <p className="text-responsive-sm text-black font-bold">5 ridiculous cats to wrangle.</p>
             </div>
-            <p className="text-responsive-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
-          </div>
-          
-          <div className="mb-8 text-responsive-lg text-black font-bold leading-relaxed">
-            <div>⏱ 60 seconds of panic</div>
-            <div>🐾 +1000 purr-points</div>
-            <div>🔥 Combos = Catnado</div>
-          </div>
+            
+            <div className="mb-4 text-responsive-sm text-black font-bold leading-relaxed space-y-1">
+              <div>⏱ 60 seconds of panic</div>
+              <div>🐾 +1000 purr-points</div>
+              <div>🔥 Combos = Catnado</div>
+            </div>
 
-          {userState.bestScore && (
-            <div className="mb-6 p-responsive bg-black bg-opacity-10 rounded-lg">
-              <div className="text-responsive-sm text-black font-bold">Your Best Score</div>
-              <div className="text-responsive-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
-            </div>
-          )}
-          
-          <button
-            onClick={startGame}
-            className="bg-black text-white font-bold btn-responsive-large rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-          >
-            ▶️ LET'S GOOO!
-          </button>
+            {userState.bestScore && (
+              <div className="mb-4 p-3 bg-black bg-opacity-10 rounded-lg">
+                <div className="text-responsive-xs text-black font-bold">Your Best Score</div>
+                <div className="text-responsive-xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+              </div>
+            )}
+            
+            <button
+              onClick={startGame}
+              className="bg-black text-white font-bold btn-responsive rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 w-full"
+            >
+              ▶️ LET'S GOOO!
+            </button>
+          </div>
         </div>
         <BottomNavBar />
       </div>
