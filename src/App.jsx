@@ -25,6 +25,82 @@ const isCoarsePointer = () =>
 const getTG = () =>
   typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 
+const SPLASH_URL = "/splash.jpg"; // put your wallpaper in /public/splash.jpg
+
+export default function App() {
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      :root { --line:#243069; }
+      html, body, #root { height: 100%; }
+      .page { background:#0a0f23; color:#fff; height:100%; display:flex; align-items:center; justify-content:center; }
+
+      /* 2. Splash CSS */
+      .splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: grid; place-items: center;
+      }
+      .splash::before {
+        content: ""; position: absolute; inset: 0;
+        background: url('${SPLASH_URL}') center/cover no-repeat;
+      }
+      .loader-ring {
+        width: 64px; height: 64px; border-radius: 50%;
+        border: 3px solid rgba(255,255,255,.25);
+        border-top-color: #bdaaff;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // 3. Add splash states
+  const [showSplash, setShowSplash] = useState(true);
+  const [tgReady, setTgReady] = useState(false);
+  const [minElapsed, setMinElapsed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  useEffect(() => {
+    const tg = getTG();
+    try { tg?.ready(); tg?.expand(); } catch {}
+    setTgReady(true);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setImgLoaded(true);
+    img.onerror = () => setImgLoaded(true);
+    img.src = SPLASH_URL;
+  }, []);
+  useEffect(() => {
+    if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
+  }, [tgReady, minElapsed, imgLoaded]);
+
+  // 4. Wrap return
+  return (
+    <>
+      {showSplash && (
+        <div className="splash">
+          <div style={{ zIndex: 1, color: "#fff", textAlign: "center" }}>
+            <div style={{ fontSize: 40 }}>🐱</div>
+            <div style={{ fontWeight: "bold" }}>Meowchi Game</div>
+            <div className="loader-ring" />
+            <div>Loading the CatVerse…</div>
+          </div>
+        </div>
+      )}
+      <div className="page" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+        {/* your existing game screens here */}
+      </div>
+    </>
+  );
+}
+
 // ---------- Root App (router) ----------
 export default function App() {
   // Inject minimal CSS once (full-screen shell)
