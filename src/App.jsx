@@ -412,7 +412,7 @@ export default function App() {
     );
   }
 
-return (
+  return (
   <>
     {showSplash && (
       <div className="splash" role="status" aria-live="polite">
