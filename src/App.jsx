@@ -287,22 +287,21 @@ function App() {
         const calculatePerfectFit = () => {
           // Measure exact available screen real estate
           const viewportHeight = window.innerHeight;
-          const telegramHeader = 80; // Estimated Telegram header
+          const telegramHeader = 60; // More accurate estimate
           const bottomNav = 80; // Bottom navigation height
           const availableHeight = viewportHeight - telegramHeader - bottomNav;
           
           // Base content measurements (in relative units)
           const baseContentHeight = {
             pawIcon: 60,        // 🐾 icon
-            title: 80,          // MEOWCHI (text-5xl)
-            title2: 80,         // CHAOS (text-5xl)
-            subtitle: 50,       // Drop cats text
+            title: 120,         // MEOWCHI + CHAOS combined
+            subtitle: 80,       // Drop cats text (2 lines)
             emojis: 60,         // Cat emojis row
             emojiText: 30,      // "5 ridiculous cats"
             gameInfo: 90,       // 3 lines of game info
             bestScore: 70,      // Best score box (if present)
             button: 60,         // LET'S GOOO button
-            spacing: 120        // All margins and padding combined
+            spacing: 80         // Minimal spacing
           };
           
           // Calculate total content height needed
@@ -313,10 +312,14 @@ function App() {
             totalBaseHeight -= baseContentHeight.bestScore;
           }
           
-          // Calculate scale factor for perfect fit
-          const scaleFactor = Math.min(availableHeight / totalBaseHeight, 1.2); // Max 1.2x scale
+          // Calculate scale factor - AGGRESSIVE UTILIZATION
+          const targetUtilization = 0.9; // Use 90% of available space
+          const targetHeight = availableHeight * targetUtilization;
+          const scaleFactor = targetHeight / totalBaseHeight;
           
-          // Apply mathematical scaling to all elements
+          console.log(`Viewport: ${viewportHeight}px, Available: ${availableHeight}px, Target: ${targetHeight}px, Scale: ${scaleFactor.toFixed(2)}`);
+          
+          // Apply AGGRESSIVE scaling - grow UP when we have space
           let styles = {
             titleSize: 'text-5xl',
             textSize: 'text-xl', 
@@ -326,51 +329,79 @@ function App() {
             spacing: 'mb-4'
           };
 
-          if (scaleFactor < 1) {
-            // Need to scale down - calculate exact sizes
-            if (scaleFactor >= 0.85) {
-              styles = {
-                titleSize: 'text-4xl',
-                textSize: 'text-lg',
-                emojiSize: 'text-4xl',
-                buttonSize: 'text-lg',
-                containerPadding: 'p-3',
-                spacing: 'mb-3'
-              };
-            } else if (scaleFactor >= 0.7) {
-              styles = {
-                titleSize: 'text-3xl',
-                textSize: 'text-base',
-                emojiSize: 'text-3xl',
-                buttonSize: 'text-base',
-                containerPadding: 'p-2',
-                spacing: 'mb-2'
-              };
-            } else if (scaleFactor >= 0.6) {
-              styles = {
-                titleSize: 'text-2xl',
-                textSize: 'text-sm',
-                emojiSize: 'text-2xl',
-                buttonSize: 'text-sm',
-                containerPadding: 'p-2',
-                spacing: 'mb-1'
-              };
-            } else {
-              // Emergency ultra-compact mode
-              styles = {
-                titleSize: 'text-xl',
-                textSize: 'text-xs',
-                emojiSize: 'text-xl',
-                buttonSize: 'text-xs',
-                containerPadding: 'p-1',
-                spacing: 'mb-1'
-              };
-            }
+          if (scaleFactor >= 1.4) {
+            // EXTRA LARGE - use the space!
+            styles = {
+              titleSize: 'text-7xl',
+              textSize: 'text-3xl',
+              emojiSize: 'text-7xl',
+              buttonSize: 'text-2xl',
+              containerPadding: 'p-6',
+              spacing: 'mb-6'
+            };
+          } else if (scaleFactor >= 1.2) {
+            // LARGE - bigger fonts for bigger screens
+            styles = {
+              titleSize: 'text-6xl',
+              textSize: 'text-2xl',
+              emojiSize: 'text-6xl',
+              buttonSize: 'text-xl',
+              containerPadding: 'p-5',
+              spacing: 'mb-5'
+            };
+          } else if (scaleFactor >= 1.0) {
+            // STANDARD - original size
+            styles = {
+              titleSize: 'text-5xl',
+              textSize: 'text-xl',
+              emojiSize: 'text-5xl',
+              buttonSize: 'text-xl',
+              containerPadding: 'p-4',
+              spacing: 'mb-4'
+            };
+          } else if (scaleFactor >= 0.85) {
+            // MEDIUM reduction
+            styles = {
+              titleSize: 'text-4xl',
+              textSize: 'text-lg',
+              emojiSize: 'text-4xl',
+              buttonSize: 'text-lg',
+              containerPadding: 'p-3',
+              spacing: 'mb-3'
+            };
+          } else if (scaleFactor >= 0.7) {
+            // SMALL reduction
+            styles = {
+              titleSize: 'text-3xl',
+              textSize: 'text-base',
+              emojiSize: 'text-3xl',
+              buttonSize: 'text-base',
+              containerPadding: 'p-2',
+              spacing: 'mb-2'
+            };
+          } else if (scaleFactor >= 0.6) {
+            // COMPACT
+            styles = {
+              titleSize: 'text-2xl',
+              textSize: 'text-sm',
+              emojiSize: 'text-2xl',
+              buttonSize: 'text-sm',
+              containerPadding: 'p-2',
+              spacing: 'mb-1'
+            };
+          } else {
+            // ULTRA-COMPACT emergency mode
+            styles = {
+              titleSize: 'text-xl',
+              textSize: 'text-xs',
+              emojiSize: 'text-xl',
+              buttonSize: 'text-xs',
+              containerPadding: 'p-1',
+              spacing: 'mb-1'
+            };
           }
 
           setWelcomeStyles(styles);
-          
-          console.log(`Screen: ${viewportHeight}px, Available: ${availableHeight}px, Scale: ${scaleFactor.toFixed(2)}`);
         };
 
         calculatePerfectFit();
@@ -726,14 +757,24 @@ function App() {
 
   const LoadingOverlay = () => {
     const [zzzVisible, setZzzVisible] = useState(false);
+    const [activeDots, setActiveDots] = useState(1);
 
-    // Zzz animation effect
+    // Zzz animation effect - slow fade in/out
     useEffect(() => {
       const zzzInterval = setInterval(() => {
         setZzzVisible(prev => !prev);
-      }, 1500); // Zzz appears/disappears every 1.5 seconds
+      }, 2000); // Slower: 2 seconds for each fade cycle
 
       return () => clearInterval(zzzInterval);
+    }, []);
+
+    // Progressive dots animation - 1, 2, 3, repeat
+    useEffect(() => {
+      const dotsInterval = setInterval(() => {
+        setActiveDots(prev => prev === 3 ? 1 : prev + 1);
+      }, 800); // Change every 800ms
+
+      return () => clearInterval(dotsInterval);
     }, []);
 
     return (
@@ -764,14 +805,17 @@ function App() {
           {/* Main content centered */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div className="mb-8 relative">
-              {/* Sleeping cat with Zzz */}
+              {/* Sleeping cat */}
               <div className="text-6xl mb-4">😽</div>
               
-              {/* Floating Zzz animation */}
+              {/* Floating Zzz animation - positioned above cat */}
               <div 
-                className={`absolute -top-4 left-1/2 transform -translate-x-1/2 text-2xl text-blue-300 transition-opacity duration-1000 ${
-                  zzzVisible ? 'opacity-100' : 'opacity-0'
+                className={`absolute -top-8 left-1/2 transform -translate-x-1/2 text-3xl text-blue-300 transition-all duration-1000 ${
+                  zzzVisible ? 'opacity-100 -translate-y-2' : 'opacity-0 translate-y-0'
                 }`}
+                style={{ 
+                  textShadow: '0 0 10px rgba(147, 197, 253, 0.5)' // Soft glow effect
+                }}
               >
                 Zzz
               </div>
@@ -789,11 +833,18 @@ function App() {
               ></div>
             </div>
             
-            {/* Loading dots */}
+            {/* Interactive loading dots - progressive animation */}
             <div className="flex justify-center space-x-1">
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              {[1, 2, 3].map((dotNumber) => (
+                <div 
+                  key={dotNumber}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                    dotNumber <= activeDots 
+                      ? 'bg-yellow-400 scale-110' 
+                      : 'bg-gray-600 scale-100'
+                  }`}
+                />
+              ))}
             </div>
           </div>
         </div>
