@@ -1,72 +1,4 @@
-return (
-    <div className="tg-app-container">
-      {animations.map((animation) => (
-        <ExplosionAnimation key={animation.id} animation={animation} />
-      ))}
-
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="tg-dragged-cat"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
-        </div>
-      )}
-
-      <div className="tg-game-header">
-        <h1 className="tg-tagline">{taglines[currentTagline]}</h1>
-      </div>
-
-      <div className="tg-score-bar">
-        <div className="tg-timer">
-          <span>⏱</span>
-          <span className={gameState.timeLeft <= 10 ? 'timer-urgent' : ''}>{gameState.timeLeft}s</span>
-        </div>
-        <div className="tg-score">
-          <span>🐾</span>
-          <span>{gameState.score.toLocaleString()}</span>
-        </div>
-      </div>
-
-      <div className="tg-next-section">
-        <div className="tg-next-content">
-          <span>NEXT:</span>
-          <div className="tg-next-cat">
-            <span>{gameState.nextCat}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="tg-game-board">
-        <div className="tg-columns-container">
-          <GameColumn columnId="left" cats={gameState.columns.left} />
-          <GameColumn columnId="center" cats={gameState.columns.center} />
-          <GameColumn columnId="right" cats={gameState.columns.right} />
-        </div>
-      </div>
-
-      <div className="tg-controls">
-        <div className="tg-drop-buttons">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`tg-drop-button ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'enabled' : 'disabled'
-            }`}
-          >
-            <span>🔽</span>
-            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`tg-drop-button ${
-              gameStateimport React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
@@ -856,7 +788,7 @@ function App() {
           ))}
           
           <div 
-            className="absolute left-1/2 transform -translate-x-1/2 -translate-y-8 text-responsive-2xl font-bold text-yellow-500 animate-bounce z-[120]"
+            className="absolute left-1/2 transform -translate-x-1/2 -translate-y-8 text-3xl font-bold text-yellow-500 animate-bounce z-[120]"
             style={{ animationDuration: '0.5s' }}
           >
             +{animation.scoreGained}
@@ -899,7 +831,7 @@ function App() {
     };
 
     return (
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 px-responsive py-responsive">
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 px-4 py-3">
         <div className="flex justify-around items-center max-w-md mx-auto">
           {navItems.map((item) => {
             const isActive = gameState.currentTab === item.id;
@@ -907,12 +839,12 @@ function App() {
               <button
                 key={item.id}
                 onClick={() => handleTabClick(item.id)}
-                className={`flex flex-col items-center justify-center px-responsive py-responsive rounded-lg min-w-16 transition-all duration-200 ${
+                className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg min-w-16 transition-all duration-200 ${
                   isActive ? getActiveClass(item.color) : 'bg-gray-700 hover:bg-gray-600'
                 }`}
               >
-                <span className="text-responsive-lg mb-1">{item.icon}</span>
-                <span className={`text-responsive-xs font-medium ${isActive ? 'text-white' : 'text-gray-300'}`}>
+                <span className="text-xl mb-1">{item.icon}</span>
+                <span className={`text-xs font-medium ${isActive ? 'text-white' : 'text-gray-300'}`}>
                   {item.label}
                 </span>
               </button>
@@ -925,26 +857,26 @@ function App() {
 
   const TasksScreen = () => (
     <div className="min-h-screen bg-white" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-blue-500 text-white p-responsive flex items-center gap-responsive">
+      <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
-        <h1 className="text-responsive-lg font-semibold">Tasks</h1>
+        <h1 className="text-lg font-semibold">Tasks</h1>
       </div>
-      <div className="p-responsive space-y-6">
+      <div className="p-4 space-y-6">
         <div>
-          <h2 className="text-gray-800 text-responsive-xl font-bold mb-4">Main Tasks</h2>
+          <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
           <div className="space-y-4">
-            <div className="bg-gray-50 rounded-2xl p-responsive flex items-center justify-between border border-gray-200 shadow-sm">
-              <div className="flex items-center gap-responsive">
-                <div className="cat-emoji-large">🐱</div>
+            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="text-4xl">🐱</div>
                 <div>
-                  <div className="text-gray-800 font-semibold text-responsive-base">Join Our Telegram Channel</div>
+                  <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
                   <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-responsive-sm">🪙 1,000</span>
-                    <span className="text-responsive-sm">⏰ +5s</span>
+                    <span className="text-sm">🪙 1,000</span>
+                    <span className="text-sm">⏰ +5s</span>
                   </div>
                 </div>
               </div>
-              <button className="bg-gray-300 text-gray-500 btn-responsive rounded-full font-semibold">
+              <button className="bg-gray-300 text-gray-500 px-6 py-2 rounded-full font-semibold">
                 Claim
               </button>
             </div>
@@ -957,38 +889,38 @@ function App() {
 
   const LeaderboardScreen = () => (
     <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-purple-500 text-white p-responsive flex items-center gap-responsive">
+      <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
-        <h1 className="text-responsive-lg font-semibold">Leaderboard</h1>
+        <h1 className="text-lg font-semibold">Leaderboard</h1>
       </div>
-      <div className="p-responsive space-y-3">
-        <div className="bg-white rounded-lg p-responsive shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3 text-responsive-base">🏆 Top Players</h3>
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
           <div className="space-y-3">
             {leaderboard.length > 0 ? (
               leaderboard.map((player, index) => (
                 <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-responsive">
-                    <span className="text-responsive-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                     </span>
                     <div>
-                      <div className="font-semibold text-gray-800 text-responsive-sm">
+                      <div className="font-semibold text-gray-800">
                         {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
                       </div>
-                      <div className="text-responsive-xs text-gray-500">{player.games_played} games played</div>
+                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-yellow-600 text-responsive-sm">{player.best_score.toLocaleString()}</div>
-                    <div className="text-responsive-xs text-gray-500">best score</div>
+                    <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500">best score</div>
                   </div>
                 </div>
               ))
             ) : (
               <div className="text-center text-gray-500 py-4">
-                <div className="cat-emoji-large mb-2">🐾</div>
-                <div className="text-responsive-base">No scores yet! Be the first to play!</div>
+                <div className="text-4xl mb-2">🐾</div>
+                <div>No scores yet! Be the first to play!</div>
               </div>
             )}
           </div>
@@ -1000,14 +932,14 @@ function App() {
 
   const BonusScreen = () => (
     <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-green-500 text-white p-responsive flex items-center gap-responsive">
+      <div className="bg-green-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
-        <h1 className="text-responsive-lg font-semibold">Bonus Time</h1>
+        <h1 className="text-lg font-semibold">Bonus Time</h1>
       </div>
-      <div className="p-responsive space-y-3">
-        <div className="bg-white rounded-lg p-responsive shadow-sm text-center">
-          <h3 className="font-semibold text-gray-800 mb-2 text-responsive-base">Your Bonus Time</h3>
-          <div className="text-responsive-3xl font-bold text-green-600 mb-2">+25s</div>
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
+          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
+          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
         </div>
       </div>
       <BottomNavBar />
@@ -1016,14 +948,14 @@ function App() {
 
   const AccountScreen = () => (
     <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-gray-500 text-white p-responsive flex items-center gap-responsive">
+      <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
         <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
-        <h1 className="text-responsive-lg font-semibold">Account</h1>
+        <h1 className="text-lg font-semibold">Account</h1>
       </div>
-      <div className="p-responsive space-y-3">
-        <div className="bg-white rounded-lg p-responsive shadow-sm text-center">
-          <div className="cat-emoji-large mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800 text-responsive-base">
+      <div className="p-4 space-y-3">
+        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
+          <div className="text-4xl mb-2">🐱</div>
+          <h3 className="font-semibold text-gray-800">
             {userState.telegramUser ? 
               (userState.telegramUser.username ? 
                 `@${userState.telegramUser.username}` : 
@@ -1036,24 +968,24 @@ function App() {
           {userState.stats && (
             <div className="mt-4 space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-600 text-responsive-sm">Games Played:</span>
-                <span className="font-semibold text-responsive-sm">{userState.stats.total_games || 0}</span>
+                <span className="text-gray-600">Games Played:</span>
+                <span className="font-semibold">{userState.stats.total_games || 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 text-responsive-sm">Best Score:</span>
-                <span className="font-semibold text-yellow-600 text-responsive-sm">{userState.stats.best_score || 0}</span>
+                <span className="text-gray-600">Best Score:</span>
+                <span className="font-semibold text-yellow-600">{userState.stats.best_score || 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 text-responsive-sm">Average Score:</span>
-                <span className="font-semibold text-responsive-sm">{userState.stats.average_score || 0}</span>
+                <span className="text-gray-600">Average Score:</span>
+                <span className="font-semibold">{userState.stats.average_score || 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 text-responsive-sm">Total Matches:</span>
-                <span className="font-semibold text-responsive-sm">{userState.stats.total_matches || 0}</span>
+                <span className="text-gray-600">Total Matches:</span>
+                <span className="font-semibold">{userState.stats.total_matches || 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600 text-responsive-sm">Best Combo:</span>
-                <span className="font-semibold text-responsive-sm">{userState.stats.best_combo || 0}</span>
+                <span className="text-gray-600">Best Combo:</span>
+                <span className="font-semibold">{userState.stats.best_combo || 0}</span>
               </div>
             </div>
           )}
@@ -1141,22 +1073,22 @@ function App() {
     const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
     
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-responsive" 
+      <div className="min-h-screen flex flex-col items-center justify-center p-4" 
            style={{backgroundColor: '#FFD700', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-responsive max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h2 className="text-responsive-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+          <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
           
           {isNewBest && (
-            <div className="bg-black bg-opacity-10 rounded-lg p-responsive mb-4">
-              <div className="text-responsive-xl">🏆</div>
-              <div className="text-responsive-lg font-bold text-black">NEW BEST SCORE!</div>
+            <div className="bg-black bg-opacity-10 rounded-lg p-4 mb-4">
+              <div className="text-xl">🏆</div>
+              <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
             </div>
           )}
           
-          <div className="text-responsive-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
-          <p className="text-black text-responsive-xl font-bold mb-4">Final Score</p>
+          <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
+          <p className="text-black text-xl font-bold mb-4">Final Score</p>
           
-          <div className="bg-black bg-opacity-10 rounded-lg p-responsive mb-4 text-responsive-sm">
+          <div className="bg-black bg-opacity-10 rounded-lg p-4 mb-4 text-sm">
             <div className="flex justify-between">
               <span>Matches:</span>
               <span className="font-bold">{gameState.matchesMade}</span>
@@ -1171,24 +1103,24 @@ function App() {
             </div>
           </div>
           
-          <p className="text-responsive-lg text-black font-bold mb-4">
+          <p className="text-lg text-black font-bold mb-4">
             😿 "Meowchi is disappointed but still cute."
           </p>
-          <p className="text-responsive-base text-black font-bold mb-8">
+          <p className="text-base text-black font-bold mb-8">
             {flavorText}
           </p>
           
           <div className="space-y-4">
             <button
               onClick={startGame}
-              className="w-full bg-black text-white font-bold btn-responsive-large rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+              className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
             >
               😺 PLAY AGAIN
             </button>
             
             <button
               onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-              className="w-full bg-yellow-400 border-2 border-black text-black font-bold btn-responsive-large rounded-full hover:bg-yellow-300 transition-all duration-200"
+              className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
               style={{backgroundColor: '#FFD700'}}
             >
               📊 LEADERBOARD
@@ -1243,7 +1175,7 @@ function App() {
       </div>
 
       <div className="tg-game-board">
-        <div className="tg-columns-container">
+        <div className="tg-columns-container" ref={boardRef}>
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
