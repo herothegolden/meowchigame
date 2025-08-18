@@ -59,6 +59,7 @@ function App() {
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
   const [spinningEmojis, setSpinningEmojis] = useState({});
+  const [isLayoutReady, setIsLayoutReady] = useState(false);
   const taglines = [
     "😼 Chaos Mode Activated",
     "🐾 Don't Blink, Human", 
@@ -229,6 +230,37 @@ function App() {
           }, 1000);
         }, i * 100); // Staggered delay: 0ms, 100ms, 200ms, 300ms, 400ms
       });
+    }
+  }, [gameState.gameStarted, gameState.currentTab]);
+
+  // Detect when layout is ready on welcome screen
+  useEffect(() => {
+    if (!gameState.gameStarted && gameState.currentTab === 'play') {
+      setIsLayoutReady(false);
+      
+      // Use multiple checks to ensure layout is truly ready
+      const checkLayout = () => {
+        // Check if DOM elements are properly sized
+        const container = document.querySelector('[data-welcome-container]');
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          if (rect.height > 0 && rect.width > 0) {
+            // Add a small delay to ensure all dynamic calculations are complete
+            setTimeout(() => {
+              setIsLayoutReady(true);
+            }, 500);
+          } else {
+            // Retry if not ready
+            setTimeout(checkLayout, 100);
+          }
+        } else {
+          // Retry if container not found
+          setTimeout(checkLayout, 100);
+        }
+      };
+
+      // Start checking after initial render
+      setTimeout(checkLayout, 100);
     }
   }, [gameState.gameStarted, gameState.currentTab]);
 
@@ -519,6 +551,39 @@ function App() {
       startPosition: { x: 0, y: 0 },
       highlightedColumn: null
     });
+  };
+
+  const LoadingScreen = () => {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-black text-white"
+           style={{ height: '100dvh' }}>
+        <div className="text-center">
+          <div className="mb-8 relative">
+            {/* Walking paw prints animation */}
+            <div className="flex items-center justify-center space-x-4 mb-4">
+              <span className="text-4xl animate-bounce" style={{ animationDelay: '0s', animationDuration: '1.5s' }}>🐾</span>
+              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.3s', animationDuration: '1.5s' }}>🐾</span>
+              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.6s', animationDuration: '1.5s' }}>🐾</span>
+              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.9s', animationDuration: '1.5s' }}>🐾</span>
+            </div>
+            
+            {/* Main loading cat */}
+            <div className="text-6xl animate-spin mb-4" style={{ animationDuration: '2s' }}>🐱</div>
+          </div>
+          
+          <h2 className="text-2xl font-bold text-yellow-400 animate-pulse">
+            Waking up cats...
+          </h2>
+          
+          {/* Loading dots */}
+          <div className="flex justify-center mt-4 space-x-1">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const DraggableCat = ({ cat, columnId }) => {
@@ -812,9 +877,18 @@ function App() {
   if (gameState.currentTab === 'account') return <AccountScreen />;
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
+    // Show loading screen while layout is calculating
+    if (!isLayoutReady) {
+      return <LoadingScreen />;
+    }
+
+    // Show welcome screen with smooth fade-in once layout is ready
     return (
-      <div className="h-screen flex flex-col p-2" 
-           style={{backgroundColor: '#FFD700', height: '100dvh'}}>
+      <div 
+        className="h-screen flex flex-col p-2 transition-opacity duration-500 ease-in-out"
+        style={{backgroundColor: '#FFD700', height: '100dvh', opacity: isLayoutReady ? 1 : 0}}
+        data-welcome-container
+      >
         <div className="flex-1 flex flex-col justify-center items-center">
           <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
             <div className="text-6xl mb-4">🐾</div>
