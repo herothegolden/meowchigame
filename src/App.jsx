@@ -764,34 +764,33 @@ function App() {
   };
 
   const LoadingOverlay = () => {
-    const [zzzVisible, setZzzVisible] = useState(false);
+    const [zzzVisible, setZzzVisible] = useState(true); // Start visible
     const [activeDots, setActiveDots] = useState(1);
 
-    // Zzz animation effect - slow fade in/out
+    // Zzz animation effect - simple toggle every 2 seconds
     useEffect(() => {
-      if (!isLayoutReady) { // Only animate while loading
-        const zzzInterval = setInterval(() => {
-          setZzzVisible(prev => !prev);
-        }, 2000); // 2 seconds for each fade cycle
+      const zzzTimer = setInterval(() => {
+        setZzzVisible(prev => {
+          console.log('Zzz toggle:', !prev);
+          return !prev;
+        });
+      }, 2000);
 
-        return () => clearInterval(zzzInterval);
-      }
-    }, [isLayoutReady]);
+      return () => clearInterval(zzzTimer);
+    }, []);
 
     // Progressive dots animation - 1, 2, 3, repeat
     useEffect(() => {
-      if (!isLayoutReady) { // Only animate while loading
-        const dotsInterval = setInterval(() => {
-          setActiveDots(prev => {
-            const next = prev >= 3 ? 1 : prev + 1;
-            console.log(`Dots: ${prev} -> ${next}`); // Debug log
-            return next;
-          });
-        }, 800); // Change every 800ms
+      const dotsTimer = setInterval(() => {
+        setActiveDots(prev => {
+          const next = prev >= 3 ? 1 : prev + 1;
+          console.log(`Dots changing: ${prev} -> ${next}`);
+          return next;
+        });
+      }, 1000); // Slower for easier debugging
 
-        return () => clearInterval(dotsInterval);
-      }
-    }, [isLayoutReady]);
+      return () => clearInterval(dotsTimer);
+    }, []);
 
     return (
       <div 
@@ -801,7 +800,7 @@ function App() {
         style={{ height: '100dvh' }}
       >
         <div className="text-center relative w-full h-full">
-          {/* Walking paw prints - 2 paws, slower movement */}
+          {/* Walking paw prints */}
           {pawPositions.map((paw, index) => (
             <div
               key={index}
@@ -820,21 +819,15 @@ function App() {
           
           {/* Main content centered */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="mb-8 relative">
+            <div className="mb-8 relative h-20">
               {/* Sleeping cat */}
-              <div className="text-6xl mb-4">😽</div>
+              <div className="text-6xl">😽</div>
               
-              {/* Floating Zzz animation - FIXED positioning and visibility */}
+              {/* Zzz - SIMPLE positioning */}
               <div 
-                className={`absolute left-1/2 transform -translate-x-1/2 text-3xl text-blue-300 transition-all duration-1000 ${
-                  zzzVisible ? 'opacity-100' : 'opacity-0'
+                className={`absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-12 text-4xl text-blue-300 font-bold transition-opacity duration-1000 ${
+                  zzzVisible ? 'opacity-100' : 'opacity-30'
                 }`}
-                style={{ 
-                  top: '-4rem', // Fixed positioning above cat
-                  textShadow: '0 0 10px rgba(147, 197, 253, 0.5)',
-                  zIndex: 10, // Ensure it's above other elements
-                  transform: zzzVisible ? 'translate(-50%, -8px)' : 'translate(-50%, 0px)'
-                }}
               >
                 Zzz
               </div>
@@ -845,25 +838,23 @@ function App() {
             </h2>
             
             {/* Progress bar */}
-            <div className="w-48 h-2 bg-gray-700 rounded-full mb-4">
+            <div className="w-48 h-2 bg-gray-700 rounded-full mb-6">
               <div 
                 className="h-full bg-yellow-400 rounded-full transition-all duration-100"
                 style={{ width: `${Math.min(loadingProgress, 100)}%` }}
               ></div>
             </div>
             
-            {/* Interactive loading dots - FIXED progressive animation */}
-            <div className="flex justify-center space-x-2">
-              {[1, 2, 3].map((dotNumber) => (
-                <div 
-                  key={dotNumber}
-                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                    dotNumber <= activeDots 
-                      ? 'bg-yellow-400 scale-125' 
-                      : 'bg-gray-600 scale-100'
-                  }`}
-                />
-              ))}
+            {/* SIMPLE dots - show state clearly */}
+            <div className="flex justify-center space-x-3">
+              <div className={`w-4 h-4 rounded-full ${activeDots >= 1 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
+              <div className={`w-4 h-4 rounded-full ${activeDots >= 2 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
+              <div className={`w-4 h-4 rounded-full ${activeDots >= 3 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
+            </div>
+            
+            {/* Debug info */}
+            <div className="mt-4 text-sm text-gray-400">
+              Dots: {activeDots} | Zzz: {zzzVisible ? 'ON' : 'OFF'}
             </div>
           </div>
         </div>
