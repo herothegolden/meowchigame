@@ -60,6 +60,16 @@ function App() {
   const [currentTagline, setCurrentTagline] = useState(0);
   const [spinningEmojis, setSpinningEmojis] = useState({});
   const [isLayoutReady, setIsLayoutReady] = useState(false);
+  const [welcomeStyles, setWelcomeStyles] = useState({
+    titleSize: 'text-5xl',
+    textSize: 'text-xl', 
+    emojiSize: 'text-5xl',
+    buttonSize: 'text-xl',
+    containerPadding: 'p-4',
+    spacing: 'mb-4'
+  });
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [pawPositions, setPawPositions] = useState([]);
   const taglines = [
     "😼 Chaos Mode Activated",
     "🐾 Don't Blink, Human", 
@@ -233,43 +243,170 @@ function App() {
     }
   }, [gameState.gameStarted, gameState.currentTab]);
 
-  // Detect when layout is ready on welcome screen
+  // Bulletproof layout calculation and loading management
   useEffect(() => {
     if (!gameState.gameStarted && gameState.currentTab === 'play') {
       setIsLayoutReady(false);
+      setLoadingProgress(0);
       
-      // Wait for next frame to ensure DOM is rendered
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const checkLayout = () => {
-            const container = document.querySelector('[data-welcome-container]');
-            const button = document.querySelector('[data-welcome-button]');
-            
-            if (container && button) {
-              const containerRect = container.getBoundingClientRect();
-              const buttonRect = button.getBoundingClientRect();
-              
-              // Check if elements are properly sized and positioned
-              if (containerRect.height > 0 && containerRect.width > 0 && 
-                  buttonRect.height > 0 && buttonRect.width > 0 &&
-                  buttonRect.bottom <= window.innerHeight) {
-                // Layout is ready and button is visible
-                setTimeout(() => {
-                  setIsLayoutReady(true);
-                }, 300); // Small delay for safety
-              } else {
-                // Retry if not ready
-                setTimeout(checkLayout, 50);
-              }
-            } else {
-              // Retry if elements not found
-              setTimeout(checkLayout, 50);
-            }
+      // Walking paw animation setup
+      const generatePawPath = () => {
+        const path = [];
+        // Create walking path: left to right, then arc back
+        for (let i = 0; i <= 20; i++) {
+          const progress = i / 20;
+          let x, y;
+          
+          if (progress <= 0.5) {
+            // Walking left to right
+            x = 20 + (progress * 2) * 60; // 20% to 80% of screen width
+            y = 40 + Math.sin(progress * 4 * Math.PI) * 5; // Slight bounce
+          } else {
+            // Arc back
+            const arcProgress = (progress - 0.5) * 2;
+            x = 80 - arcProgress * 60;
+            y = 40 + Math.sin(arcProgress * 3 * Math.PI) * 10 + 20; // Lower arc
+          }
+          
+          path.push({ x, y, visible: false });
+        }
+        return path;
+      };
+
+      setPawPositions(generatePawPath());
+
+      // Start walking animation
+      let pawStep = 0;
+      const walkingInterval = setInterval(() => {
+        setPawPositions(prev => prev.map((paw, index) => ({
+          ...paw,
+          visible: index === pawStep || index === pawStep - 1 || index === pawStep - 2
+        })));
+        
+        pawStep = (pawStep + 1) % 21;
+      }, 200);
+
+      // Progress tracking
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 2;
+        setLoadingProgress(progress);
+      }, 80);
+
+      // Start aggressive layout calculation after initial render
+      setTimeout(() => {
+        const calculateOptimalLayout = () => {
+          const screenHeight = window.innerHeight;
+          const screenWidth = window.innerWidth;
+          
+          // Calculate available space (accounting for Telegram header and bottom nav)
+          const availableHeight = screenHeight - 140; // Conservative estimate
+          
+          let styles = {
+            titleSize: 'text-5xl',
+            textSize: 'text-xl',
+            emojiSize: 'text-5xl', 
+            buttonSize: 'text-xl',
+            containerPadding: 'p-4',
+            spacing: 'mb-4'
           };
 
-          checkLayout();
-        }, 100);
-      });
+          // Aggressive size reduction for small screens
+          if (availableHeight < 600) {
+            styles = {
+              titleSize: 'text-4xl',
+              textSize: 'text-lg',
+              emojiSize: 'text-4xl',
+              buttonSize: 'text-lg',
+              containerPadding: 'p-3',
+              spacing: 'mb-3'
+            };
+          }
+          
+          if (availableHeight < 500) {
+            styles = {
+              titleSize: 'text-3xl',
+              textSize: 'text-base',
+              emojiSize: 'text-3xl',
+              buttonSize: 'text-base',
+              containerPadding: 'p-2',
+              spacing: 'mb-2'
+            };
+          }
+
+          if (availableHeight < 400) {
+            styles = {
+              titleSize: 'text-2xl',
+              textSize: 'text-sm',
+              emojiSize: 'text-2xl',
+              buttonSize: 'text-sm',
+              containerPadding: 'p-2',
+              spacing: 'mb-1'
+            };
+          }
+
+          setWelcomeStyles(styles);
+        };
+
+        calculateOptimalLayout();
+        
+        // Multiple verification passes
+        const verificationPasses = [1000, 2000, 3000, 3800];
+        verificationPasses.forEach(delay => {
+          setTimeout(() => {
+            calculateOptimalLayout();
+            
+            // Final verification at 3.8 seconds
+            if (delay === 3800) {
+              setTimeout(() => {
+                // Last chance verification with actual DOM measurement
+                requestAnimationFrame(() => {
+                  const container = document.querySelector('[data-welcome-container]');
+                  const button = document.querySelector('[data-welcome-button]');
+                  
+                  if (container && button) {
+                    const containerRect = container.getBoundingClientRect();
+                    const buttonRect = button.getBoundingClientRect();
+                    
+                    // Check if button is truly visible
+                    if (buttonRect.bottom > window.innerHeight - 20) {
+                      // Emergency size reduction
+                      setWelcomeStyles(prev => ({
+                        ...prev,
+                        titleSize: 'text-2xl',
+                        textSize: 'text-sm',
+                        buttonSize: 'text-sm',
+                        containerPadding: 'p-1',
+                        spacing: 'mb-1'
+                      }));
+                      
+                      // Give extra time for emergency adjustment
+                      setTimeout(() => {
+                        setIsLayoutReady(true);
+                      }, 300);
+                    } else {
+                      setIsLayoutReady(true);
+                    }
+                  } else {
+                    setIsLayoutReady(true);
+                  }
+                });
+              }, 100);
+            }
+          }, delay);
+        });
+      }, 200);
+
+      // Cleanup intervals
+      const cleanup = () => {
+        clearInterval(walkingInterval);
+        clearInterval(progressInterval);
+      };
+
+      // Minimum 4 seconds, then cleanup
+      setTimeout(cleanup, 4200);
+      
+      return cleanup;
     }
   }, [gameState.gameStarted, gameState.currentTab]);
 
@@ -565,34 +702,54 @@ function App() {
   const LoadingOverlay = () => {
     return (
       <div 
-        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500 ${
+        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-1000 ${
           isLayoutReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
         style={{ height: '100dvh' }}
       >
-        <div className="text-center">
-          <div className="mb-8 relative">
-            {/* Walking paw prints animation */}
-            <div className="flex items-center justify-center space-x-4 mb-4">
-              <span className="text-4xl animate-bounce" style={{ animationDelay: '0s', animationDuration: '1.5s' }}>🐾</span>
-              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.3s', animationDuration: '1.5s' }}>🐾</span>
-              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.6s', animationDuration: '1.5s' }}>🐾</span>
-              <span className="text-4xl animate-bounce" style={{ animationDelay: '0.9s', animationDuration: '1.5s' }}>🐾</span>
+        <div className="text-center relative w-full h-full">
+          {/* Walking paw prints */}
+          {pawPositions.map((paw, index) => (
+            <div
+              key={index}
+              className={`absolute text-3xl transition-opacity duration-300 ${
+                paw.visible ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{
+                left: `${paw.x}%`,
+                top: `${paw.y}%`,
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
+              🐾
+            </div>
+          ))}
+          
+          {/* Main content centered */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="mb-8">
+              {/* Main loading cat */}
+              <div className="text-6xl animate-spin mb-4" style={{ animationDuration: '2s' }}>🐱</div>
             </div>
             
-            {/* Main loading cat */}
-            <div className="text-6xl animate-spin mb-4" style={{ animationDuration: '2s' }}>🐱</div>
-          </div>
-          
-          <h2 className="text-2xl font-bold text-yellow-400 animate-pulse">
-            Waking up cats...
-          </h2>
-          
-          {/* Loading dots */}
-          <div className="flex justify-center mt-4 space-x-1">
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            <h2 className="text-2xl font-bold text-yellow-400 animate-pulse mb-4">
+              Waking up cats...
+            </h2>
+            
+            {/* Progress bar */}
+            <div className="w-48 h-2 bg-gray-700 rounded-full mb-4">
+              <div 
+                className="h-full bg-yellow-400 rounded-full transition-all duration-100"
+                style={{ width: `${Math.min(loadingProgress, 100)}%` }}
+              ></div>
+            </div>
+            
+            {/* Loading dots */}
+            <div className="flex justify-center space-x-1">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            </div>
           </div>
         </div>
       </div>
@@ -892,32 +1049,32 @@ function App() {
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
       <div className="relative">
-        {/* Welcome screen - always rendered */}
+        {/* Welcome screen - always rendered with calculated styles */}
         <div 
           className="h-screen flex flex-col p-2"
           style={{backgroundColor: '#FFD700', height: '100dvh'}}
           data-welcome-container
         >
           <div className="flex-1 flex flex-col justify-center items-center">
-            <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
+            <div className={`text-center bg-yellow-400 rounded-2xl shadow-xl ${welcomeStyles.containerPadding} max-w-sm w-full`} style={{backgroundColor: '#FFD700'}}>
               <div className="text-6xl mb-4">🐾</div>
-              <h1 className="text-5xl font-black text-black mb-2">MEOWCHI</h1>
-              <h1 className="text-5xl font-black text-black mb-4">CHAOS</h1>
-              <div className="mb-6">
-                <p className="text-black text-xl font-bold mb-2">
+              <h1 className={`${welcomeStyles.titleSize} font-black text-black mb-2`}>MEOWCHI</h1>
+              <h1 className={`${welcomeStyles.titleSize} font-black text-black ${welcomeStyles.spacing}`}>CHAOS</h1>
+              <div className={welcomeStyles.spacing}>
+                <p className={`text-black ${welcomeStyles.textSize} font-bold mb-2`}>
                   Drop cats. Cause mayhem.
                 </p>
-                <p className="text-black text-xl font-bold mb-4">
+                <p className={`text-black ${welcomeStyles.textSize} font-bold ${welcomeStyles.spacing}`}>
                   Match 3 before they scream.
                 </p>
               </div>
               
-              <div className="mb-4">
+              <div className={welcomeStyles.spacing}>
                 <div className="flex justify-center gap-3 mb-3">
                   {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
                     <span 
                       key={index}
-                      className={`text-5xl cursor-pointer transition-transform hover:scale-110 ${
+                      className={`${welcomeStyles.emojiSize} cursor-pointer transition-transform hover:scale-110 ${
                         spinningEmojis[index] ? 'animate-spin' : ''
                       }`}
                       onClick={() => handleEmojiClick(index)}
@@ -930,25 +1087,25 @@ function App() {
                     </span>
                   ))}
                 </div>
-                <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
+                <p className={`${welcomeStyles.textSize} text-black font-bold`}>5 ridiculous cats to wrangle.</p>
               </div>
               
-              <div className="mb-4 text-lg text-black font-bold leading-relaxed space-y-1">
+              <div className={`${welcomeStyles.spacing} ${welcomeStyles.textSize} text-black font-bold leading-relaxed space-y-1`}>
                 <div>⏱ 60 seconds of panic</div>
                 <div>🐾 +1000 purr-points</div>
                 <div>🔥 Combos = Catnado</div>
               </div>
 
               {userState.bestScore && (
-                <div className="mb-4 p-3 bg-black bg-opacity-10 rounded-lg">
+                <div className={`${welcomeStyles.spacing} p-3 bg-black bg-opacity-10 rounded-lg`}>
                   <div className="text-sm text-black font-bold">Your Best Score</div>
-                  <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+                  <div className={`${welcomeStyles.textSize} font-black text-black`}>{userState.bestScore.score.toLocaleString()}</div>
                 </div>
               )}
               
               <button
                 onClick={startGame}
-                className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl w-full"
+                className={`bg-black text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 ${welcomeStyles.buttonSize} w-full`}
                 data-welcome-button
               >
                 ▶️ LET'S GOOO!
