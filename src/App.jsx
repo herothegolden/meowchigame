@@ -249,25 +249,14 @@ function App() {
       setIsLayoutReady(false);
       setLoadingProgress(0);
       
-      // Walking paw animation setup
+      // Walking paw animation setup - 2 paws, slower, wider area
       const generatePawPath = () => {
         const path = [];
-        // Create walking path: left to right, then arc back
-        for (let i = 0; i <= 20; i++) {
-          const progress = i / 20;
-          let x, y;
-          
-          if (progress <= 0.5) {
-            // Walking left to right
-            x = 20 + (progress * 2) * 60; // 20% to 80% of screen width
-            y = 40 + Math.sin(progress * 4 * Math.PI) * 5; // Slight bounce
-          } else {
-            // Arc back
-            const arcProgress = (progress - 0.5) * 2;
-            x = 80 - arcProgress * 60;
-            y = 40 + Math.sin(arcProgress * 3 * Math.PI) * 10 + 20; // Lower arc
-          }
-          
+        // Create walking path: wider area (10% to 90% of screen)
+        for (let i = 0; i <= 12; i++) {
+          const progress = i / 12;
+          const x = 10 + progress * 80; // 10% to 90% of screen width
+          const y = 35 + Math.sin(progress * 2 * Math.PI) * 8; // Gentle wave
           path.push({ x, y, visible: false });
         }
         return path;
@@ -275,91 +264,126 @@ function App() {
 
       setPawPositions(generatePawPath());
 
-      // Start walking animation
+      // Start walking animation - slower, 2 paws max
       let pawStep = 0;
       const walkingInterval = setInterval(() => {
         setPawPositions(prev => prev.map((paw, index) => ({
           ...paw,
-          visible: index === pawStep || index === pawStep - 1 || index === pawStep - 2
+          visible: index === pawStep || index === pawStep - 1 // Only 2 paws visible
         })));
         
-        pawStep = (pawStep + 1) % 21;
-      }, 200);
+        pawStep = (pawStep + 1) % 13;
+      }, 500); // Slower: 500ms instead of 200ms
 
       // Progress tracking
       let progress = 0;
       const progressInterval = setInterval(() => {
-        progress += 2;
+        progress += 1.5;
         setLoadingProgress(progress);
-      }, 80);
+      }, 60);
 
-      // Start aggressive layout calculation after initial render
+      // Mathematical perfect-fit calculation
       setTimeout(() => {
-        const calculateOptimalLayout = () => {
-          const screenHeight = window.innerHeight;
-          const screenWidth = window.innerWidth;
+        const calculatePerfectFit = () => {
+          // Measure exact available screen real estate
+          const viewportHeight = window.innerHeight;
+          const telegramHeader = 80; // Estimated Telegram header
+          const bottomNav = 80; // Bottom navigation height
+          const availableHeight = viewportHeight - telegramHeader - bottomNav;
           
-          // Calculate available space (accounting for Telegram header and bottom nav)
-          const availableHeight = screenHeight - 140; // Conservative estimate
+          // Base content measurements (in relative units)
+          const baseContentHeight = {
+            pawIcon: 60,        // 🐾 icon
+            title: 80,          // MEOWCHI (text-5xl)
+            title2: 80,         // CHAOS (text-5xl)
+            subtitle: 50,       // Drop cats text
+            emojis: 60,         // Cat emojis row
+            emojiText: 30,      // "5 ridiculous cats"
+            gameInfo: 90,       // 3 lines of game info
+            bestScore: 70,      // Best score box (if present)
+            button: 60,         // LET'S GOOO button
+            spacing: 120        // All margins and padding combined
+          };
           
+          // Calculate total content height needed
+          let totalBaseHeight = Object.values(baseContentHeight).reduce((sum, height) => sum + height, 0);
+          
+          // If no best score, subtract that height
+          if (!userState.bestScore) {
+            totalBaseHeight -= baseContentHeight.bestScore;
+          }
+          
+          // Calculate scale factor for perfect fit
+          const scaleFactor = Math.min(availableHeight / totalBaseHeight, 1.2); // Max 1.2x scale
+          
+          // Apply mathematical scaling to all elements
           let styles = {
             titleSize: 'text-5xl',
-            textSize: 'text-xl',
-            emojiSize: 'text-5xl', 
+            textSize: 'text-xl', 
+            emojiSize: 'text-5xl',
             buttonSize: 'text-xl',
             containerPadding: 'p-4',
             spacing: 'mb-4'
           };
 
-          // Aggressive size reduction for small screens
-          if (availableHeight < 600) {
-            styles = {
-              titleSize: 'text-4xl',
-              textSize: 'text-lg',
-              emojiSize: 'text-4xl',
-              buttonSize: 'text-lg',
-              containerPadding: 'p-3',
-              spacing: 'mb-3'
-            };
-          }
-          
-          if (availableHeight < 500) {
-            styles = {
-              titleSize: 'text-3xl',
-              textSize: 'text-base',
-              emojiSize: 'text-3xl',
-              buttonSize: 'text-base',
-              containerPadding: 'p-2',
-              spacing: 'mb-2'
-            };
-          }
-
-          if (availableHeight < 400) {
-            styles = {
-              titleSize: 'text-2xl',
-              textSize: 'text-sm',
-              emojiSize: 'text-2xl',
-              buttonSize: 'text-sm',
-              containerPadding: 'p-2',
-              spacing: 'mb-1'
-            };
+          if (scaleFactor < 1) {
+            // Need to scale down - calculate exact sizes
+            if (scaleFactor >= 0.85) {
+              styles = {
+                titleSize: 'text-4xl',
+                textSize: 'text-lg',
+                emojiSize: 'text-4xl',
+                buttonSize: 'text-lg',
+                containerPadding: 'p-3',
+                spacing: 'mb-3'
+              };
+            } else if (scaleFactor >= 0.7) {
+              styles = {
+                titleSize: 'text-3xl',
+                textSize: 'text-base',
+                emojiSize: 'text-3xl',
+                buttonSize: 'text-base',
+                containerPadding: 'p-2',
+                spacing: 'mb-2'
+              };
+            } else if (scaleFactor >= 0.6) {
+              styles = {
+                titleSize: 'text-2xl',
+                textSize: 'text-sm',
+                emojiSize: 'text-2xl',
+                buttonSize: 'text-sm',
+                containerPadding: 'p-2',
+                spacing: 'mb-1'
+              };
+            } else {
+              // Emergency ultra-compact mode
+              styles = {
+                titleSize: 'text-xl',
+                textSize: 'text-xs',
+                emojiSize: 'text-xl',
+                buttonSize: 'text-xs',
+                containerPadding: 'p-1',
+                spacing: 'mb-1'
+              };
+            }
           }
 
           setWelcomeStyles(styles);
+          
+          console.log(`Screen: ${viewportHeight}px, Available: ${availableHeight}px, Scale: ${scaleFactor.toFixed(2)}`);
         };
 
-        calculateOptimalLayout();
+        calculatePerfectFit();
         
-        // Multiple verification passes
+        // Multiple verification passes with real DOM measurement
         const verificationPasses = [1000, 2000, 3000, 3800];
         verificationPasses.forEach(delay => {
           setTimeout(() => {
-            calculateOptimalLayout();
+            calculatePerfectFit();
             
-            // Final verification at 3.8 seconds
+            // Final DOM-based verification at 3.8 seconds
             if (delay === 3800) {
               setTimeout(() => {
-                // Last chance verification with actual DOM measurement
                 requestAnimationFrame(() => {
                   const container = document.querySelector('[data-welcome-container]');
                   const button = document.querySelector('[data-welcome-button]');
@@ -368,23 +392,24 @@ function App() {
                     const containerRect = container.getBoundingClientRect();
                     const buttonRect = button.getBoundingClientRect();
                     
-                    // Check if button is truly visible
+                    console.log(`Button bottom: ${buttonRect.bottom}, Window height: ${window.innerHeight}`);
+                    
+                    // Final check: is button truly visible with 20px margin?
                     if (buttonRect.bottom > window.innerHeight - 20) {
-                      // Emergency size reduction
-                      setWelcomeStyles(prev => ({
-                        ...prev,
-                        titleSize: 'text-2xl',
-                        textSize: 'text-sm',
-                        buttonSize: 'text-sm',
+                      console.log('Emergency size reduction triggered');
+                      // Emergency ultra-compact mode
+                      setWelcomeStyles({
+                        titleSize: 'text-lg',
+                        textSize: 'text-xs',
+                        emojiSize: 'text-lg',
+                        buttonSize: 'text-xs',
                         containerPadding: 'p-1',
                         spacing: 'mb-1'
-                      }));
+                      });
                       
-                      // Give extra time for emergency adjustment
-                      setTimeout(() => {
-                        setIsLayoutReady(true);
-                      }, 300);
+                      setTimeout(() => setIsLayoutReady(true), 200);
                     } else {
+                      console.log('Layout verification passed');
                       setIsLayoutReady(true);
                     }
                   } else {
@@ -408,7 +433,7 @@ function App() {
       
       return cleanup;
     }
-  }, [gameState.gameStarted, gameState.currentTab]);
+  }, [gameState.gameStarted, gameState.currentTab, userState.bestScore]);
 
   // Handle emoji spinning
   const handleEmojiClick = (emojiIndex) => {
@@ -700,6 +725,17 @@ function App() {
   };
 
   const LoadingOverlay = () => {
+    const [zzzVisible, setZzzVisible] = useState(false);
+
+    // Zzz animation effect
+    useEffect(() => {
+      const zzzInterval = setInterval(() => {
+        setZzzVisible(prev => !prev);
+      }, 1500); // Zzz appears/disappears every 1.5 seconds
+
+      return () => clearInterval(zzzInterval);
+    }, []);
+
     return (
       <div 
         className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-1000 ${
@@ -708,11 +744,11 @@ function App() {
         style={{ height: '100dvh' }}
       >
         <div className="text-center relative w-full h-full">
-          {/* Walking paw prints */}
+          {/* Walking paw prints - 2 paws, slower movement */}
           {pawPositions.map((paw, index) => (
             <div
               key={index}
-              className={`absolute text-3xl transition-opacity duration-300 ${
+              className={`absolute text-3xl transition-opacity duration-500 ${
                 paw.visible ? 'opacity-100' : 'opacity-0'
               }`}
               style={{
@@ -727,9 +763,18 @@ function App() {
           
           {/* Main content centered */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="mb-8">
-              {/* Main loading cat */}
-              <div className="text-6xl animate-spin mb-4" style={{ animationDuration: '2s' }}>🐱</div>
+            <div className="mb-8 relative">
+              {/* Sleeping cat with Zzz */}
+              <div className="text-6xl mb-4">😽</div>
+              
+              {/* Floating Zzz animation */}
+              <div 
+                className={`absolute -top-4 left-1/2 transform -translate-x-1/2 text-2xl text-blue-300 transition-opacity duration-1000 ${
+                  zzzVisible ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                Zzz
+              </div>
             </div>
             
             <h2 className="text-2xl font-bold text-yellow-400 animate-pulse mb-4">
