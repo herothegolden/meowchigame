@@ -1,202 +1,4 @@
-case 'error':
-          tg.HapticFeedback.notificationOccurred('error');
-          break;
-        default:
-          tg.HapticFeedback.impactOccurred('light');
-      }
-    } else if (navigator.vibrate) {
-      // Fallback vibration
-      const patterns = {
-        light: [10],
-        medium: [20],
-        heavy: [50],
-        success: [10, 50, 10],
-        error: [50, 100, 50]
-      };
-      navigator.vibrate(patterns[type] || patterns.light);
-    }
-  }, []);
-
-  // Initialize user in database
-  const initializeUser = async (user) => {
-    const result = await apiCall('/user', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: user.id,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name
-      })
-    });
-
-    if (result.success) {
-      loadUserData(user.id);
-    }
-  };
-
-  // Load user data
-  const loadUserData = async (telegramId) => {
-    try {
-      const [bestScoreResult, statsResult] = await Promise.all([
-        apiCall(`/user/${telegramId}/best-score`),
-        apiCall(`/user/${telegramId}/stats`)
-      ]);
-
-      setUserState(prev => ({
-        ...prev,
-        bestScore: bestScoreResult.success ? bestScoreResult.bestScore : null,
-        stats: statsResult.success ? statsResult.stats : null,
-        isLoading: false
-      }));
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      setUserState(prev => ({ ...prev, isLoading: false }));
-    }
-  };
-
-  // Load leaderboard
-  const loadLeaderboard = async () => {
-    const result = await apiCall('/leaderboard?limit=50');
-    if (result.success) {
-      setLeaderboard(result.leaderboard);
-    }
-  };
-
-  // Save game score
-  const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
-    if (!userState.telegramUser) return;
-
-    const result = await apiCall('/score', {
-      method: 'POST',
-      body: JSON.stringify({
-        telegram_id: userState.telegramUser.id,
-        score: finalScore,
-        game_duration: duration,
-        matches_made: matches,
-        max_combo: maxCombo
-      })
-    });
-
-    if (result.success) {
-      triggerHaptic('success');
-      loadUserData(userState.telegramUser.id);
-    }
-  };
-
-  // Game timer
-  useEffect(() => {
-    if (gameState.isActive && gameState.timeLeft > 0) {
-      gameTimerRef.current = setTimeout(() => {
-        setGameState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
-        
-        // Urgent haptic when time is low
-        if (gameState.timeLeft <= 10) {
-          triggerHaptic('light');
-        }
-      }, 1000);
-    } else if (gameState.timeLeft === 0 && gameState.isActive) {
-      endGame();
-    }
-    return () => {
-      if (gameTimerRef.current) {
-        clearTimeout(gameTimerRef.current);
-      }
-    };
-  }, [gameState.timeLeft, gameState.isActive, triggerHaptic]);
-
-  // Tagline rotation
-  useEffect(() => {
-    if (gameState.isActive) {
-      const taglineTimer = setInterval(() => {
-        setCurrentTagline(prev => (prev + 1) % taglines.length);
-      }, 2000);
-      return () => clearInterval(taglineTimer);
-    }
-  }, [gameState.isActive]);
-
-  // Load leaderboard when leaderboard tab is opened
-  useEffect(() => {
-    if (gameState.currentTab === 'leaderboard') {
-      loadLeaderboard();
-    }
-  }, [gameState.currentTab]);
-
-  // HAMSTER KOMBAT LOADING SYSTEM
-  useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play') {
-      setIsLayoutReady(false);
-      setLoadingProgress(0);
-      
-      // Floating paw animation setup
-      const generateFloatingPaws = () => {
-        const paws = [];
-        for (let i = 0; i < 3; i++) {
-          paws.push({
-            id: i,
-            x: Math.random() * 80 + 10, // 10% to 90%
-            y: Math.random() * 60 + 20, // 20% to 80%
-            delay: i * 1000
-          });
-        }
-        setPawPositions(paws);
-      };
-
-      generateFloatingPaws();
-
-      // Progressive loading
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 4;
-        setLoadingProgress(progress);
-      }, 80);
-
-      // Layout ready after 2.5 seconds
-      setTimeout(() => {
-        setIsLayoutReady(true);
-        clearInterval(progressInterval);
-      }, 2500);
-
-      return () => {
-        clearInterval(progressInterval);
-      };
-    }
-  }, [gameState.gameStarted, gameState.currentTab]);
-
-  // Auto-spin emojis with haptic feedback
-  useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play' && isLayoutReady) {
-      setTimeout(() => {
-        const emojiIndices = [0, 1, 2, 3, 4];
-        emojiIndices.forEach((index, i) => {
-          setTimeout(() => {
-            setSpinningEmojis(prev => ({
-              ...prev,
-              [index]: true
-            }));
-            
-            triggerHaptic('light');
-            
-            setTimeout(() => {
-              setSpinningEmojis(prev => ({
-                ...prev,
-                [index]: false
-              }));
-            }, 1000);
-          }, i * 150);
-        });
-      }, 800);
-    }
-  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady, triggerHaptic]);
-
-  const handleEmojiClick = (emojiIndex) => {
-    setSpinningEmojis(prev => ({
-      ...prev,
-      [emojiIndex]: true
-    }));
-    
-    triggerHaptic('light');
-    
-    setTimeout(() => {
+setTimeout(() => {
       setSpinningEmojis(prev => ({
         ...prev,
         [emojiIndex]: false
@@ -358,7 +160,6 @@ case 'error':
     });
   };
 
-  // Enhanced drag system with haptic feedback
   useEffect(() => {
     if (dragState.isDragging) {
       const handleGlobalMove = (e) => {
@@ -375,7 +176,6 @@ case 'error':
         
         const targetColumn = getColumnFromPosition(clientX, clientY);
         setDragState(prev => {
-          // Haptic feedback when entering new column
           if (prev.highlightedColumn !== targetColumn && targetColumn) {
             triggerHaptic('light');
           }
@@ -471,7 +271,6 @@ case 'error':
     });
   };
 
-  // HAMSTER KOMBAT LOADING COMPONENT
   const LoadingOverlay = () => (
     <div className={`hk-loading-overlay ${isLayoutReady ? 'hidden' : ''}`}>
       <div className="text-center relative w-full h-full flex flex-col items-center justify-center">
@@ -507,10 +306,9 @@ case 'error':
     </div>
   );
 
-  // HAMSTER KOMBAT COMPONENTS
   const DraggableCat = ({ cat, columnId }) => (
     <div
-      className="hk-cat-emoji hk-haptic-light"
+      className="hk-cat-emoji"
       onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
       onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
       onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
@@ -580,7 +378,6 @@ case 'error':
     </div>
   );
 
-  // HAMSTER KOMBAT BOTTOM NAVIGATION
   const BottomNavBar = () => {
     const navItems = [
       { id: 'play', icon: '🎮', label: 'Play' },
@@ -602,7 +399,7 @@ case 'error':
             <button
               key={item.id}
               onClick={() => handleTabClick(item.id)}
-              className={`hk-nav-item hk-haptic-light ${
+              className={`hk-nav-item ${
                 gameState.currentTab === item.id ? 'active' : ''
               }`}
             >
@@ -615,7 +412,6 @@ case 'error':
     );
   };
 
-  // SCREEN COMPONENTS (simplified for length)
   const TasksScreen = () => (
     <div className="hk-app-container">
       <div className="hk-main-content">
@@ -747,37 +543,17 @@ case 'error':
     </div>
   );
 
-  // MAIN RENDER LOGIC
   if (gameState.currentTab === 'tasks') return <TasksScreen />;
   if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
   if (gameState.currentTab === 'bonus') return <BonusScreen />;
   if (gameState.currentTab === 'account') return <AccountScreen />;
 
-  // WELCOME SCREEN
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
       <div className="hk-app-container">
         <LoadingOverlay />
         
         <div className="hk-welcome-screen">
-          {/* Floating background paws */}
-          <div className="hk-welcome-floating-paws">
-            {pawPositions.map((paw) => (
-              <div
-                key={paw.id}
-                className="hk-floating-paw"
-                style={{
-                  left: `${paw.x}%`,
-                  top: `${paw.y}%`,
-                  animationDelay: `${paw.delay}ms`
-                }}
-              >
-                🐾
-              </div>
-            ))}
-          </div>
-
-          {/* Main content - slides up from bottom */}
           <div className="hk-welcome-content">
             <h1 className="hk-title">MEOWCHI</h1>
             <h1 className="hk-title">CHAOS</h1>
@@ -792,7 +568,7 @@ case 'error':
                 {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
                   <span 
                     key={index}
-                    className={`hk-emoji-item hk-haptic-light ${
+                    className={`hk-emoji-item ${
                       spinningEmojis[index] ? 'spinning' : ''
                     }`}
                     onClick={() => handleEmojiClick(index)}
@@ -828,7 +604,7 @@ case 'error':
             
             <button
               onClick={startGame}
-              className="hk-start-button hk-haptic-medium"
+              className="hk-start-button"
             >
               ▶️ LET'S GOOO!
             </button>
@@ -840,7 +616,6 @@ case 'error':
     );
   }
 
-  // GAME OVER SCREEN
   if (!gameState.isActive && gameState.gameStarted) {
     let flavorText = "🐾 That's tragic. Even my paw is better at this.";
     if (gameState.score > 5000) {
@@ -892,14 +667,14 @@ case 'error':
             <div className="space-y-3">
               <button
                 onClick={startGame}
-                className="hk-start-button hk-haptic-medium"
+                className="hk-start-button"
               >
                 😺 PLAY AGAIN
               </button>
               
               <button
                 onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-                className="w-full bg-transparent border-2 border-black text-black font-bold py-4 px-6 rounded-2xl hk-haptic-light"
+                className="w-full bg-transparent border-2 border-black text-black font-bold py-4 px-6 rounded-2xl"
               >
                 📊 LEADERBOARD
               </button>
@@ -911,15 +686,12 @@ case 'error':
     );
   }
 
-  // MAIN GAME SCREEN
   return (
     <div className="hk-app-container">
-      {/* Explosion animations */}
       {animations.map((animation) => (
         <ExplosionAnimation key={animation.id} animation={animation} />
       ))}
 
-      {/* Dragged cat */}
       {dragState.isDragging && dragState.draggedCat && (
         <div
           className="hk-dragged-cat"
@@ -933,12 +705,10 @@ case 'error':
       )}
 
       <div className="hk-game-screen">
-        {/* Header with tagline */}
         <div className="hk-game-header">
           <h1 className="hk-tagline">{taglines[currentTagline]}</h1>
         </div>
 
-        {/* Score bar */}
         <div className="hk-score-bar">
           <div className={`hk-timer ${gameState.timeLeft <= 10 ? 'urgent' : ''}`}>
             <span>⏱</span>
@@ -950,7 +720,6 @@ case 'error':
           </div>
         </div>
 
-        {/* Next cat section */}
         <div className="hk-next-section">
           <div className="hk-next-content">
             <span>NEXT:</span>
@@ -960,7 +729,6 @@ case 'error':
           </div>
         </div>
 
-        {/* Game board */}
         <div className="hk-game-board">
           <div className="hk-columns-container" ref={boardRef}>
             <GameColumn columnId="left" cats={gameState.columns.left} />
@@ -969,7 +737,6 @@ case 'error':
           </div>
         </div>
 
-        {/* Controls */}
         <div className="hk-game-controls">
           <div className="hk-drop-buttons">
             {['left', 'center', 'right'].map((column) => {
@@ -981,7 +748,7 @@ case 'error':
                   key={column}
                   onClick={() => dropNewCat(column)}
                   disabled={!isEnabled}
-                  className={`hk-drop-button hk-haptic-light ${
+                  className={`hk-drop-button ${
                     isEnabled ? 'enabled' : 'disabled'
                   }`}
                 >
@@ -1010,7 +777,6 @@ const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
 
-// API helper functions
 const API_BASE = window.location.origin;
 
 const apiCall = async (endpoint, options = {}) => {
@@ -1065,16 +831,7 @@ function App() {
   const [currentTagline, setCurrentTagline] = useState(0);
   const [spinningEmojis, setSpinningEmojis] = useState({});
   const [isLayoutReady, setIsLayoutReady] = useState(false);
-  
-  // HAMSTER KOMBAT VIEWPORT SYSTEM
-  const [telegramViewport, setTelegramViewport] = useState({
-    height: window.innerHeight,
-    stableHeight: window.innerHeight,
-    isExpanded: false
-  });
-
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [pawPositions, setPawPositions] = useState([]);
   
   const taglines = [
     "😼 Chaos Mode Activated",
@@ -1084,87 +841,45 @@ function App() {
   
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
-  const viewportUpdateTimeoutRef = useRef(null);
 
-  // HAMSTER KOMBAT VIEWPORT MANAGEMENT
-  const updateViewportVariables = useCallback((height, stableHeight) => {
-    const root = document.documentElement;
-    root.style.setProperty('--tg-viewport-height', `${height}px`);
-    root.style.setProperty('--tg-viewport-stable-height', `${stableHeight}px`);
-    
-    // Dynamic scaling based on viewport
-    const baseScale = Math.min(Math.max(height / 667, 0.85), 1.15);
-    root.style.setProperty('--base-scale', baseScale.toString());
+  const triggerHaptic = useCallback((type = 'light') => {
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      const tg = window.Telegram.WebApp;
+      if (type === 'light') {
+        tg.HapticFeedback.impactOccurred('light');
+      } else if (type === 'medium') {
+        tg.HapticFeedback.impactOccurred('medium');
+      } else if (type === 'heavy') {
+        tg.HapticFeedback.impactOccurred('heavy');
+      } else if (type === 'success') {
+        tg.HapticFeedback.notificationOccurred('success');
+      } else if (type === 'error') {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+    } else if (navigator.vibrate) {
+      const patterns = {
+        light: [10],
+        medium: [20],
+        heavy: [50],
+        success: [10, 50, 10],
+        error: [50, 100, 50]
+      };
+      navigator.vibrate(patterns[type] || patterns.light);
+    }
   }, []);
 
-  // SMOOTH VIEWPORT TRANSITIONS
-  const handleViewportChange = useCallback((newHeight, newStableHeight) => {
-    // Clear existing timeout
-    if (viewportUpdateTimeoutRef.current) {
-      clearTimeout(viewportUpdateTimeoutRef.current);
-    }
-
-    // Immediate update for responsive scaling
-    updateViewportVariables(newHeight, newStableHeight);
-    
-    // Smooth state update
-    setTelegramViewport(prev => ({
-      ...prev,
-      height: newHeight,
-      stableHeight: newStableHeight,
-      isExpanded: Math.abs(newHeight - newStableHeight) < 50
-    }));
-
-    // Debounced layout recalculation
-    viewportUpdateTimeoutRef.current = setTimeout(() => {
-      // Force layout recalculation for game board
-      if (boardRef.current) {
-        boardRef.current.style.height = 'auto';
-        requestAnimationFrame(() => {
-          if (boardRef.current) {
-            boardRef.current.style.height = '';
-          }
-        });
-      }
-    }, 150);
-  }, [updateViewportVariables]);
-
-  // TELEGRAM WEBAPP INITIALIZATION
   useEffect(() => {
     const initializeTelegramWebApp = () => {
       if (window.Telegram?.WebApp) {
         const tg = window.Telegram.WebApp;
-        
-        // Essential Telegram WebApp setup
         tg.ready();
         tg.expand();
-        tg.enableClosingConfirmation();
         
-        // Set theme colors
-        if (tg.themeParams?.bg_color) {
-          document.body.style.backgroundColor = tg.themeParams.bg_color;
-        }
-
-        // HAMSTER KOMBAT VIEWPORT HANDLING
-        const handleTelegramViewportChanged = () => {
-          const newHeight = tg.viewportHeight || window.innerHeight;
-          const newStableHeight = tg.viewportStableHeight || window.innerHeight;
-          handleViewportChange(newHeight, newStableHeight);
-        };
-
-        // Initial viewport setup
-        handleTelegramViewportChanged();
-        
-        // Listen for viewport changes
-        tg.onEvent('viewportChanged', handleTelegramViewportChanged);
-
-        // Initialize user
         const user = tg.initDataUnsafe?.user;
         if (user) {
           setUserState(prev => ({ ...prev, telegramUser: user }));
           initializeUser(user);
         } else {
-          // Fallback for testing
           const testUser = {
             id: Date.now(),
             username: 'testuser',
@@ -1174,14 +889,7 @@ function App() {
           setUserState(prev => ({ ...prev, telegramUser: testUser }));
           initializeUser(testUser);
         }
-
-        return () => {
-          tg.offEvent('viewportChanged', handleTelegramViewportChanged);
-        };
       } else {
-        // Development fallback
-        handleViewportChange(window.innerHeight, window.innerHeight);
-        
         const testUser = {
           id: Date.now(),
           username: 'testuser',
@@ -1193,71 +901,158 @@ function App() {
       }
     };
 
-    // Handle window resize for responsive scaling
-    const handleWindowResize = () => {
-      const height = window.innerHeight;
-      const width = window.innerWidth;
-      
-      // Update CSS variables
-      updateViewportVariables(height, height);
-      
-      // Update state
-      setTelegramViewport(prev => ({
-        ...prev,
-        height,
-        stableHeight: height
-      }));
-    };
+    initializeTelegramWebApp();
+  }, []);
 
-    const cleanup = initializeTelegramWebApp();
-    window.addEventListener('resize', handleWindowResize);
-    window.addEventListener('orientationchange', () => {
-      setTimeout(handleWindowResize, 300);
+  const initializeUser = async (user) => {
+    const result = await apiCall('/user', {
+      method: 'POST',
+      body: JSON.stringify({
+        telegram_id: user.id,
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name
+      })
     });
 
+    if (result.success) {
+      loadUserData(user.id);
+    }
+  };
+
+  const loadUserData = async (telegramId) => {
+    try {
+      const [bestScoreResult, statsResult] = await Promise.all([
+        apiCall(`/user/${telegramId}/best-score`),
+        apiCall(`/user/${telegramId}/stats`)
+      ]);
+
+      setUserState(prev => ({
+        ...prev,
+        bestScore: bestScoreResult.success ? bestScoreResult.bestScore : null,
+        stats: statsResult.success ? statsResult.stats : null,
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setUserState(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const loadLeaderboard = async () => {
+    const result = await apiCall('/leaderboard?limit=50');
+    if (result.success) {
+      setLeaderboard(result.leaderboard);
+    }
+  };
+
+  const saveGameScore = async (finalScore, duration, matches, maxCombo) => {
+    if (!userState.telegramUser) return;
+
+    const result = await apiCall('/score', {
+      method: 'POST',
+      body: JSON.stringify({
+        telegram_id: userState.telegramUser.id,
+        score: finalScore,
+        game_duration: duration,
+        matches_made: matches,
+        max_combo: maxCombo
+      })
+    });
+
+    if (result.success) {
+      triggerHaptic('success');
+      loadUserData(userState.telegramUser.id);
+    }
+  };
+
+  useEffect(() => {
+    if (gameState.isActive && gameState.timeLeft > 0) {
+      gameTimerRef.current = setTimeout(() => {
+        setGameState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
+        
+        if (gameState.timeLeft <= 10) {
+          triggerHaptic('light');
+        }
+      }, 1000);
+    } else if (gameState.timeLeft === 0 && gameState.isActive) {
+      endGame();
+    }
     return () => {
-      cleanup?.();
-      window.removeEventListener('resize', handleWindowResize);
-      window.removeEventListener('orientationchange', handleWindowResize);
-      if (viewportUpdateTimeoutRef.current) {
-        clearTimeout(viewportUpdateTimeoutRef.current);
+      if (gameTimerRef.current) {
+        clearTimeout(gameTimerRef.current);
       }
     };
-  }, [handleViewportChange, updateViewportVariables]);
+  }, [gameState.timeLeft, gameState.isActive, triggerHaptic]);
 
-  // ENHANCED HAPTIC FEEDBACK
-  const triggerHaptic = useCallback((type = 'light') => {
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      const tg = window.Telegram.WebApp;
-      switch (type) {
-        case 'light':
-          tg.HapticFeedback.impactOccurred('light');
-          break;
-        case 'medium':
-          tg.HapticFeedback.impactOccurred('medium');
-          break;
-        case 'heavy':
-          tg.HapticFeedback.impactOccurred('heavy');
-          break;
-        case 'success':
-          tg.HapticFeedback.notificationOccurred('success');
-          break;
-        case 'error':
-          tg.HapticFeedback.notificationOccurred('error');
-          break;
-        default:
-          tg.HapticFeedback.impactOccurred('light');
-          break;
-      }
-    } else if (navigator.vibrate) {
-      // Fallback vibration
-      const patterns = {
-        light: [10],
-        medium: [20],
-        heavy: [50],
-        success: [10, 50, 10],
-        error: [50, 100, 50]
-      };
-      navigator.vibrate(patterns[type] || patterns.light);
+  useEffect(() => {
+    if (gameState.isActive) {
+      const taglineTimer = setInterval(() => {
+        setCurrentTagline(prev => (prev + 1) % taglines.length);
+      }, 2000);
+      return () => clearInterval(taglineTimer);
     }
-  }, []);
+  }, [gameState.isActive]);
+
+  useEffect(() => {
+    if (gameState.currentTab === 'leaderboard') {
+      loadLeaderboard();
+    }
+  }, [gameState.currentTab]);
+
+  useEffect(() => {
+    if (!gameState.gameStarted && gameState.currentTab === 'play') {
+      setIsLayoutReady(false);
+      setLoadingProgress(0);
+
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 4;
+        setLoadingProgress(progress);
+      }, 80);
+
+      setTimeout(() => {
+        setIsLayoutReady(true);
+        clearInterval(progressInterval);
+      }, 2500);
+
+      return () => {
+        clearInterval(progressInterval);
+      };
+    }
+  }, [gameState.gameStarted, gameState.currentTab]);
+
+  useEffect(() => {
+    if (!gameState.gameStarted && gameState.currentTab === 'play' && isLayoutReady) {
+      setTimeout(() => {
+        const emojiIndices = [0, 1, 2, 3, 4];
+        emojiIndices.forEach((index, i) => {
+          setTimeout(() => {
+            setSpinningEmojis(prev => ({
+              ...prev,
+              [index]: true
+            }));
+            
+            triggerHaptic('light');
+            
+            setTimeout(() => {
+              setSpinningEmojis(prev => ({
+                ...prev,
+                [index]: false
+              }));
+            }, 1000);
+          }, i * 150);
+        });
+      }, 800);
+    }
+  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady, triggerHaptic]);
+
+  const handleEmojiClick = (emojiIndex) => {
+    setSpinningEmojis(prev => ({
+      ...prev,
+      [emojiIndex]: true
+    }));
+    
+    triggerHaptic('light');
+    
+    setTimeout
