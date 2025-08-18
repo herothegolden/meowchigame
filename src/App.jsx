@@ -1,172 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
-
-const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
-const INITIAL_TIME = 60;
-const MATCH_SCORE = 1000;
-const COMBO_BONUS = 500;
-
-// API helper functions
-const API_BASE = window.location.origin;
-
-const apiCall = async (endpoint, options = {}) => {
-  try {
-    const response = await fetch(`${API_BASE}/api${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-function App() {
-  const [gameState, setGameState] = useState({
-    timeLeft: INITIAL_TIME,
-    score: 0,
-    columns: { left: [], center: [], right: [] },
-    isActive: false,
-    consecutiveMatches: 0,
-    gameStarted: false,
-    nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
-    currentTab: 'play',
-    matchesMade: 0,
-    maxCombo: 0
-  });
-
-  const [userState, setUserState] = useState({
-    telegramUser: null,
-    bestScore: null,
-    stats: null,
-    isLoading: true
-  });
-
-  const [leaderboard, setLeaderboard] = useState([]);
-
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    draggedCat: null,
-    fromColumn: null,
-    dragPosition: { x: 0, y: 0 },
-    highlightedColumn: null,
-    startPosition: { x: 0, y: 0 }
-  });
-
-  const [animations, setAnimations] = useState([]);
-  const [currentTagline, setCurrentTagline] = useState(0);
-  const [spinningEmojis, setSpinningEmojis] = useState({});
-  const [isLayoutReady, setIsLayoutReady] = useState(false);
-  const [telegramViewport, setTelegramViewport] = useState({
-    height: window.innerHeight,
-    stableHeight: window.innerHeight
-  });
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [pawPositions, setPawPositions] = useState([]);
-  
-  const taglines = [
-    "😼 Chaos Mode Activated",
-    "🐾 Don't Blink, Human", 
-    "🔥 Catnado Incoming"
-  ];
-  
-  const gameTimerRef = useRef(null);
-  const boardRef = useRef(null);
-  const dragThreshold = 15;
-
-  // Initialize Telegram Web App and user
-  useEffect(() => {
-    // Enhanced responsive system - like Hamster Kombat
-    const setResponsiveScale = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      
-      // Calculate optimal scale based on screen size
-      const widthScale = width / 375; // Base width (iPhone 6/7/8)
-      const heightScale = height / 667; // Base height (iPhone 6/7/8)
-      const optimalScale = Math.min(widthScale, heightScale, 1.3); // Max 1.3x scale
-      
-      // Set CSS custom properties for unified responsive system
-      document.documentElement.style.setProperty('--app-scale', Math.max(optimalScale, 0.7).toString());
-      document.documentElement.style.setProperty('--screen-width', `${width}px`);
-      document.documentElement.style.setProperty('--screen-height', `${height}px`);
-    };
-
-    if (window.Telegram?.WebApp) {
-      const tg = window.Telegram.WebApp;
-      tg.ready();
-      tg.expand(); // Get maximum stable height
-      
-      // Set up viewport handling with enhanced responsive scaling
-      const updateViewport = () => {
-        setTelegramViewport({
-          height: tg.viewportHeight || window.innerHeight,
-          stableHeight: tg.viewportStableHeight || window.innerHeight
-        });
-        
-        // Update responsive scaling when viewport changes
-        setResponsiveScale();
-      };
-      
-      updateViewport();
-      tg.onEvent?.('viewportChanged', updateViewport);
-      
-      // Set CSS custom properties for consistent sizing
-      document.documentElement.style.setProperty('--app-height', `${tg.viewportStableHeight || window.innerHeight}px`);
-      
-      if (tg.backgroundColor) {
-        document.body.style.backgroundColor = tg.backgroundColor;
+case 'error':
+          tg.HapticFeedback.notificationOccurred('error');
+          break;
+        default:
+          tg.HapticFeedback.impactOccurred('light');
       }
-
-      // Get Telegram user data
-      const user = tg.initDataUnsafe?.user;
-      if (user) {
-        setUserState(prev => ({ ...prev, telegramUser: user }));
-        initializeUser(user);
-      } else {
-        // Fallback for testing outside Telegram
-        const testUser = {
-          id: 123456789,
-          username: 'testuser',
-          first_name: 'Test',
-          last_name: 'User'
-        };
-        setUserState(prev => ({ ...prev, telegramUser: testUser }));
-        initializeUser(testUser);
-      }
-    } else {
-      // Fallback for development with responsive scaling
-      setResponsiveScale();
-      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
-      
-      const testUser = {
-        id: 123456789,
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User'
+    } else if (navigator.vibrate) {
+      // Fallback vibration
+      const patterns = {
+        light: [10],
+        medium: [20],
+        heavy: [50],
+        success: [10, 50, 10],
+        error: [50, 100, 50]
       };
-      setUserState(prev => ({ ...prev, telegramUser: testUser }));
-      initializeUser(testUser);
+      navigator.vibrate(patterns[type] || patterns.light);
     }
-
-    // Listen for resize events and update scaling
-    const handleResize = () => {
-      setResponsiveScale();
-    };
-    
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    
-    // Initial scale setting
-    setResponsiveScale();
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
   }, []);
 
   // Initialize user in database
@@ -230,7 +78,7 @@ function App() {
     });
 
     if (result.success) {
-      // Refresh user data after saving score
+      triggerHaptic('success');
       loadUserData(userState.telegramUser.id);
     }
   };
@@ -240,6 +88,11 @@ function App() {
     if (gameState.isActive && gameState.timeLeft > 0) {
       gameTimerRef.current = setTimeout(() => {
         setGameState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
+        
+        // Urgent haptic when time is low
+        if (gameState.timeLeft <= 10) {
+          triggerHaptic('light');
+        }
       }, 1000);
     } else if (gameState.timeLeft === 0 && gameState.isActive) {
       endGame();
@@ -249,7 +102,7 @@ function App() {
         clearTimeout(gameTimerRef.current);
       }
     };
-  }, [gameState.timeLeft, gameState.isActive]);
+  }, [gameState.timeLeft, gameState.isActive, triggerHaptic]);
 
   // Tagline rotation
   useEffect(() => {
@@ -268,10 +121,50 @@ function App() {
     }
   }, [gameState.currentTab]);
 
-  // Auto-spin emojis on welcome screen load - AFTER loading screen disappears
+  // HAMSTER KOMBAT LOADING SYSTEM
+  useEffect(() => {
+    if (!gameState.gameStarted && gameState.currentTab === 'play') {
+      setIsLayoutReady(false);
+      setLoadingProgress(0);
+      
+      // Floating paw animation setup
+      const generateFloatingPaws = () => {
+        const paws = [];
+        for (let i = 0; i < 3; i++) {
+          paws.push({
+            id: i,
+            x: Math.random() * 80 + 10, // 10% to 90%
+            y: Math.random() * 60 + 20, // 20% to 80%
+            delay: i * 1000
+          });
+        }
+        setPawPositions(paws);
+      };
+
+      generateFloatingPaws();
+
+      // Progressive loading
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 4;
+        setLoadingProgress(progress);
+      }, 80);
+
+      // Layout ready after 2.5 seconds
+      setTimeout(() => {
+        setIsLayoutReady(true);
+        clearInterval(progressInterval);
+      }, 2500);
+
+      return () => {
+        clearInterval(progressInterval);
+      };
+    }
+  }, [gameState.gameStarted, gameState.currentTab]);
+
+  // Auto-spin emojis with haptic feedback
   useEffect(() => {
     if (!gameState.gameStarted && gameState.currentTab === 'play' && isLayoutReady) {
-      // Only trigger auto-spin AFTER welcome screen is visible
       setTimeout(() => {
         const emojiIndices = [0, 1, 2, 3, 4];
         emojiIndices.forEach((index, i) => {
@@ -281,97 +174,40 @@ function App() {
               [index]: true
             }));
             
-            // Remove spinning state after animation completes
+            triggerHaptic('light');
+            
             setTimeout(() => {
               setSpinningEmojis(prev => ({
                 ...prev,
                 [index]: false
               }));
             }, 1000);
-          }, i * 100); // Staggered delay: 0ms, 100ms, 200ms, 300ms, 400ms
+          }, i * 150);
         });
-      }, 500); // Wait 500ms after welcome screen appears
+      }, 800);
     }
-  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady]);
+  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady, triggerHaptic]);
 
-  // Simple loading management - Telegram style
-  useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play') {
-      setIsLayoutReady(false);
-      setLoadingProgress(0);
-      
-      // Simple walking paw animation
-      const generateSimplePawPath = () => {
-        const path = [];
-        for (let i = 0; i <= 8; i++) {
-          const progress = i / 8;
-          const x = 15 + progress * 70; // 15% to 85% of screen width
-          const y = 40 + Math.sin(progress * Math.PI) * 5; // Gentle arc
-          path.push({ x, y, visible: false });
-        }
-        return path;
-      };
-
-      setPawPositions(generateSimplePawPath());
-
-      // Walking animation
-      let pawStep = 0;
-      const walkingInterval = setInterval(() => {
-        setPawPositions(prev => prev.map((paw, index) => ({
-          ...paw,
-          visible: index === pawStep || index === pawStep - 1
-        })));
-        
-        pawStep = (pawStep + 1) % 9;
-      }, 600);
-
-      // Progress tracking
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += 3;
-        setLoadingProgress(progress);
-      }, 100);
-
-      // Simple 3-second loading with Telegram viewport ready check
-      setTimeout(() => {
-        // Layout is ready after Telegram viewport is stable
-        setIsLayoutReady(true);
-        clearInterval(walkingInterval);
-        clearInterval(progressInterval);
-      }, 3000);
-
-      return () => {
-        clearInterval(walkingInterval);
-        clearInterval(progressInterval);
-      };
-    }
-  }, [gameState.gameStarted, gameState.currentTab]);
-
-  // Handle emoji spinning - more responsive
   const handleEmojiClick = (emojiIndex) => {
-    // Immediately start spinning
     setSpinningEmojis(prev => ({
       ...prev,
       [emojiIndex]: true
     }));
     
-    // Remove spinning state after animation completes
+    triggerHaptic('light');
+    
     setTimeout(() => {
       setSpinningEmojis(prev => ({
         ...prev,
         [emojiIndex]: false
       }));
     }, 1000);
-    
-    // Add haptic feedback if available
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
   };
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
 
   const startGame = () => {
+    triggerHaptic('medium');
     setGameState(prev => ({
       ...prev,
       timeLeft: INITIAL_TIME,
@@ -396,8 +232,8 @@ function App() {
     const maxCombo = gameState.maxCombo;
 
     setGameState(prev => ({ ...prev, isActive: false }));
+    triggerHaptic('heavy');
     
-    // Save score to database
     saveGameScore(finalScore, gameDuration, matches, maxCombo);
   };
 
@@ -414,6 +250,8 @@ function App() {
       timestamp: Date.now()
     };
     setAnimations(prev => [...prev, newAnimation]);
+    triggerHaptic('success');
+    
     setTimeout(() => {
       setAnimations(prev => prev.filter(anim => anim.id !== explosionId));
     }, 2000);
@@ -421,8 +259,12 @@ function App() {
 
   const dropNewCat = (column) => {
     if (!gameState.isActive || dragState.isDragging) return;
-    if (gameState.columns[column].length >= 6) return;
+    if (gameState.columns[column].length >= 6) {
+      triggerHaptic('error');
+      return;
+    }
 
+    triggerHaptic('light');
     const newCat = { id: generateCatId(), emoji: gameState.nextCat };
     const nextNextCat = CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)];
 
@@ -459,13 +301,11 @@ function App() {
           matchFound = true;
           const matchedEmoji = column[i].emoji;
           
-          // Remove matched cats immediately
           updatedColumns[targetColumn] = [
             ...updatedColumns[targetColumn].slice(0, i-2),
             ...updatedColumns[targetColumn].slice(i+1)
           ];
           
-          // Create explosion effect
           setTimeout(() => {
             createExplosion(0, 0, matchedEmoji, scoreGained);
           }, 100);
@@ -495,10 +335,7 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
 
-    // Set pointer capture if available
-    if (e.pointerId && e.currentTarget.setPointerCapture) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
+    triggerHaptic('light');
     
     let clientX, clientY;
     if (e.touches) {
@@ -519,13 +356,9 @@ function App() {
       startPosition: { x: clientX, y: clientY },
       highlightedColumn: null
     });
-    
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
   };
 
-  // Global drag event handlers for WebView
+  // Enhanced drag system with haptic feedback
   useEffect(() => {
     if (dragState.isDragging) {
       const handleGlobalMove = (e) => {
@@ -541,11 +374,18 @@ function App() {
         }
         
         const targetColumn = getColumnFromPosition(clientX, clientY);
-        setDragState(prev => ({
-          ...prev,
-          dragPosition: { x: clientX, y: clientY },
-          highlightedColumn: targetColumn
-        }));
+        setDragState(prev => {
+          // Haptic feedback when entering new column
+          if (prev.highlightedColumn !== targetColumn && targetColumn) {
+            triggerHaptic('light');
+          }
+          
+          return {
+            ...prev,
+            dragPosition: { x: clientX, y: clientY },
+            highlightedColumn: targetColumn
+          };
+        });
       };
 
       const handleGlobalEnd = (e) => {
@@ -562,18 +402,16 @@ function App() {
         
         const targetColumn = getColumnFromPosition(clientX, clientY);
         if (targetColumn && targetColumn !== dragState.fromColumn && dragState.draggedCat) {
-          // Check if target column is full before allowing drop
           if (gameState.columns[targetColumn].length < 6) {
             moveCat(targetColumn, dragState.draggedCat, dragState.fromColumn);
-            if (navigator.vibrate) {
-              navigator.vibrate(100);
-            }
+            triggerHaptic('medium');
+          } else {
+            triggerHaptic('error');
           }
         }
         resetDragState();
       };
 
-      // Add global listeners
       document.addEventListener('touchmove', handleGlobalMove, { passive: false });
       document.addEventListener('touchend', handleGlobalEnd, { passive: false });
       document.addEventListener('touchcancel', resetDragState, { passive: false });
@@ -590,25 +428,22 @@ function App() {
         document.removeEventListener('pointercancel', resetDragState);
       };
     }
-  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns]);
+  }, [dragState.isDragging, dragState.fromColumn, dragState.draggedCat, gameState.columns, triggerHaptic]);
 
   const moveCat = (targetColumn, draggedCat, fromColumn) => {
     setGameState(prev => {
       const newColumns = { ...prev.columns };
       
-      // Remove cat from source column
       if (newColumns[fromColumn]) {
         newColumns[fromColumn] = newColumns[fromColumn].filter(
           cat => cat.id !== draggedCat.id
         );
       }
       
-      // Add cat to target column  
       if (newColumns[targetColumn]) {
         newColumns[targetColumn] = [...newColumns[targetColumn], draggedCat];
       }
       
-      // Check matches
       const { updatedColumns, scoreGained, matchFound } = checkMatches(newColumns, targetColumn, prev.consecutiveMatches);
       
       const newConsecutiveMatches = scoreGained > 0 ? prev.consecutiveMatches + 1 : 0;
@@ -636,113 +471,56 @@ function App() {
     });
   };
 
-  const LoadingOverlay = () => {
-    const [zzzVisible, setZzzVisible] = useState(true);
-    const [activeDots, setActiveDots] = useState(1);
-
-    // Zzz animation effect - simple toggle every 2 seconds
-    useEffect(() => {
-      const zzzTimer = setInterval(() => {
-        setZzzVisible(prev => !prev);
-      }, 2000);
-      return () => clearInterval(zzzTimer);
-    }, []);
-
-    // Progressive dots animation - 1, 2, 3, repeat
-    useEffect(() => {
-      const dotsTimer = setInterval(() => {
-        setActiveDots(prev => prev >= 3 ? 1 : prev + 1);
-      }, 1000);
-      return () => clearInterval(dotsTimer);
-    }, []);
-
-    return (
-      <div 
-        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-1000 ${
-          isLayoutReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        }`}
-        style={{ height: '100dvh' }}
-      >
-        <div className="text-center relative w-full h-full">
-          {/* Walking paw prints */}
-          {pawPositions.map((paw, index) => (
-            <div
-              key={index}
-              className={`absolute text-3xl transition-opacity duration-500 ${
-                paw.visible ? 'opacity-100' : 'opacity-0'
-              }`}
-              style={{
-                left: `${paw.x}%`,
-                top: `${paw.y}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              🐾
-            </div>
-          ))}
-          
-          {/* Main content centered */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="mb-8 relative h-20">
-              {/* Sleeping cat */}
-              <div className="text-6xl">😽</div>
-              
-              {/* Zzz - SIMPLE positioning */}
-              <div 
-                className={`absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-12 text-4xl text-blue-300 font-bold transition-opacity duration-1000 ${
-                  zzzVisible ? 'opacity-100' : 'opacity-30'
-                }`}
-              >
-                Zzz
-              </div>
-            </div>
-            
-            <h2 className="text-2xl font-bold text-yellow-400 animate-pulse mb-4">
-              Waking up cats...
-            </h2>
-            
-            {/* Progress bar */}
-            <div className="w-48 h-2 bg-gray-700 rounded-full mb-6">
-              <div 
-                className="h-full bg-yellow-400 rounded-full transition-all duration-100"
-                style={{ width: `${Math.min(loadingProgress, 100)}%` }}
-              ></div>
-            </div>
-            
-            {/* SIMPLE dots - show state clearly */}
-            <div className="flex justify-center space-x-3">
-              <div className={`w-4 h-4 rounded-full ${activeDots >= 1 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
-              <div className={`w-4 h-4 rounded-full ${activeDots >= 2 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
-              <div className={`w-4 h-4 rounded-full ${activeDots >= 3 ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
-            </div>
+  // HAMSTER KOMBAT LOADING COMPONENT
+  const LoadingOverlay = () => (
+    <div className={`hk-loading-overlay ${isLayoutReady ? 'hidden' : ''}`}>
+      <div className="text-center relative w-full h-full flex flex-col items-center justify-center">
+        <div className="mb-8 relative">
+          <div className="text-6xl">😽</div>
+          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-2xl text-blue-300 animate-pulse">
+            Zzz
           </div>
         </div>
+        
+        <h2 className="text-2xl font-bold text-yellow-400 mb-6">
+          Waking up cats...
+        </h2>
+        
+        <div className="w-64 h-1 bg-gray-800 rounded-full mb-8 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full transition-all duration-100"
+            style={{ width: `${Math.min(loadingProgress, 100)}%` }}
+          />
+        </div>
+        
+        <div className="flex space-x-2">
+          {[1, 2, 3].map((dot) => (
+            <div
+              key={dot}
+              className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                loadingProgress > dot * 25 ? 'bg-yellow-400 scale-110' : 'bg-gray-600'
+              }`}
+            />
+          ))}
+        </div>
       </div>
-    );
-  };
+    </div>
+  );
 
-  const DraggableCat = ({ cat, columnId }) => {
-    return (
-      <div
-        className="tg-cat-emoji"
-        onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
-        onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
-        onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
-        style={{
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          MozUserSelect: 'none',
-          msUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent',
-          touchAction: 'none',
-          opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
-        }}
-      >
-        {cat.emoji}
-      </div>
-    );
-  };
+  // HAMSTER KOMBAT COMPONENTS
+  const DraggableCat = ({ cat, columnId }) => (
+    <div
+      className="hk-cat-emoji hk-haptic-light"
+      onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
+      onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
+      onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
+      style={{
+        opacity: dragState.draggedCat?.id === cat.id && dragState.isDragging ? 0.5 : 1
+      }}
+    >
+      {cat.emoji}
+    </div>
+  );
 
   const GameColumn = ({ columnId, cats }) => {
     const isFull = cats.length >= 6;
@@ -751,145 +529,112 @@ function App() {
     return (
       <div
         data-column={columnId}
-        className={`tg-game-column ${
-          isHighlighted ? 'column-highlighted' : ''
-        }`}
+        className={`hk-game-column ${isHighlighted ? 'highlighted' : ''}`}
       >
-        {cats.map((cat, index) => (
+        {cats.map((cat) => (
           <DraggableCat key={cat.id} cat={cat} columnId={columnId} />
         ))}
         
         {cats.length === 0 && (
-          <div className="column-empty-text">Empty</div>
+          <div className="text-gray-400 text-xs text-center mt-4">Empty</div>
         )}
         
         {isFull && (
-          <div className="column-full-text">FULL</div>
+          <div className="text-red-500 text-xs text-center font-bold absolute top-2">FULL</div>
         )}
       </div>
     );
   };
 
-  const ExplosionAnimation = ({ animation }) => {
-    return (
-      <div
-        className="fixed pointer-events-none z-[100] animate-ping"
-        style={{
-          left: animation.x - 50,
-          top: animation.y - 50,
-          transform: 'translate(-50%, -50%)'
-        }}
-      >
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center justify-center z-[110]">
-            <div className="text-6xl animate-bounce">{animation.emoji}</div>
-          </div>
-          
-          {[...Array(8)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping z-[105]"
-              style={{
-                left: 50 + Math.cos(i * Math.PI / 4) * 40,
-                top: 50 + Math.sin(i * Math.PI / 4) * 40,
-                animationDelay: `${i * 50}ms`,
-                animationDuration: '1s'
-              }}
-            />
-          ))}
-          
-          <div 
-            className="absolute left-1/2 transform -translate-x-1/2 -translate-y-8 text-3xl font-bold text-yellow-500 animate-bounce z-[120]"
-            style={{ animationDuration: '0.5s' }}
-          >
-            +{animation.scoreGained}
-          </div>
-          
-          <div className="absolute inset-0 border-4 border-yellow-400 rounded-full animate-ping opacity-75 z-[108]" />
-          <div 
-            className="absolute inset-0 border-4 border-orange-400 rounded-full animate-ping opacity-50 z-[107]"
-            style={{ animationDelay: '0.2s' }}
+  const ExplosionAnimation = ({ animation }) => (
+    <div
+      className="fixed pointer-events-none z-[200] animate-ping"
+      style={{
+        left: animation.x - 50,
+        top: animation.y - 50,
+        transform: 'translate(-50%, -50%)'
+      }}
+    >
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-6xl animate-bounce">{animation.emoji}</div>
+        </div>
+        
+        {[...Array(8)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping"
+            style={{
+              left: 50 + Math.cos(i * Math.PI / 4) * 40,
+              top: 50 + Math.sin(i * Math.PI / 4) * 40,
+              animationDelay: `${i * 50}ms`,
+              animationDuration: '1s'
+            }}
           />
+        ))}
+        
+        <div className="absolute left-1/2 transform -translate-x-1/2 -translate-y-8 text-2xl font-bold text-yellow-400 animate-bounce">
+          +{animation.scoreGained}
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
+  // HAMSTER KOMBAT BOTTOM NAVIGATION
   const BottomNavBar = () => {
     const navItems = [
-      { id: 'play', icon: '🎮', label: 'Play', color: 'orange' },
-      { id: 'tasks', icon: '✅', label: 'Tasks', color: 'blue' },
-      { id: 'leaderboard', icon: '📊', label: 'Board', color: 'purple' },
-      { id: 'bonus', icon: '🎁', label: 'Bonus', color: 'green' },
-      { id: 'account', icon: '👤', label: 'Account', color: 'gray' }
+      { id: 'play', icon: '🎮', label: 'Play' },
+      { id: 'tasks', icon: '✅', label: 'Tasks' },
+      { id: 'leaderboard', icon: '📊', label: 'Board' },
+      { id: 'bonus', icon: '🎁', label: 'Bonus' },
+      { id: 'account', icon: '👤', label: 'Account' }
     ];
 
     const handleTabClick = (tabId) => {
+      triggerHaptic('light');
       setGameState(prev => ({ ...prev, currentTab: tabId }));
-      if (tabId === 'play' && !gameState.gameStarted) {
-        setGameState(prev => ({ ...prev, gameStarted: true }));
-      }
-    };
-
-    const getActiveClass = (color) => {
-      switch(color) {
-        case 'orange': return 'bg-orange-500 shadow-lg scale-105';
-        case 'blue': return 'bg-blue-500 shadow-lg scale-105';
-        case 'purple': return 'bg-purple-500 shadow-lg scale-105';
-        case 'green': return 'bg-green-500 shadow-lg scale-105';
-        default: return 'bg-gray-500 shadow-lg scale-105';
-      }
     };
 
     return (
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 px-4 py-3">
-        <div className="flex justify-around items-center max-w-md mx-auto">
-          {navItems.map((item) => {
-            const isActive = gameState.currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleTabClick(item.id)}
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg min-w-16 transition-all duration-200 ${
-                  isActive ? getActiveClass(item.color) : 'bg-gray-700 hover:bg-gray-600'
-                }`}
-              >
-                <span className="text-xl mb-1">{item.icon}</span>
-                <span className={`text-xs font-medium ${isActive ? 'text-white' : 'text-gray-300'}`}>
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
+      <div className="hk-bottom-nav">
+        <div className="hk-nav-container">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => handleTabClick(item.id)}
+              className={`hk-nav-item hk-haptic-light ${
+                gameState.currentTab === item.id ? 'active' : ''
+              }`}
+            >
+              <span className="hk-nav-icon">{item.icon}</span>
+              <span className="hk-nav-label">{item.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     );
   };
 
+  // SCREEN COMPONENTS (simplified for length)
   const TasksScreen = () => (
-    <div className="min-h-screen bg-white" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
-        <h1 className="text-lg font-semibold">Tasks</h1>
-      </div>
-      <div className="p-4 space-y-6">
-        <div>
-          <h2 className="text-gray-800 text-xl font-bold mb-4">Main Tasks</h2>
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
-              <div className="flex items-center gap-3">
+    <div className="hk-app-container">
+      <div className="hk-main-content">
+        <div className="hk-scrollable-content">
+          <div className="bg-blue-500 text-white p-6 text-center">
+            <h1 className="text-xl font-bold">Tasks</h1>
+          </div>
+          <div className="p-6">
+            <div className="bg-white rounded-2xl p-4 shadow-lg">
+              <div className="flex items-center gap-4">
                 <div className="text-4xl">🐱</div>
-                <div>
-                  <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
-                  <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-sm">🪙 1,000</span>
-                    <span className="text-sm">⏰ +5s</span>
-                  </div>
+                <div className="flex-1">
+                  <div className="font-bold text-gray-800">Join Telegram Channel</div>
+                  <div className="text-yellow-600 text-sm">🪙 1,000 + ⏰ +5s</div>
                 </div>
+                <button className="bg-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold">
+                  Claim
+                </button>
               </div>
-              <button className="bg-gray-300 text-gray-500 px-6 py-2 rounded-full font-semibold">
-                Claim
-              </button>
             </div>
           </div>
         </div>
@@ -899,39 +644,37 @@ function App() {
   );
 
   const LeaderboardScreen = () => (
-    <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
-        <h1 className="text-lg font-semibold">Leaderboard</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
-          <div className="space-y-3">
+    <div className="hk-app-container">
+      <div className="hk-main-content">
+        <div className="hk-scrollable-content">
+          <div className="bg-purple-500 text-white p-6 text-center">
+            <h1 className="text-xl font-bold">Leaderboard</h1>
+          </div>
+          <div className="p-6 space-y-4">
             {leaderboard.length > 0 ? (
               leaderboard.map((player, index) => (
-                <div key={index} className="flex justify-between items-center p-2 rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-3">
+                <div key={index} className="bg-white rounded-2xl p-4 shadow-lg flex justify-between items-center">
+                  <div className="flex items-center gap-4">
                     <span className="text-2xl">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                     </span>
                     <div>
-                      <div className="font-semibold text-gray-800">
+                      <div className="font-bold text-gray-800">
                         {player.username ? `@${player.username}` : `${player.first_name} ${player.last_name || ''}`.trim()}
                       </div>
-                      <div className="text-sm text-gray-500">{player.games_played} games played</div>
+                      <div className="text-sm text-gray-500">{player.games_played} games</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-yellow-600">{player.best_score.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">best score</div>
+                    <div className="text-xs text-gray-500">best</div>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center text-gray-500 py-4">
-                <div className="text-4xl mb-2">🐾</div>
-                <div>No scores yet! Be the first to play!</div>
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🐾</div>
+                <div className="text-gray-500">No scores yet!</div>
               </div>
             )}
           </div>
@@ -942,15 +685,18 @@ function App() {
   );
 
   const BonusScreen = () => (
-    <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-green-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
-        <h1 className="text-lg font-semibold">Bonus Time</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <h3 className="font-semibold text-gray-800 mb-2">Your Bonus Time</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">+25s</div>
+    <div className="hk-app-container">
+      <div className="hk-main-content">
+        <div className="hk-scrollable-content">
+          <div className="bg-green-500 text-white p-6 text-center">
+            <h1 className="text-xl font-bold">Bonus Time</h1>
+          </div>
+          <div className="p-6">
+            <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
+              <h3 className="font-bold text-gray-800 mb-4">Your Bonus Time</h3>
+              <div className="text-4xl font-bold text-green-600">+25s</div>
+            </div>
+          </div>
         </div>
       </div>
       <BottomNavBar />
@@ -958,80 +704,95 @@ function App() {
   );
 
   const AccountScreen = () => (
-    <div className="min-h-screen bg-gray-100" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-      <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
-        <h1 className="text-lg font-semibold">Account</h1>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">🐱</div>
-          <h3 className="font-semibold text-gray-800">
-            {userState.telegramUser ? 
-              (userState.telegramUser.username ? 
-                `@${userState.telegramUser.username}` : 
-                `${userState.telegramUser.first_name} ${userState.telegramUser.last_name || ''}`.trim()
-              ) : 
-              'Loading...'
-            }
-          </h3>
-          
-          {userState.stats && (
-            <div className="mt-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Games Played:</span>
-                <span className="font-semibold">{userState.stats.total_games || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Best Score:</span>
-                <span className="font-semibold text-yellow-600">{userState.stats.best_score || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Average Score:</span>
-                <span className="font-semibold">{userState.stats.average_score || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Matches:</span>
-                <span className="font-semibold">{userState.stats.total_matches || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Best Combo:</span>
-                <span className="font-semibold">{userState.stats.best_combo || 0}</span>
-              </div>
+    <div className="hk-app-container">
+      <div className="hk-main-content">
+        <div className="hk-scrollable-content">
+          <div className="bg-gray-500 text-white p-6 text-center">
+            <h1 className="text-xl font-bold">Account</h1>
+          </div>
+          <div className="p-6">
+            <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
+              <div className="text-6xl mb-4">🐱</div>
+              <h3 className="font-bold text-gray-800 mb-6">
+                {userState.telegramUser ? 
+                  (userState.telegramUser.username ? 
+                    `@${userState.telegramUser.username}` : 
+                    `${userState.telegramUser.first_name} ${userState.telegramUser.last_name || ''}`.trim()
+                  ) : 
+                  'Loading...'
+                }
+              </h3>
+              
+              {userState.stats && (
+                <div className="space-y-3">
+                  {[
+                    ['Games Played', userState.stats.total_games || 0],
+                    ['Best Score', userState.stats.best_score || 0],
+                    ['Average Score', userState.stats.average_score || 0],
+                    ['Total Matches', userState.stats.total_matches || 0],
+                    ['Best Combo', userState.stats.best_combo || 0]
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between items-center">
+                      <span className="text-gray-600">{label}:</span>
+                      <span className="font-bold">{typeof value === 'number' && label.includes('Score') ? value.toLocaleString() : value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
       <BottomNavBar />
     </div>
   );
 
+  // MAIN RENDER LOGIC
   if (gameState.currentTab === 'tasks') return <TasksScreen />;
   if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
   if (gameState.currentTab === 'bonus') return <BonusScreen />;
   if (gameState.currentTab === 'account') return <AccountScreen />;
 
+  // WELCOME SCREEN
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
-      <div className="tg-app-container">
-        {/* Welcome screen - Telegram style layout */}
-        <div className="tg-welcome-screen" data-welcome-container>
-          <div className="tg-welcome-content">
-            <div className="tg-welcome-paws">🐾</div>
-            <h1 className="tg-welcome-title">MEOWCHI</h1>
-            <h1 className="tg-welcome-title">CHAOS</h1>
+      <div className="hk-app-container">
+        <LoadingOverlay />
+        
+        <div className="hk-welcome-screen">
+          {/* Floating background paws */}
+          <div className="hk-welcome-floating-paws">
+            {pawPositions.map((paw) => (
+              <div
+                key={paw.id}
+                className="hk-floating-paw"
+                style={{
+                  left: `${paw.x}%`,
+                  top: `${paw.y}%`,
+                  animationDelay: `${paw.delay}ms`
+                }}
+              >
+                🐾
+              </div>
+            ))}
+          </div>
+
+          {/* Main content - slides up from bottom */}
+          <div className="hk-welcome-content">
+            <h1 className="hk-title">MEOWCHI</h1>
+            <h1 className="hk-title">CHAOS</h1>
             
-            <div className="tg-welcome-subtitle">
-              <p>Drop cats. Cause mayhem.</p>
-              <p>Match 3 before they scream.</p>
-            </div>
+            <p className="hk-subtitle">
+              Drop cats. Cause mayhem.<br/>
+              Match 3 before they scream.
+            </p>
             
-            <div className="tg-emoji-section">
-              <div className="tg-emoji-row">
+            <div className="hk-emoji-showcase">
+              <div className="hk-emoji-row">
                 {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
                   <span 
                     key={index}
-                    className={`tg-welcome-emoji ${
+                    className={`hk-emoji-item hk-haptic-light ${
                       spinningEmojis[index] ? 'spinning' : ''
                     }`}
                     onClick={() => handleEmojiClick(index)}
@@ -1040,39 +801,46 @@ function App() {
                   </span>
                 ))}
               </div>
-              <p className="tg-emoji-text">5 ridiculous cats to wrangle.</p>
+              <p className="text-sm font-semibold text-gray-600">5 ridiculous cats to wrangle</p>
             </div>
             
-            <div className="tg-game-info">
-              <div>⏱ 60 seconds of panic</div>
-              <div>🐾 +1000 purr-points</div>
-              <div>🔥 Combos = Catnado</div>
+            <div className="hk-game-stats">
+              <div className="hk-stat">
+                <div className="hk-stat-icon">⏱</div>
+                <div className="hk-stat-text">60s panic</div>
+              </div>
+              <div className="hk-stat">
+                <div className="hk-stat-icon">🐾</div>
+                <div className="hk-stat-text">+1000 points</div>
+              </div>
+              <div className="hk-stat">
+                <div className="hk-stat-icon">🔥</div>
+                <div className="hk-stat-text">Combos = Catnado</div>
+              </div>
             </div>
 
             {userState.bestScore && (
-              <div className="tg-best-score">
-                <div className="tg-best-score-label">Your Best Score</div>
-                <div className="tg-best-score-value">{userState.bestScore.score.toLocaleString()}</div>
+              <div className="hk-best-score">
+                <div className="hk-best-score-label">Your Best Score</div>
+                <div className="hk-best-score-value">{userState.bestScore.score.toLocaleString()}</div>
               </div>
             )}
             
             <button
               onClick={startGame}
-              className="tg-start-button"
-              data-welcome-button
+              className="hk-start-button hk-haptic-medium"
             >
               ▶️ LET'S GOOO!
             </button>
           </div>
         </div>
         
-        {/* Loading overlay */}
-        <LoadingOverlay />
         <BottomNavBar />
       </div>
     );
   }
 
+  // GAME OVER SCREEN
   if (!gameState.isActive && gameState.gameStarted) {
     let flavorText = "🐾 That's tragic. Even my paw is better at this.";
     if (gameState.score > 5000) {
@@ -1084,58 +852,58 @@ function App() {
     const isNewBest = userState.bestScore ? gameState.score > userState.bestScore.score : true;
     
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4" 
-           style={{backgroundColor: '#FFD700', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
-          
-          {isNewBest && (
-            <div className="bg-black bg-opacity-10 rounded-lg p-4 mb-4">
-              <div className="text-xl">🏆</div>
-              <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
-            </div>
-          )}
-          
-          <div className="text-8xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
-          <p className="text-black text-xl font-bold mb-4">Final Score</p>
-          
-          <div className="bg-black bg-opacity-10 rounded-lg p-4 mb-4 text-sm">
-            <div className="flex justify-between">
-              <span>Matches:</span>
-              <span className="font-bold">{gameState.matchesMade}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Best Combo:</span>
-              <span className="font-bold">{gameState.maxCombo}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Time Played:</span>
-              <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
-            </div>
-          </div>
-          
-          <p className="text-lg text-black font-bold mb-4">
-            😿 "Meowchi is disappointed but still cute."
-          </p>
-          <p className="text-base text-black font-bold mb-8">
-            {flavorText}
-          </p>
-          
-          <div className="space-y-4">
-            <button
-              onClick={startGame}
-              className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
-            >
-              😺 PLAY AGAIN
-            </button>
+      <div className="hk-app-container">
+        <div className="hk-welcome-screen">
+          <div className="hk-welcome-content">
+            <h2 className="text-4xl font-black text-black mb-6">🎉 GAME OVER!</h2>
             
-            <button
-              onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
-              className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
-              style={{backgroundColor: '#FFD700'}}
-            >
-              📊 LEADERBOARD
-            </button>
+            {isNewBest && (
+              <div className="bg-black bg-opacity-10 rounded-2xl p-4 mb-6">
+                <div className="text-3xl">🏆</div>
+                <div className="text-lg font-bold text-black">NEW BEST SCORE!</div>
+              </div>
+            )}
+            
+            <div className="text-6xl font-black text-black mb-4">{gameState.score.toLocaleString()}</div>
+            <p className="text-black text-xl font-bold mb-6">Final Score</p>
+            
+            <div className="bg-black bg-opacity-10 rounded-2xl p-4 mb-6 space-y-2">
+              <div className="flex justify-between">
+                <span>Matches:</span>
+                <span className="font-bold">{gameState.matchesMade}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Best Combo:</span>
+                <span className="font-bold">{gameState.maxCombo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time Played:</span>
+                <span className="font-bold">{INITIAL_TIME - gameState.timeLeft}s</span>
+              </div>
+            </div>
+            
+            <p className="text-lg text-black font-bold mb-4">
+              😿 "Meowchi is disappointed but still cute."
+            </p>
+            <p className="text-base text-black font-bold mb-8">
+              {flavorText}
+            </p>
+            
+            <div className="space-y-3">
+              <button
+                onClick={startGame}
+                className="hk-start-button hk-haptic-medium"
+              >
+                😺 PLAY AGAIN
+              </button>
+              
+              <button
+                onClick={() => setGameState(prev => ({ ...prev, currentTab: 'leaderboard' }))}
+                className="w-full bg-transparent border-2 border-black text-black font-bold py-4 px-6 rounded-2xl hk-haptic-light"
+              >
+                📊 LEADERBOARD
+              </button>
+            </div>
           </div>
         </div>
         <BottomNavBar />
@@ -1143,15 +911,18 @@ function App() {
     );
   }
 
+  // MAIN GAME SCREEN
   return (
-    <div className="tg-app-container">
+    <div className="hk-app-container">
+      {/* Explosion animations */}
       {animations.map((animation) => (
         <ExplosionAnimation key={animation.id} animation={animation} />
       ))}
 
+      {/* Dragged cat */}
       {dragState.isDragging && dragState.draggedCat && (
         <div
-          className="tg-dragged-cat"
+          className="hk-dragged-cat"
           style={{
             left: dragState.dragPosition.x,
             top: dragState.dragPosition.y,
@@ -1161,80 +932,70 @@ function App() {
         </div>
       )}
 
-      <div className="tg-game-header">
-        <h1 className="tg-tagline">{taglines[currentTagline]}</h1>
-      </div>
-
-      <div className="tg-score-bar">
-        <div className="tg-timer">
-          <span>⏱</span>
-          <span className={gameState.timeLeft <= 10 ? 'timer-urgent' : ''}>{gameState.timeLeft}s</span>
+      <div className="hk-game-screen">
+        {/* Header with tagline */}
+        <div className="hk-game-header">
+          <h1 className="hk-tagline">{taglines[currentTagline]}</h1>
         </div>
-        <div className="tg-score">
-          <span>🐾</span>
-          <span>{gameState.score.toLocaleString()}</span>
-        </div>
-      </div>
 
-      <div className="tg-next-section">
-        <div className="tg-next-content">
-          <span>NEXT:</span>
-          <div className="tg-next-cat">
-            <span>{gameState.nextCat}</span>
+        {/* Score bar */}
+        <div className="hk-score-bar">
+          <div className={`hk-timer ${gameState.timeLeft <= 10 ? 'urgent' : ''}`}>
+            <span>⏱</span>
+            <span>{gameState.timeLeft}s</span>
+          </div>
+          <div className="hk-score">
+            <span>🐾</span>
+            <span>{gameState.score.toLocaleString()}</span>
           </div>
         </div>
-      </div>
 
-      <div className="tg-game-board">
-        <div className="tg-columns-container" ref={boardRef}>
-          <GameColumn columnId="left" cats={gameState.columns.left} />
-          <GameColumn columnId="center" cats={gameState.columns.center} />
-          <GameColumn columnId="right" cats={gameState.columns.right} />
+        {/* Next cat section */}
+        <div className="hk-next-section">
+          <div className="hk-next-content">
+            <span>NEXT:</span>
+            <div className="hk-next-cat">
+              <span>{gameState.nextCat}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="tg-controls">
-        <div className="tg-drop-buttons">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`tg-drop-button ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'enabled' : 'disabled'
-            }`}
-          >
-            <span>🔽</span>
-            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`tg-drop-button ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                ? 'enabled' : 'disabled'
-            }`}
-          >
-            <span>🔽</span>
-            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-            className={`tg-drop-button ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                ? 'enabled' : 'disabled'
-            }`}
-          >
-            <span>🔽</span>
-            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
+        {/* Game board */}
+        <div className="hk-game-board">
+          <div className="hk-columns-container" ref={boardRef}>
+            <GameColumn columnId="left" cats={gameState.columns.left} />
+            <GameColumn columnId="center" cats={gameState.columns.center} />
+            <GameColumn columnId="right" cats={gameState.columns.right} />
+          </div>
         </div>
-        
-        <p className="tg-tip">
-          💡 Tip: Drag top cats between columns or use drop buttons!
-        </p>
+
+        {/* Controls */}
+        <div className="hk-game-controls">
+          <div className="hk-drop-buttons">
+            {['left', 'center', 'right'].map((column) => {
+              const isFull = gameState.columns[column].length >= 6;
+              const isEnabled = gameState.isActive && !dragState.isDragging && !isFull;
+              
+              return (
+                <button
+                  key={column}
+                  onClick={() => dropNewCat(column)}
+                  disabled={!isEnabled}
+                  className={`hk-drop-button hk-haptic-light ${
+                    isEnabled ? 'enabled' : 'disabled'
+                  }`}
+                >
+                  <span>🔽</span>
+                  <span>{isFull ? 'FULL' : 'Drop'}</span>
+                </button>
+              );
+            })}
+          </div>
+          
+          <p className="hk-tip">
+            💡 Drag cats between columns or use drop buttons!
+          </p>
+        </div>
       </div>
 
       <BottomNavBar />
@@ -1242,4 +1003,243 @@ function App() {
   );
 }
 
-export default App;
+export default App;import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
+const INITIAL_TIME = 60;
+const MATCH_SCORE = 1000;
+const COMBO_BONUS = 500;
+
+// API helper functions
+const API_BASE = window.location.origin;
+
+const apiCall = async (endpoint, options = {}) => {
+  try {
+    const response = await fetch(`${API_BASE}/api${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('API call failed:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+function App() {
+  const [gameState, setGameState] = useState({
+    timeLeft: INITIAL_TIME,
+    score: 0,
+    columns: { left: [], center: [], right: [] },
+    isActive: false,
+    consecutiveMatches: 0,
+    gameStarted: false,
+    nextCat: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)],
+    currentTab: 'play',
+    matchesMade: 0,
+    maxCombo: 0
+  });
+
+  const [userState, setUserState] = useState({
+    telegramUser: null,
+    bestScore: null,
+    stats: null,
+    isLoading: true
+  });
+
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    draggedCat: null,
+    fromColumn: null,
+    dragPosition: { x: 0, y: 0 },
+    highlightedColumn: null,
+    startPosition: { x: 0, y: 0 }
+  });
+
+  const [animations, setAnimations] = useState([]);
+  const [currentTagline, setCurrentTagline] = useState(0);
+  const [spinningEmojis, setSpinningEmojis] = useState({});
+  const [isLayoutReady, setIsLayoutReady] = useState(false);
+  
+  // HAMSTER KOMBAT VIEWPORT SYSTEM
+  const [telegramViewport, setTelegramViewport] = useState({
+    height: window.innerHeight,
+    stableHeight: window.innerHeight,
+    isExpanded: false
+  });
+
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [pawPositions, setPawPositions] = useState([]);
+  
+  const taglines = [
+    "😼 Chaos Mode Activated",
+    "🐾 Don't Blink, Human", 
+    "🔥 Catnado Incoming"
+  ];
+  
+  const gameTimerRef = useRef(null);
+  const boardRef = useRef(null);
+  const viewportUpdateTimeoutRef = useRef(null);
+
+  // HAMSTER KOMBAT VIEWPORT MANAGEMENT
+  const updateViewportVariables = useCallback((height, stableHeight) => {
+    const root = document.documentElement;
+    root.style.setProperty('--tg-viewport-height', `${height}px`);
+    root.style.setProperty('--tg-viewport-stable-height', `${stableHeight}px`);
+    
+    // Dynamic scaling based on viewport
+    const baseScale = Math.min(Math.max(height / 667, 0.85), 1.15);
+    root.style.setProperty('--base-scale', baseScale.toString());
+  }, []);
+
+  // SMOOTH VIEWPORT TRANSITIONS
+  const handleViewportChange = useCallback((newHeight, newStableHeight) => {
+    // Clear existing timeout
+    if (viewportUpdateTimeoutRef.current) {
+      clearTimeout(viewportUpdateTimeoutRef.current);
+    }
+
+    // Immediate update for responsive scaling
+    updateViewportVariables(newHeight, newStableHeight);
+    
+    // Smooth state update
+    setTelegramViewport(prev => ({
+      ...prev,
+      height: newHeight,
+      stableHeight: newStableHeight,
+      isExpanded: Math.abs(newHeight - newStableHeight) < 50
+    }));
+
+    // Debounced layout recalculation
+    viewportUpdateTimeoutRef.current = setTimeout(() => {
+      // Force layout recalculation for game board
+      if (boardRef.current) {
+        boardRef.current.style.height = 'auto';
+        requestAnimationFrame(() => {
+          if (boardRef.current) {
+            boardRef.current.style.height = '';
+          }
+        });
+      }
+    }, 150);
+  }, [updateViewportVariables]);
+
+  // TELEGRAM WEBAPP INITIALIZATION
+  useEffect(() => {
+    const initializeTelegramWebApp = () => {
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp;
+        
+        // Essential Telegram WebApp setup
+        tg.ready();
+        tg.expand();
+        tg.enableClosingConfirmation();
+        
+        // Set theme colors
+        if (tg.themeParams?.bg_color) {
+          document.body.style.backgroundColor = tg.themeParams.bg_color;
+        }
+
+        // HAMSTER KOMBAT VIEWPORT HANDLING
+        const handleTelegramViewportChanged = () => {
+          const newHeight = tg.viewportHeight || window.innerHeight;
+          const newStableHeight = tg.viewportStableHeight || window.innerHeight;
+          handleViewportChange(newHeight, newStableHeight);
+        };
+
+        // Initial viewport setup
+        handleTelegramViewportChanged();
+        
+        // Listen for viewport changes
+        tg.onEvent('viewportChanged', handleTelegramViewportChanged);
+
+        // Initialize user
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+          setUserState(prev => ({ ...prev, telegramUser: user }));
+          initializeUser(user);
+        } else {
+          // Fallback for testing
+          const testUser = {
+            id: Date.now(),
+            username: 'testuser',
+            first_name: 'Test',
+            last_name: 'User'
+          };
+          setUserState(prev => ({ ...prev, telegramUser: testUser }));
+          initializeUser(testUser);
+        }
+
+        return () => {
+          tg.offEvent('viewportChanged', handleTelegramViewportChanged);
+        };
+      } else {
+        // Development fallback
+        handleViewportChange(window.innerHeight, window.innerHeight);
+        
+        const testUser = {
+          id: Date.now(),
+          username: 'testuser',
+          first_name: 'Test',
+          last_name: 'User'
+        };
+        setUserState(prev => ({ ...prev, telegramUser: testUser }));
+        initializeUser(testUser);
+      }
+    };
+
+    // Handle window resize for responsive scaling
+    const handleWindowResize = () => {
+      const height = window.innerHeight;
+      const width = window.innerWidth;
+      
+      // Update CSS variables
+      updateViewportVariables(height, height);
+      
+      // Update state
+      setTelegramViewport(prev => ({
+        ...prev,
+        height,
+        stableHeight: height
+      }));
+    };
+
+    const cleanup = initializeTelegramWebApp();
+    window.addEventListener('resize', handleWindowResize);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(handleWindowResize, 300);
+    });
+
+    return () => {
+      cleanup?.();
+      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('orientationchange', handleWindowResize);
+      if (viewportUpdateTimeoutRef.current) {
+        clearTimeout(viewportUpdateTimeoutRef.current);
+      }
+    };
+  }, [handleViewportChange, updateViewportVariables]);
+
+  // ENHANCED HAPTIC FEEDBACK
+  const triggerHaptic = useCallback((type = 'light') => {
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      const tg = window.Telegram.WebApp;
+      switch (type) {
+        case 'light':
+          tg.HapticFeedback.impactOccurred('light');
+          break;
+        case 'medium':
+          tg.HapticFeedback.impactOccurred('medium');
+          break;
+        case 'heavy':
+          tg.HapticFeedback.impactOccurred('heavy');
+          break;
+        case 'success':
+          tg.HapticFeedback.notificationOccurred('success');
+          break;
+        case
