@@ -1242,4 +1242,22 @@ function App() {
         case 'success':
           tg.HapticFeedback.notificationOccurred('success');
           break;
-        case
+        case 'error':
+          tg.HapticFeedback.notificationOccurred('error');
+          break;
+        default:
+          tg.HapticFeedback.impactOccurred('light');
+          break;
+      }
+    } else if (navigator.vibrate) {
+      // Fallback vibration
+      const patterns = {
+        light: [10],
+        medium: [20],
+        heavy: [50],
+        success: [10, 50, 10],
+        error: [50, 100, 50]
+      };
+      navigator.vibrate(patterns[type] || patterns.light);
+    }
+  }, []);
