@@ -219,29 +219,31 @@ function App() {
     }
   }, [gameState.currentTab]);
 
-  // Auto-spin emojis on welcome screen load
+  // Auto-spin emojis on welcome screen load - AFTER loading screen disappears
   useEffect(() => {
-    if (!gameState.gameStarted && gameState.currentTab === 'play') {
-      // Trigger auto-spin for all emojis on welcome screen load
-      const emojiIndices = [0, 1, 2, 3, 4];
-      emojiIndices.forEach((index, i) => {
-        setTimeout(() => {
-          setSpinningEmojis(prev => ({
-            ...prev,
-            [index]: true
-          }));
-          
-          // Remove spinning state after animation completes
+    if (!gameState.gameStarted && gameState.currentTab === 'play' && isLayoutReady) {
+      // Only trigger auto-spin AFTER welcome screen is visible
+      setTimeout(() => {
+        const emojiIndices = [0, 1, 2, 3, 4];
+        emojiIndices.forEach((index, i) => {
           setTimeout(() => {
             setSpinningEmojis(prev => ({
               ...prev,
-              [index]: false
+              [index]: true
             }));
-          }, 1000);
-        }, i * 100); // Staggered delay: 0ms, 100ms, 200ms, 300ms, 400ms
-      });
+            
+            // Remove spinning state after animation completes
+            setTimeout(() => {
+              setSpinningEmojis(prev => ({
+                ...prev,
+                [index]: false
+              }));
+            }, 1000);
+          }, i * 100); // Staggered delay: 0ms, 100ms, 200ms, 300ms, 400ms
+        });
+      }, 500); // Wait 500ms after welcome screen appears
     }
-  }, [gameState.gameStarted, gameState.currentTab]);
+  }, [gameState.gameStarted, gameState.currentTab, isLayoutReady]);
 
   // Bulletproof layout calculation and loading management
   useEffect(() => {
@@ -466,8 +468,9 @@ function App() {
     }
   }, [gameState.gameStarted, gameState.currentTab, userState.bestScore]);
 
-  // Handle emoji spinning
+  // Handle emoji spinning - more responsive
   const handleEmojiClick = (emojiIndex) => {
+    // Immediately start spinning
     setSpinningEmojis(prev => ({
       ...prev,
       [emojiIndex]: true
@@ -480,6 +483,11 @@ function App() {
         [emojiIndex]: false
       }));
     }, 1000);
+    
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
   };
 
   const generateCatId = () => `cat_${Date.now()}_${Math.random()}`;
@@ -761,21 +769,29 @@ function App() {
 
     // Zzz animation effect - slow fade in/out
     useEffect(() => {
-      const zzzInterval = setInterval(() => {
-        setZzzVisible(prev => !prev);
-      }, 2000); // Slower: 2 seconds for each fade cycle
+      if (!isLayoutReady) { // Only animate while loading
+        const zzzInterval = setInterval(() => {
+          setZzzVisible(prev => !prev);
+        }, 2000); // 2 seconds for each fade cycle
 
-      return () => clearInterval(zzzInterval);
-    }, []);
+        return () => clearInterval(zzzInterval);
+      }
+    }, [isLayoutReady]);
 
     // Progressive dots animation - 1, 2, 3, repeat
     useEffect(() => {
-      const dotsInterval = setInterval(() => {
-        setActiveDots(prev => prev === 3 ? 1 : prev + 1);
-      }, 800); // Change every 800ms
+      if (!isLayoutReady) { // Only animate while loading
+        const dotsInterval = setInterval(() => {
+          setActiveDots(prev => {
+            const next = prev >= 3 ? 1 : prev + 1;
+            console.log(`Dots: ${prev} -> ${next}`); // Debug log
+            return next;
+          });
+        }, 800); // Change every 800ms
 
-      return () => clearInterval(dotsInterval);
-    }, []);
+        return () => clearInterval(dotsInterval);
+      }
+    }, [isLayoutReady]);
 
     return (
       <div 
@@ -808,13 +824,16 @@ function App() {
               {/* Sleeping cat */}
               <div className="text-6xl mb-4">😽</div>
               
-              {/* Floating Zzz animation - positioned above cat */}
+              {/* Floating Zzz animation - FIXED positioning and visibility */}
               <div 
-                className={`absolute -top-8 left-1/2 transform -translate-x-1/2 text-3xl text-blue-300 transition-all duration-1000 ${
-                  zzzVisible ? 'opacity-100 -translate-y-2' : 'opacity-0 translate-y-0'
+                className={`absolute left-1/2 transform -translate-x-1/2 text-3xl text-blue-300 transition-all duration-1000 ${
+                  zzzVisible ? 'opacity-100' : 'opacity-0'
                 }`}
                 style={{ 
-                  textShadow: '0 0 10px rgba(147, 197, 253, 0.5)' // Soft glow effect
+                  top: '-4rem', // Fixed positioning above cat
+                  textShadow: '0 0 10px rgba(147, 197, 253, 0.5)',
+                  zIndex: 10, // Ensure it's above other elements
+                  transform: zzzVisible ? 'translate(-50%, -8px)' : 'translate(-50%, 0px)'
                 }}
               >
                 Zzz
@@ -833,14 +852,14 @@ function App() {
               ></div>
             </div>
             
-            {/* Interactive loading dots - progressive animation */}
-            <div className="flex justify-center space-x-1">
+            {/* Interactive loading dots - FIXED progressive animation */}
+            <div className="flex justify-center space-x-2">
               {[1, 2, 3].map((dotNumber) => (
                 <div 
                   key={dotNumber}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
                     dotNumber <= activeDots 
-                      ? 'bg-yellow-400 scale-110' 
+                      ? 'bg-yellow-400 scale-125' 
                       : 'bg-gray-600 scale-100'
                   }`}
                 />
