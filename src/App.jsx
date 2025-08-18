@@ -442,6 +442,7 @@ export default function App() {
     </div>
   </>
 );
+}
 
 // ---------- Game View (Match-3) ----------
 function GameView({ onExit, onBack, onCoins }) {
