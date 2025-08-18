@@ -525,14 +525,28 @@ function removeAllMatches(g){
 }
 
 function shuffleToSolvable(g){
-  const flat = []; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) flat.push(g[r][c]);
-  let attempts=0; while(attempts<100){
-    // Fisher-Yates
-    for(let i=flat.length-1;i>0;i--){ const j=(Math.random()* (i+1))|0; [flat[i],flat[j]]=[flat[j],flat[i]]; }
+  const flat = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
+  }
+
+  let attempts = 0;
+  while (attempts < 100) {
+    // Fisher-Yates shuffle
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+
     const t = makeGrid(ROWS, COLS);
-    let idx=0; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS)c++) t[r][c]=flat[idx++];
+    let idx = 0;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
+    }
+
     removeAllMatches(t);
-    if (hasAnyMove(t)) return t; attempts++;
+    if (hasAnyMove(t)) return t;
+    attempts++;
   }
   return initSolvableGrid();
 }
