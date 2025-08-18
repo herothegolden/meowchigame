@@ -7,3 +7,9 @@ button { touch-action: manipulation; }
 
 /* Prevent long-press selection on mobile */
 body { -webkit-user-select: none; user-select: none; }
+
+/* Optional: smooth font rendering and background fallback */
+html, body { background: #0a0f23; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* Default var for iOS 100vh fix (overwritten in App.jsx) */
+:root { --vh: 1vh; }
