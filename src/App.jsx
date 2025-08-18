@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const CAT_EMOJIS = ['ðŸ˜º', 'ðŸ˜»', 'ðŸ˜¼', 'ðŸˆ', 'ðŸˆâ€â¬›'];
+const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
 const MATCH_SCORE = 1000;
 const COMBO_BONUS = 500;
@@ -29,14 +29,67 @@ function App() {
   const [animations, setAnimations] = useState([]);
   const [currentTagline, setCurrentTagline] = useState(0);
   const taglines = [
-    "ðŸ˜¼ Chaos Mode Activated",
-    "ðŸ¾ Don't Blink, Human", 
-    "ðŸ"¥ Catnado Incoming"
+    "😼 Chaos Mode Activated",
+    "🐾 Don't Blink, Human", 
+    "🔥 Catnado Incoming"
   ];
   
   const gameTimerRef = useRef(null);
   const boardRef = useRef(null);
   const dragThreshold = 15;
+
+  // Fixed canvas scaling with safety checks
+  useEffect(() => {
+    const updateScale = () => {
+      const canvas = document.getElementById('game-canvas');
+      if (!canvas) return;
+      
+      const canvasWidth = 393;
+      const canvasHeight = 852;
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Safety checks for window dimensions
+      if (windowWidth <= 0 || windowHeight <= 0) return;
+      
+      const scaleX = windowWidth / canvasWidth;
+      const scaleY = windowHeight / canvasHeight;
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Safety check for scale value
+      if (scale <= 0 || !isFinite(scale)) return;
+      
+      canvas.style.transform = `scale(${scale})`;
+      canvas.style.transformOrigin = 'top left';
+      
+      // Center the canvas
+      const scaledWidth = canvasWidth * scale;
+      const scaledHeight = canvasHeight * scale;
+      const offsetX = Math.max(0, (windowWidth - scaledWidth) / 2);
+      const offsetY = Math.max(0, (windowHeight - scaledHeight) / 2);
+      
+      canvas.style.left = `${offsetX}px`;
+      canvas.style.top = `${offsetY}px`;
+    };
+    
+    // Initial update with delay to ensure DOM is ready
+    const timer = setTimeout(updateScale, 100);
+    
+    const handleResize = () => {
+      // Debounce resize events
+      clearTimeout(timer);
+      setTimeout(updateScale, 50);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, [gameState.currentTab]); // Re-run when tab changes
 
   // Initialize Telegram Web App
   useEffect(() => {
@@ -419,11 +472,11 @@ function App() {
 
   const BottomNavBar = () => {
     const navItems = [
-      { id: 'play', icon: 'ðŸŽ®', label: 'Play', color: 'orange' },
-      { id: 'tasks', icon: 'âœ…', label: 'Tasks', color: 'blue' },
-      { id: 'leaderboard', icon: 'ðŸ"Š', label: 'Board', color: 'purple' },
-      { id: 'bonus', icon: 'ðŸŽ', label: 'Bonus', color: 'green' },
-      { id: 'account', icon: 'ðŸ'¤', label: 'Account', color: 'gray' }
+      { id: 'play', icon: '🎮', label: 'Play', color: 'orange' },
+      { id: 'tasks', icon: '✅', label: 'Tasks', color: 'blue' },
+      { id: 'leaderboard', icon: '📊', label: 'Board', color: 'purple' },
+      { id: 'bonus', icon: '🎁', label: 'Bonus', color: 'green' },
+      { id: 'account', icon: '👤', label: 'Account', color: 'gray' }
     ];
 
     const handleTabClick = (tabId) => {
@@ -469,9 +522,9 @@ function App() {
   };
 
   const TasksScreen = () => (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white pb-20" style={{ height: '852px' }}>
       <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">âœ…</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">✅</div>
         <h1 className="text-lg font-semibold">Tasks</h1>
       </div>
       <div className="p-4 space-y-6">
@@ -480,12 +533,12 @@ function App() {
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-2xl p-4 flex items-center justify-between border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="text-4xl">ðŸ±</div>
+                <div className="text-4xl">🐱</div>
                 <div>
                   <div className="text-gray-800 font-semibold">Join Our Telegram Channel</div>
                   <div className="flex items-center gap-2 text-yellow-600">
-                    <span className="text-sm">ðŸª™ 1,000</span>
-                    <span className="text-sm">â° +5s</span>
+                    <span className="text-sm">🪙 1,000</span>
+                    <span className="text-sm">⏰ +5s</span>
                   </div>
                 </div>
               </div>
@@ -501,17 +554,17 @@ function App() {
   );
 
   const LeaderboardScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="min-h-screen bg-gray-100 pb-20" style={{ height: '852px' }}>
       <div className="bg-purple-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸ"Š</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">📊</div>
         <h1 className="text-lg font-semibold">Leaderboard</h1>
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h3 className="font-semibold text-gray-800 mb-3">ðŸ† Top Players</h3>
+          <h3 className="font-semibold text-gray-800 mb-3">🏆 Top Players</h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span>ðŸ¥‡ @player1</span>
+              <span>🥇 @player1</span>
               <span className="font-bold text-yellow-600">15,000 pts</span>
             </div>
           </div>
@@ -522,9 +575,9 @@ function App() {
   );
 
   const BonusScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="min-h-screen bg-gray-100 pb-20" style={{ height: '852px' }}>
       <div className="bg-green-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸŽ</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">🎁</div>
         <h1 className="text-lg font-semibold">Bonus Time</h1>
       </div>
       <div className="p-4 space-y-3">
@@ -538,14 +591,14 @@ function App() {
   );
 
   const AccountScreen = () => (
-    <div className="min-h-screen bg-gray-100 pb-20">
+    <div className="min-h-screen bg-gray-100 pb-20" style={{ height: '852px' }}>
       <div className="bg-gray-500 text-white p-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">ðŸ'¤</div>
+        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">👤</div>
         <h1 className="text-lg font-semibold">Account</h1>
       </div>
       <div className="p-4 space-y-3">
         <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-          <div className="text-4xl mb-2">ðŸ±</div>
+          <div className="text-4xl mb-2">🐱</div>
           <h3 className="font-semibold text-gray-800">@username</h3>
         </div>
       </div>
@@ -553,192 +606,329 @@ function App() {
     </div>
   );
 
-  if (gameState.currentTab === 'tasks') return <TasksScreen />;
-  if (gameState.currentTab === 'leaderboard') return <LeaderboardScreen />;
-  if (gameState.currentTab === 'bonus') return <BonusScreen />;
-  if (gameState.currentTab === 'account') return <AccountScreen />;
+  if (gameState.currentTab === 'tasks') return (
+    <div style={{ 
+      position: 'fixed', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      backgroundColor: '#000'
+    }}>
+      <div 
+        id="game-canvas"
+        style={{ 
+          position: 'absolute',
+          width: '393px', 
+          height: '852px',
+          overflow: 'hidden'
+        }}
+      >
+        <TasksScreen />
+      </div>
+    </div>
+  );
+  
+  if (gameState.currentTab === 'leaderboard') return (
+    <div style={{ 
+      position: 'fixed', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      backgroundColor: '#000'
+    }}>
+      <div 
+        id="game-canvas"
+        style={{ 
+          position: 'absolute',
+          width: '393px', 
+          height: '852px',
+          overflow: 'hidden'
+        }}
+      >
+        <LeaderboardScreen />
+      </div>
+    </div>
+  );
+  
+  if (gameState.currentTab === 'bonus') return (
+    <div style={{ 
+      position: 'fixed', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      backgroundColor: '#000'
+    }}>
+      <div 
+        id="game-canvas"
+        style={{ 
+          position: 'absolute',
+          width: '393px', 
+          height: '852px',
+          overflow: 'hidden'
+        }}
+      >
+        <BonusScreen />
+      </div>
+    </div>
+  );
+  
+  if (gameState.currentTab === 'account') return (
+    <div style={{ 
+      position: 'fixed', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      backgroundColor: '#000'
+    }}>
+      <div 
+        id="game-canvas"
+        style={{ 
+          position: 'absolute',
+          width: '393px', 
+          height: '852px',
+          overflow: 'hidden'
+        }}
+      >
+        <AccountScreen />
+      </div>
+    </div>
+  );
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h1 className="text-6xl font-black text-black mb-4">ðŸ¾ MEOWCHI CHAOS</h1>
-          <p className="text-black text-xl font-bold mb-8">
-            Drop cats. Cause mayhem. Match 3 before they scream.
-          </p>
-          
-          <div className="mb-8">
-            <div className="flex justify-center gap-3 mb-4">
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>ðŸ˜º</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>ðŸ˜¹</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>ðŸˆ</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>ðŸ˜»</span>
-              <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>ðŸˆâ€â¬›</span>
+      <div style={{ 
+        position: 'fixed', 
+        width: '100vw', 
+        height: '100vh', 
+        overflow: 'hidden', 
+        backgroundColor: '#000'
+      }}>
+        <div 
+          id="game-canvas"
+          style={{ 
+            position: 'absolute',
+            width: '393px', 
+            height: '852px',
+            overflow: 'hidden'
+          }}
+        >
+          <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700', height: '852px'}}>
+            <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+              <h1 className="text-6xl font-black text-black mb-4">🐾 MEOWCHI CHAOS</h1>
+              <p className="text-black text-xl font-bold mb-8">
+                Drop cats. Cause mayhem. Match 3 before they scream.
+              </p>
+              
+              <div className="mb-8">
+                <div className="flex justify-center gap-3 mb-4">
+                  <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out'}}>😺</span>
+                  <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.1s'}}>😹</span>
+                  <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.2s'}}>🐈</span>
+                  <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.3s'}}>😻</span>
+                  <span className="text-5xl animate-spin" style={{animation: 'spin 1s ease-in-out', animationDelay: '0.4s'}}>🐈‍⬛</span>
+                </div>
+                <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
+              </div>
+              
+              <div className="mb-8 text-lg text-black font-bold leading-relaxed">
+                <div>⏱ 60 seconds of panic</div>
+                <div>🐾 +1000 purr-points</div>
+                <div>🔥 Combos = Catnado</div>
+              </div>
+              
+              <button
+                onClick={startGame}
+                className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
+              >
+                ▶️ LET'S GOOO!
+              </button>
             </div>
-            <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
+            <BottomNavBar />
           </div>
-          
-          <div className="mb-8 text-lg text-black font-bold leading-relaxed">
-            <div>â± 60 seconds of panic</div>
-            <div>ðŸ¾ +1000 purr-points</div>
-            <div>ðŸ"¥ Combos = Catnado</div>
-          </div>
-          
-          <button
-            onClick={startGame}
-            className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl"
-          >
-            â–¶ï¸ LET'S GOOO!
-          </button>
         </div>
-        <BottomNavBar />
       </div>
     );
   }
 
   if (!gameState.isActive && gameState.gameStarted) {
-    let flavorText = "ðŸ¾ That's tragic. Even my paw is better at this.";
+    let flavorText = "🐾 That's tragic. Even my paw is better at this.";
     if (gameState.score > 5000) {
-      flavorText = "ðŸ"¥ Absolute CatGod. Touch grass, maybe?";
+      flavorText = "🔥 Absolute CatGod. Touch grass, maybe?";
     } else if (gameState.score > 2000) {
-      flavorText = "ðŸ˜¼ Not bad. You may live another round.";
+      flavorText = "😼 Not bad. You may live another round.";
     }
     
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700'}}>
-        <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
-          <h2 className="text-5xl font-black text-black mb-6">ðŸŽ‰ GAME OVER, HUMAN!</h2>
-          <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
-          <p className="text-black text-xl font-bold mb-4">Final Score</p>
-          <p className="text-lg text-black font-bold mb-4">
-            ðŸ˜¿ "Meowchi is disappointed but still cute."
-          </p>
-          <p className="text-base text-black font-bold mb-8">
-            {flavorText}
-          </p>
-          
-          <div className="space-y-4">
-            <button
-              onClick={startGame}
-              className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
-            >
-              ðŸ˜º PLAY AGAIN
-            </button>
-            
-            <button
-              onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
-              className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
-              style={{backgroundColor: '#FFD700'}}
-            >
-              ðŸ"Š BOARD
-            </button>
+      <div style={{ 
+        position: 'fixed', 
+        width: '100vw', 
+        height: '100vh', 
+        overflow: 'hidden', 
+        backgroundColor: '#000'
+      }}>
+        <div 
+          id="game-canvas"
+          style={{ 
+            position: 'absolute',
+            width: '393px', 
+            height: '852px',
+            overflow: 'hidden'
+          }}
+        >
+          <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-20" style={{backgroundColor: '#FFD700', height: '852px'}}>
+            <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-8 max-w-sm" style={{backgroundColor: '#FFD700'}}>
+              <h2 className="text-5xl font-black text-black mb-6">🎉 GAME OVER, HUMAN!</h2>
+              <div className="text-8xl font-black text-black mb-4">{gameState.score}</div>
+              <p className="text-black text-xl font-bold mb-4">Final Score</p>
+              <p className="text-lg text-black font-bold mb-4">
+                😿 "Meowchi is disappointed but still cute."
+              </p>
+              <p className="text-base text-black font-bold mb-8">
+                {flavorText}
+              </p>
+              
+              <div className="space-y-4">
+                <button
+                  onClick={startGame}
+                  className="w-full bg-black text-white font-bold py-4 px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xl"
+                >
+                  😺 PLAY AGAIN
+                </button>
+                
+                <button
+                  onClick={() => setGameState(prev => ({ ...prev, gameStarted: false, currentTab: 'play' }))}
+                  className="w-full bg-yellow-400 border-2 border-black text-black font-bold py-4 px-6 rounded-full hover:bg-yellow-300 transition-all duration-200 text-xl"
+                  style={{backgroundColor: '#FFD700'}}
+                >
+                  📊 BOARD
+                </button>
+              </div>
+            </div>
+            <BottomNavBar />
           </div>
         </div>
-        <BottomNavBar />
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden">
-      {animations.map((animation) => (
-        <ExplosionAnimation key={animation.id} animation={animation} />
-      ))}
+    <div style={{ 
+      position: 'fixed', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      backgroundColor: '#000'
+    }}>
+      <div 
+        id="game-canvas"
+        style={{ 
+          position: 'absolute',
+          width: '393px', 
+          height: '852px',
+          overflow: 'hidden'
+        }}
+      >
+        <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden" style={{ height: '852px' }}>
+          {animations.map((animation) => (
+            <ExplosionAnimation key={animation.id} animation={animation} />
+          ))}
 
-      {dragState.isDragging && dragState.draggedCat && (
-        <div
-          className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
-          style={{
-            left: dragState.dragPosition.x,
-            top: dragState.dragPosition.y,
-          }}
-        >
-          {dragState.draggedCat.emoji}
-        </div>
-      )}
+          {dragState.isDragging && dragState.draggedCat && (
+            <div
+              className="fixed pointer-events-none z-40 text-6xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
+              style={{
+                left: dragState.dragPosition.x,
+                top: dragState.dragPosition.y,
+              }}
+            >
+              {dragState.draggedCat.emoji}
+            </div>
+          )}
 
-      <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
-        <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
-      </div>
-
-      <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">â±</span>
-          <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
-            {gameState.timeLeft}s
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">ðŸ¾</span>
-          <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
-        </div>
-      </div>
-
-      <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
-        <div className="flex items-center justify-center gap-3 text-white">
-          <span className="font-semibold">NEXT:</span>
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-            <span className="text-6xl">{gameState.nextCat}</span>
+          <div className="bg-blue-500 text-white p-3 flex items-center justify-center">
+            <h1 className="text-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
           </div>
+
+          <div className="bg-white p-3 flex justify-between items-center border-b shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">⏱</span>
+              <span className={`text-2xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
+                {gameState.timeLeft}s
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🐾</span>
+              <span className="text-2xl font-black text-purple-600">{gameState.score}</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-gradient-to-r from-purple-500 to-blue-500">
+            <div className="flex items-center justify-center gap-3 text-white">
+              <span className="font-semibold">NEXT:</span>
+              <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+                <span className="text-6xl">{gameState.nextCat}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 p-3 min-h-0">
+            <div ref={boardRef} className="flex justify-center gap-3 h-full">
+              <GameColumn columnId="left" cats={gameState.columns.left} />
+              <GameColumn columnId="center" cats={gameState.columns.center} />
+              <GameColumn columnId="right" cats={gameState.columns.right} />
+            </div>
+          </div>
+
+          <div className="p-3 bg-white border-t mb-20">
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => dropNewCat('left')}
+                disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+                className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                  gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+                    ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <span className="text-2xl">🔽</span>
+                <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+              </button>
+              
+              <button
+                onClick={() => dropNewCat('center')}
+                disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+                className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                  gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
+                    ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <span className="text-2xl">🔽</span>
+                <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
+              </button>
+              
+              <button
+                onClick={() => dropNewCat('right')}
+                disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
+                className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
+                  gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
+                    ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <span className="text-2xl">🔽</span>
+                <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
+              </button>
+            </div>
+            
+            <p className="text-center text-gray-500 text-sm font-medium">
+              💡 Tip: Drag top cats between columns or use drop buttons!
+            </p>
+          </div>
+
+          <BottomNavBar />
         </div>
       </div>
-
-      <div className="flex-1 p-3 min-h-0">
-        <div ref={boardRef} className="flex justify-center gap-3 h-full">
-          <GameColumn columnId="left" cats={gameState.columns.left} />
-          <GameColumn columnId="center" cats={gameState.columns.center} />
-          <GameColumn columnId="right" cats={gameState.columns.right} />
-        </div>
-      </div>
-
-      <div className="p-3 bg-white border-t mb-20">
-        <div className="flex gap-2 mb-2">
-          <button
-            onClick={() => dropNewCat('left')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-2xl">ðŸ"½</span>
-            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('center')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-2xl">ðŸ"½</span>
-            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-          
-          <button
-            onClick={() => dropNewCat('right')}
-            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-            className={`flex-1 py-4 rounded-lg font-bold transition-all flex items-center justify-center gap-1 text-lg ${
-              gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <span className="text-2xl">ðŸ"½</span>
-            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
-          </button>
-        </div>
-        
-        <p className="text-center text-gray-500 text-sm font-medium">
-          ðŸ'¡ Tip: Drag top cats between columns or use drop buttons!
-        </p>
-      </div>
-
-      <BottomNavBar />
     </div>
   );
 }
