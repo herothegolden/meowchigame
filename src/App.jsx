@@ -208,6 +208,30 @@ function App() {
     }
   }, [gameState.currentTab]);
 
+  // Auto-spin emojis on welcome screen load
+  useEffect(() => {
+    if (!gameState.gameStarted && gameState.currentTab === 'play') {
+      // Trigger auto-spin for all emojis on welcome screen load
+      const emojiIndices = [0, 1, 2, 3, 4];
+      emojiIndices.forEach((index, i) => {
+        setTimeout(() => {
+          setSpinningEmojis(prev => ({
+            ...prev,
+            [index]: true
+          }));
+          
+          // Remove spinning state after animation completes
+          setTimeout(() => {
+            setSpinningEmojis(prev => ({
+              ...prev,
+              [index]: false
+            }));
+          }, 1000);
+        }, i * 100); // Staggered delay: 0ms, 100ms, 200ms, 300ms, 400ms
+      });
+    }
+  }, [gameState.gameStarted, gameState.currentTab]);
+
   // Handle emoji spinning
   const handleEmojiClick = (emojiIndex) => {
     setSpinningEmojis(prev => ({
@@ -793,17 +817,24 @@ function App() {
            style={{backgroundColor: '#FFD700', height: '100dvh'}}>
         <div className="flex-1 flex flex-col justify-center items-center">
           <div className="text-center bg-yellow-400 rounded-2xl shadow-xl p-4 max-w-sm w-full" style={{backgroundColor: '#FFD700'}}>
-            <h1 className="text-responsive-5xl font-black text-black mb-3">🐾 MEOWCHI CHAOS</h1>
-            <p className="text-black text-responsive-base font-bold mb-4">
-              Drop cats. Cause mayhem. Match 3 before they scream.
-            </p>
+            <div className="text-6xl mb-4">🐾</div>
+            <h1 className="text-5xl font-black text-black mb-2">MEOWCHI</h1>
+            <h1 className="text-5xl font-black text-black mb-4">CHAOS</h1>
+            <div className="mb-6">
+              <p className="text-black text-xl font-bold mb-2">
+                Drop cats. Cause mayhem.
+              </p>
+              <p className="text-black text-xl font-bold mb-4">
+                Match 3 before they scream.
+              </p>
+            </div>
             
             <div className="mb-4">
-              <div className="flex justify-center gap-2 mb-3">
+              <div className="flex justify-center gap-3 mb-3">
                 {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
                   <span 
                     key={index}
-                    className={`text-responsive-3xl cursor-pointer transition-transform hover:scale-110 ${
+                    className={`text-5xl cursor-pointer transition-transform hover:scale-110 ${
                       spinningEmojis[index] ? 'animate-spin' : ''
                     }`}
                     onClick={() => handleEmojiClick(index)}
@@ -816,10 +847,10 @@ function App() {
                   </span>
                 ))}
               </div>
-              <p className="text-responsive-sm text-black font-bold">5 ridiculous cats to wrangle.</p>
+              <p className="text-lg text-black font-bold">5 ridiculous cats to wrangle.</p>
             </div>
             
-            <div className="mb-4 text-responsive-sm text-black font-bold leading-relaxed space-y-1">
+            <div className="mb-4 text-lg text-black font-bold leading-relaxed space-y-1">
               <div>⏱ 60 seconds of panic</div>
               <div>🐾 +1000 purr-points</div>
               <div>🔥 Combos = Catnado</div>
@@ -827,14 +858,14 @@ function App() {
 
             {userState.bestScore && (
               <div className="mb-4 p-3 bg-black bg-opacity-10 rounded-lg">
-                <div className="text-responsive-xs text-black font-bold">Your Best Score</div>
-                <div className="text-responsive-xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
+                <div className="text-sm text-black font-bold">Your Best Score</div>
+                <div className="text-2xl font-black text-black">{userState.bestScore.score.toLocaleString()}</div>
               </div>
             )}
             
             <button
               onClick={startGame}
-              className="bg-black text-white font-bold btn-responsive rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 w-full"
+              className="bg-black text-white font-bold py-4 px-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 text-xl w-full"
             >
               ▶️ LET'S GOOO!
             </button>
