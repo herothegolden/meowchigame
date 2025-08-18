@@ -412,41 +412,36 @@ export default function App() {
     );
   }
 
-  return (
-    <>
-      {showSplash && (
-        <div className="splash" role="status" aria-live="polite">
-          <div className="splash-content">
-            <div style={{ fontSize: 40 }}>🐱</div>
-            <div style={{ fontWeight: 900, letterSpacing: ".3px" }}>Meowchi Game</div>
-            <div className="loader-ring" />
-            <div style={{ opacity: .85, fontSize: 13 }}>Loading the CatVerse…</div>
-          </div>
-        </div>
-      )}
-
-      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        <Header />
-        <div className="content">
-          {screen === "home" && <Home />}
-          {screen === "shop" && <Shop />}
-          {screen === "leaderboard" && <Leaderboard />}
-          {screen === "daily" && <Daily />}
-          {screen === "invite" && <Invite />}
-          {screen === "settings" && <Settings />}
-          {screen === "game" && (
-            <GameView
-              onExit={(run) => { setLastRun(run); setScreen("gameover"); }}
-              onBack={() => setScreen("home")}
-              onCoins={(d) => setCoins((c) => c + d)}
-            />
-          )}
-          {screen === "gameover" && <GameOver />}
-        </div>
+return (
+  <>
+    {showSplash && (
+      <div className="splash" role="status" aria-live="polite">
+        <div className="loader-ring" />
+        <div className="splash-text">Waking up cats…</div>
       </div>
-    </>
-  );
-}
+    )}
+
+    <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+      <Header />
+      <div className="content">
+        {screen === "home" && <Home />}
+        {screen === "shop" && <Shop />}
+        {screen === "leaderboard" && <Leaderboard />}
+        {screen === "daily" && <Daily />}
+        {screen === "invite" && <Invite />}
+        {screen === "settings" && <Settings />}
+        {screen === "game" && (
+          <GameView
+            onExit={(run) => { setLastRun(run); setScreen("gameover"); }}
+            onBack={() => setScreen("home")}
+            onCoins={(d) => setCoins((c) => c + d)}
+          />
+        )}
+        {screen === "gameover" && <GameOver />}
+      </div>
+    </div>
+  </>
+);
 
 // ---------- Game View (Match-3) ----------
 function GameView({ onExit, onBack, onCoins }) {
