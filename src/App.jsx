@@ -1,4 +1,72 @@
-import React, { useState, useEffect, useRef } from 'react';
+return (
+    <div className="tg-app-container">
+      {animations.map((animation) => (
+        <ExplosionAnimation key={animation.id} animation={animation} />
+      ))}
+
+      {dragState.isDragging && dragState.draggedCat && (
+        <div
+          className="tg-dragged-cat"
+          style={{
+            left: dragState.dragPosition.x,
+            top: dragState.dragPosition.y,
+          }}
+        >
+          {dragState.draggedCat.emoji}
+        </div>
+      )}
+
+      <div className="tg-game-header">
+        <h1 className="tg-tagline">{taglines[currentTagline]}</h1>
+      </div>
+
+      <div className="tg-score-bar">
+        <div className="tg-timer">
+          <span>⏱</span>
+          <span className={gameState.timeLeft <= 10 ? 'timer-urgent' : ''}>{gameState.timeLeft}s</span>
+        </div>
+        <div className="tg-score">
+          <span>🐾</span>
+          <span>{gameState.score.toLocaleString()}</span>
+        </div>
+      </div>
+
+      <div className="tg-next-section">
+        <div className="tg-next-content">
+          <span>NEXT:</span>
+          <div className="tg-next-cat">
+            <span>{gameState.nextCat}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="tg-game-board">
+        <div className="tg-columns-container">
+          <GameColumn columnId="left" cats={gameState.columns.left} />
+          <GameColumn columnId="center" cats={gameState.columns.center} />
+          <GameColumn columnId="right" cats={gameState.columns.right} />
+        </div>
+      </div>
+
+      <div className="tg-controls">
+        <div className="tg-drop-buttons">
+          <button
+            onClick={() => dropNewCat('left')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
+            className={`tg-drop-button ${
+              gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
+                ? 'enabled' : 'disabled'
+            }`}
+          >
+            <span>🔽</span>
+            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+          </button>
+          
+          <button
+            onClick={() => dropNewCat('center')}
+            disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
+            className={`tg-drop-button ${
+              gameStateimport React, { useState, useEffect, useRef } from 'react';
 
 const CAT_EMOJIS = ['😺', '😻', '😼', '🐈', '🐈‍⬛'];
 const INITIAL_TIME = 60;
@@ -60,13 +128,9 @@ function App() {
   const [currentTagline, setCurrentTagline] = useState(0);
   const [spinningEmojis, setSpinningEmojis] = useState({});
   const [isLayoutReady, setIsLayoutReady] = useState(false);
-  const [welcomeStyles, setWelcomeStyles] = useState({
-    titleSize: 'text-5xl',
-    textSize: 'text-xl', 
-    emojiSize: 'text-5xl',
-    buttonSize: 'text-xl',
-    containerPadding: 'p-4',
-    spacing: 'mb-4'
+  const [telegramViewport, setTelegramViewport] = useState({
+    height: window.innerHeight,
+    stableHeight: window.innerHeight
   });
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [pawPositions, setPawPositions] = useState([]);
@@ -83,9 +147,26 @@ function App() {
   // Initialize Telegram Web App and user
   useEffect(() => {
     if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
       const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand(); // Get maximum stable height
+      
+      // Set up viewport handling
+      const updateViewport = () => {
+        setTelegramViewport({
+          height: tg.viewportHeight || window.innerHeight,
+          stableHeight: tg.viewportStableHeight || window.innerHeight
+        });
+      };
+      
+      updateViewport();
+      tg.onEvent?.('viewportChanged', updateViewport);
+      
+      // Set CSS custom properties for consistent sizing
+      const screenWidth = window.innerWidth;
+      const baseFontSize = Math.min(Math.max(screenWidth / 375 * 16, 12), 20);
+      document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}px`);
+      document.documentElement.style.setProperty('--app-height', `${tg.viewportStableHeight || window.innerHeight}px`);
       
       if (tg.backgroundColor) {
         document.body.style.backgroundColor = tg.backgroundColor;
@@ -109,6 +190,11 @@ function App() {
       }
     } else {
       // Fallback for development
+      const screenWidth = window.innerWidth;
+      const baseFontSize = Math.min(Math.max(screenWidth / 375 * 16, 12), 20);
+      document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}px`);
+      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+      
       const testUser = {
         id: 123456789,
         username: 'testuser',
@@ -245,228 +331,58 @@ function App() {
     }
   }, [gameState.gameStarted, gameState.currentTab, isLayoutReady]);
 
-  // Bulletproof layout calculation and loading management
+  // Simple loading management - Telegram style
   useEffect(() => {
     if (!gameState.gameStarted && gameState.currentTab === 'play') {
       setIsLayoutReady(false);
       setLoadingProgress(0);
       
-      // Walking paw animation setup - 2 paws, slower, wider area
-      const generatePawPath = () => {
+      // Simple walking paw animation
+      const generateSimplePawPath = () => {
         const path = [];
-        // Create walking path: wider area (10% to 90% of screen)
-        for (let i = 0; i <= 12; i++) {
-          const progress = i / 12;
-          const x = 10 + progress * 80; // 10% to 90% of screen width
-          const y = 35 + Math.sin(progress * 2 * Math.PI) * 8; // Gentle wave
+        for (let i = 0; i <= 8; i++) {
+          const progress = i / 8;
+          const x = 15 + progress * 70; // 15% to 85% of screen width
+          const y = 40 + Math.sin(progress * Math.PI) * 5; // Gentle arc
           path.push({ x, y, visible: false });
         }
         return path;
       };
 
-      setPawPositions(generatePawPath());
+      setPawPositions(generateSimplePawPath());
 
-      // Start walking animation - slower, 2 paws max
+      // Walking animation
       let pawStep = 0;
       const walkingInterval = setInterval(() => {
         setPawPositions(prev => prev.map((paw, index) => ({
           ...paw,
-          visible: index === pawStep || index === pawStep - 1 // Only 2 paws visible
+          visible: index === pawStep || index === pawStep - 1
         })));
         
-        pawStep = (pawStep + 1) % 13;
-      }, 500); // Slower: 500ms instead of 200ms
+        pawStep = (pawStep + 1) % 9;
+      }, 600);
 
       // Progress tracking
       let progress = 0;
       const progressInterval = setInterval(() => {
-        progress += 1.5;
+        progress += 3;
         setLoadingProgress(progress);
-      }, 60);
+      }, 100);
 
-      // Mathematical perfect-fit calculation
+      // Simple 3-second loading with Telegram viewport ready check
       setTimeout(() => {
-        const calculatePerfectFit = () => {
-          // Measure exact available screen real estate
-          const viewportHeight = window.innerHeight;
-          const telegramHeader = 60; // More accurate estimate
-          const bottomNav = 80; // Bottom navigation height
-          const availableHeight = viewportHeight - telegramHeader - bottomNav;
-          
-          // Base content measurements (in relative units)
-          const baseContentHeight = {
-            pawIcon: 60,        // 🐾 icon
-            title: 120,         // MEOWCHI + CHAOS combined
-            subtitle: 80,       // Drop cats text (2 lines)
-            emojis: 60,         // Cat emojis row
-            emojiText: 30,      // "5 ridiculous cats"
-            gameInfo: 90,       // 3 lines of game info
-            bestScore: 70,      // Best score box (if present)
-            button: 60,         // LET'S GOOO button
-            spacing: 80         // Minimal spacing
-          };
-          
-          // Calculate total content height needed
-          let totalBaseHeight = Object.values(baseContentHeight).reduce((sum, height) => sum + height, 0);
-          
-          // If no best score, subtract that height
-          if (!userState.bestScore) {
-            totalBaseHeight -= baseContentHeight.bestScore;
-          }
-          
-          // Calculate scale factor - AGGRESSIVE UTILIZATION
-          const targetUtilization = 0.9; // Use 90% of available space
-          const targetHeight = availableHeight * targetUtilization;
-          const scaleFactor = targetHeight / totalBaseHeight;
-          
-          console.log(`Viewport: ${viewportHeight}px, Available: ${availableHeight}px, Target: ${targetHeight}px, Scale: ${scaleFactor.toFixed(2)}`);
-          
-          // Apply AGGRESSIVE scaling - grow UP when we have space
-          let styles = {
-            titleSize: 'text-5xl',
-            textSize: 'text-xl', 
-            emojiSize: 'text-5xl',
-            buttonSize: 'text-xl',
-            containerPadding: 'p-4',
-            spacing: 'mb-4'
-          };
+        // Layout is ready after Telegram viewport is stable
+        setIsLayoutReady(true);
+        clearInterval(walkingInterval);
+        clearInterval(progressInterval);
+      }, 3000);
 
-          if (scaleFactor >= 1.4) {
-            // EXTRA LARGE - use the space!
-            styles = {
-              titleSize: 'text-7xl',
-              textSize: 'text-3xl',
-              emojiSize: 'text-7xl',
-              buttonSize: 'text-2xl',
-              containerPadding: 'p-6',
-              spacing: 'mb-6'
-            };
-          } else if (scaleFactor >= 1.2) {
-            // LARGE - bigger fonts for bigger screens
-            styles = {
-              titleSize: 'text-6xl',
-              textSize: 'text-2xl',
-              emojiSize: 'text-6xl',
-              buttonSize: 'text-xl',
-              containerPadding: 'p-5',
-              spacing: 'mb-5'
-            };
-          } else if (scaleFactor >= 1.0) {
-            // STANDARD - original size
-            styles = {
-              titleSize: 'text-5xl',
-              textSize: 'text-xl',
-              emojiSize: 'text-5xl',
-              buttonSize: 'text-xl',
-              containerPadding: 'p-4',
-              spacing: 'mb-4'
-            };
-          } else if (scaleFactor >= 0.85) {
-            // MEDIUM reduction
-            styles = {
-              titleSize: 'text-4xl',
-              textSize: 'text-lg',
-              emojiSize: 'text-4xl',
-              buttonSize: 'text-lg',
-              containerPadding: 'p-3',
-              spacing: 'mb-3'
-            };
-          } else if (scaleFactor >= 0.7) {
-            // SMALL reduction
-            styles = {
-              titleSize: 'text-3xl',
-              textSize: 'text-base',
-              emojiSize: 'text-3xl',
-              buttonSize: 'text-base',
-              containerPadding: 'p-2',
-              spacing: 'mb-2'
-            };
-          } else if (scaleFactor >= 0.6) {
-            // COMPACT
-            styles = {
-              titleSize: 'text-2xl',
-              textSize: 'text-sm',
-              emojiSize: 'text-2xl',
-              buttonSize: 'text-sm',
-              containerPadding: 'p-2',
-              spacing: 'mb-1'
-            };
-          } else {
-            // ULTRA-COMPACT emergency mode
-            styles = {
-              titleSize: 'text-xl',
-              textSize: 'text-xs',
-              emojiSize: 'text-xl',
-              buttonSize: 'text-xs',
-              containerPadding: 'p-1',
-              spacing: 'mb-1'
-            };
-          }
-
-          setWelcomeStyles(styles);
-        };
-
-        calculatePerfectFit();
-        
-        // Multiple verification passes with real DOM measurement
-        const verificationPasses = [1000, 2000, 3000, 3800];
-        verificationPasses.forEach(delay => {
-          setTimeout(() => {
-            calculatePerfectFit();
-            
-            // Final DOM-based verification at 3.8 seconds
-            if (delay === 3800) {
-              setTimeout(() => {
-                requestAnimationFrame(() => {
-                  const container = document.querySelector('[data-welcome-container]');
-                  const button = document.querySelector('[data-welcome-button]');
-                  
-                  if (container && button) {
-                    const containerRect = container.getBoundingClientRect();
-                    const buttonRect = button.getBoundingClientRect();
-                    
-                    console.log(`Button bottom: ${buttonRect.bottom}, Window height: ${window.innerHeight}`);
-                    
-                    // Final check: is button truly visible with 20px margin?
-                    if (buttonRect.bottom > window.innerHeight - 20) {
-                      console.log('Emergency size reduction triggered');
-                      // Emergency ultra-compact mode
-                      setWelcomeStyles({
-                        titleSize: 'text-lg',
-                        textSize: 'text-xs',
-                        emojiSize: 'text-lg',
-                        buttonSize: 'text-xs',
-                        containerPadding: 'p-1',
-                        spacing: 'mb-1'
-                      });
-                      
-                      setTimeout(() => setIsLayoutReady(true), 200);
-                    } else {
-                      console.log('Layout verification passed');
-                      setIsLayoutReady(true);
-                    }
-                  } else {
-                    setIsLayoutReady(true);
-                  }
-                });
-              }, 100);
-            }
-          }, delay);
-        });
-      }, 200);
-
-      // Cleanup intervals
-      const cleanup = () => {
+      return () => {
         clearInterval(walkingInterval);
         clearInterval(progressInterval);
       };
-
-      // Minimum 4 seconds, then cleanup
-      setTimeout(cleanup, 4200);
-      
-      return cleanup;
     }
-  }, [gameState.gameStarted, gameState.currentTab, userState.bestScore]);
+  }, [gameState.gameStarted, gameState.currentTab]);
 
   // Handle emoji spinning - more responsive
   const handleEmojiClick = (emojiIndex) => {
@@ -865,7 +781,7 @@ function App() {
   const DraggableCat = ({ cat, columnId }) => {
     return (
       <div
-        className="cat-emoji select-none transition-all duration-200 p-1 cursor-grab active:cursor-grabbing hover:scale-105"
+        className="tg-cat-emoji"
         onPointerDown={(e) => handleDragStart(e, cat.id, columnId)}
         onTouchStart={(e) => handleDragStart(e, cat.id, columnId)}
         onMouseDown={(e) => handleDragStart(e, cat.id, columnId)}
@@ -892,8 +808,8 @@ function App() {
     return (
       <div
         data-column={columnId}
-        className={`flex-1 max-w-20 border-2 rounded-lg p-responsive transition-all duration-200 flex flex-col-reverse items-center gap-1 bg-white overflow-hidden h-full ${
-          isHighlighted ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        className={`tg-game-column ${
+          isHighlighted ? 'column-highlighted' : ''
         }`}
       >
         {cats.map((cat, index) => (
@@ -901,11 +817,11 @@ function App() {
         ))}
         
         {cats.length === 0 && (
-          <div className="text-gray-300 text-responsive-xs text-center mt-2">Empty</div>
+          <div className="column-empty-text">Empty</div>
         )}
         
         {isFull && (
-          <div className="text-red-400 text-responsive-xs text-center font-bold">FULL</div>
+          <div className="column-full-text">FULL</div>
         )}
       </div>
     );
@@ -1154,75 +1070,62 @@ function App() {
 
   if (!gameState.gameStarted && gameState.currentTab === 'play') {
     return (
-      <div className="relative">
-        {/* Welcome screen - always rendered with calculated styles */}
-        <div 
-          className="h-screen flex flex-col p-2"
-          style={{backgroundColor: '#FFD700', height: '100dvh'}}
-          data-welcome-container
-        >
-          <div className="flex-1 flex flex-col justify-center items-center">
-            <div className={`text-center bg-yellow-400 rounded-2xl shadow-xl ${welcomeStyles.containerPadding} max-w-sm w-full`} style={{backgroundColor: '#FFD700'}}>
-              <div className="text-6xl mb-4">🐾</div>
-              <h1 className={`${welcomeStyles.titleSize} font-black text-black mb-2`}>MEOWCHI</h1>
-              <h1 className={`${welcomeStyles.titleSize} font-black text-black ${welcomeStyles.spacing}`}>CHAOS</h1>
-              <div className={welcomeStyles.spacing}>
-                <p className={`text-black ${welcomeStyles.textSize} font-bold mb-2`}>
-                  Drop cats. Cause mayhem.
-                </p>
-                <p className={`text-black ${welcomeStyles.textSize} font-bold ${welcomeStyles.spacing}`}>
-                  Match 3 before they scream.
-                </p>
-              </div>
-              
-              <div className={welcomeStyles.spacing}>
-                <div className="flex justify-center gap-3 mb-3">
-                  {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
-                    <span 
-                      key={index}
-                      className={`${welcomeStyles.emojiSize} cursor-pointer transition-transform hover:scale-110 ${
-                        spinningEmojis[index] ? 'animate-spin' : ''
-                      }`}
-                      onClick={() => handleEmojiClick(index)}
-                      style={{
-                        animation: spinningEmojis[index] ? 'spin 1s ease-in-out' : 'none',
-                        display: 'inline-block'
-                      }}
-                    >
-                      {emoji}
-                    </span>
-                  ))}
-                </div>
-                <p className={`${welcomeStyles.textSize} text-black font-bold`}>5 ridiculous cats to wrangle.</p>
-              </div>
-              
-              <div className={`${welcomeStyles.spacing} ${welcomeStyles.textSize} text-black font-bold leading-relaxed space-y-1`}>
-                <div>⏱ 60 seconds of panic</div>
-                <div>🐾 +1000 purr-points</div>
-                <div>🔥 Combos = Catnado</div>
-              </div>
-
-              {userState.bestScore && (
-                <div className={`${welcomeStyles.spacing} p-3 bg-black bg-opacity-10 rounded-lg`}>
-                  <div className="text-sm text-black font-bold">Your Best Score</div>
-                  <div className={`${welcomeStyles.textSize} font-black text-black`}>{userState.bestScore.score.toLocaleString()}</div>
-                </div>
-              )}
-              
-              <button
-                onClick={startGame}
-                className={`bg-black text-white font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 ${welcomeStyles.buttonSize} w-full`}
-                data-welcome-button
-              >
-                ▶️ LET'S GOOO!
-              </button>
+      <div className="tg-app-container">
+        {/* Welcome screen - Telegram style layout */}
+        <div className="tg-welcome-screen" data-welcome-container>
+          <div className="tg-welcome-content">
+            <div className="tg-welcome-paws">🐾</div>
+            <h1 className="tg-welcome-title">MEOWCHI</h1>
+            <h1 className="tg-welcome-title">CHAOS</h1>
+            
+            <div className="tg-welcome-subtitle">
+              <p>Drop cats. Cause mayhem.</p>
+              <p>Match 3 before they scream.</p>
             </div>
+            
+            <div className="tg-emoji-section">
+              <div className="tg-emoji-row">
+                {['😺', '😹', '🐈', '😻', '🐈‍⬛'].map((emoji, index) => (
+                  <span 
+                    key={index}
+                    className={`tg-welcome-emoji ${
+                      spinningEmojis[index] ? 'spinning' : ''
+                    }`}
+                    onClick={() => handleEmojiClick(index)}
+                  >
+                    {emoji}
+                  </span>
+                ))}
+              </div>
+              <p className="tg-emoji-text">5 ridiculous cats to wrangle.</p>
+            </div>
+            
+            <div className="tg-game-info">
+              <div>⏱ 60 seconds of panic</div>
+              <div>🐾 +1000 purr-points</div>
+              <div>🔥 Combos = Catnado</div>
+            </div>
+
+            {userState.bestScore && (
+              <div className="tg-best-score">
+                <div className="tg-best-score-label">Your Best Score</div>
+                <div className="tg-best-score-value">{userState.bestScore.score.toLocaleString()}</div>
+              </div>
+            )}
+            
+            <button
+              onClick={startGame}
+              className="tg-start-button"
+              data-welcome-button
+            >
+              ▶️ LET'S GOOO!
+            </button>
           </div>
-          <BottomNavBar />
         </div>
         
-        {/* Loading overlay - fades out when ready */}
+        {/* Loading overlay */}
         <LoadingOverlay />
+        <BottomNavBar />
       </div>
     );
   }
@@ -1298,15 +1201,14 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-gray-100 flex flex-col relative overflow-hidden" 
-         style={{ height: '100dvh' }}>
+    <div className="tg-app-container">
       {animations.map((animation) => (
         <ExplosionAnimation key={animation.id} animation={animation} />
       ))}
 
       {dragState.isDragging && dragState.draggedCat && (
         <div
-          className="fixed pointer-events-none z-40 cat-emoji-xl transform -translate-x-1/2 -translate-y-1/2 rotate-12 scale-110 drop-shadow-lg"
+          className="tg-dragged-cat"
           style={{
             left: dragState.dragPosition.x,
             top: dragState.dragPosition.y,
@@ -1316,91 +1218,78 @@ function App() {
         </div>
       )}
 
-      <div className="bg-blue-500 text-white p-responsive flex items-center justify-center">
-        <h1 className="text-responsive-lg font-bold animate-pulse">{taglines[currentTagline]}</h1>
+      <div className="tg-game-header">
+        <h1 className="tg-tagline">{taglines[currentTagline]}</h1>
       </div>
 
-      <div className="bg-white p-responsive flex justify-between items-center border-b shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-responsive-xl">⏱</span>
-          <span className={`text-responsive-xl font-black ${gameState.timeLeft <= 10 ? 'text-red-500 animate-pulse' : 'text-gray-800'}`}>
-            {gameState.timeLeft}s
-          </span>
+      <div className="tg-score-bar">
+        <div className="tg-timer">
+          <span>⏱</span>
+          <span className={gameState.timeLeft <= 10 ? 'timer-urgent' : ''}>{gameState.timeLeft}s</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-responsive-xl">🐾</span>
-          <span className="text-responsive-xl font-black text-purple-600">{gameState.score.toLocaleString()}</span>
+        <div className="tg-score">
+          <span>🐾</span>
+          <span>{gameState.score.toLocaleString()}</span>
         </div>
       </div>
 
-      <div className="p-responsive bg-gradient-to-r from-purple-500 to-blue-500">
-        <div className="flex items-center justify-center gap-responsive text-white">
-          <span className="font-semibold text-responsive-base">NEXT:</span>
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-            <span className="cat-emoji-xl">{gameState.nextCat}</span>
+      <div className="tg-next-section">
+        <div className="tg-next-content">
+          <span>NEXT:</span>
+          <div className="tg-next-cat">
+            <span>{gameState.nextCat}</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 p-responsive min-h-0 game-board-container">
-        <div 
-          ref={boardRef} 
-          className="flex justify-center gap-responsive h-full"
-          style={{
-            touchAction: 'none',
-            overscrollBehavior: 'contain'
-          }}
-        >
+      <div className="tg-game-board">
+        <div className="tg-columns-container">
           <GameColumn columnId="left" cats={gameState.columns.left} />
           <GameColumn columnId="center" cats={gameState.columns.center} />
           <GameColumn columnId="right" cats={gameState.columns.right} />
         </div>
       </div>
 
-      <div className="p-responsive bg-white border-t" 
-           style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}>
-        <div className="flex gap-2 mb-2">
+      <div className="tg-controls">
+        <div className="tg-drop-buttons">
           <button
             onClick={() => dropNewCat('left')}
             disabled={!gameState.isActive || dragState.isDragging || gameState.columns.left.length >= 6}
-            className={`flex-1 btn-responsive rounded-lg font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`tg-drop-button ${
               gameState.isActive && !dragState.isDragging && gameState.columns.left.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'enabled' : 'disabled'
             }`}
           >
-            <span className="text-responsive-xl">🔽</span>
-            <span className="text-responsive-base">{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
+            <span>🔽</span>
+            <span>{gameState.columns.left.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
           
           <button
             onClick={() => dropNewCat('center')}
             disabled={!gameState.isActive || dragState.isDragging || gameState.columns.center.length >= 6}
-            className={`flex-1 btn-responsive rounded-lg font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`tg-drop-button ${
               gameState.isActive && !dragState.isDragging && gameState.columns.center.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'enabled' : 'disabled'
             }`}
           >
-            <span className="text-responsive-xl">🔽</span>
-            <span className="text-responsive-base">{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
+            <span>🔽</span>
+            <span>{gameState.columns.center.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
           
           <button
             onClick={() => dropNewCat('right')}
             disabled={!gameState.isActive || dragState.isDragging || gameState.columns.right.length >= 6}
-            className={`flex-1 btn-responsive rounded-lg font-bold transition-all flex items-center justify-center gap-1 ${
+            className={`tg-drop-button ${
               gameState.isActive && !dragState.isDragging && gameState.columns.right.length < 6
-                ? 'bg-green-500 hover:bg-green-600 text-white shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'enabled' : 'disabled'
             }`}
           >
-            <span className="text-responsive-xl">🔽</span>
-            <span className="text-responsive-base">{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
+            <span>🔽</span>
+            <span>{gameState.columns.right.length >= 6 ? 'FULL' : 'Drop'}</span>
           </button>
         </div>
         
-        <p className="text-center text-gray-500 text-responsive-sm font-medium">
+        <p className="tg-tip">
           💡 Tip: Drag top cats between columns or use drop buttons!
         </p>
       </div>
