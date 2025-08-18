@@ -1,32 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>🐾 MeowChi Game</title>
-  <meta name="description" content="MeowChi - Match 3 cat puzzle game for Telegram">
-  
-  <!-- Telegram Web App Script -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  
-  <!-- Favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐱</text></svg>">
-  
-  <!-- Mobile optimizations -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="format-detection" content="telephone=no">
-  
-  <!-- Prevent zoom on double tap -->
-  <style>
-    * {
-      touch-action: manipulation;
-    }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Candy-Cats</title>
+    <meta name="theme-color" content="#0a0f23" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Telegram WebApp SDK (available inside Telegram; safe to load in browser too) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
