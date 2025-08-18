@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
-   Candy-Cats – Match-3 (simplified) Telegram WebApp
-   ✦ Hamster-style full-screen shell (Header / Content)
-   ✦ Stable sizing via Telegram viewportStableHeight
-   ✦ Splash (loading) screen while WebApp initializes
-   ✦ Mechanics unchanged (swap → match → gravity → refill)
+   Candy-Cats – Match-3 (Telegram WebApp)
+   (Top section cleaned: no duplicate App component,
+   no duplicate splash/styles. The main App is defined
+   later in the file — keep that one.)
 -------------------------------------------------- */
 
 // ---------- Shared config ----------
@@ -23,7 +22,7 @@ const isCoarsePointer = () =>
   window.matchMedia("(pointer:coarse)").matches;
 
 const getTG = () =>
-  typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
+  typeof window !== "undefined" ? window.Telegram?.WebApp: undefined;
 
 const SPLASH_URL = "/splash.jpg"; // put your wallpaper in /public/splash.jpg
 
