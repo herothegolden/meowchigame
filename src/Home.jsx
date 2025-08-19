@@ -1,10 +1,6 @@
 import React from "react";
 import "./home.css";
 
-/**
- * Home screen – UI only. Beige single background, no gradient.
- * Buttons call back into App via onNavigate() to preserve your routing.
- */
 export default function Home({ coins = 0, onNavigate }) {
   return (
     <div className="home-root">
