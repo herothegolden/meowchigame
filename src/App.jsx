@@ -259,16 +259,26 @@ function GameView({ onExit, onCoins, settings }) {
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
   useResizeCell(containerRef, setCell);
- }
 
   // Board state
   const [grid, setGrid] = useState(() => initSolvableGrid());
-  const gridRef = useRef(grid); gridRef.current = grid;
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
 
   // Selection + hint + animation state
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
+
+  // TODO: render JSX here
+  return (
+    <div ref={containerRef} className="game-container">
+      <div ref={boardRef} className="game-board">
+        {/* Render grid here */}
+      </div>
+    </div>
+  );
+}
 
   // Score / moves / combo FX
   const [score, setScore] = useState(0);
