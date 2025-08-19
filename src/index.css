@@ -77,18 +77,32 @@ body{
 
 /* splash */
 .splash{
-  position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:999;
+  position:fixed; inset:0; z-index:9999;
+  background:
+    linear-gradient(180deg, rgba(8,10,20,.5), rgba(8,10,20,.6)),
+    url("/splash.jpg") center/cover no-repeat;
+  display:grid; place-items:center;
+  opacity:1; transition: opacity .35s ease;
 }
-.splash-min{display:grid;gap:12px;place-items:center}
+.splash.hide{ opacity:0; pointer-events:none }
+.splash.show{ opacity:1 }
+
+.splash-min{
+  display:grid; gap:12px; place-items:center;
+  padding:16px 20px;
+  backdrop-filter: saturate(140%) blur(1px);
+  border-radius:16px;
+}
+
 .loader-ring{
   width:34px;height:34px;border-radius:50%;
   border:3px solid rgba(255,255,255,.18);
   border-top-color:#fff;animation:spin 1s linear infinite
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-.splash-text{color:#cfe0ff;font-size:14px}
+.splash-text{color:#e8eeff;font-size:14px;text-shadow:0 1px 2px rgba(0,0,0,.4)}
 
-/* --- Board / GameView styles (polished) --- */
+/* --- Board / GameView styles (match your current file) --- */
 .section.board-wrap{position:relative}
 .board{
   position:relative;
@@ -97,19 +111,15 @@ body{
   border-radius:12px;
   border:1px solid var(--line);
   overflow:hidden;
-  overscroll-behavior: contain;
 }
 .gridlines{
   position:absolute; inset:0;
   opacity:.16; pointer-events:none;
 }
-
 .tile{
   position:absolute; display:grid; place-items:center;
   user-select:none; touch-action:none;
   border-radius:10px;
-  overflow: hidden; /* clip bigger emojis inside tile */
-  /* Animate position & transform; nicer easing */
   transition:
     left .22s cubic-bezier(.2,.8,.2,1),
     top .22s cubic-bezier(.2,.8,.2,1),
@@ -119,68 +129,12 @@ body{
   border:1px solid rgba(255,255,255,.06);
   will-change: left, top, transform, opacity;
 }
+.tile .tile-emoji{ filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
 .tile.sel{outline:3px solid rgba(102,126,234,.6)}
+.tile.hint{box-shadow:0 0 0 3px rgba(118,75,162,.6) inset}
+.tile.drop-in{animation:drop .35s ease}
+@keyframes drop{from{transform:translateY(-18px);opacity:.0}to{transform:translateY(0);opacity:1}}
 
-/* Hinted tiles pulse */
-.tile.hint .tile-emoji{
-  animation: hint-pulse 0.9s ease-in-out infinite;
-}
-@keyframes hint-pulse{
-  0%{ transform:scale(1) }
-  50%{ transform:scale(1.08) }
-  100%{ transform:scale(1) }
-}
-
-/* Pressed / grabbing feel (applies only to emoji to avoid conflicting with tile transforms) */
-.tile.grab .tile-emoji{
-  transform: scale(0.96);
-  filter: drop-shadow(0 3px 6px rgba(0,0,0,.45));
-}
-
-/* Invalid swap shake */
-.tile.shake{
-  animation: shakeH .18s ease both;
-}
-@keyframes shakeH{
-  0%{ transform: translateX(0) }
-  25%{ transform: translateX(-4px) }
-  50%{ transform: translateX(4px) }
-  75%{ transform: translateX(-2px) }
-  100%{ transform: translateX(0) }
-}
-
-/* Drop-in for freshly spawned tiles (short & light) */
-.tile.drop-in{animation:drop .26s cubic-bezier(.2,.8,.2,1)}
-@keyframes drop{from{transform:translateY(-14px);opacity:.0}to{transform:translateY(0);opacity:1}}
-
-/* Match pop / blasting visual */
-.tile.blasting{
-  animation:pop .23s ease forwards;
-  box-shadow:0 0 0 4px #ffd166 inset, 0 0 18px 5px rgba(255,209,102,.7), 0 0 36px 10px rgba(255,255,255,.25);
-  background:linear-gradient(135deg, #ffd166 0%, #ff9500 100%);
-}
-.tile.blasting .tile-emoji{ filter: drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
-@keyframes pop{
-  0%{ transform:scale(1); opacity:1 }
-  60%{ transform:scale(1.18) rotate(8deg); opacity:1 }
-  100%{ transform:scale(1); opacity:.0 }
-}
-
-/* Snappier easing while swapping */
-.tile.swapping{
-  transition:
-    left .18s cubic-bezier(.3,.9,.1,1),
-    top .18s cubic-bezier(.3,.9,.1,1),
-    transform .18s cubic-bezier(.3,.9,.1,1),
-    opacity .18s linear;
-}
-
-.tile .tile-emoji{
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
-  line-height: 1; /* keep tall emojis tidy */
-}
-
-/* combo banner */
 .combo{
   position:absolute; left:50%; top:-10px; transform:translate(-50%,-50%);
   background:rgba(255,255,255,.1);
@@ -188,7 +142,6 @@ body{
   padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px
 }
 
-/* pause overlay */
 .pause-overlay{
   position:absolute; inset:0; display:grid; place-items:center;
   background:rgba(0,0,0,.5); backdrop-filter:saturate(120%) blur(2px);
@@ -207,13 +160,4 @@ body{
 @keyframes fly{
   from { transform: translate(0,0) scale(1); opacity:1 }
   to   { transform: translate(var(--tx), var(--ty)) scale(.75); opacity:0 }
-}
-
-/* Respect users who prefer reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .tile, .tile.swapping{
-    transition: none;
-    animation: none;
-  }
-  .spark{ animation: none; opacity:0; }
 }
