@@ -10,3 +10,7 @@ button { touch-action: manipulation; }
 
 /* Prevent long-press selection on mobile */
 body { -webkit-user-select: none; user-select: none; }
+
+/* Prevent sideways scrolling and make drag responsive */
+html, body { overflow-x: hidden; }
+canvas, button { touch-action: none; }
