@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
 app.use(compression());
 
 // Allow inline style (we inject a <style> tag) and Telegram WebApp script.
