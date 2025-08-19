@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * GameView contains the full Match-3 game (pointer drag, cascades, combos).
- * POLISH PASS: purely visual improvements (stagger, easing, hint pulse).
- * Mechanics, routing, and Telegram WebApp setup remain unchanged.
+ * POLISH PATCHES ONLY — logic preserved.
+ * 1) Invalid-swap shake + press "grab"
+ * 2) Distance-based fall stagger by actual drop distance
+ * 3) Cleaner pop -> fall sequencing + input lock during cascades
  */
 
 const COLS = 8;
@@ -11,7 +12,7 @@ const ROWS = 8;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
 
-// Keep your emojis
+// Your emojis
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
@@ -26,7 +27,7 @@ export default function GameView({ onExit, onCoins, settings }) {
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
-  // Selection + hint + animation state
+  // Selection / hint / swap
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
@@ -37,10 +38,21 @@ export default function GameView({ onExit, onCoins, settings }) {
   const [combo, setCombo] = useState(0);
   const [fx, setFx] = useState([]);
   const [blast, setBlast] = useState(new Set());
-  const [paused, setPaused] = useState(false);
 
-  // Track which tiles were just created so they "drop in"
+  // New tiles (for drop-in) + fall delay map (by distance)
   const [newTiles, setNewTiles] = useState(new Set());
+  const [fallDelay, setFallDelay] = useState({}); // {"r-c": seconds}
+
+  // Input/animation helpers
+  const [paused, setPaused] = useState(false);
+  const [animating, setAnimating] = useState(false); // lock input during cascades
+  const animatingRef = useRef(animating); animatingRef.current = animating;
+
+  // Press/invalid-swap feedback
+  const [grabTile, setGrabTile] = useState(null); // {r,c} while pressed
+  const [shake, setShake] = useState(new Set());  // tiles shaking after invalid swap
+
+  const movesRef = useRef(moves); movesRef.current = moves;
 
   useEffect(() => { window.currentGameScore = score; }, [score]);
 
@@ -49,10 +61,10 @@ export default function GameView({ onExit, onCoins, settings }) {
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  // Unified Pointer Events (works in Telegram WebView)
+  // Pointer events (Telegram WebView friendly) — preserved
   useEffect(() => {
     const el = boardRef.current; if (!el || paused) return;
-    let drag = null; const threshold = 18;
+    let drag = null; const thresholdBase = 18;
 
     const rc = (e) => {
       const rect = el.getBoundingClientRect();
@@ -62,15 +74,20 @@ export default function GameView({ onExit, onCoins, settings }) {
     };
 
     const down = (e) => {
+      if (animatingRef.current) return; // lock during cascades
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e); if (!inBounds(p.r, p.c)) return;
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
-      setSel({ r: p.r, c: p.c }); haptic(5);
+      setSel({ r: p.r, c: p.c });
+      setGrabTile({ r: p.r, c: p.c });
+      haptic(5);
     };
 
     const move = (e) => {
-      if (!drag) return;
-      const p = rc(e); const dx = p.x - drag.x, dy = p.y - drag.y;
+      if (!drag || animatingRef.current) return;
+      const p = rc(e);
+      const dx = p.x - drag.x, dy = p.y - drag.y;
+      const threshold = Math.min(thresholdBase, Math.floor(cell * 0.35));
       if (!drag.dragging && Math.hypot(dx, dy) > threshold) {
         drag.dragging = true; haptic(8);
         const horiz = Math.abs(dx) > Math.abs(dy);
@@ -83,14 +100,19 @@ export default function GameView({ onExit, onCoins, settings }) {
     const up = (e) => {
       if (!drag) return;
       const p = rc(e); const dx = p.x - drag.x, dy = p.y - drag.y;
-      if (drag.dragging) {
-        const horiz = Math.abs(dx) > Math.abs(dy);
-        const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
-        const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
-        if (inBounds(tr, tc)) { trySwap(drag.r, drag.c, tr, tc); haptic(12); }
+      if (!drag.dragging) {
+        setSel({ r: drag.r, c: drag.c });
+      } else {
+        if (!animatingRef.current) {
+          const horiz = Math.abs(dx) > Math.abs(dy);
+          const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
+          const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
+          if (inBounds(tr, tc)) { trySwap(drag.r, drag.c, tr, tc); haptic(12); }
+        }
         setSel(null);
-      } else { setSel({ r: drag.r, c: drag.c }); }
+      }
       drag = null;
+      setGrabTile(null);
     };
 
     el.addEventListener("pointerdown", down, { passive: true });
@@ -110,36 +132,53 @@ export default function GameView({ onExit, onCoins, settings }) {
     const g = cloneGrid(gridRef.current);
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
     const matches = findMatches(g);
+
     if (matches.length === 0) {
+      // INVALID SWAP: shake both tiles briefly
+      const s = new Set(shake);
+      s.add(`${r1}-${c1}`); s.add(`${r2}-${c2}`);
+      setShake(s);
+      setTimeout(() => {
+        setShake((prev) => {
+          const n = new Set(prev);
+          n.delete(`${r1}-${c1}`); n.delete(`${r2}-${c2}`);
+          return n;
+        });
+      }, 220);
       haptic(8);
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 120);
       return;
     }
+
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
-    // Let the CSS transform animate the swap; then commit the grid.
+    // Let CSS animate swap; then commit the grid
     setTimeout(() => {
       setGrid(g); setSwapping(null); setMoves((m) => Math.max(0, m - 1));
       resolveCascades(g, () => { if (movesRef.current === 0) finish(); });
     }, 300);
   }
 
-  const movesRef = useRef(moves); movesRef.current = moves;
-
-  // Cascade resolver (visual timings tuned; logic unchanged)
+  // Cascade resolver — timing staged; input locked; distance-based fall delay computed
   function resolveCascades(start, done) {
+    setAnimating(true);
     let g = cloneGrid(start); let comboCount = 0;
+
     const step = () => {
       const matches = findMatches(g);
       if (matches.length === 0) {
-        setGrid(g); setNewTiles(new Set());
+        setGrid(g); setNewTiles(new Set()); setFallDelay({});
         if (comboCount > 0) { setCombo(comboCount); haptic(15); setTimeout(() => setCombo(0), 1500); }
-        ensureSolvable(); done && done(); return;
+        ensureSolvable();
+        setAnimating(false);
+        done && done();
+        return;
       }
 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
+      // FX points
       const fxId = Date.now() + Math.random();
       setFx((prev) => [
         ...prev,
@@ -153,46 +192,66 @@ export default function GameView({ onExit, onCoins, settings }) {
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
 
-      // Remove matched items (pop animation handled via CSS class)
+      // 1) Mark matches null in a copy (pop phase)
       matches.forEach(([r, c]) => { g[r][c] = null; });
-      setGrid(cloneGrid(g));
+      setGrid(cloneGrid(g)); // show holes so pop anim is clear
+      setTimeout(() => setBlast(new Set()), 200); // let pop finish ~200ms
 
-      // Clear blast highlight quickly (let the pop finish)
-      setTimeout(() => setBlast(new Set()), 280);
-
-      // Apply gravity + refill; with left/top transitions + stagger this will slide
+      // 2) Gravity + refill (after pop)
       setTimeout(() => {
-        const empty = new Set();
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (g[r][c] === null) empty.add(`${r}-${c}`);
+        // Compute distance-based delays BEFORE gravity: how many nulls below each tile
+        const delayMap = {};
+        for (let c = 0; c < COLS; c++) {
+          // Precompute cumulative nulls from bottom for speed
+          const nullsBelow = new Array(ROWS).fill(0);
+          let count = 0;
+          for (let r = ROWS - 1; r >= 0; r--) {
+            nullsBelow[r] = count;
+            if (g[r][c] === null) count++;
+          }
+          // Each non-null will fall by `nullsBelow[r]` rows
+          for (let r = ROWS - 1; r >= 0; r--) {
+            if (g[r][c] != null) {
+              const dist = nullsBelow[r]; // rows to fall
+              const newR = r + dist;
+              if (dist > 0) {
+                // 0.03s per row, capped to 0.14s for snappiness
+                delayMap[`${newR}-${c}`] = Math.min(0.14, dist * 0.03);
+              }
+            }
           }
         }
+
+        // Apply gravity + refill
         applyGravity(g);
+        const empties = new Set();
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
-        setNewTiles(empty);     // mark spots that will receive new tiles -> drop-in animation
-        setGrid(cloneGrid(g));  // position changes will animate (left/top transition)
+
+        setNewTiles(empties);       // new tiles get drop-in animation
+        setFallDelay(delayMap);     // per-tile delay by actual distance
+        setGrid(cloneGrid(g));      // left/top transitions + delays handle slide
+
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 160);
-        }, 240);
-      }, 200);
-
-      // Cleanup old fx particles
-      setTimeout(() => setFx((prev) => prev.filter((p) => p.id < fxId || p.id > fxId + 100)), 1500);
+          // Short cadence between cascade steps
+          setTimeout(step, 140);
+        }, 220);
+      }, 200); // wait until pop visually completes
     };
     step();
   }
 
   function doHint() {
+    if (animating) return;
     const m = findFirstMove(gridRef.current);
     if (!m) { shuffleBoard(); return; }
     setHint(m);
     setTimeout(() => setHint(null), 1200);
     haptic(10);
   }
-  function shuffleBoard() { const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
+  function shuffleBoard() { if (animating) return; const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
   function ensureSolvable() { if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current)); }
   function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
 
@@ -241,15 +300,17 @@ export default function GameView({ onExit, onCoins, settings }) {
 
             const tileKey = `${r}-${c}`;
             const isNewTile = newTiles.has(tileKey);
+            const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
+            const isShake = shake.has(tileKey);
 
-            // Micro-stagger for slide/fall (no delay during swaps for snappiness)
-            const delaySeconds = isSwapping ? 0 : Math.min(0.12, r * 0.012 + c * 0.002);
+            // Distance-based stagger (no delay during swaps); default 0 if none
+            const delaySeconds = isSwapping ? 0 : (fallDelay[tileKey] ?? 0);
 
             return (
               <div
                 key={`tile-${r}-${c}`}
                 className={
-                  `tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""}`
+                  `tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`
                 }
                 style={{
                   left: c * cell,
@@ -289,7 +350,7 @@ export default function GameView({ onExit, onCoins, settings }) {
 
       <div className="controls">
         <button className="btn" onClick={() => setPaused((p) => !p)}>{paused ? "Resume" : "Pause"}</button>
-        <button className="btn" onClick={() => { setGrid(initSolvableGrid()); setScore(0); setMoves(20); setCombo(0); setSel(null); setHint(null); setSwapping(null); }}>Reset</button>
+        <button className="btn" onClick={() => { if (animating) return; setGrid(initSolvableGrid()); setScore(0); setMoves(20); setCombo(0); setSel(null); setHint(null); setSwapping(null); setFallDelay({}); setNewTiles(new Set()); }}>Reset</button>
         <button className="btn" onClick={doHint}>💡 Sweet Hint</button>
         <button className="btn primary" onClick={shuffleBoard}>🔄 Sugar Shuffle</button>
         <div className="controls-size">8×8</div>
@@ -298,7 +359,7 @@ export default function GameView({ onExit, onCoins, settings }) {
   );
 }
 
-/* ------------ helpers & hook (mechanics unchanged) ------------ */
+/* ------------ helpers & hook (logic unchanged) ------------ */
 function Poof({ x, y, size }) {
   const sparks = Array.from({ length: 20 });
   return (
