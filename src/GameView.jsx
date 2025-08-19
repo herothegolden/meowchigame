@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * POLISH PATCHES ONLY — logic preserved.
+ * POLISH PATCHES ONLY — mechanics preserved.
  * 1) Invalid-swap shake + press "grab"
  * 2) Distance-based fall stagger by actual drop distance
  * 3) Cleaner pop -> fall sequencing + input lock during cascades
+ * + Bigger emojis (visual only)
  */
 
 const COLS = 8;
 const ROWS = 8;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
+
+// Tune this to adjust emoji size relative to the cell.
+const EMOJI_SIZE = 0.86;
 
 // Your emojis
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
@@ -324,7 +328,7 @@ export default function GameView({ onExit, onCoins, settings }) {
               >
                 <span
                   className="tile-emoji"
-                  style={{ fontSize: Math.floor(cell * 0.7) }}
+                  style={{ fontSize: Math.floor(cell * EMOJI_SIZE), lineHeight: 1 }}
                 >
                   {v}
                 </span>
