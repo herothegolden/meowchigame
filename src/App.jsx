@@ -98,7 +98,11 @@ export default function App() {
       "@media (max-width: 480px) { .content { padding: 6px 10px 10px 10px; } .brand-compact .name { font-size: 13px; } .btn { padding: 6px 8px; font-size: 11px; } .score-info { font-size: 12px; gap: 8px; } }";
     
     document.head.appendChild(style);
-    return () => document.head.removeChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   }, []);
 
       .list > * {
