@@ -252,7 +252,7 @@ export default function App() {
   </div>
 </div>
       }
-
+      
 // ---------- Game View (Match-3) ----------
 function GameView({ onExit, onCoins, settings }) {
   const containerRef = useRef(null);
@@ -269,6 +269,14 @@ function GameView({ onExit, onCoins, settings }) {
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
+
+  // Score / moves / combo FX
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(20);
+  const [combo, setCombo] = useState(0);
+  const [fx, setFx] = useState([]);
+  const [blast, setBlast] = useState(new Set());
+  const [paused, setPaused] = useState(false);
 
   // TODO: render JSX here
   return (
