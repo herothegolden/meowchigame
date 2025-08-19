@@ -213,33 +213,46 @@ export default function App() {
         </div>
       )}
 
-      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        <Header />
-        <div className="content">
-          {screen === "home" && HomeView}
-          {screen === "shop" && <Shop />}
-          {screen === "leaderboard" && <Leaderboard />}
-          {screen === "daily" && <Daily />}
-          {screen === "invite" && <Invite />}
-          {screen === "settings" && <Settings />}
-          {screen === "game" && <GameView
-              onExit={(run) => { setLastRun(run); setCoins((c) => c + run.coins); setScreen("gameover"); setScreenHistory((h) => [...h, "gameover"]); }}
-              onCoins={(d) => setCoins((c) => c + d)}
-              settings={settings}
-            />}
-          {screen === "gameover" && (
-            <div className="section" style={{ display: "grid", gap: 10 }}>
-              <div className="title">🍬 Sweet Level Complete!</div>
-              <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
-              <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
-              <button className="btn primary" onClick={() => setScreen("game")}>🍭 Play More Meowchi</button>
-            </div>
-          )}
+     <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+  <Header />
+  <div className="content">
+    {screen === "home" && <HomeView />}
+    {screen === "shop" && <Shop />}
+    {screen === "leaderboard" && <Leaderboard />}
+    {screen === "daily" && <Daily />}
+    {screen === "invite" && <Invite />}
+    {screen === "settings" && <Settings />}
+    {screen === "game" && (
+      <GameView
+        onExit={(run) => {
+          setLastRun(run);
+          setCoins((c) => c + run.coins);
+          setScreen("gameover");
+          setScreenHistory((h) => [...h, "gameover"]);
+        }}
+        onCoins={(d) => setCoins((c) => c + d)}
+        settings={settings}
+      />
+    )}
+    {screen === "gameover" && lastRun && (
+      <div className="section" style={{ display: "grid", gap: 10 }}>
+        <div className="title">🍬 Sweet Level Complete!</div>
+        <div className="row">
+          <div className="muted">Score</div>
+          <b>{lastRun.score}</b>
         </div>
+        <div className="row">
+          <div className="muted">$Meow earned</div>
+          <b>{lastRun.coins}</b>
+        </div>
+        <button className="btn primary" onClick={() => setScreen("game")}>
+          🍭 Play More Meowchi
+        </button>
       </div>
-    </>
-  );
-}
+    )}
+  </div>
+</div>
+      }
 
 // ---------- Game View (Match-3) ----------
 function GameView({ onExit, onCoins, settings }) {
