@@ -97,6 +97,7 @@ body{
   border-radius:12px;
   border:1px solid var(--line);
   overflow:hidden;
+  overscroll-behavior: contain;
 }
 .gridlines{
   position:absolute; inset:0;
@@ -119,7 +120,7 @@ body{
 }
 .tile.sel{outline:3px solid rgba(102,126,234,.6)}
 
-/* Hinted tiles gently pulse so the move is readable */
+/* Hinted tiles pulse */
 .tile.hint .tile-emoji{
   animation: hint-pulse 0.9s ease-in-out infinite;
 }
@@ -129,11 +130,29 @@ body{
   100%{ transform:scale(1) }
 }
 
+/* Pressed / grabbing feel (applies only to emoji to avoid conflicting with tile transforms) */
+.tile.grab .tile-emoji{
+  transform: scale(0.96);
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,.45));
+}
+
+/* Invalid swap shake */
+.tile.shake{
+  animation: shakeH .18s ease both;
+}
+@keyframes shakeH{
+  0%{ transform: translateX(0) }
+  25%{ transform: translateX(-4px) }
+  50%{ transform: translateX(4px) }
+  75%{ transform: translateX(-2px) }
+  100%{ transform: translateX(0) }
+}
+
 /* Drop-in for freshly spawned tiles (short & light) */
 .tile.drop-in{animation:drop .26s cubic-bezier(.2,.8,.2,1)}
 @keyframes drop{from{transform:translateY(-14px);opacity:.0}to{transform:translateY(0);opacity:1}}
 
-/* Match pop / blasting visual — crisper timing, subtle glow on emoji */
+/* Match pop / blasting visual */
 .tile.blasting{
   animation:pop .23s ease forwards;
   box-shadow:0 0 0 4px #ffd166 inset, 0 0 18px 5px rgba(255,209,102,.7), 0 0 36px 10px rgba(255,255,255,.25);
@@ -146,7 +165,7 @@ body{
   100%{ transform:scale(1); opacity:.0 }
 }
 
-/* Slightly snappier easing while swapping */
+/* Snappier easing while swapping */
 .tile.swapping{
   transition:
     left .18s cubic-bezier(.3,.9,.1,1),
