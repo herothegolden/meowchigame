@@ -2,15 +2,18 @@
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 
-/* Kill page scrolling during play (fixes annoying side scroll) */
-html, body, #root { overflow: hidden; }
-
 /* Reduce tap delay on mobile */
 button { touch-action: manipulation; }
 
 /* Prevent long-press selection on mobile */
 body { -webkit-user-select: none; user-select: none; }
 
-/* Prevent sideways scrolling and make drag responsive */
-html, body { overflow-x: hidden; }
-canvas, button { touch-action: none; }
+/* Optional: smooth font rendering and background fallback */
+html, body { 
+  background: #0a0f23; 
+  -webkit-font-smoothing: antialiased; 
+  -moz-osx-font-smoothing: grayscale; 
+}
+
+/* Default var for iOS 100vh fix (overwritten in App.jsx) */
+:root { --vh: 1vh; }
