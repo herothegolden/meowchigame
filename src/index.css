@@ -88,7 +88,7 @@ body{
 @keyframes spin{to{transform:rotate(360deg)}}
 .splash-text{color:#cfe0ff;font-size:14px}
 
-/* --- Board / GameView styles (match current GameView.jsx) --- */
+/* --- Board / GameView styles (polished) --- */
 .section.board-wrap{position:relative}
 .board{
   position:relative;
@@ -102,19 +102,62 @@ body{
   position:absolute; inset:0;
   opacity:.16; pointer-events:none;
 }
+
 .tile{
   position:absolute; display:grid; place-items:center;
   user-select:none; touch-action:none;
   border-radius:10px;
-  transition: transform .18s ease;
+  /* Animate position & transform; nicer easing */
+  transition:
+    left .22s cubic-bezier(.2,.8,.2,1),
+    top .22s cubic-bezier(.2,.8,.2,1),
+    transform .18s cubic-bezier(.2,.8,.2,1),
+    opacity .18s linear;
   background:#111a32;
   border:1px solid rgba(255,255,255,.06);
+  will-change: left, top, transform, opacity;
 }
 .tile.sel{outline:3px solid rgba(102,126,234,.6)}
-.tile.hint{box-shadow:0 0 0 3px rgba(118,75,162,.6) inset}
-.tile.drop-in{animation:drop .35s ease}
-@keyframes drop{from{transform:translateY(-18px);opacity:.0}to{transform:translateY(0);opacity:1}}
 
+/* Hinted tiles gently pulse so the move is readable */
+.tile.hint .tile-emoji{
+  animation: hint-pulse 0.9s ease-in-out infinite;
+}
+@keyframes hint-pulse{
+  0%{ transform:scale(1) }
+  50%{ transform:scale(1.08) }
+  100%{ transform:scale(1) }
+}
+
+/* Drop-in for freshly spawned tiles (short & light) */
+.tile.drop-in{animation:drop .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes drop{from{transform:translateY(-14px);opacity:.0}to{transform:translateY(0);opacity:1}}
+
+/* Match pop / blasting visual — crisper timing, subtle glow on emoji */
+.tile.blasting{
+  animation:pop .23s ease forwards;
+  box-shadow:0 0 0 4px #ffd166 inset, 0 0 18px 5px rgba(255,209,102,.7), 0 0 36px 10px rgba(255,255,255,.25);
+  background:linear-gradient(135deg, #ffd166 0%, #ff9500 100%);
+}
+.tile.blasting .tile-emoji{ filter: drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
+@keyframes pop{
+  0%{ transform:scale(1); opacity:1 }
+  60%{ transform:scale(1.18) rotate(8deg); opacity:1 }
+  100%{ transform:scale(1); opacity:.0 }
+}
+
+/* Slightly snappier easing while swapping */
+.tile.swapping{
+  transition:
+    left .18s cubic-bezier(.3,.9,.1,1),
+    top .18s cubic-bezier(.3,.9,.1,1),
+    transform .18s cubic-bezier(.3,.9,.1,1),
+    opacity .18s linear;
+}
+
+.tile .tile-emoji{ filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+
+/* combo banner */
 .combo{
   position:absolute; left:50%; top:-10px; transform:translate(-50%,-50%);
   background:rgba(255,255,255,.1);
@@ -122,6 +165,7 @@ body{
   padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px
 }
 
+/* pause overlay */
 .pause-overlay{
   position:absolute; inset:0; display:grid; place-items:center;
   background:rgba(0,0,0,.5); backdrop-filter:saturate(120%) blur(2px);
@@ -140,4 +184,13 @@ body{
 @keyframes fly{
   from { transform: translate(0,0) scale(1); opacity:1 }
   to   { transform: translate(var(--tx), var(--ty)) scale(.75); opacity:0 }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .tile, .tile.swapping{
+    transition: none;
+    animation: none;
+  }
+  .spark{ animation: none; opacity:0; }
 }
