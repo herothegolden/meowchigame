@@ -19,7 +19,7 @@ app.use(
         "default-src": ["'self'"],
         "script-src": ["'self'", "'unsafe-inline'", "https://telegram.org"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:"],
+        "img-src": ["'self'", "data:", "https:"],
         "connect-src": ["'self'"],
         "frame-ancestors": ["'self'", "https://*.t.me", "https://web.telegram.org"]
       }
@@ -30,10 +30,18 @@ app.use(
 const dist = path.join(__dirname, "dist");
 app.use(express.static(dist, { maxAge: "1y", index: false }));
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // SPA fallback
 app.get("*", (_, res) => {
   res.sendFile(path.join(dist, "index.html"));
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server on :${port}`));
+app.listen(port, () => {
+  console.log(`🍬 Candy Crush Cats server running on port ${port}`);
+  console.log(`🌐 Local: http://localhost:${port}`);
+});
