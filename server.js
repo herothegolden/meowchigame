@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(compression());
 
-// Allow inline style (we inject a <style> tag) and Telegram WebApp script.
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -30,10 +29,7 @@ app.use(
 const dist = path.join(__dirname, "dist");
 app.use(express.static(dist, { maxAge: "1y", index: false }));
 
-// SPA fallback
-app.get("*", (_, res) => {
-  res.sendFile(path.join(dist, "index.html"));
-});
+app.get("*", (_, res) => res.sendFile(path.join(dist, "index.html")));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server on :${port}`));
