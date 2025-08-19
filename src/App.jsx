@@ -1,15 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
-   Candy-Cats (Canvas) — Match‑3 with animations
-   ✦ Pieces: 🐱 CAT, 🍪 OREO, 🍥 MARSHMALLOW, 🍓 STRAWBERRY, 🥨 PRETZEL
-   ✦ Inputs: drag (touch/mouse) to swap adjacent tiles
-   ✦ Animations: swap tween, clear fade+poof, gravity fall, refill, cascades
-   ✦ HUD: score, moves, combo, hint, shuffle, pause
-   ✦ No horizontal scroll; mobile-first layout
-
-   Files untouched: index.html, main.jsx, server.js, vite.config.js
-   Also add the tiny CSS tweak in index.css (section 2 below).
+   Candy‑Cats (Canvas) — Oreo/Strawberry/Pretzel theme
+   ✔ Drag to swap (touch & mouse)
+   ✔ Visible: swap tween → clear fade → gravity fall → refill → cascades
+   ✔ Level 1: 6×6, 20 moves, target 1000
+   ✔ No horizontal scroll
 -------------------------------------------------- */
 
 // ---------- Game constants ----------
@@ -47,32 +43,32 @@ const LEVEL1_LAYOUT = [
   [P.CAT, P.OREO, P.PRETZEL, P.MARSHMALLOW, P.STRAWBERRY, P.CAT],
 ];
 
-// Drawing
+// Visuals
 const BG = "#0f1533";
 const GRID_LINE = "rgba(122,162,255,.25)";
 const TILE_BG = "#151b46";
 const TILE_HL = "#1a2260";
 const TILE_BORDER = "#26307a";
 
-// Tweens
+// Timings
 const SWAP_MS = 140;
-const FALL_PX_PER_MS = 0.6; // gravity
 const CLEAR_MS = 180;
 const CASCADE_DELAY_MS = 90;
 
-// Utilities
+// Utils
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const now = () => performance.now();
+const easeInOut = (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
 
-// ---------- Root app shell ----------
+// ---------- Root shell ----------
 export default function App() {
+  // inject minimal UI CSS once
   useEffect(() => {
-    // Minimal inline CSS for the shell
     const style = document.createElement("style");
     style.innerHTML = `
       :root { --line:#243069; }
+      html, body, #root { height:100%; }
       body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; overflow-x:hidden; }
-      #root, html, body { height:100%; }
       .page { min-height:100%; display:flex; align-items:center; justify-content:center; padding:16px; }
       .card { width:min(480px, 100%); display:flex; flex-direction:column; gap:12px; }
       .panel, .section { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:12px 14px; box-shadow:0 10px 28px rgba(0,0,0,.2); }
@@ -101,7 +97,11 @@ export default function App() {
           <b>Candy‑Cats</b>
           <span className="pill">{screen.toUpperCase()}</span>
         </div>
-        {screen !== "home" && <button className="btn" onClick={() => setScreen("home")}>Home</button>}
+        {screen !== "home" && (
+          <button className="btn" onClick={() => setScreen("home")}>
+            Home
+          </button>
+        )}
       </div>
     );
   }
@@ -111,9 +111,12 @@ export default function App() {
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">Match‑3 with cats & treats</div>
         <div className="muted">
-          Drag a tile to swap with a neighbor. Make 3+ in a row/col to clear; watch them pop and fall!
+          Drag a tile toward a neighbor to swap. Make 3+ in a row/col to clear;
+          watch them pop and fall!
         </div>
-        <button className="btn primary" onClick={() => setScreen("game")}>▶️ Play Level 1</button>
+        <button className="btn primary" onClick={() => setScreen("game")}>
+          ▶️ Play Level 1
+        </button>
       </div>
     );
   }
@@ -122,11 +125,23 @@ export default function App() {
     return (
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">Level Over</div>
-        <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
-        <div className="row"><div className="muted">Result</div><b style={{ color: lastRun.win ? "#7CFC7C" : "#ffb4a2" }}>{lastRun.win ? "Win" : "Try Again"}</b></div>
+        <div className="row">
+          <div className="muted">Score</div>
+          <b>{lastRun.score}</b>
+        </div>
+        <div className="row">
+          <div className="muted">Result</div>
+          <b style={{ color: lastRun.win ? "#7CFC7C" : "#ffb4a2" }}>
+            {lastRun.win ? "Win" : "Try Again"}
+          </b>
+        </div>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn primary" onClick={() => setScreen("game")}>Play again</button>
-          <button className="btn" onClick={() => setScreen("home")}>Home</button>
+          <button className="btn primary" onClick={() => setScreen("game")}>
+            Play again
+          </button>
+          <button className="btn" onClick={() => setScreen("home")}>
+            Home
+          </button>
         </div>
       </div>
     );
@@ -156,6 +171,7 @@ export default function App() {
 function CanvasGame({ onExit, onBack }) {
   const wrapRef = useRef(null);
   const canvRef = useRef(null);
+
   const [hud, setHud] = useState({
     score: 0,
     moves: MOVES,
@@ -163,95 +179,98 @@ function CanvasGame({ onExit, onBack }) {
     paused: false,
   });
 
-  // Board model: cell objects live in grid[r][c]
-  // Each cell keeps an animation state: x,y (pixels), sx,sy (scale), alpha, vx,vy, clearingUntil (timestamp)
-  const gridRef = useRef(makeGrid());
-
-  // Layout (computed)
+  // board state
+  const gridRef = useRef(makeGridFromLayout(LEVEL1_LAYOUT)); // cells with anim state
   const cellSizeRef = useRef(60);
-  const originRef = useRef({ x: 0, y: 0 }); // top-left of board in canvas
   const boardPxRef = useRef({ w: 0, h: 0 });
 
-  // Interaction
-  const dragRef = useRef({ active: false, r: -1, c: -1, startX: 0, startY: 0, lastX: 0, lastY: 0 });
+  // dragging state (kept simple and robust)
+  const dragRef = useRef({
+    active: false,
+    r: -1,
+    c: -1,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+  });
 
-  // Anim loop
-  const rafRef = useRef(0);
-  const lastTRef = useRef(0);
-  const busyRef = useRef(false); // block input during swaps/clear/fall phases
+  const busyRef = useRef(false); // block input during animations
 
-  // ---------- Init ----------
+  // init + sizing + listeners
   useEffect(() => {
-    // create canvas and size it
     const canvas = canvRef.current;
-    const dpr = window.devicePixelRatio || 1;
     const resize = () => {
       const wrap = wrapRef.current;
-      if (!wrap) return;
-      // Reserve space for HUD
-      const availW = wrap.clientWidth - 2; // small pad
+      if (!wrap || !canvas) return;
+      const availW = wrap.clientWidth - 2;
       const availH = Math.max(260, wrap.clientHeight - 200);
-
-      // cell size keeps board square-ish within wrapper
-      const s = Math.floor(Math.min(availW / COLS, availH / ROWS));
-      cellSizeRef.current = clamp(s, 44, 80);
+      const cs = Math.floor(Math.min(availW / COLS, availH / ROWS));
+      cellSizeRef.current = clamp(cs, 44, 80);
       const w = COLS * cellSizeRef.current;
       const h = ROWS * cellSizeRef.current;
       boardPxRef.current = { w, h };
-
+      const dpr = window.devicePixelRatio || 1;
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
-
-      originRef.current = { x: 0, y: 0 }; // centered can be added later
     };
     resize();
     const ro = new ResizeObserver(resize);
-    ro.observe(wrapRef.current);
+    wrapRef.current && ro.observe(wrapRef.current);
     window.addEventListener("resize", resize);
 
-    // initialize board from level layout, remove auto-matches, ensure a move
-    gridRef.current = makeGridFromLayout(LEVEL1_LAYOUT);
+    // sanitize board: no auto‑clear and at least one move
     stripAllMatches(gridRef.current);
     ensureAnyMove(gridRef.current);
 
     startLoop();
 
-    // input handlers
-    const onPointerDown = (e) => {
+    // ---- Pointer input (fixed) ----
+    const rcFromCanvas = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
+      const cs = cellSizeRef.current;
+      const c = Math.floor(x / cs);
+      const r = Math.floor(y / cs);
+      return { r, c, x, y };
+    };
+
+    const onDown = (e) => {
       if (hud.paused || busyRef.current) return;
-      const pt = canvasPoint(canvas, e);
-      const hit = hitCell(pt.x, pt.y);
-      if (!hit) return;
+      const p = rcFromCanvas(e);
+      if (!inBounds(p.r, p.c)) return;
       dragRef.current = {
         active: true,
-        r: hit.r,
-        c: hit.c,
-        startX: pt.x,
-        startY: pt.y,
-        lastX: pt.x,
-        lastY: pt.y,
+        r: p.r,
+        c: p.c,
+        startX: p.x,
+        startY: p.y,
+        lastX: p.x,
+        lastY: p.y,
       };
-      canvas.setPointerCapture?.(e.pointerId);
+      canvas.setPointerCapture?.(e.pointerId); // keep pointer events on canvas
     };
-    const onPointerMove = (e) => {
+
+    const onMove = (e) => {
       if (!dragRef.current.active) return;
-      const pt = canvasPoint(canvas, e);
-      dragRef.current.lastX = pt.x;
-      dragRef.current.lastY = pt.y;
+      const p = rcFromCanvas(e);
+      dragRef.current.lastX = p.x;
+      dragRef.current.lastY = p.y;
     };
-    const onPointerUp = async (e) => {
+
+    const onUp = async (e) => {
       if (!dragRef.current.active) return;
       const d = dragRef.current;
       dragRef.current.active = false;
-
       if (hud.paused || busyRef.current) return;
 
-      // Decide swap dir from drag delta
       const dx = d.lastX - d.startX;
       const dy = d.lastY - d.startY;
-      const threshold = Math.max(8, cellSizeRef.current * 0.25);
+      const threshold = Math.max(12, cellSizeRef.current * 0.22);
+
       let dr = 0,
         dc = 0;
       if (Math.abs(dx) > Math.abs(dy)) {
@@ -259,6 +278,7 @@ function CanvasGame({ onExit, onBack }) {
       } else {
         if (Math.abs(dy) >= threshold) dr = dy > 0 ? 1 : -1;
       }
+
       const r2 = d.r + dr,
         c2 = d.c + dc;
       if (!inBounds(r2, c2)) return;
@@ -266,60 +286,67 @@ function CanvasGame({ onExit, onBack }) {
       await attemptSwap(d.r, d.c, r2, c2);
     };
 
-    canvas.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    const onCancel = () => {
+      dragRef.current.active = false;
+    };
+
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onCancel);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(_raf);
       ro.disconnect();
       window.removeEventListener("resize", resize);
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onCancel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hud.paused]);
 
-  // ---------- Main loop ----------
+  // --------------- Main loop ---------------
+  let _raf = 0;
   function startLoop() {
+    let last = 0;
     const step = (t) => {
-      const dt = lastTRef.current ? t - lastTRef.current : 16;
-      lastTRef.current = t;
+      const dt = last ? Math.min(48, t - last) : 16;
+      last = t;
       update(dt);
       draw();
-      rafRef.current = requestAnimationFrame(step);
+      _raf = requestAnimationFrame(step);
     };
-    rafRef.current = requestAnimationFrame(step);
+    _raf = requestAnimationFrame(step);
   }
 
-  function update(dt) {
-    // Gravity animation
+  function update() {
     const g = gridRef.current;
+    const cs = cellSizeRef.current;
+
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const cell = g[r][c];
         if (!cell) continue;
-        // approach target pixel pos
-        const targetX = c * cellSizeRef.current + cellSizeRef.current / 2;
-        const targetY = r * cellSizeRef.current + cellSizeRef.current / 2;
 
-        const k = 0.18; // spring-ish
-        cell.vx += (targetX - cell.x) * k;
-        cell.vy += (targetY - cell.y) * k;
+        // spring toward its grid center
+        const tx = c * cs + cs / 2;
+        const ty = r * cs + cs / 2;
+        const k = 0.18;
+        cell.vx += (tx - cell.x) * k;
+        cell.vy += (ty - cell.y) * k;
         cell.x += cell.vx * 0.12;
         cell.y += cell.vy * 0.12;
         cell.vx *= 0.5;
         cell.vy *= 0.5;
 
-        // clear animation (fade)
+        // fade while clearing
         if (cell.clearingUntil) {
-          const remain = clamp((cell.clearingUntil - now()) / CLEAR_MS, 0, 1);
-          cell.alpha = remain;
-          cell.s = 0.9 + 0.1 * remain;
-          if (remain <= 0) {
-            g[r][c] = null;
-          }
+          const rem = clamp((cell.clearingUntil - now()) / CLEAR_MS, 0, 1);
+          cell.alpha = rem;
+          cell.s = 0.9 + 0.1 * rem;
+          if (rem <= 0) g[r][c] = null;
         }
       }
     }
@@ -328,8 +355,8 @@ function CanvasGame({ onExit, onBack }) {
   function draw() {
     const canvas = canvRef.current;
     if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
     const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
     const { w, h } = boardPxRef.current;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -342,13 +369,14 @@ function CanvasGame({ onExit, onBack }) {
     ctx.strokeStyle = GRID_LINE;
     ctx.lineWidth = 1;
     ctx.beginPath();
+    const cs = cellSizeRef.current;
     for (let r = 0; r <= ROWS; r++) {
-      const y = r * cellSizeRef.current + 0.5;
+      const y = r * cs + 0.5;
       ctx.moveTo(0, y);
       ctx.lineTo(w, y);
     }
     for (let c = 0; c <= COLS; c++) {
-      const x = c * cellSizeRef.current + 0.5;
+      const x = c * cs + 0.5;
       ctx.moveTo(x, 0);
       ctx.lineTo(x, h);
     }
@@ -360,95 +388,88 @@ function CanvasGame({ onExit, onBack }) {
       for (let c = 0; c < COLS; c++) {
         const cell = g[r][c];
         if (!cell) continue;
-        const x = cell.x;
-        const y = cell.y;
 
-        // tile bg
-        const size = cellSizeRef.current * (cell.s ?? 1);
+        const size = cs * (cell.s ?? 1);
         const half = size / 2;
-        const alpha = cell.alpha ?? 1;
 
         ctx.save();
-        ctx.globalAlpha = 0.95 * alpha;
+        ctx.globalAlpha = 0.95 * (cell.alpha ?? 1);
 
-        // rounded rect
-        roundRect(ctx, x - half, y - half, size, size, 12);
+        roundRect(ctx, cell.x - half, cell.y - half, size, size, 12);
         ctx.fillStyle = cell.highlight ? TILE_HL : TILE_BG;
         ctx.fill();
         ctx.strokeStyle = TILE_BORDER;
         ctx.stroke();
 
-        // emoji
         ctx.font = `${Math.floor(size * 0.72)}px system-ui, Apple Color Emoji, Noto Color Emoji, Segoe UI Emoji`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(EMOJI[cell.type] || "❓", x, y);
+        ctx.fillText(EMOJI[cell.type] || "❓", cell.x, cell.y);
         ctx.restore();
       }
     }
 
-    // dragging highlight
+    // drag highlight
     if (dragRef.current.active) {
       const { r, c } = dragRef.current;
       if (inBounds(r, c)) {
-        const x = c * cellSizeRef.current;
-        const y = r * cellSizeRef.current;
         ctx.save();
         ctx.strokeStyle = "#7aa2ff";
         ctx.lineWidth = 2;
-        ctx.strokeRect(x + 2, y + 2, cellSizeRef.current - 4, cellSizeRef.current - 4);
+        ctx.strokeRect(c * cs + 2, r * cs + 2, cs - 4, cs - 4);
         ctx.restore();
       }
     }
   }
 
-  // ---------- Actions ----------
+  // --------------- Actions ---------------
   async function attemptSwap(r1, c1, r2, c2) {
     if (hud.moves <= 0) return;
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
-
     const g = gridRef.current;
     if (!g[r1][c1] || !g[r2][c2]) return;
 
     busyRef.current = true;
-    // animate swap
-    await tweenSwap(r1, c1, r2, c2);
+
+    // animate swap (tween positions, then swap types)
+    await tweenSwap(g, r1, c1, r2, c2);
 
     // evaluate
     let matched = collectMatches(g);
     if (matched.length === 0) {
-      // swap back
-      await tweenSwap(r1, c1, r2, c2);
+      // swap back if invalid
+      await tweenSwap(g, r1, c1, r2, c2);
       busyRef.current = false;
       return;
     }
 
-    // consume 1 move
     setHud((h) => ({ ...h, moves: h.moves - 1 }));
 
-    // Cascades loop
+    // cascades
     let combo = 0;
     while (matched.length > 0) {
       combo++;
-      // clear with fade
       addScore(10 * matched.length * combo);
+
+      // mark for fade
       clearWithFade(g, matched);
       await sleep(CLEAR_MS);
 
-      // remove cleared (set to null already), apply gravity fall animation
-      const fallPlan = computeFalls(g);
-      await animateFalls(g, fallPlan);
+      // compact (gravity) and show falling via springs
+      compactGravity(g); // data moves immediately; update() animates to targets
+      await sleep(240);
 
-      // refill from top (spawn above and fall)
-      const spawns = refillSpawnPlan(g);
-      await animateSpawns(g, spawns);
+      // refill from top (spawn above, fade in)
+      spawnRefill(g);
+      await sleep(260);
 
       matched = collectMatches(g);
       if (matched.length > 0) await sleep(CASCADE_DELAY_MS);
     }
 
     // end?
-    if (hud.moves - 1 <= 0) {
+    const nextMoves = hud.moves - 1;
+    if (nextMoves <= 0) {
       const win = hud.score >= OBJECTIVE_SCORE;
       onExit({ score: hud.score, win });
     }
@@ -456,11 +477,15 @@ function CanvasGame({ onExit, onBack }) {
   }
 
   function addScore(pts) {
-    setHud((h) => ({ ...h, score: h.score + pts, combo: Math.min(9, (h.combo ?? 0) + 1) }));
+    setHud((h) => ({
+      ...h,
+      score: h.score + pts,
+      combo: Math.min(9, (h.combo ?? 0) + 1),
+    }));
     setTimeout(() => setHud((h) => ({ ...h, combo: 0 })), 900);
   }
 
-  // ---------- HUD controls ----------
+  // HUD controls
   const resetLevel = () => {
     gridRef.current = makeGridFromLayout(LEVEL1_LAYOUT);
     stripAllMatches(gridRef.current);
@@ -479,22 +504,31 @@ function CanvasGame({ onExit, onBack }) {
     shuffleToSolvable(gridRef.current);
   };
 
-  // ---------- Render UI ----------
+  // layout sizes (for initial mount)
   const { w, h } = boardPxRef.current;
 
   return (
     <div className="section" style={{ display: "grid", gap: 10 }}>
       <div className="row">
-        <button className="btn" onClick={onBack}>Back</button>
+        <button className="btn" onClick={onBack}>
+          Back
+        </button>
         <div className="muted">
           Drag a tile toward a neighbor to swap. Score {OBJECTIVE_SCORE} in {MOVES} moves.
         </div>
       </div>
 
       <div className="row">
-        <div><span className="muted">Score</span> <b>{hud.score}</b></div>
-        <div><span className="muted">Moves</span> <b>{hud.moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{hud.combo > 0 ? `x${hud.combo + 1}` : "-"}</b></div>
+        <div>
+          <span className="muted">Score</span> <b>{hud.score}</b>
+        </div>
+        <div>
+          <span className="muted">Moves</span> <b>{hud.moves}</b>
+        </div>
+        <div>
+          <span className="muted">Combo</span>{" "}
+          <b>{hud.combo > 0 ? `x${hud.combo + 1}` : "-"}</b>
+        </div>
       </div>
 
       <div ref={wrapRef} style={{ width: "100%", display: "grid", placeItems: "center" }}>
@@ -516,39 +550,32 @@ function CanvasGame({ onExit, onBack }) {
   );
 }
 
-// ---------- Board helpers ----------
-function makeGridFromLayout(layout) {
-  const g = Array.from({ length: ROWS }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => makeCell(layout[r][c] ?? randomPiece(), r, c, true))
-  );
-  return g;
-}
-
-function makeGrid() {
-  const g = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => null)
-  );
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      g[r][c] = makeCell(randomPiece(), r, c, true);
-  return g;
-}
-
-function makeCell(type, r, c, snap = false) {
-  const size = 60; // will be resnapped by tween loop
-  const cx = c * size + size / 2;
-  const cy = r * size + size / 2;
+// ---------- Board / animation helpers ----------
+function makeCell(type, r, c, cs, spawnAbove = false) {
+  const x = c * cs + cs / 2;
+  const y = r * cs + cs / 2;
   return {
     type,
-    x: snap ? cx : cx + (Math.random() * 30 - 15),
-    y: snap ? cy : cy - Math.random() * 100,
+    x,
+    y: spawnAbove ? y - (Math.random() * 120 + 60) : y,
     vx: 0,
     vy: 0,
-    s: 1,
-    alpha: 1,
+    s: spawnAbove ? 0.9 : 1,
+    alpha: spawnAbove ? 0.2 : 1,
     clearingUntil: 0,
     highlight: false,
   };
+}
+
+function makeGridFromLayout(layout) {
+  // we don't know cell size yet during data init; it gets snapped during update()
+  const cs = 60;
+  const g = Array.from({ length: ROWS }, (_, r) =>
+    Array.from({ length: COLS }, (_, c) =>
+      makeCell(layout[r][c] ?? randomPiece(), r, c, cs, false)
+    )
+  );
+  return g;
 }
 
 function randomPiece() {
@@ -559,53 +586,28 @@ function inBounds(r, c) {
   return r >= 0 && r < ROWS && c >= 0 && c < COLS;
 }
 
-function canvasPoint(canvas, e) {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  return { x, y };
-}
-
-function hitCell(x, y) {
-  const cellSize = Math.floor(Math.min(
-    (document.body.clientWidth - 32) / COLS,
-    600 / ROWS
-  ));
-  const cs = clamp(cellSize, 44, 80); // same range as we use
-  const c = Math.floor(x / cs);
-  const r = Math.floor(y / cs);
-  if (!inBounds(r, c)) return null;
-  return { r, c };
-}
-
 function collectMatches(g) {
   const hits = new Set();
-  // Horizontal
+  // horizontal
   for (let r = 0; r < ROWS; r++) {
     let c = 0;
     while (c < COLS) {
-      const cur = g[r][c]?.type;
-      if (!cur) {
-        c++;
-        continue;
-      }
+      const t = g[r][c]?.type;
+      if (!t) { c++; continue; }
       let len = 1;
-      while (c + len < COLS && g[r][c + len]?.type === cur) len++;
+      while (c + len < COLS && g[r][c + len]?.type === t) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
       c += len;
     }
   }
-  // Vertical
+  // vertical
   for (let c = 0; c < COLS; c++) {
     let r = 0;
     while (r < ROWS) {
-      const cur = g[r][c]?.type;
-      if (!cur) {
-        r++;
-        continue;
-      }
+      const t = g[r][c]?.type;
+      if (!t) { r++; continue; }
       let len = 1;
-      while (r + len < ROWS && g[r + len][c]?.type === cur) len++;
+      while (r + len < ROWS && g[r + len][c]?.type === t) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
       r += len;
     }
@@ -614,6 +616,7 @@ function collectMatches(g) {
 }
 
 function stripAllMatches(g) {
+  // replace pieces until no instantaneous matches
   while (true) {
     const m = collectMatches(g);
     if (m.length === 0) break;
@@ -621,12 +624,7 @@ function stripAllMatches(g) {
   }
 }
 
-function hasAnyMove(g) {
-  return !!findFirstMove(g);
-}
-
 function findFirstMove(g) {
-  // try right/down swaps
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (c + 1 < COLS) {
@@ -647,25 +645,23 @@ function findFirstMove(g) {
 }
 
 function ensureAnyMove(g) {
-  if (!hasAnyMove(g)) shuffleToSolvable(g);
+  if (!findFirstMove(g)) shuffleToSolvable(g);
 }
 
 function shuffleToSolvable(g) {
   const flat = g.flat().map((cell) => cell.type);
   let tries = 0;
   while (tries++ < 100) {
-    // Fisher-Yates
     for (let i = flat.length - 1; i > 0; i--) {
       const j = (Math.random() * (i + 1)) | 0;
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
-    // write back
     let idx = 0;
     for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++) g[r][c].type = flat[idx++];
-
+      for (let c = 0; c < COLS; c++)
+        g[r][c].type = flat[idx++];
     stripAllMatches(g);
-    if (hasAnyMove(g)) return;
+    if (findFirstMove(g)) return;
   }
 }
 
@@ -675,36 +671,28 @@ function swapTypes(g, r1, c1, r2, c2) {
   g[r2][c2].type = a;
 }
 
-async function tweenSwap(r1, c1, r2, c2) {
-  const g = gridRef.current;
+async function tweenSwap(g, r1, c1, r2, c2) {
   const a = g[r1][c1];
   const b = g[r2][c2];
+  const cs = (typeof window !== "undefined" ? window : {}).cellSizeRef?.current || 0; // not used directly
+  const ax0 = a.x, ay0 = a.y;
+  const bx0 = b.x, by0 = b.y;
+  const ax1 = b.x, ay1 = b.y;
+  const bx1 = a.x, by1 = a.y;
   const t0 = now();
-  const ax0 = a.x,
-    ay0 = a.y;
-  const bx0 = b.x,
-    by0 = b.y;
-  const ax1 = c2 *  cellSizeRef.current + cellSizeRef.current / 2;
-  const ay1 = r2 *  cellSizeRef.current + cellSizeRef.current / 2;
-  const bx1 = c1 *  cellSizeRef.current + cellSizeRef.current / 2;
-  const by1 = r1 *  cellSizeRef.current + cellSizeRef.current / 2;
 
   return new Promise((res) => {
     const run = () => {
-      const t = now() - t0;
-      const u = clamp(t / SWAP_MS, 0, 1);
+      const u = clamp((now() - t0) / SWAP_MS, 0, 1);
       const e = easeInOut(u);
       a.x = ax0 + (ax1 - ax0) * e;
       a.y = ay0 + (ay1 - ay0) * e;
       b.x = bx0 + (bx1 - bx0) * e;
       b.y = by0 + (by1 - by0) * e;
-      if (u < 1) requestAnimationFrame(run);
-      else {
-        // finalize swap of types
+      if (u < 1) {
+        requestAnimationFrame(run);
+      } else {
         swapTypes(g, r1, c1, r2, c2);
-        // snap positions to their cells (velocity reset)
-        snapCell(a, r2, c2);
-        snapCell(b, r1, c1);
         res();
       }
     };
@@ -712,51 +700,15 @@ async function tweenSwap(r1, c1, r2, c2) {
   });
 }
 
-function snapCell(cell, r, c) {
-  const cx = c * cellSizeRef.current + cellSizeRef.current / 2;
-  const cy = r * cellSizeRef.current + cellSizeRef.current / 2;
-  cell.x = cx;
-  cell.y = cy;
-  cell.vx = 0;
-  cell.vy = 0;
-}
-
-function clearWithFade(g, matchCells) {
+function clearWithFade(g, matched) {
   const until = now() + CLEAR_MS;
-  for (const [r, c] of matchCells) {
+  for (const [r, c] of matched) {
     const cell = g[r][c];
-    if (!cell) continue;
-    cell.clearingUntil = until;
+    if (cell) cell.clearingUntil = until;
   }
 }
 
-function computeFalls(g) {
-  // return array of { fromR, toR, c }
-  const falls = [];
-  for (let c = 0; c < COLS; c++) {
-    let write = ROWS - 1;
-    for (let r = ROWS - 1; r >= 0; r--) {
-      if (g[r][c] && !g[r][c].clearingUntil) {
-        if (write !== r) {
-          falls.push({ fromR: r, toR: write, c });
-        }
-        write--;
-      }
-    }
-  }
-  return falls;
-}
-
-function animateFalls(g, falls) {
-  // Move cells in data immediately; animate positions downwards
-  for (const f of falls) {
-    for (let r = f.fromR; r >= 0; r--) {
-      if (g[r][f.c] && !g[r][f.c].clearingUntil) {
-        // bubble down to next empty above write
-      }
-    }
-  }
-  // Actually perform a standard gravity compacting:
+function compactGravity(g) {
   for (let c = 0; c < COLS; c++) {
     let write = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -771,41 +723,16 @@ function animateFalls(g, falls) {
     }
     for (; write >= 0; write--) g[write][c] = null;
   }
-
-  // Animate motion by snapping targets and letting update() spring to them.
-  return sleep(240);
 }
 
-function refillSpawnPlan(g) {
-  const spawns = [];
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (!g[r][c]) spawns.push({ r, c });
-  return spawns;
-}
-
-function animateSpawns(g, spawns) {
-  const sz = cellSizeRef.current;
-  for (const { r, c } of spawns) {
-    const cell = makeCell(randomPiece(), r, c, false);
-    // spawn above
-    cell.x = c * sz + sz / 2;
-    cell.y = (r * sz + sz / 2) - Math.random() * 120 - 60;
-    cell.vx = 0; cell.vy = 0; cell.alpha = 0.0; cell.s = 0.9;
-    g[r][c] = cell;
-    // tween alpha in
-    const t0 = now();
-    const dur = 160;
-    const tick = () => {
-      const u = clamp((now() - t0) / dur, 0, 1);
-      cell.alpha = 0.2 + 0.8 * u;
-      cell.s = 0.9 + 0.1 * u;
-      if (u < 1) requestAnimationFrame(tick);
-    };
-    tick();
+function spawnRefill(g) {
+  // spawn new cells above, they will fall via springs in update()
+  const cs = 60; // initial snap (the spring will move them to real centers)
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!g[r][c]) g[r][c] = makeCell(randomPiece(), r, c, cs, true);
+    }
   }
-  // let gravity settle them
-  return sleep(260);
 }
 
 function flashHint(g, move) {
@@ -819,11 +746,6 @@ function flashHint(g, move) {
   }, 900);
 }
 
-// ---------- Small utils ----------
-function sleep(ms) {
-  return new Promise((res) => setTimeout(res, ms));
-}
-
 function roundRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -835,6 +757,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function easeInOut(t) {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
 }
