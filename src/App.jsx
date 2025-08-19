@@ -216,8 +216,7 @@ export default function App() {
      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
   <Header />
   <div className="content">
-    {screen === "home" && <HomeView />}
-    {screen === "shop" && <Shop />}
+    {screen === "home" && <Home coins={coins} onNavigate={navigateTo} />}
     {screen === "leaderboard" && <Leaderboard />}
     {screen === "daily" && <Daily />}
     {screen === "invite" && <Invite />}
