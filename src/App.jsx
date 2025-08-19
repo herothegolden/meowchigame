@@ -1,143 +1,287 @@
-:root{
-  --bg: #0b1020;
-  --card: #111a32;
-  --muted: #a8b0c2;
-  --line: rgba(255,255,255,0.08);
-  --text: #e8eeff;
-  --accent: #667eea;
-  --accent2:#764ba2;
-}
+import React, { useEffect, useState } from "react";
+import Home from "./Home.jsx";
+import GameView from "./GameView.jsx";
 
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{
-  margin:0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
+// Small helpers for Telegram WebApp viewport quirks
+const getTG = () =>
+  (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
-/* app shell */
-.shell{
-  max-width: 520px;
-  margin: 0 auto;
-  min-height: calc(var(--vh,1vh)*100);
-  display:flex;
-  flex-direction:column;
-  padding: 12px;
-}
+export default function App() {
+  // stable viewport units for mobile webview
+  useEffect(() => {
+    const setVH = () => {
+      const tg = getTG();
+      const height = tg?.viewportStableHeight || window.innerHeight;
+      const vh = height / 100;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    };
+    setVH();
+    window.addEventListener("resize", setVH);
+    return () => window.removeEventListener("resize", setVH);
+  }, []);
 
-/* header */
-.header{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
-.header-line1{display:flex;gap:8px}
-.header-line2{display:flex;align-items:center;justify-content:space-between}
-.brand-compact{display:flex;align-items:center;gap:8px}
-.logo{font-size:20px}
-.name{font-weight:800}
-.pill-compact{font-size:11px;padding:4px 8px;border-radius:999px;background:#1b2647;color:#cfe0ff}
+  // Telegram init (safe no-op outside Telegram)
+  useEffect(() => {
+    const tg = getTG();
+    try {
+      tg?.ready();
+      tg?.expand();
+      tg?.disableVerticalSwipes?.();
+    } catch {}
+  }, []);
 
-/* content area */
-.content{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+  // splash (optional—but keeps layout from flashing)
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowSplash(false), 600);
+    return () => clearTimeout(t);
+  }, []);
 
-/* sections & lists */
-.section{
-  background:#0e1430;
-  border:1px solid var(--line);
-  border-radius:16px;
-  padding:16px;
-  box-shadow:0 10px 24px rgba(0,0,0,.25);
-}
-.title{font-weight:800;margin-bottom:8px}
-.row{display:flex;align-items:center;justify-content:space-between}
-.list{display:grid}
-.grid-gap{gap:8px}
-.grid-gap-6{gap:6px}
-.muted{color:var(--muted)}
-.small{font-size:12px}
-.pill{
-  background:#101a3a;border:1px solid var(--line);
-  padding:8px 10px;border-radius:999px
-}
-.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  // ------------ App state (routing kept as before) ------------
+  const [screen, setScreen] = useState("home");
+  const [screenHistory, setScreenHistory] = useState(["home"]);
+  const [coins, setCoins] = useState(500);
+  const [lastRun, setLastRun] = useState(null);
+  const [settings, setSettings] = useState({ haptics: true, sounds: false });
+  const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
+  const [lbScope, setLbScope] = useState("daily");
+  const leaders = {
+    daily: [["mira", 220], ["zeno", 180], ["kira", 150]],
+    weekly: [["mira", 820], ["kira", 760], ["alex", 700]],
+    all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
+  };
 
-/* buttons & tabs */
-.btn{
-  appearance:none;border:0;border-radius:12px;
-  padding:10px 14px;font-weight:700;color:#fff;
-  background:#293a7a;cursor:pointer
-}
-.btn.primary{background: linear-gradient(135deg, var(--accent), var(--accent2));}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.tabs{display:flex;gap:6px}
-.tab{
-  border:1px solid var(--line);background:#101735;color:#cfe0ff;
-  padding:6px 10px;border-radius:999px;font-size:12px
-}
-.tab.active{background:#21306a}
+  const navigateTo = (s) => {
+    setScreenHistory((p) => [...p, s]);
+    setScreen(s);
+  };
+  const goBack = () => {
+    if (screenHistory.length > 1) {
+      const h = [...screenHistory];
+      h.pop();
+      setScreenHistory(h);
+      setScreen(h[h.length - 1]);
+    } else {
+      setScreen("home");
+      setScreenHistory(["home"]);
+    }
+  };
+  const goHome = () => {
+    setScreen("home");
+    setScreenHistory(["home"]);
+  };
 
-/* splash */
-.splash{
-  position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:999;
-}
-.splash-min{display:grid;gap:12px;place-items:center}
-.loader-ring{
-  width:34px;height:34px;border-radius:50%;
-  border:3px solid rgba(255,255,255,.18);
-  border-top-color:#fff;animation:spin 1s linear infinite
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-.splash-text{color:#cfe0ff;font-size:14px}
+  // ------------ Small inline screens (UI only) ------------
+  function Header() {
+    const isHome = screen === "home";
+    return (
+      <header className="header">
+        {!isHome && (
+          <div className="header-line1">
+            <button className="btn" onClick={goBack}>← Back</button>
+            <button className="btn" onClick={goHome}>🏠 Home</button>
+          </div>
+        )}
+        <div className="header-line2">
+          <div className="brand-compact">
+            <span className="logo">🐱</span>
+            <div className="name">Meowchi</div>
+            <span className="pill-compact">{screen.toUpperCase()}</span>
+          </div>
+          <div className="score-info">
+            {screen === "game" && (
+              <div className="score-item">
+                Score: {typeof window !== "undefined" ? (window.currentGameScore || 0) : 0}
+              </div>
+            )}
+            <div className="score-item">$Meow {coins}</div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
-/* --- Board / GameView styles (match current GameView.jsx) --- */
-.section.board-wrap{position:relative}
-.board{
-  position:relative;
-  margin:10px auto 8px;
-  background:#0a1130;
-  border-radius:12px;
-  border:1px solid var(--line);
-  overflow:hidden;
-}
-.gridlines{
-  position:absolute; inset:0;
-  opacity:.16; pointer-events:none;
-}
-.tile{
-  position:absolute; display:grid; place-items:center;
-  user-select:none; touch-action:none;
-  border-radius:10px;
-  transition: transform .18s ease;
-  background:#111a32;
-  border:1px solid rgba(255,255,255,.06);
-}
-.tile.sel{outline:3px solid rgba(102,126,234,.6)}
-.tile.hint{box-shadow:0 0 0 3px rgba(118,75,162,.6) inset}
-.tile.drop-in{animation:drop .35s ease}
-@keyframes drop{from{transform:translateY(-18px);opacity:.0}to{transform:translateY(0);opacity:1}}
+  function Shop() {
+    const items = [
+      { key: "hint", name: "Candy Hint", desc: "Highlight a sweet swap", price: 20, icon: "💡" },
+      { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
+      { key: "hammer", name: "Candy Crusher", desc: "Smash any candy", price: 60, icon: "🔨" },
+      { key: "bomb", name: "Candy Bomb", desc: "Explode 3×3 area", price: 80, icon: "💥" },
+    ];
+    return (
+      <section className="section">
+        <div className="title" style={{ marginBottom: 10 }}>🛍 Meowchi Shop</div>
+        <div className="list grid-gap">
+          {items.map((it) => (
+            <div key={it.key} className="row">
+              <div>
+                <div style={{ fontWeight: 600 }}>{it.icon} {it.name}</div>
+                <div className="muted small">{it.desc}</div>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <div className="muted small">{it.price} $Meow</div>
+                <button
+                  className="btn"
+                  onClick={() => setCoins((c) => Math.max(0, c - it.price))}
+                  disabled={coins < it.price}
+                >
+                  Buy
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
-.combo{
-  position:absolute; left:50%; top:-10px; transform:translate(-50%,-50%);
-  background:rgba(255,255,255,.1);
-  border:1px solid var(--line);
-  padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px
-}
+  function Leaderboard() {
+    const scopes = [["daily", "Daily"], ["weekly", "Weekly"], ["all", "All-time"]];
+    const rows = leaders[lbScope] || [];
+    return (
+      <section className="section">
+        <div className="row">
+          <div className="title">🏆 Sweet Leaderboard</div>
+          <div className="tabs">
+            {scopes.map(([k, label]) => (
+              <button
+                key={k}
+                className={`tab ${lbScope === k ? "active" : ""}`}
+                onClick={() => setLbScope(k)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="list grid-gap-6">
+          {rows.map(([u, s], i) => (
+            <div key={u} className="row">
+              <div className="row" style={{ gap: 8 }}>
+                <span className="muted small" style={{ width: 20, textAlign: "right" }}>{i + 1}.</span>
+                <b>{u}</b>
+              </div>
+              <b>{s}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
-.pause-overlay{
-  position:absolute; inset:0; display:grid; place-items:center;
-  background:rgba(0,0,0,.5); backdrop-filter:saturate(120%) blur(2px);
-}
+  function Daily() {
+    const today = new Date().toISOString().slice(0, 10);
+    const canClaim = daily.lastClaim !== today;
+    function claim() {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      setDaily((d) => ({ streak: d.lastClaim === yesterday ? d.streak + 1 : 1, lastClaim: today }));
+      setCoins((c) => c + 50);
+    }
+    return (
+      <section className="section">
+        <div className="title">🍯 Daily Sweet Treats</div>
+        <div className="muted">Streak: <b>{daily.streak}</b> {daily.lastClaim ? `• last: ${daily.lastClaim}` : ""}</div>
+        <button className="btn primary" onClick={claim} disabled={!canClaim}>
+          {canClaim ? "Claim 50 $Meow" : "Come back tomorrow"}
+        </button>
+        <div className="muted small">Keep your sweet streak alive! Resets if you miss a day.</div>
+      </section>
+    );
+  }
 
-/* controls under board */
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.controls .btn{padding:8px 12px}
-.controls-size{opacity:.7;font-size:12px}
+  function Invite() {
+    const link = "https://t.me/meowchi_game_bot?start=sweet";
+    const [copied, setCopied] = useState(false);
+    async function copy() {
+      try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1000); } catch {}
+    }
+    return (
+      <section className="section">
+        <div className="title">🍭 Share the Sweetness</div>
+        <div className="muted small">
+          Invite friends! When your friend finishes their first level, you both get 200 $Meow.
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <div className="pill ellipsis">{link}</div>
+          <button className="btn" onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
+        </div>
+      </section>
+    );
+  }
 
-/* fancy spark particles used by Poof */
-.spark{
-  position:absolute; transform-origin:var(--cx) var(--cy);
-  animation:fly var(--dur,1.1s) ease-out forwards;
-}
-@keyframes fly{
-  from { transform: translate(0,0) scale(1); opacity:1 }
-  to   { transform: translate(var(--tx), var(--ty)) scale(.75); opacity:0 }
+  function Settings() {
+    return (
+      <section className="section">
+        <div className="title">Settings</div>
+        <label className="row">
+          <div>Haptics</div>
+          <input
+            type="checkbox"
+            checked={settings.haptics}
+            onChange={(e) => setSettings((s) => ({ ...s, haptics: e.target.checked }))}
+          />
+        </label>
+        <label className="row">
+          <div>Sounds (preview only)</div>
+          <input
+            type="checkbox"
+            checked={settings.sounds}
+            onChange={(e) => setSettings((s) => ({ ...s, sounds: e.target.checked }))}
+          />
+        </label>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      {showSplash && (
+        <div className="splash" role="status" aria-live="polite">
+          <div className="splash-min">
+            <div className="loader-ring" />
+            <div className="splash-text">Loading sweet meowchi…</div>
+          </div>
+        </div>
+      )}
+
+      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+        <Header />
+        <main className="content">
+          {screen === "home" && (
+            <Home coins={coins} onNavigate={navigateTo} />
+          )}
+
+          {screen === "shop" && <Shop />}
+          {screen === "leaderboard" && <Leaderboard />}
+          {screen === "daily" && <Daily />}
+          {screen === "invite" && <Invite />}
+          {screen === "settings" && <Settings />}
+
+          {screen === "game" && (
+            <GameView
+              onExit={(run) => {
+                setLastRun(run);
+                setCoins((c) => c + (run?.coins || 0));
+                setScreen("gameover");
+                setScreenHistory((h) => [...h, "gameover"]);
+              }}
+              onCoins={(d) => setCoins((c) => c + d)}
+              settings={settings}
+            />
+          )}
+
+          {screen === "gameover" && lastRun && (
+            <section className="section">
+              <div className="title">🍬 Sweet Level Complete!</div>
+              <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
+              <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
+              <button className="btn primary" onClick={() => setScreen("game")}>
+                🍭 Play More Meowchi
+              </button>
+            </section>
+          )}
+        </main>
+      </div>
+    </>
+  );
 }
