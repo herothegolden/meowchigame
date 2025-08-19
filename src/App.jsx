@@ -259,6 +259,7 @@ function GameView({ onExit, onCoins, settings }) {
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
   useResizeCell(containerRef, setCell);
+ }
 
   // Board state
   const [grid, setGrid] = useState(() => initSolvableGrid());
