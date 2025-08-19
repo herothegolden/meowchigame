@@ -4,7 +4,6 @@ import "./home.css";
 export default function Home({ coins = 0, onNavigate }) {
   return (
     <div className="home-root">
-      <div className="home-gradient" aria-hidden />
       <div className="home-center">
         <div className="home-card">
           <div className="home-topbar">
