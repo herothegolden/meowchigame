@@ -1,4 +1,314 @@
-<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+import React, { useEffect, useRef, useState } from "react";
+
+/* -------------------------------------------------
+   Candy Crush with Cats — Match-3 (Telegram WebApp)
+   ✦ Candy Crush style with cats, pretzels, strawberries, oreos, marshmallows
+   ✦ HK-like full-screen shell (Header / Content)
+   ✦ Stable 100vh via Telegram viewportStableHeight
+   ✦ Wallpaper splash that holds ≥ 3s
+   ✦ Mechanics: swap → match 3+ → clear → gravity → refill
+-------------------------------------------------- */
+
+// ---------- Shared config ----------
+const COLS = 8;
+const ROWS = 8;
+const CELL_MIN = 36;
+const CELL_MAX = 64;
+
+const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
+const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
+
+const getTG = () =>
+  (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
+
+// ---------- Root App ----------
+export default function App() {
+  // Inject CSS once
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      :root { --line:#243069; --vh: 1vh; }
+      html, body, #root { height: 100%; }
+      body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+
+      /* Full-screen shell (Hamster Kombat style) */
+      .shell {
+        height: calc(var(--vh, 1vh) * 100);
+        display: grid;
+        grid-template-rows: auto 1fr;
+        width: 100%;
+      }
+      .header {
+        display:flex; align-items:center; justify-content:space-between;
+        padding:12px 16px;
+        background:#0f1430; border-bottom:1px solid rgba(122,162,255,.15);
+        position: sticky; top: 0; z-index: 5;
+      }
+      .brand { display:flex; align-items:center; gap:10px; }
+      .brand .logo { font-size:22px }
+      .brand .name { font-weight:800; letter-spacing:.2px }
+      .pill { padding:2px 8px; border-radius:999px; border:1px solid rgba(122,162,255,.25); background:#0f1533; font-size:11px; }
+
+      .content {
+        height: 100%; width: 100%;
+        padding: 12px 16px 16px 16px;
+        display: grid; align-content:start; gap: 12px;
+        overflow:auto;
+      }
+
+      .section {
+        background:#0f1430; border:1px solid var(--line);
+        border-radius:16px; padding:14px;
+        box-shadow:0 10px 28px rgba(0,0,0,.15);
+      }
+      .title { font-weight:800; font-size:16px; }
+      .muted { opacity:.72; }
+      .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+      .grid { display:grid; gap:10px; }
+      .btn {
+        background:#12183a; border:1px solid #1c244e; border-radius:14px;
+        padding:10px 12px; color:#fff; cursor:pointer;
+      }
+      .btn:hover { background:#1a2260; }
+      .btn:disabled { opacity:0.5; cursor:not-allowed; }
+      .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:700; }
+      .btn.primary:hover { background:#1a2768; }
+      .btn.block { width:100%; }
+
+      .list > * {
+        background:#12183a; border:1px solid #1c244e; border-radius:14px;
+        padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;
+      }
+      .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+      .tab { padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#12183a; cursor:pointer; font-size:12px; }
+      .tab:hover { background:#1a2260; }
+      .tab.active { background:#132049; border-color:#1f2a5c; font-weight:700; }
+
+      /* Board - enhanced for smooth rendering */
+      .board-wrap { display:grid; gap:10px; }
+      .board {
+        position:relative; background:#0f1533; border-radius:18px;
+        outline:1px solid var(--line);
+        box-shadow:0 10px 34px rgba(0,0,0,.35); touch-action:none;
+        margin: 0 auto;
+      }
+      .gridlines { position:absolute; inset:0; opacity:.15; pointer-events:none; }
+      .tile {
+        position:absolute; display:flex; align-items:center; justify-content:center;
+        border-radius:16px; background:linear-gradient(135deg, #1a2260 0%, #151b46 100%);
+        outline:1px solid #26307a;
+        transition: transform .3s ease, opacity .4s ease, background .2s ease, box-shadow .3s ease;
+        cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      }
+      .tile:hover { 
+        background:linear-gradient(135deg, #2a3270 0%, #1f2556 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,.3);
+      }
+      .tile.sel { 
+        background:linear-gradient(135deg, #3a4280 0%, #2f3566 100%);
+        outline-color:#4a58b4; 
+        transform: scale(1.05);
+        box-shadow: 0 0 0 3px rgba(74, 88, 180, 0.4);
+      }
+      .tile.hint { 
+        box-shadow: 0 0 0 3px #7aa2ff inset, 0 0 20px rgba(122,162,255,.6);
+        animation: pulse-hint 2s ease-in-out infinite;
+      }
+      @keyframes pulse-hint {
+        0%, 100% { box-shadow: 0 0 0 3px #7aa2ff inset, 0 0 20px rgba(122,162,255,.6); }
+        50% { box-shadow: 0 0 0 3px #ffd166 inset, 0 0 25px rgba(255,209,102,.8); }
+      }
+      .tile.falling {
+        animation: fall-in 0.6s ease-out;
+      }
+      .tile.swapping {
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 20;
+      }
+      .tile.drop-in {
+        animation: drop-from-above 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
+      @keyframes fall-in {
+        0% { transform: translateY(-100px); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes drop-from-above {
+        0% { 
+          transform: translateY(-400px); 
+          opacity: 0.7; 
+        }
+        100% { 
+          transform: translateY(0); 
+          opacity: 1; 
+        }
+      }
+      .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; }
+      .combo { position:absolute; left:50%; transform:translateX(-50%); top:6px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 8px; font-size:12px; }
+      @keyframes poof { 
+        from { 
+          opacity:1; 
+          transform: translate(var(--cx), var(--cy)) scale(1.2) rotate(0deg); 
+        } 
+        50% {
+          opacity:1;
+          transform: translate(calc(var(--cx) + (var(--tx) - var(--cx)) * 0.7), calc(var(--cy) + (var(--ty) - var(--cy)) * 0.7)) scale(1) rotate(180deg);
+        }
+        to { 
+          opacity:0; 
+          transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
+        } 
+      }
+      .spark { 
+        position:absolute; 
+        animation: poof ease-out forwards;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      /* Splash (clean wallpaper, no dim/box) */
+      .splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: grid; place-items: center; overflow: hidden;
+        background: linear-gradient(135deg, #0a0f23 0%, #1a2260 50%, #243069 100%);
+      }
+      .splash-min {
+        position: relative;
+        display: grid; gap: 10px; place-items: center; text-align: center;
+      }
+      .loader-ring {
+        width: 56px; height: 56px; border-radius: 50%;
+        border: 3px solid rgba(255,255,255,.25);
+        border-top-color: #ffffff;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .splash-text { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // Stable vh (Telegram provides viewportStableHeight)
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight / 100;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    };
+    setVH();
+    window.addEventListener("resize", setVH);
+    return () => window.removeEventListener("resize", setVH);
+  }, []);
+
+  // Splash gating (3s + tg.ready + image loaded)
+  const [showSplash, setShowSplash] = useState(true);
+  const [tgReady, setTgReady] = useState(false);
+  const [minElapsed, setMinElapsed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  useEffect(() => {
+    const tg = getTG();
+    try { tg?.ready(); tg?.expand(); } catch {}
+    setTgReady(true);
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 2000); // Shorter for demo
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    setImgLoaded(true); // Skip image loading for demo
+  }, []);
+  useEffect(() => {
+    if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
+  }, [tgReady, minElapsed, imgLoaded]);
+
+  // Navigation / state
+  const [screen, setScreen] = useState("home");
+  const [coins, setCoins] = useState(500);
+  const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
+  const [settings, setSettings] = useState({ haptics: true, sounds: false });
+  const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
+  const [lbScope, setLbScope] = useState("daily");
+  const leaders = {
+    daily: [["mira", 220], ["zeno", 180], ["kira", 150]],
+    weekly: [["mira", 820], ["kira", 760], ["alex", 700]],
+    all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
+  };
+
+  // UI sections
+  function Header() {
+    return (
+      <div className="header">
+        <div className="brand">
+          <span className="logo">🍬</span>
+          <div className="name">Candy‑Crush‑Cats</div>
+          <span className="pill">{screen.toUpperCase()}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div>
+            <span className="muted" style={{ marginRight: 6 }}>
+              CandyCoins
+            </span>
+            <b>{coins}</b>
+          </div>
+          {screen !== "home" && (
+            <button className="btn" onClick={() => setScreen("home")}>
+              Home
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function Home() {
+    return (
+      <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="section" style={{ display: "grid", gap: 10 }}>
+          <div className="title">Match‑3 Candy Crush with cute cats!</div>
+          <button className="btn primary block" onClick={() => setScreen("game")}>
+            🍭 Play Candy Crush
+          </button>
+          <div className="row">
+            <button className="btn block" onClick={() => setScreen("shop")}>🛍 Candy Shop</button>
+            <button className="btn block" onClick={() => setScreen("leaderboard")}>🏆 Sweet Leaders</button>
+          </div>
+          <div className="row">
+            <button className="btn block" onClick={() => setScreen("daily")}>🍯 Daily Treats</button>
+            <button className="btn block" onClick={() => setScreen("invite")}>🔗 Share Sweetness</button>
+          </div>
+          <button className="btn block" onClick={() => setScreen("settings")}>⚙️ Settings</button>
+        </div>
+        <div className="section" style={{ display: "grid", gap: 8 }}>
+          <div className="title">How to play Candy Crush</div>
+          <div className="muted">
+            Swap adjacent candies to create rows or columns of 3+ matching treats! 
+            Match cats 😺, pretzels 🥨, strawberries 🍓, oreos 🍪, or marshmallows 🍡. 
+            Create cascades for <b>bonus points</b>. Use hints when stuck!
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function Shop() {
+    const items = [
+      { key: "hint", name: "Candy Hint", desc: "Highlight a sweet swap", price: 20, icon: "💡" },
+      { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
+      { key: "hammer", name: "Candy Crusher", desc: "Smash any candy", price: 60, icon: "🔨" },
+      { key: "bomb", name: "Candy Bomb", desc: "Explode 3x3 area", price: 80, icon: "💥" },
+    ];
+    return (
+      <div className="section">
+        <div className="title" style={{ marginBottom: 10 }}>🍭 Candy Shop</div>
+        <div className="list" style={{ display: "grid", gap: 8 }}>
+          {items.map((it) => (
+            <div key={it.key}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{it.icon} {it.name}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{it.desc}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div className="muted" style={{ fontSize: 12 }}>{it.price} 🍬</div>
                 <button
                   className="btn"
@@ -371,718 +681,4 @@ function GameView({ onExit, onBack, onCoins }) {
     if (matches.length === 0) {
       haptic(8);
       setSel({ r: r1, c: c1 });
-      setTimeout(() => setSel(null), 120);
-      return;
-    }
-    
-    // Start visual swap animation
-    setSwapping({ from: {r: r1, c: c1}, to: {r: r2, c: c2} });
-    
-    // After animation completes, update grid and start cascades
-    setTimeout(() => {
-      setGrid(g);
-      setSwapping(null);
-      setMoves((m) => Math.max(0, m - 1));
-      
-      resolveCascades(g, () => {
-        if (movesRef.current === 0) finish();
-      });
-    }, 300);
-  }
-
-  const movesRef = useRef(moves);
-  movesRef.current = moves;
-
-  function resolveCascades(startGrid, done) {
-    let g = cloneGrid(startGrid);
-    let comboCount = 0;
-    
-    const step = () => {
-      const matches = findMatches(g);
-      if (matches.length === 0) {
-        setGrid(g);
-        setNewTiles(new Set());
-        if (comboCount > 0) {
-          setCombo(comboCount);
-          haptic(15);
-          setTimeout(() => setCombo(0), 1500);
-        }
-        ensureSolvable();
-        done && done();
-        return;
-      }
-      
-      // Show blast effect
-      const keys = matches.map(([r, c]) => `${r}:${c}`);
-      setBlast(new Set(keys));
-      
-      // FX particles
-      const fxId = Date.now() + Math.random();
-      setFx((prev) => [
-        ...prev,
-        ...matches.map((m, i) => ({ 
-          id: fxId + i + Math.random(),
-          x: m[1] * cell, 
-          y: m[0] * cell 
-        })),
-      ]);
-      
-      // Scoring
-      setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
-      onCoins(Math.ceil(matches.length / 4));
-      
-      // PHASE 1: Clear matches and show empty spaces
-      matches.forEach(([r, c]) => { g[r][c] = null; });
-      setGrid(cloneGrid(g));
-      
-      setTimeout(() => setBlast(new Set()), 800);
-      
-      // PHASE 2: Apply gravity and refill, then animate the drops
-      setTimeout(() => {
-        // Remember which positions were empty before refill
-        const emptyPositions = new Set();
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (g[r][c] === null) {
-              emptyPositions.add(`${r}-${c}`);
-            }
-          }
-        }
-        
-        // Apply gravity and refill
-        applyGravity(g);
-        refill(g);
-        
-        // Mark positions that got new tiles for drop animation
-        setNewTiles(emptyPositions);
-        setGrid(cloneGrid(g));
-        
-        // Clear the drop animation after it completes
-        setTimeout(() => {
-          setNewTiles(new Set());
-          comboCount++;
-          setTimeout(step, 300);
-        }, 800); // Drop animation duration
-        
-      }, 600); // Time to see empty spaces
-      
-      setTimeout(() => {
-        setFx((prev) => prev.filter((p) => p.id < fxId || p.id > fxId + 100));
-      }, 1500);
-    };
-    
-    step();
-  }
-
-  function doHint() {
-    const m = findFirstMove(gridRef.current);
-    if (!m) { shuffleBoard(); return; }
-    setHint(m);
-    setTimeout(() => setHint(null), 1500);
-    haptic(10);
-  }
-
-  function shuffleBoard() {
-    const g = shuffleToSolvable(gridRef.current);
-    setGrid(g);
-    haptic(12);
-  }
-
-  function ensureSolvable() {
-    if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current));
-  }
-
-  function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
-
-  const boardW = cell * COLS, boardH = cell * ROWS;
-
-  return (
-    <div className="section board-wrap" ref={containerRef}>
-      <div className="row">
-        <button className="btn" onClick={onBack}>Back</button>
-        <div className="muted">
-          🍬 Touch and drag to swap adjacent candies! 🍭
-        </div>
-      </div>
-
-      {/* HUD */}
-      <div className="row">
-        <div><span className="muted">Score</span> <b>{score}</b></div>
-        <div><span className="muted">Moves</span> <b>{moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
-      </div>
-
-      {/* Board */}
-      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
-        <div
-          className="gridlines"
-          style={{
-            backgroundImage:
-              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-            backgroundSize: `${cell}px ${cell}px`,
-          }}
-        />
-
-        {/* Tiles */}
-        {grid.map((row, r) =>
-          row.map((v, c) => {
-            const isSelected = sel && sel.r === r && sel.c === c;
-            const isHinted = hint && 
-              ((hint[0][0] === r && hint[0][1] === c) ||
-               (hint[1][0] === r && hint[1][1] === c));
-            const isBlasting = blast.has(`${r}:${c}`);
-            
-            // Smooth swap animation
-            let swapTransform = "";
-            if (swapping) {
-              if (swapping.from.r === r && swapping.from.c === c) {
-                const deltaX = (swapping.to.c - swapping.from.c) * cell;
-                const deltaY = (swapping.to.r - swapping.from.r) * cell;
-                swapTransform = `translate(${deltaX}px, ${deltaY}px)`;
-              } else if (swapping.to.r === r && swapping.to.c === c) {
-                const deltaX = (swapping.from.c - swapping.to.c) * cell;
-                const deltaY = (swapping.from.r - swapping.to.r) * cell;
-                swapTransform = `translate(${deltaX}px, ${deltaY}px)`;
-              }
-            }
-            
-            const isSwapping = swapping && (
-              (swapping.from.r === r && swapping.from.c === c) || 
-              (swapping.to.r === r && swapping.to.c === c)
-            );
-
-            const tileKey = `${r}-${c}`;
-            const isNewTile = newTiles.has(tileKey);
-            
-            return (
-              <div
-                key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isNewTile ? "drop-in" : ""}`}
-                style={{
-                  left: c * cell,
-                  top: r * cell,
-                  width: cell,
-                  height: cell,
-                  transform: swapTransform || (isBlasting ? "scale(1.3) rotate(10deg)" : undefined),
-                  boxShadow: isBlasting
-                    ? "0 0 0 4px #ffd166 inset, 0 0 20px 6px rgba(255,209,102,.8), 0 0 40px 10px rgba(255,255,255,.3)"
-                    : undefined,
-                  background: isBlasting ? "linear-gradient(135deg, #ffd166 0%, #ff9500 100%)" : undefined,
-                  zIndex: isBlasting ? 10 : (isSwapping ? 20 : 1),
-                }}
-              >
-                <span style={{ 
-                  fontSize: Math.floor(cell * 0.7),
-                  transform: isBlasting ? "scale(1.2)" : undefined,
-                  filter: isBlasting ? "drop-shadow(0 2px 4px rgba(0,0,0,.5))" : undefined,
-                }}>
-                  {v}
-                </span>
-              </div>
-            );
-          })
-        )}
-
-        {/* particles */}
-        {fx.map((p) => (
-          <Poof key={p.id} id={p.id} x={p.x} y={p.y} size={cell} />
-        ))}
-
-        {/* combo */}
-        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
-
-        {/* Pause overlay */}
-        {paused && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(0,0,0,.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 18,
-            }}
-          >
-            <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>
-                🍬 Game Paused
-              </div>
-              <div className="muted" style={{ marginBottom: 12 }}>
-                Take a sweet break!
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn primary" onClick={() => setPaused(false)}>
-                  Resume
-                </button>
-                <button className="btn" onClick={() => finish()}>
-                  End Sweet Level
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Controls */}
-      <div className="controls">
-        <button className="btn" onClick={() => setPaused((p) => !p)}>
-          {paused ? "Resume" : "Pause"}
-        </button>
-        <button
-          className="btn"
-          onClick={() => {
-            setGrid(initSolvableGrid());
-            setScore(0);
-            setMoves(20);
-            setCombo(0);
-            setSel(null);
-            setHint(null);
-            setSwapping(null);
-          }}
-        >
-          Reset
-        </button>
-        <button className="btn" onClick={doHint}>💡 Sweet Hint</button>
-        <button className="btn primary" onClick={shuffleBoard}>🔄 Sugar Shuffle</button>
-        <div
-          style={{
-            gridColumn: "span 1",
-            opacity: 0.7,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-          }}
-        >
-          8×8
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------- Helpers ----------
-const makeGrid = (rows, cols) =>
-  Array.from({ length: rows }, () => Array(cols).fill(null));
-const cloneGrid = (g) => g.map((r) => r.slice());
-const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
-
-function findMatches(g) {
-  const hits = new Set();
-  // Horizontal
-  for (let r = 0; r < ROWS; r++) {
-    let c = 0;
-    while (c < COLS) {
-      const v = g[r][c];
-      if (!v) { c++; continue; }
-      let len = 1;
-      while (c + len < COLS && g[r][c + len] === v) len++;
-      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
-      c += len;
-    }
-  }
-  // Vertical
-  for (let c = 0; c < COLS; c++) {
-    let r = 0;
-    while (r < ROWS) {
-      const v = g[r][c];
-      if (!v) { r++; continue; }
-      let len = 1;
-      while (r + len < ROWS && g[r + len][c] === v) len++;
-      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
-      r += len;
-    }
-  }
-  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
-}
-
-function applyGravity(g) {
-  for (let c = 0; c < COLS; c++) {
-    let write = ROWS - 1;
-    for (let r = ROWS - 1; r >= 0; r--) {
-      if (g[r][c] != null) {
-        const v = g[r][c];
-        g[r][c] = null;
-        g[write][c] = v;
-        write--;
-      }
-    }
-    while (write >= 0) { g[write][c] = null; write--; }
-  }
-}
-
-function refill(g) {
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (g[r][c] == null) g[r][c] = randEmoji();
-}
-
-function hasAnyMove(g) { return !!findFirstMove(g); }
-
-function findFirstMove(g) {
-  // Check swaps right and down for a created match
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (c + 1 < COLS) {
-        const t = cloneGrid(g);
-        [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]];
-        if (findMatches(t).length > 0) return [[r, c], [r, c + 1]];
-      }
-      if (r + 1 < ROWS) {
-        const t = cloneGrid(g);
-        [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]];
-        if (findMatches(t).length > 0) return [[r, c], [r + 1, c]];
-      }
-    }
-  }
-  return null;
-}
-
-function initSolvableGrid() {
-  let g; let tries = 0;
-  do {
-    g = makeGrid(ROWS, COLS);
-    for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++)
-        g[r][c] = randEmoji();
-    removeAllMatches(g);
-    tries++;
-    if (tries > 50) break;
-  } while (!hasAnyMove(g));
-  return g;
-}
-
-function removeAllMatches(g) {
-  // Reroll any existing matches to start without clears
-  while (true) {
-    const m = findMatches(g);
-    if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
-  }
-}
-
-function shuffleToSolvable(g) {
-  const flat = [];
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
-
-  let attempts = 0;
-  while (attempts < 100) {
-    // Fisher-Yates shuffle
-    for (let i = flat.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
-      [flat[i], flat[j]] = [flat[j], flat[i]];
-    }
-
-    const t = makeGrid(ROWS, COLS);
-    let idx = 0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][cimport React, { useEffect, useRef, useState } from "react";
-
-/* -------------------------------------------------
-   Candy Crush with Cats — Match-3 (Telegram WebApp)
-   ✦ Candy Crush style with cats, pretzels, strawberries, oreos, marshmallows
-   ✦ HK-like full-screen shell (Header / Content)
-   ✦ Stable 100vh via Telegram viewportStableHeight
-   ✦ Wallpaper splash that holds ≥ 3s
-   ✦ Mechanics: swap → match 3+ → clear → gravity → refill
--------------------------------------------------- */
-
-// ---------- Shared config ----------
-const COLS = 8;
-const ROWS = 8;
-const CELL_MIN = 36;
-const CELL_MAX = 64;
-
-const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
-const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
-
-const getTG = () =>
-  (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
-
-// ---------- Root App ----------
-export default function App() {
-  // Inject CSS once
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.innerHTML = `
-      :root { --line:#243069; --vh: 1vh; }
-      html, body, #root { height: 100%; }
-      body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-
-      /* Full-screen shell (Hamster Kombat style) */
-      .shell {
-        height: calc(var(--vh, 1vh) * 100);
-        display: grid;
-        grid-template-rows: auto 1fr;
-        width: 100%;
-      }
-      .header {
-        display:flex; align-items:center; justify-content:space-between;
-        padding:12px 16px;
-        background:#0f1430; border-bottom:1px solid rgba(122,162,255,.15);
-        position: sticky; top: 0; z-index: 5;
-      }
-      .brand { display:flex; align-items:center; gap:10px; }
-      .brand .logo { font-size:22px }
-      .brand .name { font-weight:800; letter-spacing:.2px }
-      .pill { padding:2px 8px; border-radius:999px; border:1px solid rgba(122,162,255,.25); background:#0f1533; font-size:11px; }
-
-      .content {
-        height: 100%; width: 100%;
-        padding: 12px 16px 16px 16px;
-        display: grid; align-content:start; gap: 12px;
-        overflow:auto;
-      }
-
-      .section {
-        background:#0f1430; border:1px solid var(--line);
-        border-radius:16px; padding:14px;
-        box-shadow:0 10px 28px rgba(0,0,0,.15);
-      }
-      .title { font-weight:800; font-size:16px; }
-      .muted { opacity:.72; }
-      .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-      .grid { display:grid; gap:10px; }
-      .btn {
-        background:#12183a; border:1px solid #1c244e; border-radius:14px;
-        padding:10px 12px; color:#fff; cursor:pointer;
-      }
-      .btn:hover { background:#1a2260; }
-      .btn:disabled { opacity:0.5; cursor:not-allowed; }
-      .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:700; }
-      .btn.primary:hover { background:#1a2768; }
-      .btn.block { width:100%; }
-
-      .list > * {
-        background:#12183a; border:1px solid #1c244e; border-radius:14px;
-        padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px;
-      }
-      .tabs { display:flex; gap:8px; flex-wrap:wrap; }
-      .tab { padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#12183a; cursor:pointer; font-size:12px; }
-      .tab:hover { background:#1a2260; }
-      .tab.active { background:#132049; border-color:#1f2a5c; font-weight:700; }
-
-      /* Board - enhanced for smooth rendering */
-      .board-wrap { display:grid; gap:10px; }
-      .board {
-        position:relative; background:#0f1533; border-radius:18px;
-        outline:1px solid var(--line);
-        box-shadow:0 10px 34px rgba(0,0,0,.35); touch-action:none;
-        margin: 0 auto;
-      }
-      .gridlines { position:absolute; inset:0; opacity:.15; pointer-events:none; }
-      .tile {
-        position:absolute; display:flex; align-items:center; justify-content:center;
-        border-radius:16px; background:linear-gradient(135deg, #1a2260 0%, #151b46 100%);
-        outline:1px solid #26307a;
-        transition: transform .3s ease, opacity .4s ease, background .2s ease, box-shadow .3s ease;
-        cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2);
-      }
-      .tile:hover { 
-        background:linear-gradient(135deg, #2a3270 0%, #1f2556 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,.3);
-      }
-      .tile.sel { 
-        background:linear-gradient(135deg, #3a4280 0%, #2f3566 100%);
-        outline-color:#4a58b4; 
-        transform: scale(1.05);
-        box-shadow: 0 0 0 3px rgba(74, 88, 180, 0.4);
-      }
-      .tile.hint { 
-        box-shadow: 0 0 0 3px #7aa2ff inset, 0 0 20px rgba(122,162,255,.6);
-        animation: pulse-hint 2s ease-in-out infinite;
-      }
-      @keyframes pulse-hint {
-        0%, 100% { box-shadow: 0 0 0 3px #7aa2ff inset, 0 0 20px rgba(122,162,255,.6); }
-        50% { box-shadow: 0 0 0 3px #ffd166 inset, 0 0 25px rgba(255,209,102,.8); }
-      }
-      .tile.falling {
-        animation: fall-in 0.6s ease-out;
-      }
-      .tile.swapping {
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 20;
-      }
-      .tile.drop-in {
-        animation: drop-from-above 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-      }
-      @keyframes fall-in {
-        0% { transform: translateY(-100px); opacity: 0; }
-        100% { transform: translateY(0); opacity: 1; }
-      }
-      @keyframes drop-from-above {
-        0% { 
-          transform: translateY(-400px); 
-          opacity: 0.7; 
-        }
-        100% { 
-          transform: translateY(0); 
-          opacity: 1; 
-        }
-      }
-      .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; }
-      .combo { position:absolute; left:50%; transform:translateX(-50%); top:6px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 8px; font-size:12px; }
-      @keyframes poof { 
-        from { 
-          opacity:1; 
-          transform: translate(var(--cx), var(--cy)) scale(1.2) rotate(0deg); 
-        } 
-        50% {
-          opacity:1;
-          transform: translate(calc(var(--cx) + (var(--tx) - var(--cx)) * 0.7), calc(var(--cy) + (var(--ty) - var(--cy)) * 0.7)) scale(1) rotate(180deg);
-        }
-        to { 
-          opacity:0; 
-          transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
-        } 
-      }
-      .spark { 
-        position:absolute; 
-        animation: poof ease-out forwards;
-        pointer-events: none;
-        z-index: 100;
-      }
-
-      /* Splash (clean wallpaper, no dim/box) */
-      .splash {
-        position: fixed; inset: 0; z-index: 9999;
-        display: grid; place-items: center; overflow: hidden;
-        background: linear-gradient(135deg, #0a0f23 0%, #1a2260 50%, #243069 100%);
-      }
-      .splash-min {
-        position: relative;
-        display: grid; gap: 10px; place-items: center; text-align: center;
-      }
-      .loader-ring {
-        width: 56px; height: 56px; border-radius: 50%;
-        border: 3px solid rgba(255,255,255,.25);
-        border-top-color: #ffffff;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-      .splash-text { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
-    `;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, []);
-
-  // Stable vh (Telegram provides viewportStableHeight)
-  useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight / 100;
-      document.documentElement.style.setProperty("--vh", `${vh}px`);
-    };
-    setVH();
-    window.addEventListener("resize", setVH);
-    return () => window.removeEventListener("resize", setVH);
-  }, []);
-
-  // Splash gating (3s + tg.ready + image loaded)
-  const [showSplash, setShowSplash] = useState(true);
-  const [tgReady, setTgReady] = useState(false);
-  const [minElapsed, setMinElapsed] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-
-  useEffect(() => {
-    const tg = getTG();
-    try { tg?.ready(); tg?.expand(); } catch {}
-    setTgReady(true);
-  }, []);
-  useEffect(() => {
-    const t = setTimeout(() => setMinElapsed(true), 2000); // Shorter for demo
-    return () => clearTimeout(t);
-  }, []);
-  useEffect(() => {
-    setImgLoaded(true); // Skip image loading for demo
-  }, []);
-  useEffect(() => {
-    if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
-  }, [tgReady, minElapsed, imgLoaded]);
-
-  // Navigation / state
-  const [screen, setScreen] = useState("home");
-  const [coins, setCoins] = useState(500);
-  const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
-  const [settings, setSettings] = useState({ haptics: true, sounds: false });
-  const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
-  const [lbScope, setLbScope] = useState("daily");
-  const leaders = {
-    daily: [["mira", 220], ["zeno", 180], ["kira", 150]],
-    weekly: [["mira", 820], ["kira", 760], ["alex", 700]],
-    all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
-  };
-
-  // UI sections
-  function Header() {
-    return (
-      <div className="header">
-        <div className="brand">
-          <span className="logo">🍬</span>
-          <div className="name">Candy‑Crush‑Cats</div>
-          <span className="pill">{screen.toUpperCase()}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div>
-            <span className="muted" style={{ marginRight: 6 }}>
-              CandyCoins
-            </span>
-            <b>{coins}</b>
-          </div>
-          {screen !== "home" && (
-            <button className="btn" onClick={() => setScreen("home")}>
-              Home
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function Home() {
-    return (
-      <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
-        <div className="section" style={{ display: "grid", gap: 10 }}>
-          <div className="title">Match‑3 Candy Crush with cute cats!</div>
-          <button className="btn primary block" onClick={() => setScreen("game")}>
-            🍭 Play Candy Crush
-          </button>
-          <div className="row">
-            <button className="btn block" onClick={() => setScreen("shop")}>🛍 Candy Shop</button>
-            <button className="btn block" onClick={() => setScreen("leaderboard")}>🏆 Sweet Leaders</button>
-          </div>
-          <div className="row">
-            <button className="btn block" onClick={() => setScreen("daily")}>🍯 Daily Treats</button>
-            <button className="btn block" onClick={() => setScreen("invite")}>🔗 Share Sweetness</button>
-          </div>
-          <button className="btn block" onClick={() => setScreen("settings")}>⚙️ Settings</button>
-        </div>
-        <div className="section" style={{ display: "grid", gap: 8 }}>
-          <div className="title">How to play Candy Crush</div>
-          <div className="muted">
-            Swap adjacent candies to create rows or columns of 3+ matching treats! 
-            Match cats 😺, pretzels 🥨, strawberries 🍓, oreos 🍪, or marshmallows 🍡. 
-            Create cascades for <b>bonus points</b>. Use hints when stuck!
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function Shop() {
-    const items = [
-      { key: "hint", name: "Candy Hint", desc: "Highlight a sweet swap", price: 20, icon: "💡" },
-      { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
-      { key: "hammer", name: "Candy Crusher", desc: "Smash any candy", price: 60, icon: "🔨" },
-      { key: "bomb", name: "Candy Bomb", desc: "Explode 3x3 area", price: 80, icon: "💥" },
-    ];
-    return (
-      <div className="section">
-        <div className="title" style={{ marginBottom: 10 }}>🍭 Candy Shop</div>
-        <div className="list" style={{ display: "grid", gap: 8 }}>
-          {items.map((it) => (
-            <div key={it.key}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{it.icon} {it.name}</div>
-                <div className="muted" style={{ fontSize: 12 }}>{it.desc}</div>
-              </div>
+      setTimeout(() => setSel
