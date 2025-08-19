@@ -2,25 +2,90 @@ import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
    Meowchi (Candy-Cats) – Match-3 (Telegram WebApp)
-   ✦ HK-like full-screen shell (Header / Content)
-   ✦ Stable 100vh via Telegram viewportStableHeight
-   ✦ Wallpaper splash that holds ≥ 3s
-   ✦ Mechanics: swap → match 3+ → clear → gravity → refill
+   Level 1 + Special Pieces + EXTRAS
+   ✦ Level-config engine (6x6, 20 moves, 1000 score)
+   ✦ Specials from shapes (4/5/T-L) + effects
+   ✦ EXTRAS:
+     - Color Bomb partner-color logic
+     - Special+Special combos (striped+striped, striped+wrapped, wrapped+wrapped, bomb+bomb, bomb+X)
+     - Telegram CloudStorage save/load (coins, best score)
+   ✦ Tutorial: auto-highlight first valid move
+   ✦ Same UI shell/splash/haptics/back button
 -------------------------------------------------- */
 
-// ---------- Shared config ----------
-const COLS = 8;
-const ROWS = 8;
+// ---------- Engine types / assets ----------
+const PIECE = {
+  CAT: "CAT",
+  OREO: "OREO",
+  MARSHMALLOW: "MARSHMALLOW",
+  STRAWBERRY: "STRAWBERRY",
+  PRETZEL: "PRETZEL",
+
+  STRIPED_H: "STRIPED_H",
+  STRIPED_V: "STRIPED_V",
+  WRAPPED: "WRAPPED",
+  COLOR_BOMB: "COLOR_BOMB",
+  MEGA_STRAWBERRY: "MEGA_STRAWBERRY",
+};
+
+const EMOJI = {
+  CAT: "🐱",
+  OREO: "🍪",
+  MARSHMALLOW: "🍥",
+  STRAWBERRY: "🍓",
+  PRETZEL: "🥨",
+
+  STRIPED_H: "🐱⚡",
+  STRIPED_V: "🐱⚡",
+  WRAPPED: "🍥💥",
+  COLOR_BOMB: "🍪🌈",
+  MEGA_STRAWBERRY: "🍓⭐",
+};
+
+// Level 1 from your spec
+const LEVELS = {
+  1: {
+    size: [6, 6],
+    moves: 20,
+    objective: { type: "score", target: 1000 },
+    pool: [PIECE.CAT, PIECE.OREO, PIECE.MARSHMALLOW, PIECE.STRAWBERRY, PIECE.PRETZEL],
+    layout: [
+      ["CAT", "OREO", "MARSHMALLOW", "STRAWBERRY", "PRETZEL", "CAT"],
+      ["OREO", "PRETZEL", "CAT", "OREO", "MARSHMALLOW", "STRAWBERRY"],
+      ["MARSHMALLOW", "STRAWBERRY", "PRETZEL", "CAT", "OREO", "MARSHMALLOW"],
+      ["STRAWBERRY", "CAT", "OREO", "MARSHMALLOW", "PRETZEL", "STRAWBERRY"],
+      ["PRETZEL", "MARSHMALLOW", "STRAWBERRY", "CAT", "OREO", "PRETZEL"],
+      ["CAT", "OREO", "PRETZEL", "MARSHMALLOW", "STRAWBERRY", "CAT"],
+    ],
+  },
+};
+
 const CELL_MIN = 36;
 const CELL_MAX = 64;
-
-const CAT_SET = ["😺", "😸", "😹", "😻", "😼", "🐱"];
-const randEmoji = () => CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
-
 const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
-const SPLASH_URL = "/splash.jpg"; // place image in /public/splash.jpg
+const SPLASH_URL = "/splash.jpg"; // optional splash
+
+// ---------- Cloud helpers ----------
+const SAVE_KEY = "candycats_save_v1";
+function cloudSet(obj) {
+  const tg = getTG();
+  if (!tg || !tg.CloudStorage) return;
+  try {
+    tg.CloudStorage.setItem(SAVE_KEY, JSON.stringify(obj), () => {});
+  } catch {}
+}
+function cloudGet(cb) {
+  const tg = getTG();
+  if (!tg || !tg.CloudStorage) return cb(null);
+  try {
+    tg.CloudStorage.getItem(SAVE_KEY, (_err, v) => {
+      if (!v) return cb(null);
+      try { cb(JSON.parse(v)); } catch { cb(null); }
+    });
+  } catch { cb(null); }
+}
 
 // ---------- Root App ----------
 export default function App() {
@@ -32,7 +97,6 @@ export default function App() {
       html, body, #root { height: 100%; }
       body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
 
-      /* Full-screen shell (Hamster Kombat style) */
       .shell {
         height: calc(var(--vh, 1vh) * 100);
         display: grid;
@@ -81,7 +145,6 @@ export default function App() {
       .tab { padding:8px 10px; border-radius:999px; border:1px solid var(--line); background:#12183a; cursor:pointer; font-size:12px; }
       .tab.active { background:#132049; border-color:#1f2a5c; font-weight:700; }
 
-      /* Board */
       .board-wrap { display:grid; gap:10px; }
       .board {
         position:relative; background:#0f1533; border-radius:18px;
@@ -102,15 +165,10 @@ export default function App() {
       @keyframes poof { from { opacity:1; transform: translate(var(--cx), var(--cy)) scale(.9) rotate(0deg); } to { opacity:0; transform: translate(var(--tx), var(--ty)) scale(.4) rotate(90deg); } }
       .spark { position:absolute; font-size:18px; animation: poof .75s ease-out forwards; }
 
-      /* Splash (clean wallpaper, no dim/box) */
       .splash {
         position: fixed; inset: 0; z-index: 9999;
         display: grid; place-items: center; overflow: hidden;
         background: url('/splash.jpg') center/cover no-repeat;
-      }
-      .splash-min {
-        position: relative;
-        display: grid; gap: 10px; place-items: center; text-align: center;
       }
       .loader-ring {
         width: 56px; height: 56px; border-radius: 50%;
@@ -144,7 +202,7 @@ export default function App() {
     };
   }, []);
 
-  // Splash gating (3s + tg.ready + image loaded)
+  // Splash gating (quick)
   const [showSplash, setShowSplash] = useState(true);
   const [tgReady, setTgReady] = useState(false);
   const [minElapsed, setMinElapsed] = useState(false);
@@ -156,7 +214,7 @@ export default function App() {
     setTgReady(true);
   }, []);
   useEffect(() => {
-    const t = setTimeout(() => setMinElapsed(true), 3000);
+    const t = setTimeout(() => setMinElapsed(true), 1000);
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {
@@ -172,7 +230,8 @@ export default function App() {
   // Navigation / state
   const [screen, setScreen] = useState("home");
   const [coins, setCoins] = useState(500);
-  const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
+  const [best, setBest] = useState(0);
+  const [lastRun, setLastRun] = useState({ score: 0, coins: 0, win: false });
   const [settings, setSettings] = useState({ haptics: true, sounds: false });
   const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
   const [lbScope, setLbScope] = useState("daily");
@@ -182,7 +241,22 @@ export default function App() {
     all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
   };
 
-  // UI sections
+  // Load saved coins/best from Cloud
+  useEffect(() => {
+    cloudGet((data) => {
+      if (data && typeof data === "object") {
+        if (typeof data.coins === "number") setCoins(data.coins);
+        if (typeof data.best === "number") setBest(data.best);
+      }
+    });
+  }, []);
+
+  function persist() {
+    cloudSet({ coins, best });
+  }
+
+  useEffect(() => { persist(); }, [coins, best]);
+
   function Header() {
     return (
       <div className="header">
@@ -192,16 +266,13 @@ export default function App() {
           <span className="pill">{screen.toUpperCase()}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div><span className="muted" style={{ marginRight: 6 }}>Best</span><b>{best}</b></div>
           <div>
-            <span className="muted" style={{ marginRight: 6 }}>
-              CatCoins
-            </span>
+            <span className="muted" style={{ margin: "0 6px 0 10px" }}>CatCoins</span>
             <b>{coins}</b>
           </div>
           {screen !== "home" && (
-            <button className="btn" onClick={() => setScreen("home")}>
-              Home
-            </button>
+            <button className="btn" onClick={() => setScreen("home")}>Home</button>
           )}
         </div>
       </div>
@@ -214,7 +285,7 @@ export default function App() {
         <div className="section" style={{ display: "grid", gap: 10 }}>
           <div className="title">Match‑3 with cats</div>
           <button className="btn primary block" onClick={() => setScreen("game")}>
-            ▶️ Play
+            ▶️ Play Level 1
           </button>
           <div className="row">
             <button className="btn block" onClick={() => setScreen("shop")}>🛍 Shop</button>
@@ -229,9 +300,9 @@ export default function App() {
         <div className="section" style={{ display: "grid", gap: 8 }}>
           <div className="title">How to play</div>
           <div className="muted">
-            Tap a tile, then swipe to a neighbor (or tap a neighbor) to swap. Make
-            a line of 3+ identical cats to clear. Cascades give bonus points. You
-            have limited moves—use <b>Hint</b> or <b>Shuffle</b> if stuck.
+            Swap adjacent tiles to make 3+ in a row or column. 4+ creates special pieces:
+            <br/>• 4 → Striped row/col • 5 → 🍪 Color Bomb • T/L → 🍥 Wrapped • 5+ w/ 🍓 → 🍓⭐ Mega
+            <br/>Reach <b>1,000</b> points in <b>20</b> moves.
           </div>
         </div>
       </div>
@@ -282,7 +353,7 @@ export default function App() {
             {scopes.map(([k, label]) => (
               <button
                 key={k}
-                className={`tab ${lbScope === k ? "active" : ""}`}
+                className={\`tab \${lbScope === k ? "active" : ""}\`}
                 onClick={() => setLbScope(k)}
               >
                 {label}
@@ -321,7 +392,7 @@ export default function App() {
         <div className="title">Daily Reward</div>
         <div className="muted">
           Streak: <b>{daily.streak}</b>
-          {daily.lastClaim ? ` • last: ${daily.lastClaim}` : ""}
+          {daily.lastClaim ? \` • last: \${daily.lastClaim}\` : ""}
         </div>
         <button className="btn primary" onClick={claim} disabled={!canClaim}>
           {canClaim ? "Claim 50 🐾" : "Come back tomorrow"}
@@ -395,11 +466,11 @@ export default function App() {
     return (
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">Level Over</div>
+        <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
+        <div className="row"><div className="muted">CatCoins earned</div><b>{lastRun.coins}</b></div>
         <div className="row">
-          <div className="muted">Score</div><b>{lastRun.score}</b>
-        </div>
-        <div className="row">
-          <div className="muted">CatCoins earned</div><b>{lastRun.coins}</b>
+          <div className="muted">Result</div>
+          <b style={{ color: lastRun.win ? "#7CFC7C" : "#ffb4a2" }}>{lastRun.win ? "Win" : "Try Again"}</b>
         </div>
         <button className="btn primary" onClick={() => setScreen("game")}>
           Play again
@@ -432,9 +503,15 @@ export default function App() {
         {screen === "settings" && <Settings />}
         {screen === "game" && (
           <GameView
-            onExit={(run) => { setLastRun(run); setScreen("gameover"); }}
+            levelNum={1}
+            onExit={(run) => {
+              setLastRun(run);
+              if (run.score > best) setBest(run.score);
+              setCoins((c) => c + run.coins);
+              setScreen("gameover");
+            }}
             onBack={() => setScreen("home")}
-            onCoins={(d) => setCoins((c) => c + d)}
+            haptics={settings.haptics}
           />
         )}
         {screen === "gameover" && <GameOver />}
@@ -444,26 +521,37 @@ export default function App() {
 );
 }
 
-// ---------- Game View (Match-3) ----------
-function GameView({ onExit, onBack, onCoins }) {
+// ---------- Game View with combos & Cloud save ----------
+function GameView({ levelNum, onExit, onBack, haptics }) {
+  const level = LEVELS[levelNum];
+  const ROWS = level.size[0];
+  const COLS = level.size[1];
+
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
-  useResizeCell(containerRef, setCell);
+  useResizeCell(containerRef, setCell, ROWS, COLS);
 
-  // Board state
-  const [grid, setGrid] = useState(() => initSolvableGrid());
+  // Board stores {type: PIECE, special?: one of PIECE.* specials}
+  const [grid, setGrid] = useState(() => {
+    const g = levelToGrid(level);
+    removeAllMatches(g, ROWS, COLS); // start with no clears
+    ensureAnyMove(g, ROWS, COLS, level.pool);
+    return g;
+  });
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
-  // Selection + hint
+  // HUD
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(level.moves);
+  const [combo, setCombo] = useState(0);
+
+  // Selection + hint + tutorial
   const [sel, setSel] = useState(null); // {r,c}
   const [hint, setHint] = useState(null); // [[r1,c1],[r2,c2]]
 
-  // Score / moves / combo FX
-  const [score, setScore] = useState(0);
-  const [moves, setMoves] = useState(20);
-  const [combo, setCombo] = useState(0);
+  // FX + pause
   const [fx, setFx] = useState([]);
   const [blast, setBlast] = useState(new Set());
   const [paused, setPaused] = useState(false);
@@ -476,42 +564,32 @@ function GameView({ onExit, onBack, onCoins }) {
       tg.ready();
       tg.expand();
       tg.BackButton.show();
-    } catch {}
-    const onBackBtn = () => setPaused((p) => !p);
-    tg?.onEvent?.("backButtonClicked", onBackBtn);
-    return () => {
-      tg?.offEvent?.("backButtonClicked", onBackBtn);
-      try { tg.BackButton.hide(); } catch {}
-    };
-  }, []);
-
-  // MainButton = Hint
-  useEffect(() => {
-    const tg = getTG();
-    if (!tg) return;
-    try {
       tg.MainButton.setText("Hint 🔍");
       tg.MainButton.show();
     } catch {}
-    const handler = () => doHint();
-    tg?.onEvent?.("mainButtonClicked", handler);
+    const onBackBtn = () => setPaused((p) => !p);
+    const onMain = () => doHint();
+    tg?.onEvent?.("backButtonClicked", onBackBtn);
+    tg?.onEvent?.("mainButtonClicked", onMain);
     return () => {
-      tg?.offEvent?.("mainButtonClicked", handler);
-      try { tg.MainButton.hide(); } catch {}
+      tg?.offEvent?.("backButtonClicked", onBackBtn);
+      tg?.offEvent?.("mainButtonClicked", onMain);
+      try { tg.BackButton.hide(); tg.MainButton.hide(); } catch {}
     };
   }, []);
 
   function haptic(ms = 12) {
+    if (!haptics) return;
     try { getTG()?.HapticFeedback?.impactOccurred("light"); } catch {}
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  // Input handlers (tap + swipe + mouse click-to-swap)
+  // Input (tap + swipe + desktop convenience)
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
     let start = null; // {r,c,x,y}
-    const thresh = 6; // px minimum to consider swipe
+    const thresh = 6;
     const rcFromEvent = (e) => {
       const rect = el.getBoundingClientRect();
       const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
@@ -524,7 +602,6 @@ function GameView({ onExit, onBack, onCoins }) {
     const onDown = (e) => {
       if (paused) return;
       const p = rcFromEvent(e);
-      // Desktop convenience: if already selected and adjacent, swap immediately
       if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
         trySwap(sel.r, sel.c, p.r, p.c);
         setSel(null);
@@ -540,7 +617,6 @@ function GameView({ onExit, onBack, onCoins }) {
     const onUp = (e) => {
       if (paused || !start) return;
       const end = rcFromEvent(e);
-      // If ended on adjacent cell, use that. Else infer from swipe direction.
       let dr = end.r - start.r, dc = end.c - start.c;
       const dx = end.x - start.x, dy = end.y - start.y;
       if (Math.abs(dr) + Math.abs(dc) !== 1) {
@@ -553,7 +629,7 @@ function GameView({ onExit, onBack, onCoins }) {
         else { dc = 0; dr = dy > 0 ? 1 : -1; }
       }
       const r2 = start.r + dr, c2 = start.c + dc;
-      if (!inBounds(r2, c2)) { setSel(null); start = null; return; }
+      if (!inBounds(r2, c2, ROWS, COLS)) { setSel(null); start = null; return; }
       trySwap(start.r, start.c, r2, c2);
       setSel(null);
       start = null;
@@ -565,70 +641,261 @@ function GameView({ onExit, onBack, onCoins }) {
       el.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [cell, paused, sel]);
+  }, [cell, paused, sel, ROWS, COLS]);
 
-  // Swap logic
+  // Tutorial: auto-highlight a valid swap
+  useEffect(() => {
+    const m = findFirstMove(gridRef.current, ROWS, COLS);
+    if (m) {
+      setHint(m);
+      const t = setTimeout(() => setHint(null), 1500);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  function finishIfDone() {
+    if (movesRef.current === 0) {
+      const win = scoreRef.current >= level.objective.target;
+      onExit({
+        score: scoreRef.current,
+        coins: Math.floor(scoreRef.current * 0.15),
+        win,
+      });
+    }
+  }
+
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
+  const scoreRef = useRef(score);
+  scoreRef.current = score;
+
+  // --- SWAP with combo handling ---
   function trySwap(r1, c1, r2, c2) {
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
-    const g = cloneGrid(gridRef.current);
+    const g = cloneGrid(gridRef.current, ROWS, COLS);
+    const A = g[r1][c1];
+    const B = g[r2][c2];
+
+    // Handle special+special or bomb combos first
+    if (handleSwapCombos(g, r1, c1, r2, c2, ROWS, COLS)) {
+      // After manual combo clear, cascade
+      setGrid(g);
+      setMoves((m) => Math.max(0, m - 1));
+      resolveCascades(g, () => finishIfDone());
+      return;
+    }
+
+    // Normal swap then check matches
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
-    const matches = findMatches(g);
-    if (matches.length === 0) {
+
+    const results = detectAllMatches(g, ROWS, COLS);
+    if (results.totalClears === 0) {
       haptic(8);
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 120);
       return;
     }
+
     setGrid(g);
     setMoves((m) => Math.max(0, m - 1));
-    resolveCascades(g, () => {
-      if (movesRef.current === 0) finish();
-    });
+    resolveCascades(g, () => finishIfDone());
   }
 
-  const movesRef = useRef(moves);
-  movesRef.current = moves;
+  // --- Combo logic ---
+  function handleSwapCombos(g, r1, c1, r2, c2, ROWS, COLS) {
+    const A = g[r1][c1], B = g[r2][c2];
+    if (!A || !B) return false;
+
+    const centerR = r2, centerC = c2; // treat drop target as center
+    const cleared = new Set();
+    let specialsTriggered = 0;
+
+    const add = (rr, cc) => { if (inBounds(rr, cc, ROWS, COLS)) cleared.add(key(rr, cc)); };
+
+    const isBomb = (t) => t?.special === PIECE.COLOR_BOMB;
+    const isStriped = (t) => t?.special === PIECE.STRIPED_H || t?.special === PIECE.STRIPED_V;
+    const isWrapped = (t) => t?.special === PIECE.WRAPPED;
+    const isMega = (t) => t?.special === PIECE.MEGA_STRAWBERRY;
+
+    // COLOR_BOMB combos
+    if (isBomb(A) || isBomb(B)) {
+      const bomb = isBomb(A) ? A : B;
+      const other = isBomb(A) ? B : A;
+
+      if (isBomb(A) && isBomb(B)) {
+        // bomb + bomb = clear entire board
+        for (let rr = 0; rr < ROWS; rr++) for (let cc = 0; cc < COLS; cc++) add(rr, cc);
+      } else if (isStriped(other)) {
+        // bomb + striped: turn all of other's color into striped and trigger lines
+        const targetType = other.type;
+        for (let rr = 0; rr < ROWS; rr++) {
+          for (let cc = 0; cc < COLS; cc++) {
+            const t = g[rr][cc];
+            if (t && t.type === targetType && !t.special) {
+              // mark as striped and clear its row or column randomly
+              t.special = Math.random() < 0.5 ? PIECE.STRIPED_H : PIECE.STRIPED_V;
+              triggerSpecial(g, rr, cc, t.special, ROWS, COLS, cleared);
+              specialsTriggered++;
+            }
+          }
+        }
+        add(r1, c1); add(r2, c2);
+      } else if (isWrapped(other)) {
+        // bomb + wrapped: turn all of other's color into wrapped and explode
+        const targetType = other.type;
+        for (let rr = 0; rr < ROWS; rr++) {
+          for (let cc = 0; cc < COLS; cc++) {
+            const t = g[rr][cc];
+            if (t && t.type === targetType && !t.special) {
+              t.special = PIECE.WRAPPED;
+              triggerSpecial(g, rr, cc, t.special, ROWS, COLS, cleared);
+              specialsTriggered++;
+            }
+          }
+        }
+        add(r1, c1); add(r2, c2);
+      } else if (isMega(other)) {
+        // bomb + mega: heavy clear — all of color + 3 rows/cols at center
+        const targetType = other.type;
+        for (let rr = 0; rr < ROWS; rr++)
+          for (let cc = 0; cc < COLS; cc++)
+            if (g[rr][cc]?.type === targetType) add(rr, cc);
+        // plus mega sweep
+        for (let rr = centerR - 1; rr <= centerR + 1; rr++)
+          for (let cc = 0; cc < COLS; cc++) add(rr, cc);
+        for (let cc = centerC - 1; cc <= centerC + 1; cc++)
+          for (let rr = 0; rr < ROWS; rr++) add(rr, cc);
+        add(r1, c1); add(r2, c2);
+      } else {
+        // bomb + basic: remove all of other's type
+        const targetType = other.type;
+        for (let rr = 0; rr < ROWS; rr++)
+          for (let cc = 0; cc < COLS; cc++)
+            if (g[rr][cc]?.type === targetType) add(rr, cc);
+        add(r1, c1); add(r2, c2);
+      }
+
+      // apply immediate clear & cascade entry
+      if (cleared.size > 0) {
+        // include triggering specials in cleared handling
+        performManualClear(g, cleared, ROWS, COLS);
+        // score estimation
+        const base = cleared.size * 12; // slightly juicier for combos
+        setScore((s) => s + base + specialsTriggered * 25);
+        haptic(18);
+        return true;
+      }
+      return false;
+    }
+
+    // SPECIAL + SPECIAL (no bomb)
+    if (isStriped(A) && isStriped(B)) {
+      // cross: clear row of A and col of B (and vice versa for effect)
+      for (let cc = 0; cc < COLS; cc++) add(r1, cc);
+      for (let rr = 0; rr < ROWS; rr++) add(rr, c2);
+      add(r1, c1); add(r2, c2);
+      performManualClear(g, cleared, ROWS, COLS);
+      setScore((s) => s + cleared.size * 12 + 40);
+      haptic(16);
+      return true;
+    }
+
+    if ((isStriped(A) && isWrapped(B)) || (isStriped(B) && isWrapped(A))) {
+      // 3 rows + 3 cols centered at swap target
+      for (let rr = centerR - 1; rr <= centerR + 1; rr++)
+        for (let cc = 0; cc < COLS; cc++) add(rr, cc);
+      for (let cc = centerC - 1; cc <= centerC + 1; cc++)
+        for (let rr = 0; rr < ROWS; rr++) add(rr, cc);
+      add(r1, c1); add(r2, c2);
+      performManualClear(g, cleared, ROWS, COLS);
+      setScore((s) => s + cleared.size * 12 + 50);
+      haptic(18);
+      return true;
+    }
+
+    if (isWrapped(A) && isWrapped(B)) {
+      // 5x5 twice centered at target
+      for (let pass = 0; pass < 2; pass++) {
+        for (let rr = centerR - 2; rr <= centerR + 2; rr++)
+          for (let cc = centerC - 2; cc <= centerC + 2; cc++)
+            add(rr, cc);
+      }
+      add(r1, c1); add(r2, c2);
+      performManualClear(g, cleared, ROWS, COLS);
+      setScore((s) => s + cleared.size * 12 + 60);
+      haptic(22);
+      return true;
+    }
+
+    if (isMega(A) || isMega(B)) {
+      // Mega with anything: at least do its 3 rows + 3 cols
+      for (let rr = centerR - 1; rr <= centerR + 1; rr++)
+        for (let cc = 0; cc < COLS; cc++) add(rr, cc);
+      for (let cc = centerC - 1; cc <= centerC + 1; cc++)
+        for (let rr = 0; rr < ROWS; rr++) add(rr, cc);
+      add(r1, c1); add(r2, c2);
+      performManualClear(g, cleared, ROWS, COLS);
+      setScore((s) => s + cleared.size * 12 + 40);
+      haptic(18);
+      return true;
+    }
+
+    return false;
+  }
 
   function resolveCascades(startGrid, done) {
-    let g = cloneGrid(startGrid);
+    let g = cloneGrid(startGrid, ROWS, COLS);
     let comboCount = 0;
+
     const step = () => {
-      const matches = findMatches(g);
-      if (matches.length === 0) {
+      const results = detectAllMatches(g, ROWS, COLS);
+      if (results.totalClears === 0) {
         setGrid(g);
         if (comboCount > 0) {
           setCombo(comboCount);
           haptic(15);
           setTimeout(() => setCombo(0), 900);
         }
-        ensureSolvable();
+        ensureAnyMove(g, ROWS, COLS, level.pool);
         done && done();
         return;
       }
-      // FX + scoring
+
+      // particles + blast highlight
       const fxId = Date.now();
       setFx((prev) => [
         ...prev,
-        ...matches.map((m, i) => ({ id: fxId + i, x: m[1] * cell, y: m[0] * cell })),
+        ...results.clearedCells.map(([r, c], i) => ({
+          id: fxId + i, x: c * cell, y: r * cell
+        })),
       ]);
       setTimeout(() => setFx((prev) => prev.filter((p) => p.id < fxId)), 900);
-      const keys = matches.map(([r, c]) => `${r}:${c}`);
-      setBlast(new Set(keys));
+
+      const keys = new Set(results.clearedCells.map(([r, c]) => \`\${r}:\${c}\`));
+      setBlast(keys);
       setTimeout(() => setBlast(new Set()), 500);
-      setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
-      onCoins(Math.ceil(matches.length / 4));
-      // clear → gravity → refill
-      matches.forEach(([r, c]) => { g[r][c] = null; });
-      applyGravity(g);
-      refill(g);
+
+      // scoring: 10 per tile × (combo+1), bonus for specials
+      const base = results.clearedCells.length * 10 * Math.max(1, comboCount + 1);
+      const bonus = results.specialsTriggered * 20;
+      setScore((s) => s + base + bonus);
+
+      // apply clears
+      results.clearedCells.forEach(([r, c]) => { g[r][c] = null; });
+
+      // gravity + refill
+      applyGravity(g, ROWS, COLS);
+      refill(g, ROWS, COLS, level.pool);
+
       comboCount++;
       setTimeout(step, 90);
     };
+
     step();
   }
 
   function doHint() {
-    const m = findFirstMove(gridRef.current);
+    const m = findFirstMove(gridRef.current, ROWS, COLS);
     if (!m) { shuffleBoard(); return; }
     setHint(m);
     setTimeout(() => setHint(null), 1500);
@@ -636,16 +903,10 @@ function GameView({ onExit, onBack, onCoins }) {
   }
 
   function shuffleBoard() {
-    const g = shuffleToSolvable(gridRef.current);
+    const g = shuffleToSolvable(gridRef.current, ROWS, COLS, level.pool);
     setGrid(g);
     haptic(12);
   }
-
-  function ensureSolvable() {
-    if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current));
-  }
-
-  function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
 
   const boardW = cell * COLS, boardH = cell * ROWS;
   const tg = getTG();
@@ -665,7 +926,7 @@ function GameView({ onExit, onBack, onCoins }) {
       <div className="row">
         <div><span className="muted">Score</span> <b>{score}</b></div>
         <div><span className="muted">Moves</span> <b>{moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+        <div><span className="muted">Combo</span> <b>{combo > 0 ? \`x\${combo + 1}\` : "-"}</b></div>
       </div>
 
       {/* Board */}
@@ -675,37 +936,31 @@ function GameView({ onExit, onBack, onCoins }) {
           style={{
             backgroundImage:
               "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-            backgroundSize: `${cell}px ${cell}px`,
+            backgroundSize: \`\${cell}px \${cell}px\`,
           }}
         />
 
         {/* Tiles */}
         {grid.map((row, r) =>
-          row.map((v, c) => (
+          row.map((tile, c) => (
             <div
-              key={`t-${r}-${c}-${v}-${score}`}
-              className={`tile ${
-                sel && sel.r === r && sel.c === c ? "sel" : ""
-              } ${
-                hint &&
-                ((hint[0][0] === r && hint[0][1] === c) ||
-                  (hint[1][0] === r && hint[1][1] === c))
-                  ? "hint"
-                  : ""
-              }`}
+              key={\`t-\${r}-\${c}-\${tile?.type || "x"}-\${score}\`}
+              className={\`tile \${sel && sel.r === r && sel.c === c ? "sel" : ""} \${hint && ((hint[0][0] === r && hint[0][1] === c) || (hint[1][0] === r && hint[1][1] === c)) ? "hint" : ""}\`}
               style={{
                 left: c * cell,
                 top: r * cell,
                 width: cell,
                 height: cell,
-                transform: blast.has(`${r}:${c}`) ? "scale(1.18)" : undefined,
-                boxShadow: blast.has(`${r}:${c}`)
+                transform: blast.has(\`\${r}:\${c}\`) ? "scale(1.18)" : undefined,
+                boxShadow: blast.has(\`\${r}:\${c}\`)
                   ? "0 0 0 3px #ffd166 inset, 0 0 16px 4px rgba(255,209,102,.6)"
                   : undefined,
-                background: blast.has(`${r}:${c}`) ? "#1f2568" : undefined,
+                background: blast.has(\`\${r}:\${c}\`) ? "#1f2568" : undefined,
               }}
             >
-              <span style={{ fontSize: Math.floor(cell * 0.72) }}>{v}</span>
+              <span style={{ fontSize: Math.floor(cell * 0.72) }}>
+                {tile ? EMOJI[tile.special || tile.type] : ""}
+              </span>
             </div>
           ))
         )}
@@ -732,17 +987,14 @@ function GameView({ onExit, onBack, onCoins }) {
             }}
           >
             <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>
-                Paused
-              </div>
-              <div className="muted" style={{ marginBottom: 12 }}>
-                Tap Resume
-              </div>
+              <div className="title" style={{ marginBottom: 8 }}>Paused</div>
+              <div className="muted" style={{ marginBottom: 12 }}>Tap Resume</div>
               <div className="row" style={{ gap: 8 }}>
-                <button className="btn primary" onClick={() => setPaused(false)}>
-                  Resume
-                </button>
-                <button className="btn" onClick={() => finish()}>
+                <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
+                <button className="btn" onClick={() => {
+                  const win = score >= LEVELS[1].objective.target;
+                  onExit({ score, coins: Math.floor(score * 0.15), win });
+                }}>
                   End Level
                 </button>
               </div>
@@ -759,9 +1011,12 @@ function GameView({ onExit, onBack, onCoins }) {
         <button
           className="btn"
           onClick={() => {
-            setGrid(initSolvableGrid());
+            const g = levelToGrid(level);
+            removeAllMatches(g, ROWS, COLS);
+            ensureAnyMove(g, ROWS, COLS, level.pool);
+            setGrid(g);
             setScore(0);
-            setMoves(20);
+            setMoves(level.moves);
             setCombo(0);
             setSel(null);
             setHint(null);
@@ -781,49 +1036,52 @@ function GameView({ onExit, onBack, onCoins }) {
             fontSize: 12,
           }}
         >
-          8×8
+          {ROWS}×{COLS}
         </div>
       </div>
     </div>
   );
 }
 
-// ---------- Helpers ----------
-const makeGrid = (rows, cols) =>
-  Array.from({ length: rows }, () => Array(cols).fill(null));
-const cloneGrid = (g) => g.map((r) => r.slice());
-const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
+// ---------- Helpers (grid, matching, specials) ----------
+const inBounds = (r, c, ROWS, COLS) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
 
-function findMatches(g) {
-  const hits = new Set();
-  // Horizontal
-  for (let r = 0; r < ROWS; r++) {
-    let c = 0;
-    while (c < COLS) {
-      const v = g[r][c];
-      if (!v) { c++; continue; }
-      let len = 1;
-      while (c + len < COLS && g[r][c + len] === v) len++;
-      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
-      c += len;
+function levelToGrid(level) {
+  const [R, C] = level.size;
+  const g = Array.from({ length: R }, () => Array(C).fill(null));
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      g[r][c] = { type: level.layout[r][c], special: null };
     }
   }
-  // Vertical
-  for (let c = 0; c < COLS; c++) {
-    let r = 0;
-    while (r < ROWS) {
-      const v = g[r][c];
-      if (!v) { r++; continue; }
-      let len = 1;
-      while (r + len < ROWS && g[r + len][c] === v) len++;
-      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
-      r += len;
-    }
-  }
-  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
+  return g;
 }
 
-function applyGravity(g) {
+function cloneGrid(g, ROWS, COLS) {
+  const t = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      t[r][c] = g[r][c] ? { ...g[r][c] } : null;
+  return t;
+}
+
+function removeAllMatches(g, ROWS, COLS) {
+  while (true) {
+    const res = detectRuns(g, ROWS, COLS);
+    if (res.runs.length === 0) break;
+    res.runs.forEach((run) => {
+      for (const [r, c] of run.cells) {
+        g[r][c] = { type: randomBasicFrom([PIECE.CAT, PIECE.OREO, PIECE.MARSHMALLOW, PIECE.STRAWBERRY, PIECE.PRETZEL]) };
+      }
+    });
+  }
+}
+
+function randomBasicFrom(pool) {
+  return pool[(Math.random() * pool.length) | 0];
+}
+
+function applyGravity(g, ROWS, COLS) {
   for (let c = 0; c < COLS; c++) {
     let write = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -838,79 +1096,281 @@ function applyGravity(g) {
   }
 }
 
-function refill(g) {
+function refill(g, ROWS, COLS, pool) {
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
-      if (g[r][c] == null) g[r][c] = randEmoji();
+      if (g[r][c] == null) g[r][c] = { type: randomBasicFrom(pool), special: null };
 }
 
-function hasAnyMove(g) { return !!findFirstMove(g); }
+function ensureAnyMove(g, ROWS, COLS, pool) {
+  if (!hasAnyMove(g, ROWS, COLS)) {
+    const s = shuffleToSolvable(g, ROWS, COLS, pool);
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        g[r][c] = s[r][c];
+  }
+}
 
-function findFirstMove(g) {
-  // Check swaps right and down for a created match
+function shuffleToSolvable(g, ROWS, COLS, pool) {
+  const flat = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]?.type || randomBasicFrom(pool));
+
+  let attempts = 0;
+  while (attempts < 100) {
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+    const t = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    let idx = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = { type: flat[idx++], special: null };
+
+    removeAllMatches(t, ROWS, COLS);
+    if (hasAnyMove(t, ROWS, COLS)) return t;
+    attempts++;
+  }
+  // fallback random fresh
+  const f = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      f[r][c] = { type: randomBasicFrom(pool), special: null };
+  removeAllMatches(f, ROWS, COLS);
+  return f;
+}
+
+// --- Matching & specials ---
+
+function detectAllMatches(g, ROWS, COLS) {
+  // 1) Find straight runs ≥3
+  const { runs, byCell } = detectRuns(g, ROWS, COLS);
+
+  // 2) Identify T/L intersections → wrapped
+  const wrappedCenters = detectWrappedCenters(byCell);
+
+  // 3) Decide promotions (one per run; T/L centers override to wrapped)
+  const promotions = []; // {r,c,special}
+  const clearedNormals = new Set(); // tiles cleared due to runs (excluding promoted ones)
+
+  for (const run of runs) {
+    const len = run.cells.length;
+    const orient = run.orient; // 'H' / 'V'
+    // pick a promotion cell: prefer an intersection cell (if any), else the middle
+    let promoRC = run.cells[Math.floor(run.cells.length / 2)];
+    // if any cell is wrapped center, use that
+    for (const [r, c] of run.cells) {
+      if (wrappedCenters.has(key(r, c))) { promoRC = [r, c]; break; }
+    }
+
+    // compute special to promote
+    let special = null;
+    if (wrappedCenters.has(key(promoRC[0], promoRC[1]))) {
+      special = PIECE.WRAPPED;
+    } else if (len >= 5) {
+      // 5-in-a-row → Oreo Bomb; if run includes a 🍓, prefer Mega
+      const hasStrawberry = run.cells.some(([r, c]) => g[r][c]?.type === PIECE.STRAWBERRY);
+      special = hasStrawberry ? PIECE.MEGA_STRAWBERRY : PIECE.COLOR_BOMB;
+    } else if (len === 4) {
+      special = orient === "H" ? PIECE.STRIPED_H : PIECE.STRIPED_V;
+    }
+
+    if (special) {
+      promotions.push({ r: promoRC[0], c: promoRC[1], special });
+      // clear the rest of the run except promo cell
+      for (const [r, c] of run.cells) {
+        if (r === promoRC[0] && c === promoRC[1]) continue;
+        clearedNormals.add(key(r, c));
+      }
+    } else {
+      // plain 3-run: clear all
+      for (const [r, c] of run.cells) clearedNormals.add(key(r, c));
+    }
+  }
+
+  // 4) Apply promotions in grid
+  for (const p of promotions) {
+    const t = g[p.r][p.c];
+    if (t) t.special = p.special;
+  }
+
+  // 5) Trigger special effects for all specials included in clears
+  const clearedCells = new Set([...clearedNormals].map(parseKey));
+  let specialsTriggered = 0;
+  for (const k of [...clearedNormals]) {
+    const [r, c] = parseKey(k);
+    const tile = g[r][c];
+    if (!tile) continue;
+    if (tile.special) {
+      specialsTriggered++;
+      triggerSpecial(g, r, c, tile.special, ROWS, COLS, clearedCells);
+    }
+  }
+
+  const clearedArr = [...clearedCells].map(parseKey);
+  return {
+    totalClears: clearedArr.length,
+    clearedCells: clearedArr,
+    specialsTriggered,
+  };
+}
+
+function detectRuns(g, ROWS, COLS) {
+  const runs = [];
+  const byCell = new Map(); // key -> {hLen?, vLen?}
+
+  // Horizontal runs
+  for (let r = 0; r < ROWS; r++) {
+    let c = 0;
+    while (c < COLS) {
+      const t = g[r][c];
+      if (!t || t.special) { c++; continue; } // specials don't extend normal runs
+      let len = 1;
+      while (c + len < COLS && g[r][c + len] && !g[r][c + len].special && g[r][c + len].type === t.type) len++;
+      if (len >= 3) {
+        const cells = [];
+        for (let k = 0; k < len; k++) {
+          cells.push([r, c + k]);
+          const K = key(r, c + k);
+          const v = byCell.get(K) || {};
+          v.hLen = len; byCell.set(K, v);
+        }
+        runs.push({ orient: "H", cells });
+      }
+      c += len;
+    }
+  }
+
+  // Vertical runs
+  for (let c = 0; c < COLS; c++) {
+    let r = 0;
+    while (r < ROWS) {
+      const t = g[r][c];
+      if (!t || t.special) { r++; continue; }
+      let len = 1;
+      while (r + len < ROWS && g[r + len][c] && !g[r + len][c].special && g[r + len][c].type === t.type) len++;
+      if (len >= 3) {
+        const cells = [];
+        for (let k = 0; k < len; k++) {
+          cells.push([r + k, c]);
+          const K = key(r + k, c);
+          const v = byCell.get(K) || {};
+          v.vLen = len; byCell.set(K, v);
+        }
+        runs.push({ orient: "V", cells });
+      }
+      r += len;
+    }
+  }
+
+  return { runs, byCell };
+}
+
+function detectWrappedCenters(byCell) {
+  // T/L if a cell participates in both an H-run and a V-run (classic heuristic)
+  const centers = new Set();
+  for (const [K, v] of byCell.entries()) {
+    if ((v.hLen && v.hLen >= 3) && (v.vLen && v.vLen >= 3)) {
+      centers.add(K);
+    }
+  }
+  return centers;
+}
+
+function triggerSpecial(g, r, c, special, ROWS, COLS, clearedSet) {
+  const add = (rr, cc) => { if (inBounds(rr, cc, ROWS, COLS)) clearedSet.add(key(rr, cc)); };
+
+  if (special === PIECE.STRIPED_H) {
+    for (let cc = 0; cc < COLS; cc++) add(r, cc);
+  } else if (special === PIECE.STRIPED_V) {
+    for (let rr = 0; rr < ROWS; rr++) add(rr, c);
+  } else if (special === PIECE.WRAPPED) {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++)
+          add(r + dr, c + dc);
+    }
+  } else if (special === PIECE.COLOR_BOMB) {
+    // default "standalone" bomb use: remove most frequent color
+    const freq = new Map();
+    for (let rr = 0; rr < ROWS; rr++) {
+      for (let cc = 0; cc < COLS; cc++) {
+        const t = g[rr][cc];
+        if (!t || t.special) continue;
+        freq.set(t.type, (freq.get(t.type) || 0) + 1);
+      }
+    }
+    let target = null, best = -1;
+    for (const [type, count] of freq.entries()) {
+      if (count > best) { best = count; target = type; }
+    }
+    if (target) {
+      for (let rr = 0; rr < ROWS; rr++)
+        for (let cc = 0; cc < COLS; cc++)
+          if (g[rr][cc]?.type === target) add(rr, cc);
+    }
+  } else if (special === PIECE.MEGA_STRAWBERRY) {
+    for (let rr = r - 1; rr <= r + 1; rr++)
+      for (let cc = 0; cc < COLS; cc++) add(rr, cc);
+    for (let cc = c - 1; cc <= c + 1; cc++)
+      for (let rr = 0; rr < ROWS; rr++) add(rr, cc);
+  }
+}
+
+// Manual clear used by combo handlers (includes triggering specials inside cleared area)
+function performManualClear(g, clearedSet, ROWS, COLS) {
+  // Expand clearedSet by triggering any specials in it
+  // Note: run until stable in case triggering adds new specials to be triggered
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const toTrigger = [];
+    for (const K of [...clearedSet]) {
+      const [r, c] = parseKey(K);
+      const t = g[r][c];
+      if (t && t.special) {
+        toTrigger.push([r, c, t.special]);
+      }
+    }
+    for (const [r, c, sp] of toTrigger) {
+      const before = clearedSet.size;
+      triggerSpecial(g, r, c, sp, ROWS, COLS, clearedSet);
+      if (clearedSet.size > before) changed = true;
+    }
+  }
+  // Apply clears
+  for (const K of [...clearedSet]) {
+    const [r, c] = parseKey(K);
+    g[r][c] = null;
+  }
+  applyGravity(g, ROWS, COLS);
+  // note: refill/cascades handled by caller
+}
+
+function hasAnyMove(g, ROWS, COLS) {
+  return !!findFirstMove(g, ROWS, COLS);
+}
+
+function findFirstMove(g, ROWS, COLS) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (c + 1 < COLS) {
-        const t = cloneGrid(g);
+        const t = cloneGrid(g, ROWS, COLS);
         [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]];
-        if (findMatches(t).length > 0) return [[r, c], [r, c + 1]];
+        if (detectRuns(t, ROWS, COLS).runs.length > 0) return [[r, c], [r, c + 1]];
       }
       if (r + 1 < ROWS) {
-        const t = cloneGrid(g);
+        const t = cloneGrid(g, ROWS, COLS);
         [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]];
-        if (findMatches(t).length > 0) return [[r, c], [r + 1, c]];
+        if (detectRuns(t, ROWS, COLS).runs.length > 0) return [[r, c], [r + 1, c]];
       }
     }
   }
   return null;
 }
 
-function initSolvableGrid() {
-  let g; let tries = 0;
-  do {
-    g = makeGrid(ROWS, COLS);
-    for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++)
-        g[r][c] = randEmoji();
-    removeAllMatches(g);
-    tries++;
-    if (tries > 50) break;
-  } while (!hasAnyMove(g));
-  return g;
-}
+function key(r, c) { return \`\${r}:\${c}\`; }
+function parseKey(k) { return k.split(":").map((n) => parseInt(n, 10)); }
 
-function removeAllMatches(g) {
-  // Reroll any existing matches to start without clears
-  while (true) {
-    const m = findMatches(g);
-    if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
-  }
-}
-
-function shuffleToSolvable(g) {
-  const flat = [];
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
-
-  let attempts = 0;
-  while (attempts < 100) {
-    // Fisher-Yates shuffle
-    for (let i = flat.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
-      [flat[i], flat[j]] = [flat[j], flat[i]];
-    }
-
-    const t = makeGrid(ROWS, COLS);
-    let idx = 0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-
-    removeAllMatches(t);
-    if (hasAnyMove(t)) return t;
-    attempts++;
-  }
-  return initSolvableGrid();
-}
-
+// Particles
 function Poof({ x, y, size }) {
   const sparks = Array.from({ length: 10 });
   return (
@@ -937,15 +1397,11 @@ function Poof({ x, y, size }) {
   );
 }
 
-function useResizeCell(containerRef, setCell) {
+function useResizeCell(containerRef, setCell, ROWS, COLS) {
   useEffect(() => {
     const compute = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      // Reserve space for HUD + controls (~180px), then fill the rest.
-      const pad = 24;
-      const w = el.clientWidth - pad * 2;
-      const h = el.clientHeight - 180;
+      const el = containerRef.current; if (!el) return;
+      const pad = 24; const w = el.clientWidth - pad * 2; const h = el.clientHeight - 180;
       const size = Math.floor(Math.min(w / COLS, h / ROWS));
       setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
     };
@@ -960,5 +1416,5 @@ function useResizeCell(containerRef, setCell) {
       ro?.disconnect();
       window.removeEventListener("resize", compute);
     };
-  }, [containerRef, setCell]);
+  }, [containerRef, setCell, ROWS, COLS]);
 }
