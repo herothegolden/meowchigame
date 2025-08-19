@@ -681,4 +681,477 @@ function GameView({ onExit, onBack, onCoins }) {
     if (matches.length === 0) {
       haptic(8);
       setSel({ r: r1, c: c1 });
-      setTimeout(() => setSel
+      setTimeout(() => setSel(null), 120);
+      return;
+    }
+    
+    // Start visual swap animation
+    setSwapping({ from: {r: r1, c: c1}, to: {r: r2, c: c2} });
+    
+    // After animation completes, update grid and start cascades
+    setTimeout(() => {
+      setGrid(g);
+      setSwapping(null);
+      setMoves((m) => Math.max(0, m - 1));
+      
+      resolveCascades(g, () => {
+        if (movesRef.current === 0) finish();
+      });
+    }, 300);
+  }
+
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
+
+  function resolveCascades(startGrid, done) {
+    let g = cloneGrid(startGrid);
+    let comboCount = 0;
+    
+    const step = () => {
+      const matches = findMatches(g);
+      if (matches.length === 0) {
+        setGrid(g);
+        setNewTiles(new Set());
+        if (comboCount > 0) {
+          setCombo(comboCount);
+          haptic(15);
+          setTimeout(() => setCombo(0), 1500);
+        }
+        ensureSolvable();
+        done && done();
+        return;
+      }
+      
+      // Show blast effect
+      const keys = matches.map(([r, c]) => `${r}:${c}`);
+      setBlast(new Set(keys));
+      
+      // FX particles
+      const fxId = Date.now() + Math.random();
+      setFx((prev) => [
+        ...prev,
+        ...matches.map((m, i) => ({ 
+          id: fxId + i + Math.random(),
+          x: m[1] * cell, 
+          y: m[0] * cell 
+        })),
+      ]);
+      
+      // Scoring
+      setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
+      onCoins(Math.ceil(matches.length / 4));
+      
+      // PHASE 1: Clear matches and show empty spaces
+      matches.forEach(([r, c]) => { g[r][c] = null; });
+      setGrid(cloneGrid(g));
+      
+      setTimeout(() => setBlast(new Set()), 800);
+      
+      // PHASE 2: Apply gravity and refill, then animate the drops
+      setTimeout(() => {
+        // Remember which positions were empty before refill
+        const emptyPositions = new Set();
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (g[r][c] === null) {
+              emptyPositions.add(`${r}-${c}`);
+            }
+          }
+        }
+        
+        // Apply gravity and refill
+        applyGravity(g);
+        refill(g);
+        
+        // Mark positions that got new tiles for drop animation
+        setNewTiles(emptyPositions);
+        setGrid(cloneGrid(g));
+        
+        // Clear the drop animation after it completes
+        setTimeout(() => {
+          setNewTiles(new Set());
+          comboCount++;
+          setTimeout(step, 300);
+        }, 800); // Drop animation duration
+        
+      }, 600); // Time to see empty spaces
+      
+      setTimeout(() => {
+        setFx((prev) => prev.filter((p) => p.id < fxId || p.id > fxId + 100));
+      }, 1500);
+    };
+    
+    step();
+  }
+
+  function doHint() {
+    const m = findFirstMove(gridRef.current);
+    if (!m) { shuffleBoard(); return; }
+    setHint(m);
+    setTimeout(() => setHint(null), 1500);
+    haptic(10);
+  }
+
+  function shuffleBoard() {
+    const g = shuffleToSolvable(gridRef.current);
+    setGrid(g);
+    haptic(12);
+  }
+
+  function ensureSolvable() {
+    if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current));
+  }
+
+  function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
+
+  const boardW = cell * COLS, boardH = cell * ROWS;
+
+  return (
+    <div className="section board-wrap" ref={containerRef}>
+      <div className="row">
+        <button className="btn" onClick={onBack}>Back</button>
+        <div className="muted">
+          🍬 Touch and drag to swap adjacent candies! 🍭
+        </div>
+      </div>
+
+      {/* HUD */}
+      <div className="row">
+        <div><span className="muted">Score</span> <b>{score}</b></div>
+        <div><span className="muted">Moves</span> <b>{moves}</b></div>
+        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+      </div>
+
+      {/* Board */}
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+        <div
+          className="gridlines"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
+            backgroundSize: `${cell}px ${cell}px`,
+          }}
+        />
+
+        {/* Tiles */}
+        {grid.map((row, r) =>
+          row.map((v, c) => {
+            const isSelected = sel && sel.r === r && sel.c === c;
+            const isHinted = hint && 
+              ((hint[0][0] === r && hint[0][1] === c) ||
+               (hint[1][0] === r && hint[1][1] === c));
+            const isBlasting = blast.has(`${r}:${c}`);
+            
+            // Smooth swap animation
+            let swapTransform = "";
+            if (swapping) {
+              if (swapping.from.r === r && swapping.from.c === c) {
+                const deltaX = (swapping.to.c - swapping.from.c) * cell;
+                const deltaY = (swapping.to.r - swapping.from.r) * cell;
+                swapTransform = `translate(${deltaX}px, ${deltaY}px)`;
+              } else if (swapping.to.r === r && swapping.to.c === c) {
+                const deltaX = (swapping.from.c - swapping.to.c) * cell;
+                const deltaY = (swapping.from.r - swapping.to.r) * cell;
+                swapTransform = `translate(${deltaX}px, ${deltaY}px)`;
+              }
+            }
+            
+            const isSwapping = swapping && (
+              (swapping.from.r === r && swapping.from.c === c) || 
+              (swapping.to.r === r && swapping.to.c === c)
+            );
+
+            const tileKey = `${r}-${c}`;
+            const isNewTile = newTiles.has(tileKey);
+            
+            return (
+              <div
+                key={`tile-${r}-${c}`}
+                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isNewTile ? "drop-in" : ""}`}
+                style={{
+                  left: c * cell,
+                  top: r * cell,
+                  width: cell,
+                  height: cell,
+                  transform: swapTransform || (isBlasting ? "scale(1.3) rotate(10deg)" : undefined),
+                  boxShadow: isBlasting
+                    ? "0 0 0 4px #ffd166 inset, 0 0 20px 6px rgba(255,209,102,.8), 0 0 40px 10px rgba(255,255,255,.3)"
+                    : undefined,
+                  background: isBlasting ? "linear-gradient(135deg, #ffd166 0%, #ff9500 100%)" : undefined,
+                  zIndex: isBlasting ? 10 : (isSwapping ? 20 : 1),
+                }}
+              >
+                <span style={{ 
+                  fontSize: Math.floor(cell * 0.7),
+                  transform: isBlasting ? "scale(1.2)" : undefined,
+                  filter: isBlasting ? "drop-shadow(0 2px 4px rgba(0,0,0,.5))" : undefined,
+                }}>
+                  {v}
+                </span>
+              </div>
+            );
+          })
+        )}
+
+        {/* particles */}
+        {fx.map((p) => (
+          <Poof key={p.id} id={p.id} x={p.x} y={p.y} size={cell} />
+        ))}
+
+        {/* combo */}
+        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
+
+        {/* Pause overlay */}
+        {paused && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(0,0,0,.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 18,
+            }}
+          >
+            <div className="section" style={{ textAlign: "center" }}>
+              <div className="title" style={{ marginBottom: 8 }}>
+                🍬 Game Paused
+              </div>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Take a sweet break!
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn primary" onClick={() => setPaused(false)}>
+                  Resume
+                </button>
+                <button className="btn" onClick={() => finish()}>
+                  End Sweet Level
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="controls">
+        <button className="btn" onClick={() => setPaused((p) => !p)}>
+          {paused ? "Resume" : "Pause"}
+        </button>
+        <button
+          className="btn"
+          onClick={() => {
+            setGrid(initSolvableGrid());
+            setScore(0);
+            setMoves(20);
+            setCombo(0);
+            setSel(null);
+            setHint(null);
+            setSwapping(null);
+          }}
+        >
+          Reset
+        </button>
+        <button className="btn" onClick={doHint}>💡 Sweet Hint</button>
+        <button className="btn primary" onClick={shuffleBoard}>🔄 Sugar Shuffle</button>
+        <div
+          style={{
+            gridColumn: "span 1",
+            opacity: 0.7,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 12,
+          }}
+        >
+          8×8
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Helpers ----------
+const makeGrid = (rows, cols) =>
+  Array.from({ length: rows }, () => Array(cols).fill(null));
+const cloneGrid = (g) => g.map((r) => r.slice());
+const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
+
+function findMatches(g) {
+  const hits = new Set();
+  // Horizontal
+  for (let r = 0; r < ROWS; r++) {
+    let c = 0;
+    while (c < COLS) {
+      const v = g[r][c];
+      if (!v) { c++; continue; }
+      let len = 1;
+      while (c + len < COLS && g[r][c + len] === v) len++;
+      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
+      c += len;
+    }
+  }
+  // Vertical
+  for (let c = 0; c < COLS; c++) {
+    let r = 0;
+    while (r < ROWS) {
+      const v = g[r][c];
+      if (!v) { r++; continue; }
+      let len = 1;
+      while (r + len < ROWS && g[r + len][c] === v) len++;
+      if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
+      r += len;
+    }
+  }
+  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
+}
+
+function applyGravity(g) {
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (g[r][c] != null) {
+        const v = g[r][c];
+        g[r][c] = null;
+        g[write][c] = v;
+        write--;
+      }
+    }
+    while (write >= 0) { g[write][c] = null; write--; }
+  }
+}
+
+function refill(g) {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (g[r][c] == null) g[r][c] = randEmoji();
+}
+
+function hasAnyMove(g) { return !!findFirstMove(g); }
+
+function findFirstMove(g) {
+  // Check swaps right and down for a created match
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (c + 1 < COLS) {
+        const t = cloneGrid(g);
+        [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]];
+        if (findMatches(t).length > 0) return [[r, c], [r, c + 1]];
+      }
+      if (r + 1 < ROWS) {
+        const t = cloneGrid(g);
+        [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]];
+        if (findMatches(t).length > 0) return [[r, c], [r + 1, c]];
+      }
+    }
+  }
+  return null;
+}
+
+function initSolvableGrid() {
+  let g; let tries = 0;
+  do {
+    g = makeGrid(ROWS, COLS);
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        g[r][c] = randEmoji();
+    removeAllMatches(g);
+    tries++;
+    if (tries > 50) break;
+  } while (!hasAnyMove(g));
+  return g;
+}
+
+function removeAllMatches(g) {
+  // Reroll any existing matches to start without clears
+  while (true) {
+    const m = findMatches(g);
+    if (m.length === 0) break;
+    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
+  }
+}
+
+function shuffleToSolvable(g) {
+  const flat = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
+
+  let attempts = 0;
+  while (attempts < 100) {
+    // Fisher-Yates shuffle
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+
+    const t = makeGrid(ROWS, COLS);
+    let idx = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
+
+    removeAllMatches(t);
+    if (hasAnyMove(t)) return t;
+    attempts++;
+  }
+  return initSolvableGrid();
+}
+
+function Poof({ x, y, size }) {
+  const sparks = Array.from({ length: 20 }); // More particles!
+  return (
+    <>
+      {sparks.map((_, i) => {
+        const angle = (i / 20) * Math.PI * 2;
+        const distance = size * (0.8 + Math.random() * 0.6); // Varied distances
+        const tx = size / 2 + Math.cos(angle) * distance;
+        const ty = size / 2 + Math.sin(angle) * distance;
+        const randomDelay = Math.random() * 0.2; // Staggered timing
+        const randomDuration = 1.2 + Math.random() * 0.6; // Varied speeds
+        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🍬', '💎'];
+        const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
+        
+        const style = {
+          left: x, top: y,
+          ["--cx"]: size / 2 + "px",
+          ["--cy"]: size / 2 + "px",
+          ["--tx"]: tx + "px",
+          ["--ty"]: ty + "px",
+          position: "absolute",
+          animationDelay: `${randomDelay}s`,
+          animationDuration: `${randomDuration}s`,
+          fontSize: Math.floor(size * (0.3 + Math.random() * 0.4)) + "px", // Varied sizes
+        };
+        return (
+          <span key={i} className="spark" style={style}>
+            {randomSpark}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+function useResizeCell(containerRef, setCell) {
+  useEffect(() => {
+    const compute = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      // Reserve space for HUD + controls (~180px), then fill the rest.
+      const pad = 24;
+      const w = el.clientWidth - pad * 2;
+      const h = el.clientHeight - 180;
+      const size = Math.floor(Math.min(w / COLS, h / ROWS));
+      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
+    };
+    compute();
+    let ro;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(compute);
+      ro.observe(containerRef.current);
+    }
+    window.addEventListener("resize", compute);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", compute);
+    };
+  }, [containerRef, setCell]);
+}
