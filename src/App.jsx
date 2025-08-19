@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
-   Candy Crush with Cats — Match-3 (Telegram WebApp)
-   ✦ Candy Crush style with cats, pretzels, strawberries, oreos, marshmallows
-   ✦ HK-like full-screen shell (Header / Content)
+   Meowchi Game — Match-3 (Telegram WebApp)
+   ✦ Match-3 style with cats, pretzels, strawberries, oreos, marshmallows
+   ✦ Full-screen responsive design
    ✦ Stable 100vh via Telegram viewportStableHeight
-   ✦ Wallpaper splash that holds ≥ 3s
-   ✦ Mechanics: swap → match 3+ → clear → gravity → refill
+   ✦ Touch & drag functionality optimized for mobile
+   ✦ Proper navigation with back buttons
 -------------------------------------------------- */
 
 // ---------- Shared config ----------
@@ -37,29 +37,41 @@ export default function App() {
         display: grid;
         grid-template-rows: auto 1fr;
         width: 100%;
+        max-width: 100vw;
+        overflow: hidden;
       }
       .header {
         display:flex; align-items:center; justify-content:space-between;
         padding:12px 16px;
         background:#0f1430; border-bottom:1px solid rgba(122,162,255,.15);
         position: sticky; top: 0; z-index: 5;
+        min-height: 60px;
+        flex-shrink: 0;
       }
-      .brand { display:flex; align-items:center; gap:10px; }
-      .brand .logo { font-size:22px }
-      .brand .name { font-weight:800; letter-spacing:.2px }
-      .pill { padding:2px 8px; border-radius:999px; border:1px solid rgba(122,162,255,.25); background:#0f1533; font-size:11px; }
+      .brand { display:flex; align-items:center; gap:10px; flex: 1; min-width: 0; }
+      .brand .logo { font-size:22px; flex-shrink: 0; }
+      .brand .name { font-weight:800; letter-spacing:.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pill { padding:2px 8px; border-radius:999px; border:1px solid rgba(122,162,255,.25); background:#0f1533; font-size:11px; flex-shrink: 0; }
 
       .content {
-        height: 100%; width: 100%;
+        height: 100%; 
+        width: 100%;
+        max-width: 100vw;
         padding: 12px 16px 16px 16px;
-        display: grid; align-content:start; gap: 12px;
+        display: grid; 
+        align-content:start; 
+        gap: 12px;
         overflow:auto;
+        box-sizing: border-box;
       }
 
       .section {
         background:#0f1430; border:1px solid var(--line);
         border-radius:16px; padding:14px;
         box-shadow:0 10px 28px rgba(0,0,0,.15);
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .title { font-weight:800; font-size:16px; }
       .muted { opacity:.72; }
@@ -68,12 +80,21 @@ export default function App() {
       .btn {
         background:#12183a; border:1px solid #1c244e; border-radius:14px;
         padding:10px 12px; color:#fff; cursor:pointer;
+        white-space: nowrap; text-align: center;
+        touch-action: manipulation;
       }
       .btn:hover { background:#1a2260; }
       .btn:disabled { opacity:0.5; cursor:not-allowed; }
       .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:700; }
       .btn.primary:hover { background:#1a2768; }
       .btn.block { width:100%; }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+      }
 
       .list > * {
         background:#12183a; border:1px solid #1c244e; border-radius:14px;
@@ -89,8 +110,10 @@ export default function App() {
       .board {
         position:relative; background:#0f1533; border-radius:18px;
         outline:1px solid var(--line);
-        box-shadow:0 10px 34px rgba(0,0,0,.35); touch-action:none;
+        box-shadow:0 10px 34px rgba(0,0,0,.35); 
         margin: 0 auto;
+        touch-action: none;
+        user-select: none;
       }
       .gridlines { position:absolute; inset:0; opacity:.15; pointer-events:none; }
       .tile {
@@ -99,6 +122,8 @@ export default function App() {
         outline:1px solid #26307a;
         transition: transform .3s ease, opacity .4s ease, background .2s ease, box-shadow .3s ease;
         cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+        touch-action: none;
+        user-select: none;
       }
       .tile:hover { 
         background:linear-gradient(135deg, #2a3270 0%, #1f2556 100%);
@@ -184,6 +209,14 @@ export default function App() {
       }
       @keyframes spin { to { transform: rotate(360deg); } }
       .splash-text { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
+
+      /* Responsive breakpoints */
+      @media (max-width: 480px) {
+        .header { padding: 8px 12px; }
+        .content { padding: 8px 12px 12px 12px; }
+        .brand .name { font-size: 14px; }
+        .btn { padding: 8px 10px; font-size: 14px; }
+      }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
@@ -198,6 +231,17 @@ export default function App() {
     setVH();
     window.addEventListener("resize", setVH);
     return () => window.removeEventListener("resize", setVH);
+  }, []);
+
+  // Telegram WebApp initialization with vertical swipes disabled
+  useEffect(() => {
+    const tg = getTG();
+    try { 
+      tg?.ready(); 
+      tg?.expand(); 
+      // Disable vertical swipes to prevent app closing during game
+      tg?.disableVerticalSwipes?.();
+    } catch {}
   }, []);
 
   // Splash gating (3s + tg.ready + image loaded)
@@ -222,8 +266,9 @@ export default function App() {
     if (tgReady && minElapsed && imgLoaded) setShowSplash(false);
   }, [tgReady, minElapsed, imgLoaded]);
 
-  // Navigation / state
+  // Navigation / state with history tracking
   const [screen, setScreen] = useState("home");
+  const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(500);
   const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
   const [settings, setSettings] = useState({ haptics: true, sounds: false });
@@ -235,26 +280,58 @@ export default function App() {
     all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
   };
 
+  // Navigation functions
+  const navigateTo = (newScreen) => {
+    setScreenHistory(prev => [...prev, newScreen]);
+    setScreen(newScreen);
+  };
+
+  const goBack = () => {
+    if (screenHistory.length > 1) {
+      const newHistory = [...screenHistory];
+      newHistory.pop(); // Remove current screen
+      const previousScreen = newHistory[newHistory.length - 1];
+      setScreenHistory(newHistory);
+      setScreen(previousScreen);
+    } else {
+      // Fallback to home if no history
+      setScreen("home");
+      setScreenHistory(["home"]);
+    }
+  };
+
+  const goHome = () => {
+    setScreen("home");
+    setScreenHistory(["home"]);
+  };
+
   // UI sections
   function Header() {
+    const isHome = screen === "home";
+    
     return (
       <div className="header">
         <div className="brand">
-          <span className="logo">🍬</span>
-          <div className="name">Candy‑Crush‑Cats</div>
+          <span className="logo">🐱</span>
+          <div className="name">Meowchi</div>
           <span className="pill">{screen.toUpperCase()}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="header-actions">
           <div>
             <span className="muted" style={{ marginRight: 6 }}>
-              CandyCoins
+              $Meow
             </span>
             <b>{coins}</b>
           </div>
-          {screen !== "home" && (
-            <button className="btn" onClick={() => setScreen("home")}>
-              Home
-            </button>
+          {!isHome && (
+            <>
+              <button className="btn" onClick={goBack}>
+                ← Back
+              </button>
+              <button className="btn" onClick={goHome}>
+                🏠 Home
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -265,24 +342,24 @@ export default function App() {
     return (
       <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
         <div className="section" style={{ display: "grid", gap: 10 }}>
-          <div className="title">Match‑3 Candy Crush with cute cats!</div>
-          <button className="btn primary block" onClick={() => setScreen("game")}>
-            🍭 Play Candy Crush
+          <div className="title">Match‑3 Meowchi Game with cute cats!</div>
+          <button className="btn primary block" onClick={() => navigateTo("game")}>
+            🍭 Play Meowchi Game
           </button>
           <div className="row">
-            <button className="btn block" onClick={() => setScreen("shop")}>🛍 Candy Shop</button>
-            <button className="btn block" onClick={() => setScreen("leaderboard")}>🏆 Sweet Leaders</button>
+            <button className="btn block" onClick={() => navigateTo("shop")}>🛍 Meowchi Shop</button>
+            <button className="btn block" onClick={() => navigateTo("leaderboard")}>🏆 Sweet Leaders</button>
           </div>
           <div className="row">
-            <button className="btn block" onClick={() => setScreen("daily")}>🍯 Daily Treats</button>
-            <button className="btn block" onClick={() => setScreen("invite")}>🔗 Share Sweetness</button>
+            <button className="btn block" onClick={() => navigateTo("daily")}>🍯 Daily Treats</button>
+            <button className="btn block" onClick={() => navigateTo("invite")}>🔗 Share Sweetness</button>
           </div>
-          <button className="btn block" onClick={() => setScreen("settings")}>⚙️ Settings</button>
+          <button className="btn block" onClick={() => navigateTo("settings")}>⚙️ Settings</button>
         </div>
         <div className="section" style={{ display: "grid", gap: 8 }}>
-          <div className="title">How to play Candy Crush</div>
+          <div className="title">How to play Meowchi</div>
           <div className="muted">
-            Swap adjacent candies to create rows or columns of 3+ matching treats! 
+            Touch and drag to swap adjacent candies to create rows or columns of 3+ matching treats! 
             Match cats 😺, pretzels 🥨, strawberries 🍓, oreos 🍪, or marshmallows 🍡. 
             Create cascades for <b>bonus points</b>. Use hints when stuck!
           </div>
@@ -300,7 +377,7 @@ export default function App() {
     ];
     return (
       <div className="section">
-        <div className="title" style={{ marginBottom: 10 }}>🍭 Candy Shop</div>
+        <div className="title" style={{ marginBottom: 10 }}>🛍 Meowchi Shop</div>
         <div className="list" style={{ display: "grid", gap: 8 }}>
           {items.map((it) => (
             <div key={it.key}>
@@ -309,7 +386,7 @@ export default function App() {
                 <div className="muted" style={{ fontSize: 12 }}>{it.desc}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div className="muted" style={{ fontSize: 12 }}>{it.price} 🍬</div>
+                <div className="muted" style={{ fontSize: 12 }}>{it.price} $Meow</div>
                 <button
                   className="btn"
                   onClick={() => setCoins((c) => Math.max(0, c - it.price))}
@@ -378,7 +455,7 @@ export default function App() {
           {daily.lastClaim ? ` • last: ${daily.lastClaim}` : ""}
         </div>
         <button className="btn primary" onClick={claim} disabled={!canClaim}>
-          {canClaim ? "Claim 50 🍬" : "Come back tomorrow"}
+          {canClaim ? "Claim 50 $Meow" : "Come back tomorrow"}
         </button>
         <div className="muted" style={{ fontSize: 12 }}>
           Keep your sweet streak alive! Resets if you miss a day.
@@ -388,7 +465,7 @@ export default function App() {
   }
 
   function Invite() {
-    const link = "https://t.me/candy_crush_cats_bot?start=sweet";
+    const link = "https://t.me/meowchi_game_bot?start=sweet";
     const [copied, setCopied] = useState(false);
     async function copy() {
       try {
@@ -401,7 +478,7 @@ export default function App() {
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">🍭 Share the Sweetness</div>
         <div className="muted" style={{ fontSize: 12 }}>
-          Invite friends to join the candy crushing fun! When your friend completes their first level, you both get 200 🍬.
+          Invite friends to join the meowchi crushing fun! When your friend completes their first level, you both get 200 $Meow.
         </div>
         <div className="row" style={{ gap: 8 }}>
           <div
@@ -453,14 +530,14 @@ export default function App() {
           <div className="muted">Score</div><b>{lastRun.score}</b>
         </div>
         <div className="row">
-          <div className="muted">CandyCoins earned</div><b>{lastRun.coins}</b>
+          <div className="muted">$Meow earned</div><b>{lastRun.coins}</b>
         </div>
-        <button className="btn primary" onClick={() => setScreen("game")}>
-          🍭 Crush More Candy
+        <button className="btn primary" onClick={() => navigateTo("game")}>
+          🍭 Play More Meowchi
         </button>
         <div className="row">
-          <button className="btn block" onClick={() => setScreen("shop")}>Candy Shop</button>
-          <button className="btn block" onClick={() => setScreen("leaderboard")}>Sweet Leaders</button>
+          <button className="btn block" onClick={() => navigateTo("shop")}>Meowchi Shop</button>
+          <button className="btn block" onClick={() => navigateTo("leaderboard")}>Sweet Leaders</button>
         </div>
       </div>
     );
@@ -472,7 +549,7 @@ export default function App() {
         <div className="splash" role="status" aria-live="polite">
           <div className="splash-min">
             <div className="loader-ring" />
-            <div className="splash-text">Loading sweet candies…</div>
+            <div className="splash-text">Loading sweet meowchi…</div>
           </div>
         </div>
       )}
@@ -488,8 +565,12 @@ export default function App() {
           {screen === "settings" && <Settings />}
           {screen === "game" && (
             <GameView
-              onExit={(run) => { setLastRun(run); setScreen("gameover"); }}
-              onBack={() => setScreen("home")}
+              onExit={(run) => { 
+                setLastRun(run); 
+                setCoins((c) => c + run.coins);
+                navigateTo("gameover"); 
+              }}
+              onBack={goBack}
               onCoins={(d) => setCoins((c) => c + d)}
             />
           )}
@@ -532,13 +613,14 @@ function GameView({ onExit, onBack, onCoins }) {
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  // Enhanced touch and drag support
+  // Enhanced touch and drag support optimized for Telegram WebApp
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
     
-    let dragState = null; // {startR, startC, startX, startY, isDragging}
-    const thresh = 20; // Increased threshold for better drag detection
+    let dragState = null; // {startR, startC, startX, startY, isDragging, startTime}
+    const dragThreshold = 15; // Reduced threshold for better responsiveness
+    const tapTimeout = 300; // Maximum time for a tap vs drag
     
     const rcFromEvent = (e) => {
       const rect = el.getBoundingClientRect();
@@ -551,33 +633,27 @@ function GameView({ onExit, onBack, onCoins }) {
       return { r, c, x, y };
     };
 
-    const onStart = (e) => {
+    const onTouchStart = (e) => {
       if (paused) return;
       e.preventDefault();
       
       const p = rcFromEvent(e);
       if (!inBounds(p.r, p.c)) return;
       
-      // Desktop convenience: if already selected and clicking adjacent, swap immediately
-      if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1 && !e.touches) {
-        trySwap(sel.r, sel.c, p.r, p.c);
-        setSel(null);
-        dragState = null;
-        return;
-      }
-      
       dragState = {
         startR: p.r,
         startC: p.c,
         startX: p.x,
         startY: p.y,
-        isDragging: false
+        isDragging: false,
+        startTime: Date.now()
       };
       
       setSel({ r: p.r, c: p.c });
+      haptic(5); // Light haptic feedback on touch start
     };
 
-    const onMove = (e) => {
+    const onTouchMove = (e) => {
       if (paused || !dragState) return;
       e.preventDefault();
       
@@ -586,8 +662,9 @@ function GameView({ onExit, onBack, onCoins }) {
       const dy = p.y - dragState.startY;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      if (distance > thresh) {
+      if (distance > dragThreshold && !dragState.isDragging) {
         dragState.isDragging = true;
+        haptic(8); // Slightly stronger feedback when drag starts
         
         // Determine direction and target cell
         let targetR = dragState.startR;
@@ -608,11 +685,15 @@ function GameView({ onExit, onBack, onCoins }) {
       }
     };
 
-    const onEnd = (e) => {
+    const onTouchEnd = (e) => {
       if (paused || !dragState) return;
       e.preventDefault();
       
+      const currentTime = Date.now();
+      const timeDiff = currentTime - dragState.startTime;
+      
       if (dragState.isDragging) {
+        // This was a drag - perform swap
         const p = rcFromEvent(e);
         const dx = p.x - dragState.startX;
         const dy = p.y - dragState.startY;
@@ -630,43 +711,75 @@ function GameView({ onExit, onBack, onCoins }) {
         
         if (inBounds(targetR, targetC)) {
           trySwap(dragState.startR, dragState.startC, targetR, targetC);
+          haptic(12); // Success haptic
+        } else {
+          haptic(8); // Invalid move haptic
         }
         setSel(null);
-      } else {
-        // Just a tap - keep selection
-        setSel({ r: dragState.startR, c: dragState.startC });
+      } else if (timeDiff < tapTimeout) {
+        // This was a quick tap - keep selection or swap with previous selection
+        if (sel && 
+            sel.r !== dragState.startR || sel.c !== dragState.startC) {
+          // We have a previous selection, try to swap
+          const distance = Math.abs(sel.r - dragState.startR) + Math.abs(sel.c - dragState.startC);
+          if (distance === 1) {
+            trySwap(sel.r, sel.c, dragState.startR, dragState.startC);
+            setSel(null);
+            haptic(12);
+          } else {
+            // Too far, just update selection
+            setSel({ r: dragState.startR, c: dragState.startC });
+            haptic(5);
+          }
+        } else {
+          // Just selecting this tile
+          setSel({ r: dragState.startR, c: dragState.startC });
+          haptic(5);
+        }
       }
       
       dragState = null;
     };
 
-    const onCancel = () => {
+    const onTouchCancel = () => {
       setSel(null);
       dragState = null;
     };
 
-    // Mouse events
-    el.addEventListener("mousedown", onStart);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onEnd);
-    
-    // Touch events
-    el.addEventListener("touchstart", onStart, { passive: false });
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("touchend", onEnd, { passive: false });
-    window.addEventListener("touchcancel", onCancel, { passive: false });
+    // Touch events with proper passive: false for preventDefault
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+    el.addEventListener("touchcancel", onTouchCancel, { passive: false });
+
+    // Desktop mouse events for development/testing
+    const onMouseDown = (e) => {
+      if (paused) return;
+      
+      const p = rcFromEvent(e);
+      if (!inBounds(p.r, p.c)) return;
+      
+      // Desktop convenience: if already selected and clicking adjacent, swap immediately
+      if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
+        trySwap(sel.r, sel.c, p.r, p.c);
+        setSel(null);
+        return;
+      }
+      
+      setSel({ r: p.r, c: p.c });
+    };
+
+    el.addEventListener("mousedown", onMouseDown);
 
     return () => {
-      // Mouse cleanup
-      el.removeEventListener("mousedown", onStart);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onEnd);
-      
       // Touch cleanup
-      el.removeEventListener("touchstart", onStart);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onEnd);
-      window.removeEventListener("touchcancel", onCancel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchCancel);
+      
+      // Mouse cleanup
+      el.removeEventListener("mousedown", onMouseDown);
     };
   }, [cell, paused, sel]);
 
@@ -809,7 +922,7 @@ function GameView({ onExit, onBack, onCoins }) {
   return (
     <div className="section board-wrap" ref={containerRef}>
       <div className="row">
-        <button className="btn" onClick={onBack}>Back</button>
+        <button className="btn" onClick={onBack}>← Back</button>
         <div className="muted">
           🍬 Touch and drag to swap adjacent candies! 🍭
         </div>
