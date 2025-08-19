@@ -1,129 +1,119 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
-   Candy-Cats – Match-3 (Telegram WebApp-friendly)
-   ✔ Tap-then-tap OR swipe to swap
-   ✔ Visible clear → (pause) → gravity fall → refill (animated)
-   ✔ No horizontal scroll while playing
+   Candy-Cats (Canvas) — Match‑3 with animations
+   ✦ Pieces: 🐱 CAT, 🍪 OREO, 🍥 MARSHMALLOW, 🍓 STRAWBERRY, 🥨 PRETZEL
+   ✦ Inputs: drag (touch/mouse) to swap adjacent tiles
+   ✦ Animations: swap tween, clear fade+poof, gravity fall, refill, cascades
+   ✦ HUD: score, moves, combo, hint, shuffle, pause
+   ✦ No horizontal scroll; mobile-first layout
+
+   Files untouched: index.html, main.jsx, server.js, vite.config.js
+   Also add the tiny CSS tweak in index.css (section 2 below).
 -------------------------------------------------- */
 
-const COLS = 8;
-const ROWS = 8;
-const CELL_MIN = 36;
-const CELL_MAX = 64;
+// ---------- Game constants ----------
+const ROWS = 6;
+const COLS = 6;
+const MOVES = 20;
+const OBJECTIVE_SCORE = 1000;
 
-const CAT_SET = ["😺", "😸", "😹", "😻", "😼", "🐱"];
-const randEmoji = () => CAT_SET[(Math.random() * CAT_SET.length) | 0];
+// Pieces
+const P = {
+  CAT: "CAT",
+  OREO: "OREO",
+  MARSHMALLOW: "MARSHMALLOW",
+  STRAWBERRY: "STRAWBERRY",
+  PRETZEL: "PRETZEL",
+};
 
-const getTG = () =>
-  (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
+const EMOJI = {
+  [P.CAT]: "🐱",
+  [P.OREO]: "🍪",
+  [P.MARSHMALLOW]: "🍥",
+  [P.STRAWBERRY]: "🍓",
+  [P.PRETZEL]: "🥨",
+};
 
-// ---------- Root App ----------
+const POOL = [P.CAT, P.OREO, P.MARSHMALLOW, P.STRAWBERRY, P.PRETZEL];
+
+// Level 1 layout (your spec)
+const LEVEL1_LAYOUT = [
+  [P.CAT, P.OREO, P.MARSHMALLOW, P.STRAWBERRY, P.PRETZEL, P.CAT],
+  [P.OREO, P.PRETZEL, P.CAT, P.OREO, P.MARSHMALLOW, P.STRAWBERRY],
+  [P.MARSHMALLOW, P.STRAWBERRY, P.PRETZEL, P.CAT, P.OREO, P.MARSHMALLOW],
+  [P.STRAWBERRY, P.CAT, P.OREO, P.MARSHMALLOW, P.PRETZEL, P.STRAWBERRY],
+  [P.PRETZEL, P.MARSHMALLOW, P.STRAWBERRY, P.CAT, P.OREO, P.PRETZEL],
+  [P.CAT, P.OREO, P.PRETZEL, P.MARSHMALLOW, P.STRAWBERRY, P.CAT],
+];
+
+// Drawing
+const BG = "#0f1533";
+const GRID_LINE = "rgba(122,162,255,.25)";
+const TILE_BG = "#151b46";
+const TILE_HL = "#1a2260";
+const TILE_BORDER = "#26307a";
+
+// Tweens
+const SWAP_MS = 140;
+const FALL_PX_PER_MS = 0.6; // gravity
+const CLEAR_MS = 180;
+const CASCADE_DELAY_MS = 90;
+
+// Utilities
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const now = () => performance.now();
+
+// ---------- Root app shell ----------
 export default function App() {
-  // inject UI CSS once
   useEffect(() => {
+    // Minimal inline CSS for the shell
     const style = document.createElement("style");
     style.innerHTML = `
       :root { --line:#243069; }
-      html, body, #root { height: 100%; }
-      .page { background:#0a0f23; color:#fff; height:100%; display:flex; align-items:center; justify-content:center; padding:16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-      .card { width:min(420px, 100%); display:flex; flex-direction:column; gap:12px; }
-      .panel { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 10px 28px rgba(0,0,0,.25); }
-      .section { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 10px 28px rgba(0,0,0,.15); }
-      .title { font-weight:700; font-size:16px; }
-      .muted { opacity:.7; }
-      .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-      .grid { display:grid; gap:10px; }
-      .btn { background:#12183a; border:1px solid #1c244e; border-radius:14px; padding:10px 12px; color:#fff; cursor:pointer; }
-      .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:600; }
-      .btn.block { width:100%; }
-      .list > * { background:#12183a; border:1px solid #1c244e; border-radius:14px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; }
-
-      .board { position:relative; background:#0f1533; border-radius:18px; outline:1px solid var(--line); box-shadow:0 10px 34px rgba(0,0,0,.35); touch-action:none; margin: 0 auto; }
-      .gridlines { position:absolute; inset:0; opacity:.2; pointer-events:none; }
-
-      /* ANIMATIONS: animate left/top + transform so swaps & falls are visible */
-      .tile {
-        position:absolute; display:flex; align-items:center; justify-content:center;
-        border-radius:12px; background:#151b46; outline:1px solid #26307a;
-        transition:
-          left .18s ease, top .18s ease,
-          transform .18s ease, opacity .25s ease,
-          background .15s ease, box-shadow .18s ease;
-        will-change: left, top, transform, opacity;
-      }
-      .tile.sel { background:#1a2260; outline-color:#3a48a4; }
-      .tile.hint { box-shadow: 0 0 0 2px #7aa2ff inset; }
-      .tile.blip { transform: scale(1.12); box-shadow: 0 0 0 3px #ffd166 inset, 0 0 16px 4px rgba(255,209,102,.6); background:#1f2568; }
-
+      body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; overflow-x:hidden; }
+      #root, html, body { height:100%; }
+      .page { min-height:100%; display:flex; align-items:center; justify-content:center; padding:16px; }
+      .card { width:min(480px, 100%); display:flex; flex-direction:column; gap:12px; }
+      .panel, .section { background:#0f1430; border:1px solid var(--line); border-radius:16px; padding:12px 14px; box-shadow:0 10px 28px rgba(0,0,0,.2); }
+      .panel { display:flex; align-items:center; justify-content:space-between; }
+      .title { font-weight:800; font-size:16px; }
+      .muted { opacity:.72; }
+      .btn { background:#12183a; border:1px solid #1c244e; color:#fff; border-radius:14px; padding:10px 12px; cursor:pointer; }
+      .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:700; }
+      .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
       .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; }
-      .combo { position:absolute; left:50%; transform:translateX(-50%); top:6px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 8px; font-size:12px; }
-
-      @keyframes poof { from { opacity:1; transform: translate(var(--cx), var(--cy)) scale(.9) rotate(0deg); } to { opacity:0; transform: translate(var(--tx), var(--ty)) scale(.4) rotate(90deg); } }
-      .spark { position:absolute; font-size:18px; animation: poof .75s ease-out forwards; }
+      canvas { touch-action:none; display:block; }
+      .pill { padding:2px 8px; border-radius:999px; border:1px solid var(--line); background:#0f1533; font-size:11px; }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
   }, []);
 
   const [screen, setScreen] = useState("home");
-  const [coins, setCoins] = useState(500);
-  const [lastRun, setLastRun] = useState({ score: 0, coins: 0 });
-  const [settings, setSettings] = useState({ haptics: true });
+  const [lastRun, setLastRun] = useState({ score: 0, win: false });
 
   function Header() {
     return (
       <div className="panel">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 22 }}>🍬</span>
-          <div style={{ fontWeight: 700 }}>Candy‑Cats</div>
-          <span style={{ marginLeft: 8, opacity: 0.7, fontSize: 12 }}>
-            {screen.toUpperCase()}
-          </span>
-        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div>
-            <span className="muted" style={{ marginRight: 6 }}>
-              CatCoins
-            </span>
-            <b>{coins}</b>
-          </div>
-          {screen !== "home" && (
-            <button className="btn" onClick={() => setScreen("home")}>
-              Home
-            </button>
-          )}
+          <span style={{ fontSize: 22 }}>🍬</span>
+          <b>Candy‑Cats</b>
+          <span className="pill">{screen.toUpperCase()}</span>
         </div>
+        {screen !== "home" && <button className="btn" onClick={() => setScreen("home")}>Home</button>}
       </div>
     );
   }
 
   function Home() {
     return (
-      <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
-        <div className="section" style={{ display: "grid", gap: 10 }}>
-          <div className="title">Match‑3 with cats</div>
-          <button className="btn primary block" onClick={() => setScreen("game")}>
-            ▶️ Play
-          </button>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Swap by **swiping** or **tap‑then‑tap** adjacent tiles. Watch clears,
-            falls, and refills animate.
-          </div>
+      <div className="section" style={{ display: "grid", gap: 10 }}>
+        <div className="title">Match‑3 with cats & treats</div>
+        <div className="muted">
+          Drag a tile to swap with a neighbor. Make 3+ in a row/col to clear; watch them pop and fall!
         </div>
-        <div className="section" style={{ display: "grid", gap: 8 }}>
-          <div className="title">Settings</div>
-          <label style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between"
-          }}>
-            <span>Haptics</span>
-            <input
-              type="checkbox"
-              checked={settings.haptics}
-              onChange={(e) => setSettings(s => ({ ...s, haptics: e.target.checked }))}
-            />
-          </label>
-        </div>
+        <button className="btn primary" onClick={() => setScreen("game")}>▶️ Play Level 1</button>
       </div>
     );
   }
@@ -132,9 +122,12 @@ export default function App() {
     return (
       <div className="section" style={{ display: "grid", gap: 10 }}>
         <div className="title">Level Over</div>
-        <div className="row"><span className="muted">Score</span><b>{lastRun.score}</b></div>
-        <div className="row"><span className="muted">CatCoins</span><b>{lastRun.coins}</b></div>
-        <button className="btn primary" onClick={() => setScreen("game")}>Play again</button>
+        <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
+        <div className="row"><div className="muted">Result</div><b style={{ color: lastRun.win ? "#7CFC7C" : "#ffb4a2" }}>{lastRun.win ? "Win" : "Try Again"}</b></div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn primary" onClick={() => setScreen("game")}>Play again</button>
+          <button className="btn" onClick={() => setScreen("home")}>Home</button>
+        </div>
       </div>
     );
   }
@@ -145,10 +138,12 @@ export default function App() {
         <Header />
         {screen === "home" && <Home />}
         {screen === "game" && (
-          <GameView
-            onExit={(run) => { setLastRun(run); setCoins(c => c + run.coins); setScreen("gameover"); }}
+          <CanvasGame
+            onExit={(run) => {
+              setLastRun(run);
+              setScreen("gameover");
+            }}
             onBack={() => setScreen("home")}
-            haptics={settings.haptics}
           />
         )}
         {screen === "gameover" && <GameOver />}
@@ -157,269 +152,363 @@ export default function App() {
   );
 }
 
-// ---------- Game View (with animated pipeline) ----------
-function GameView({ onExit, onBack, haptics }) {
-  const containerRef = useRef(null);
-  const boardRef = useRef(null);
-  const [cell, setCell] = useState(48);
-  useResizeCell(containerRef, setCell);
-  const tg = getTG();
+// ---------- Canvas Game ----------
+function CanvasGame({ onExit, onBack }) {
+  const wrapRef = useRef(null);
+  const canvRef = useRef(null);
+  const [hud, setHud] = useState({
+    score: 0,
+    moves: MOVES,
+    combo: 0,
+    paused: false,
+  });
 
-  // Grid state
-  const [grid, setGrid] = useState(() => initSolvableGrid());
-  const gridRef = useRef(grid); gridRef.current = grid;
+  // Board model: cell objects live in grid[r][c]
+  // Each cell keeps an animation state: x,y (pixels), sx,sy (scale), alpha, vx,vy, clearingUntil (timestamp)
+  const gridRef = useRef(makeGrid());
 
-  // HUD
-  const [score, setScore] = useState(0);
-  const [moves, setMoves] = useState(20);
-  const [combo, setCombo] = useState(0);
+  // Layout (computed)
+  const cellSizeRef = useRef(60);
+  const originRef = useRef({ x: 0, y: 0 }); // top-left of board in canvas
+  const boardPxRef = useRef({ w: 0, h: 0 });
 
-  // Selection / hint / FX
-  const [sel, setSel] = useState(null);
-  const [hint, setHint] = useState(null);
-  const [blast, setBlast] = useState(new Set());
-  const [fx, setFx] = useState([]);
-  const [paused, setPaused] = useState(false);
+  // Interaction
+  const dragRef = useRef({ active: false, r: -1, c: -1, startX: 0, startY: 0, lastX: 0, lastY: 0 });
 
-  // Telegram buttons
+  // Anim loop
+  const rafRef = useRef(0);
+  const lastTRef = useRef(0);
+  const busyRef = useRef(false); // block input during swaps/clear/fall phases
+
+  // ---------- Init ----------
   useEffect(() => {
-    const w = getTG(); if (!w) return;
-    try { w.ready(); w.expand(); w.BackButton.show(); w.MainButton.setText('Hint 🔍'); w.MainButton.show(); } catch {}
-    const onBackBtn = () => setPaused(p => !p);
-    const onMain = () => doHint();
-    w?.onEvent?.('backButtonClicked', onBackBtn);
-    w?.onEvent?.('mainButtonClicked', onMain);
-    return () => {
-      w?.offEvent?.('backButtonClicked', onBackBtn);
-      w?.offEvent?.('mainButtonClicked', onMain);
-      try { w.BackButton.hide(); w.MainButton.hide(); } catch {}
+    // create canvas and size it
+    const canvas = canvRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const resize = () => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      // Reserve space for HUD
+      const availW = wrap.clientWidth - 2; // small pad
+      const availH = Math.max(260, wrap.clientHeight - 200);
+
+      // cell size keeps board square-ish within wrapper
+      const s = Math.floor(Math.min(availW / COLS, availH / ROWS));
+      cellSizeRef.current = clamp(s, 44, 80);
+      const w = COLS * cellSizeRef.current;
+      const h = ROWS * cellSizeRef.current;
+      boardPxRef.current = { w, h };
+
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+
+      originRef.current = { x: 0, y: 0 }; // centered can be added later
     };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrapRef.current);
+    window.addEventListener("resize", resize);
+
+    // initialize board from level layout, remove auto-matches, ensure a move
+    gridRef.current = makeGridFromLayout(LEVEL1_LAYOUT);
+    stripAllMatches(gridRef.current);
+    ensureAnyMove(gridRef.current);
+
+    startLoop();
+
+    // input handlers
+    const onPointerDown = (e) => {
+      if (hud.paused || busyRef.current) return;
+      const pt = canvasPoint(canvas, e);
+      const hit = hitCell(pt.x, pt.y);
+      if (!hit) return;
+      dragRef.current = {
+        active: true,
+        r: hit.r,
+        c: hit.c,
+        startX: pt.x,
+        startY: pt.y,
+        lastX: pt.x,
+        lastY: pt.y,
+      };
+      canvas.setPointerCapture?.(e.pointerId);
+    };
+    const onPointerMove = (e) => {
+      if (!dragRef.current.active) return;
+      const pt = canvasPoint(canvas, e);
+      dragRef.current.lastX = pt.x;
+      dragRef.current.lastY = pt.y;
+    };
+    const onPointerUp = async (e) => {
+      if (!dragRef.current.active) return;
+      const d = dragRef.current;
+      dragRef.current.active = false;
+
+      if (hud.paused || busyRef.current) return;
+
+      // Decide swap dir from drag delta
+      const dx = d.lastX - d.startX;
+      const dy = d.lastY - d.startY;
+      const threshold = Math.max(8, cellSizeRef.current * 0.25);
+      let dr = 0,
+        dc = 0;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dx) >= threshold) dc = dx > 0 ? 1 : -1;
+      } else {
+        if (Math.abs(dy) >= threshold) dr = dy > 0 ? 1 : -1;
+      }
+      const r2 = d.r + dr,
+        c2 = d.c + dc;
+      if (!inBounds(r2, c2)) return;
+
+      await attemptSwap(d.r, d.c, r2, c2);
+    };
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function haptic(ms = 12) {
-    if (!haptics) return;
-    try { getTG()?.HapticFeedback?.impactOccurred('light'); } catch {}
-    try { navigator.vibrate?.(ms); } catch {}
+  // ---------- Main loop ----------
+  function startLoop() {
+    const step = (t) => {
+      const dt = lastTRef.current ? t - lastTRef.current : 16;
+      lastTRef.current = t;
+      update(dt);
+      draw();
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
   }
 
-  // Input (tap + swipe + desktop)
-  useEffect(() => {
-    const el = boardRef.current; if (!el) return;
-    let start = null; // {r,c,x,y}
-    const thresh = 6;
+  function update(dt) {
+    // Gravity animation
+    const g = gridRef.current;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cell = g[r][c];
+        if (!cell) continue;
+        // approach target pixel pos
+        const targetX = c * cellSizeRef.current + cellSizeRef.current / 2;
+        const targetY = r * cellSizeRef.current + cellSizeRef.current / 2;
 
-    const rcFromEvent = (e) => {
-      const rect = el.getBoundingClientRect();
-      const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
-      const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
-      const c = Math.floor(x / cell);
-      const r = Math.floor(y / cell);
-      return { r, c, x, y };
-    };
+        const k = 0.18; // spring-ish
+        cell.vx += (targetX - cell.x) * k;
+        cell.vy += (targetY - cell.y) * k;
+        cell.x += cell.vx * 0.12;
+        cell.y += cell.vy * 0.12;
+        cell.vx *= 0.5;
+        cell.vy *= 0.5;
 
-    const onDown = (e) => {
-      if (paused) return;
-      const p = rcFromEvent(e);
-      if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
-        trySwap(sel.r, sel.c, p.r, p.c);
-        setSel(null); start = null;
-        e.target.setPointerCapture?.(e.pointerId);
-        return;
+        // clear animation (fade)
+        if (cell.clearingUntil) {
+          const remain = clamp((cell.clearingUntil - now()) / CLEAR_MS, 0, 1);
+          cell.alpha = remain;
+          cell.s = 0.9 + 0.1 * remain;
+          if (remain <= 0) {
+            g[r][c] = null;
+          }
+        }
       }
-      start = p; setSel({ r: p.r, c: p.c });
-      e.target.setPointerCapture?.(e.pointerId);
-    };
+    }
+  }
 
-    const onUp = (e) => {
-      if (paused || !start) return;
-      const end = rcFromEvent(e);
-      let dr = end.r - start.r, dc = end.c - start.c;
-      const dx = end.x - start.x, dy = end.y - start.y;
-      if (Math.abs(dr) + Math.abs(dc) !== 1) {
-        if (Math.abs(dx) < thresh && Math.abs(dy) < thresh) { setSel(null); start = null; return; }
-        if (Math.abs(dx) > Math.abs(dy)) { dr = 0; dc = dx > 0 ? 1 : -1; }
-        else { dc = 0; dr = dy > 0 ? 1 : -1; }
+  function draw() {
+    const canvas = canvRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext("2d");
+    const { w, h } = boardPxRef.current;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // board bg
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, w, h);
+
+    // grid lines
+    ctx.strokeStyle = GRID_LINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let r = 0; r <= ROWS; r++) {
+      const y = r * cellSizeRef.current + 0.5;
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+    }
+    for (let c = 0; c <= COLS; c++) {
+      const x = c * cellSizeRef.current + 0.5;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+
+    // tiles
+    const g = gridRef.current;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cell = g[r][c];
+        if (!cell) continue;
+        const x = cell.x;
+        const y = cell.y;
+
+        // tile bg
+        const size = cellSizeRef.current * (cell.s ?? 1);
+        const half = size / 2;
+        const alpha = cell.alpha ?? 1;
+
+        ctx.save();
+        ctx.globalAlpha = 0.95 * alpha;
+
+        // rounded rect
+        roundRect(ctx, x - half, y - half, size, size, 12);
+        ctx.fillStyle = cell.highlight ? TILE_HL : TILE_BG;
+        ctx.fill();
+        ctx.strokeStyle = TILE_BORDER;
+        ctx.stroke();
+
+        // emoji
+        ctx.font = `${Math.floor(size * 0.72)}px system-ui, Apple Color Emoji, Noto Color Emoji, Segoe UI Emoji`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(EMOJI[cell.type] || "❓", x, y);
+        ctx.restore();
       }
-      const r2 = start.r + dr, c2 = start.c + dc;
-      if (!inBounds(r2, c2)) { setSel(null); start = null; return; }
-      trySwap(start.r, start.c, r2, c2);
-      setSel(null); start = null;
-    };
+    }
 
-    el.addEventListener("pointerdown", onDown);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      el.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [cell, paused, sel]);
+    // dragging highlight
+    if (dragRef.current.active) {
+      const { r, c } = dragRef.current;
+      if (inBounds(r, c)) {
+        const x = c * cellSizeRef.current;
+        const y = r * cellSizeRef.current;
+        ctx.save();
+        ctx.strokeStyle = "#7aa2ff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 2, y + 2, cellSizeRef.current - 4, cellSizeRef.current - 4);
+        ctx.restore();
+      }
+    }
+  }
 
-  // Swapping with validation
-  const movesRef = useRef(moves); movesRef.current = moves;
-  const scoreRef = useRef(score); scoreRef.current = score;
-
-  function trySwap(r1, c1, r2, c2) {
+  // ---------- Actions ----------
+  async function attemptSwap(r1, c1, r2, c2) {
+    if (hud.moves <= 0) return;
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
-    const g = cloneGrid(gridRef.current);
-    [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
-    const matches = findMatches(g);
-    if (matches.length === 0) {
-      haptic(8);
-      // tiny feedback pulse on the two tiles
-      flashBlast([[r1, c1], [r2, c2]], 180);
+
+    const g = gridRef.current;
+    if (!g[r1][c1] || !g[r2][c2]) return;
+
+    busyRef.current = true;
+    // animate swap
+    await tweenSwap(r1, c1, r2, c2);
+
+    // evaluate
+    let matched = collectMatches(g);
+    if (matched.length === 0) {
+      // swap back
+      await tweenSwap(r1, c1, r2, c2);
+      busyRef.current = false;
       return;
     }
-    setGrid(g);
-    setMoves((m) => Math.max(0, m - 1));
-    resolveCascades(g, () => {
-      if (movesRef.current === 0) {
-        onExit({
-          score: scoreRef.current,
-          coins: Math.floor(scoreRef.current * 0.15),
-        });
-      }
-    });
+
+    // consume 1 move
+    setHud((h) => ({ ...h, moves: h.moves - 1 }));
+
+    // Cascades loop
+    let combo = 0;
+    while (matched.length > 0) {
+      combo++;
+      // clear with fade
+      addScore(10 * matched.length * combo);
+      clearWithFade(g, matched);
+      await sleep(CLEAR_MS);
+
+      // remove cleared (set to null already), apply gravity fall animation
+      const fallPlan = computeFalls(g);
+      await animateFalls(g, fallPlan);
+
+      // refill from top (spawn above and fall)
+      const spawns = refillSpawnPlan(g);
+      await animateSpawns(g, spawns);
+
+      matched = collectMatches(g);
+      if (matched.length > 0) await sleep(CASCADE_DELAY_MS);
+    }
+
+    // end?
+    if (hud.moves - 1 <= 0) {
+      const win = hud.score >= OBJECTIVE_SCORE;
+      onExit({ score: hud.score, win });
+    }
+    busyRef.current = false;
   }
 
-  function flashBlast(cells, ms = 250) {
-    const keys = new Set(cells.map(([r, c]) => `${r}:${c}`));
-    setBlast(keys);
-    setTimeout(() => setBlast(new Set()), ms);
+  function addScore(pts) {
+    setHud((h) => ({ ...h, score: h.score + pts, combo: Math.min(9, (h.combo ?? 0) + 1) }));
+    setTimeout(() => setHud((h) => ({ ...h, combo: 0 })), 900);
   }
 
-  // Cascades with visible phases
-  function resolveCascades(startGrid, done) {
-    let g = cloneGrid(startGrid);
-    let comboCount = 0;
+  // ---------- HUD controls ----------
+  const resetLevel = () => {
+    gridRef.current = makeGridFromLayout(LEVEL1_LAYOUT);
+    stripAllMatches(gridRef.current);
+    ensureAnyMove(gridRef.current);
+    setHud({ score: 0, moves: MOVES, combo: 0, paused: false });
+  };
 
-    const step = () => {
-      const matches = findMatches(g);
-      if (matches.length === 0) {
-        setGrid(g);
-        if (comboCount > 0) {
-          setCombo(comboCount);
-          haptic(15);
-          setTimeout(() => setCombo(0), 900);
-        }
-        ensureSolvable(g, setGrid);
-        done && done();
-        return;
-      }
-
-      // 1) Highlight & particles (keep tiles on screen briefly)
-      flashBlast(matches, 260);
-      const fxId = Date.now();
-      setFx((prev) => [
-        ...prev,
-        ...matches.map(([r, c], i) => ({ id: fxId + i, x: c * cell, y: r * cell })),
-      ]);
-      setTimeout(() => setFx((prev) => prev.filter((p) => p.id < fxId)), 900);
-
-      // 2) After short delay, actually clear → gravity → refill (these animate via CSS)
-      setTimeout(() => {
-        // score
-        setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
-
-        matches.forEach(([r, c]) => { g[r][c] = null; });
-        applyGravity(g);          // tiles fall (left/top transition)
-        setGrid(cloneGrid(g));    // commit fall; show it before refill
-
-        // small delay so fall is visible before refill appears
-        setTimeout(() => {
-          refill(g);
-          setGrid(cloneGrid(g));  // commit refill (they pop into place)
-          comboCount++;
-          setTimeout(step, 160);   // move to next cascade step
-        }, 180);
-      }, 240);
-    };
-
-    step();
-  }
-
-  function doHint() {
+  const hint = () => {
+    if (busyRef.current) return;
     const m = findFirstMove(gridRef.current);
-    if (!m) { setGrid(shuffleToSolvable(gridRef.current)); haptic(10); return; }
-    flashBlast(m, 750);
-    haptic(10);
-  }
+    flashHint(gridRef.current, m);
+  };
 
-  function finishNow() {
-    onExit({ score, coins: Math.floor(score * 0.15) });
-  }
+  const shuffle = () => {
+    if (busyRef.current) return;
+    shuffleToSolvable(gridRef.current);
+  };
 
-  const boardW = cell * COLS, boardH = cell * ROWS;
+  // ---------- Render UI ----------
+  const { w, h } = boardPxRef.current;
 
   return (
-    <div className="section" ref={containerRef} style={{ display: "grid", gap: 10 }}>
-      <div className="row" style={{ gap: 8 }}>
+    <div className="section" style={{ display: "grid", gap: 10 }}>
+      <div className="row">
         <button className="btn" onClick={onBack}>Back</button>
         <div className="muted">
-          {tg ? "Back button pauses"
-              : "Swipe or tap‑then‑tap adjacent tiles to swap"}
+          Drag a tile toward a neighbor to swap. Score {OBJECTIVE_SCORE} in {MOVES} moves.
         </div>
       </div>
 
       <div className="row">
-        <div><span className="muted">Score</span> <b>{score}</b></div>
-        <div><span className="muted">Moves</span> <b>{moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+        <div><span className="muted">Score</span> <b>{hud.score}</b></div>
+        <div><span className="muted">Moves</span> <b>{hud.moves}</b></div>
+        <div><span className="muted">Combo</span> <b>{hud.combo > 0 ? `x${hud.combo + 1}` : "-"}</b></div>
       </div>
 
-      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
-        <div className="gridlines"
-             style={{ backgroundImage:
-               "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-               backgroundSize: `${cell}px ${cell}px` }} />
-
-        {grid.map((row, r) => row.map((v, c) => (
-          <div
-            key={`t-${r}-${c}-${v}-${score}`}
-            className={`tile ${sel && sel.r === r && sel.c === c ? "sel" : ""} ${blast.has(`${r}:${c}`) ? "blip" : ""} ${hint && ((hint[0][0] === r && hint[0][1] === c) || (hint[1][0] === r && hint[1][1] === c)) ? "hint" : ""}`}
-            style={{
-              left: c * cell,
-              top: r * cell,
-              width: cell,
-              height: cell
-            }}
-          >
-            <span style={{ fontSize: Math.floor(cell * 0.72) }}>{v ?? ""}</span>
-          </div>
-        )))}
-
-        {fx.map((p) => <Poof key={p.id} id={p.id} x={p.x} y={p.y} size={cell} />)}
-        {combo > 0 && <div className="combo">Combo x{combo + 1}!</div>}
-
-        {paused && (
-          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.35)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        borderRadius: 18 }}>
-            <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>Paused</div>
-              <div className="muted" style={{ marginBottom: 12 }}>Tap Resume</div>
-              <div className="row" style={{ gap: 8 }}>
-                <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
-                <button className="btn" onClick={finishNow}>End Level</button>
-              </div>
-            </div>
-          </div>
-        )}
+      <div ref={wrapRef} style={{ width: "100%", display: "grid", placeItems: "center" }}>
+        <canvas ref={canvRef} width={w} height={h} />
       </div>
 
       <div className="controls">
-        <button className="btn" onClick={() => setPaused(p => !p)}>
-          {paused ? "Resume" : "Pause"}
+        <button className="btn" onClick={() => setHud((h) => ({ ...h, paused: !h.paused }))}>
+          {hud.paused ? "Resume" : "Pause"}
         </button>
-        <button className="btn" onClick={() => {
-          setGrid(initSolvableGrid()); setScore(0); setMoves(20);
-          setCombo(0); setSel(null); setHint(null);
-        }}>Reset</button>
-        <button className="btn" onClick={doHint}>Hint 🔍</button>
-        <button className="btn primary" onClick={() => { setGrid(shuffleToSolvable(gridRef.current)); haptic(12); }}>
-          Shuffle 🔀
-        </button>
-        <div style={{ gridColumn: "span 1", opacity: .7, display: "flex",
-                      alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+        <button className="btn" onClick={resetLevel}>Reset</button>
+        <button className="btn" onClick={hint}>Hint 🔍</button>
+        <button className="btn primary" onClick={shuffle}>Shuffle 🔀</button>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", opacity:.7, fontSize:12 }}>
           {ROWS}×{COLS}
         </div>
       </div>
@@ -427,20 +516,81 @@ function GameView({ onExit, onBack, haptics }) {
   );
 }
 
-// ---------- Core helpers ----------
-const makeGrid = (rows, cols) => Array.from({ length: rows }, () => Array(cols).fill(null));
-const cloneGrid = (g) => g.map((r) => r.slice());
-const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
+// ---------- Board helpers ----------
+function makeGridFromLayout(layout) {
+  const g = Array.from({ length: ROWS }, (_, r) =>
+    Array.from({ length: COLS }, (_, c) => makeCell(layout[r][c] ?? randomPiece(), r, c, true))
+  );
+  return g;
+}
 
-function findMatches(g) {
+function makeGrid() {
+  const g = Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => null)
+  );
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      g[r][c] = makeCell(randomPiece(), r, c, true);
+  return g;
+}
+
+function makeCell(type, r, c, snap = false) {
+  const size = 60; // will be resnapped by tween loop
+  const cx = c * size + size / 2;
+  const cy = r * size + size / 2;
+  return {
+    type,
+    x: snap ? cx : cx + (Math.random() * 30 - 15),
+    y: snap ? cy : cy - Math.random() * 100,
+    vx: 0,
+    vy: 0,
+    s: 1,
+    alpha: 1,
+    clearingUntil: 0,
+    highlight: false,
+  };
+}
+
+function randomPiece() {
+  return POOL[(Math.random() * POOL.length) | 0];
+}
+
+function inBounds(r, c) {
+  return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+}
+
+function canvasPoint(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  return { x, y };
+}
+
+function hitCell(x, y) {
+  const cellSize = Math.floor(Math.min(
+    (document.body.clientWidth - 32) / COLS,
+    600 / ROWS
+  ));
+  const cs = clamp(cellSize, 44, 80); // same range as we use
+  const c = Math.floor(x / cs);
+  const r = Math.floor(y / cs);
+  if (!inBounds(r, c)) return null;
+  return { r, c };
+}
+
+function collectMatches(g) {
   const hits = new Set();
   // Horizontal
   for (let r = 0; r < ROWS; r++) {
     let c = 0;
     while (c < COLS) {
-      const v = g[r][c]; if (!v) { c++; continue; }
+      const cur = g[r][c]?.type;
+      if (!cur) {
+        c++;
+        continue;
+      }
       let len = 1;
-      while (c + len < COLS && g[r][c + len] === v) len++;
+      while (c + len < COLS && g[r][c + len]?.type === cur) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
       c += len;
     }
@@ -449,126 +599,242 @@ function findMatches(g) {
   for (let c = 0; c < COLS; c++) {
     let r = 0;
     while (r < ROWS) {
-      const v = g[r][c]; if (!v) { r++; continue; }
+      const cur = g[r][c]?.type;
+      if (!cur) {
+        r++;
+        continue;
+      }
       let len = 1;
-      while (r + len < ROWS && g[r + len][c] === v) len++;
+      while (r + len < ROWS && g[r + len][c]?.type === cur) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
       r += len;
     }
   }
-  return Array.from(hits).map(k => k.split(":").map(n => parseInt(n, 10)));
+  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
 }
 
-function applyGravity(g) {
-  for (let c = 0; c < COLS; c++) {
-    let write = ROWS - 1;
-    for (let r = ROWS - 1; r >= 0; r--) {
-      if (g[r][c] != null) {
-        const v = g[r][c]; g[r][c] = null; g[write][c] = v; write--;
-      }
-    }
-    while (write >= 0) { g[write][c] = null; write--; }
+function stripAllMatches(g) {
+  while (true) {
+    const m = collectMatches(g);
+    if (m.length === 0) break;
+    for (const [r, c] of m) g[r][c].type = randomPiece();
   }
 }
 
-function refill(g) {
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (g[r][c] == null) g[r][c] = randEmoji();
+function hasAnyMove(g) {
+  return !!findFirstMove(g);
 }
 
 function findFirstMove(g) {
+  // try right/down swaps
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (c + 1 < COLS) { const t = cloneGrid(g); [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]]; if (findMatches(t).length > 0) return [[r, c], [r, c + 1]]; }
-      if (r + 1 < ROWS) { const t = cloneGrid(g); [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]]; if (findMatches(t).length > 0) return [[r, c], [r + 1, c]]; }
+      if (c + 1 < COLS) {
+        swapTypes(g, r, c, r, c + 1);
+        const ok = collectMatches(g).length > 0;
+        swapTypes(g, r, c, r, c + 1);
+        if (ok) return [[r, c], [r, c + 1]];
+      }
+      if (r + 1 < ROWS) {
+        swapTypes(g, r, c, r + 1, c);
+        const ok = collectMatches(g).length > 0;
+        swapTypes(g, r, c, r + 1, c);
+        if (ok) return [[r, c], [r + 1, c]];
+      }
     }
   }
   return null;
 }
 
-function hasAnyMove(g) { return !!findFirstMove(g); }
-
-function initSolvableGrid() {
-  let g; let tries = 0;
-  do {
-    g = makeGrid(ROWS, COLS);
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) g[r][c] = randEmoji();
-    removeAllMatches(g); tries++;
-    if (tries > 50) break;
-  } while (!hasAnyMove(g));
-  return g;
-}
-
-function removeAllMatches(g) {
-  while (true) {
-    const m = findMatches(g);
-    if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
-  }
+function ensureAnyMove(g) {
+  if (!hasAnyMove(g)) shuffleToSolvable(g);
 }
 
 function shuffleToSolvable(g) {
-  const flat = [];
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
-
-  let attempts = 0;
-  while (attempts < 100) {
+  const flat = g.flat().map((cell) => cell.type);
+  let tries = 0;
+  while (tries++ < 100) {
+    // Fisher-Yates
     for (let i = flat.length - 1; i > 0; i--) {
       const j = (Math.random() * (i + 1)) | 0;
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
-    const t = makeGrid(ROWS, COLS);
+    // write back
     let idx = 0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-    removeAllMatches(t);
-    if (hasAnyMove(t)) return t;
-    attempts++;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) g[r][c].type = flat[idx++];
+
+    stripAllMatches(g);
+    if (hasAnyMove(g)) return;
   }
-  return initSolvableGrid();
 }
 
-function ensureSolvable(g, setG) {
-  if (!hasAnyMove(g)) setG(shuffleToSolvable(g));
+function swapTypes(g, r1, c1, r2, c2) {
+  const a = g[r1][c1].type;
+  g[r1][c1].type = g[r2][c2].type;
+  g[r2][c2].type = a;
 }
 
-function Poof({ x, y, size }) {
-  const sparks = Array.from({ length: 10 });
-  return (
-    <>
-      {sparks.map((_, i) => {
-        const angle = (i / 10) * Math.PI * 2;
-        const tx = size / 2 + Math.cos(angle) * (size * 0.9);
-        const ty = size / 2 + Math.sin(angle) * (size * 0.9);
-        const style = {
-          left: x, top: y,
-          ["--cx"]: size / 2 + "px",
-          ["--cy"]: size / 2 + "px",
-          ["--tx"]: tx + "px",
-          ["--ty"]: ty + "px",
-          position: "absolute",
-        };
-        return <span key={i} className="spark" style={style}>✨</span>;
-      })}
-    </>
-  );
-}
+async function tweenSwap(r1, c1, r2, c2) {
+  const g = gridRef.current;
+  const a = g[r1][c1];
+  const b = g[r2][c2];
+  const t0 = now();
+  const ax0 = a.x,
+    ay0 = a.y;
+  const bx0 = b.x,
+    by0 = b.y;
+  const ax1 = c2 *  cellSizeRef.current + cellSizeRef.current / 2;
+  const ay1 = r2 *  cellSizeRef.current + cellSizeRef.current / 2;
+  const bx1 = c1 *  cellSizeRef.current + cellSizeRef.current / 2;
+  const by1 = r1 *  cellSizeRef.current + cellSizeRef.current / 2;
 
-function useResizeCell(containerRef, setCell) {
-  useEffect(() => {
-    const compute = () => {
-      const el = containerRef.current; if (!el) return;
-      const pad = 24; const w = el.clientWidth - pad * 2; const h = el.clientHeight - 180;
-      const size = Math.floor(Math.min(w / COLS, h / ROWS));
-      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
+  return new Promise((res) => {
+    const run = () => {
+      const t = now() - t0;
+      const u = clamp(t / SWAP_MS, 0, 1);
+      const e = easeInOut(u);
+      a.x = ax0 + (ax1 - ax0) * e;
+      a.y = ay0 + (ay1 - ay0) * e;
+      b.x = bx0 + (bx1 - bx0) * e;
+      b.y = by0 + (by1 - by0) * e;
+      if (u < 1) requestAnimationFrame(run);
+      else {
+        // finalize swap of types
+        swapTypes(g, r1, c1, r2, c2);
+        // snap positions to their cells (velocity reset)
+        snapCell(a, r2, c2);
+        snapCell(b, r1, c1);
+        res();
+      }
     };
-    compute();
-    let ro;
-    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
-      ro = new ResizeObserver(compute);
-      ro.observe(containerRef.current);
+    run();
+  });
+}
+
+function snapCell(cell, r, c) {
+  const cx = c * cellSizeRef.current + cellSizeRef.current / 2;
+  const cy = r * cellSizeRef.current + cellSizeRef.current / 2;
+  cell.x = cx;
+  cell.y = cy;
+  cell.vx = 0;
+  cell.vy = 0;
+}
+
+function clearWithFade(g, matchCells) {
+  const until = now() + CLEAR_MS;
+  for (const [r, c] of matchCells) {
+    const cell = g[r][c];
+    if (!cell) continue;
+    cell.clearingUntil = until;
+  }
+}
+
+function computeFalls(g) {
+  // return array of { fromR, toR, c }
+  const falls = [];
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (g[r][c] && !g[r][c].clearingUntil) {
+        if (write !== r) {
+          falls.push({ fromR: r, toR: write, c });
+        }
+        write--;
+      }
     }
-    window.addEventListener("resize", compute);
-    return () => { ro?.disconnect(); window.removeEventListener("resize", compute); };
-  }, [containerRef, setCell]);
+  }
+  return falls;
+}
+
+function animateFalls(g, falls) {
+  // Move cells in data immediately; animate positions downwards
+  for (const f of falls) {
+    for (let r = f.fromR; r >= 0; r--) {
+      if (g[r][f.c] && !g[r][f.c].clearingUntil) {
+        // bubble down to next empty above write
+      }
+    }
+  }
+  // Actually perform a standard gravity compacting:
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      const cell = g[r][c];
+      if (cell && !cell.clearingUntil) {
+        if (write !== r) {
+          g[write][c] = cell;
+          g[r][c] = null;
+        }
+        write--;
+      }
+    }
+    for (; write >= 0; write--) g[write][c] = null;
+  }
+
+  // Animate motion by snapping targets and letting update() spring to them.
+  return sleep(240);
+}
+
+function refillSpawnPlan(g) {
+  const spawns = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (!g[r][c]) spawns.push({ r, c });
+  return spawns;
+}
+
+function animateSpawns(g, spawns) {
+  const sz = cellSizeRef.current;
+  for (const { r, c } of spawns) {
+    const cell = makeCell(randomPiece(), r, c, false);
+    // spawn above
+    cell.x = c * sz + sz / 2;
+    cell.y = (r * sz + sz / 2) - Math.random() * 120 - 60;
+    cell.vx = 0; cell.vy = 0; cell.alpha = 0.0; cell.s = 0.9;
+    g[r][c] = cell;
+    // tween alpha in
+    const t0 = now();
+    const dur = 160;
+    const tick = () => {
+      const u = clamp((now() - t0) / dur, 0, 1);
+      cell.alpha = 0.2 + 0.8 * u;
+      cell.s = 0.9 + 0.1 * u;
+      if (u < 1) requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  // let gravity settle them
+  return sleep(260);
+}
+
+function flashHint(g, move) {
+  if (!move) return;
+  const [[r1, c1], [r2, c2]] = move;
+  const a = g[r1][c1];
+  const b = g[r2][c2];
+  a.highlight = b.highlight = true;
+  setTimeout(() => {
+    a.highlight = b.highlight = false;
+  }, 900);
+}
+
+// ---------- Small utils ----------
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
