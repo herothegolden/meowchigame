@@ -1,4 +1,20 @@
-import React, { useEffect, useRef, useState } from "react";
+return (
+    <div className="section board-wrap" ref={containerRef}>
+      {/* Game HUD */}
+      <div className="row">
+        <div><span className="muted">Score</span> <b>{score}</b></div>
+        <div><span className="muted">Moves</span> <b>{moves}</b></div>
+        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+      </div>
+
+      {/* Board */}
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+        <div
+          className="gridlines"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
+            backgroundSize: `${cell}import React, { useEffect, useRef, useState } from "react";
 
 /* -------------------------------------------------
    Meowchi Game — Match-3 (Telegram WebApp)
@@ -31,7 +47,7 @@ export default function App() {
       html, body, #root { height: 100%; }
       body { margin:0; background:#0a0f23; color:#fff; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
 
-      /* Full-screen shell (Hamster Kombat style) */
+      /* Full-screen shell (optimized for maximum space) */
       .shell {
         height: calc(var(--vh, 1vh) * 100);
         display: grid;
@@ -40,34 +56,86 @@ export default function App() {
         max-width: 100vw;
         overflow: hidden;
       }
+      
+      /* Compact 2-line header design */
       .header {
-        display:flex; align-items:center; justify-content:space-between;
-        padding:12px 16px;
         background:#0f1430; border-bottom:1px solid rgba(122,162,255,.15);
         position: sticky; top: 0; z-index: 5;
-        min-height: 60px;
         flex-shrink: 0;
+        padding: 6px 12px;
       }
-      .brand { display:flex; align-items:center; gap:10px; flex: 1; min-width: 0; }
-      .brand .logo { font-size:22px; flex-shrink: 0; }
-      .brand .name { font-weight:800; letter-spacing:.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .pill { padding:2px 8px; border-radius:999px; border:1px solid rgba(122,162,255,.25); background:#0f1533; font-size:11px; flex-shrink: 0; }
+      
+      .header-line1 {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      
+      .header-line2 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 32px;
+      }
+      
+      .brand-compact { 
+        display: flex; 
+        align-items: center; 
+        gap: 6px; 
+        flex: 1; 
+        min-width: 0; 
+      }
+      
+      .brand-compact .logo { 
+        font-size: 18px; 
+        flex-shrink: 0; 
+      }
+      
+      .brand-compact .name { 
+        font-weight: 700; 
+        font-size: 14px;
+        letter-spacing: .1px; 
+        white-space: nowrap; 
+      }
+      
+      .pill-compact { 
+        padding: 1px 6px; 
+        border-radius: 999px; 
+        border: 1px solid rgba(122,162,255,.25); 
+        background: #0f1533; 
+        font-size: 9px; 
+        flex-shrink: 0; 
+      }
+      
+      .score-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 13px;
+      }
+      
+      .score-item {
+        white-space: nowrap;
+        font-weight: 600;
+      }
 
       .content {
         height: 100%; 
         width: 100%;
         max-width: 100vw;
-        padding: 12px 16px 16px 16px;
+        padding: 8px 12px 12px 12px;
         display: grid; 
-        align-content:start; 
-        gap: 12px;
-        overflow:auto;
+        align-content: start; 
+        gap: 8px;
+        overflow: auto;
         box-sizing: border-box;
       }
 
       .section {
         background:#0f1430; border:1px solid var(--line);
-        border-radius:16px; padding:14px;
+        border-radius:16px; padding:12px;
         box-shadow:0 10px 28px rgba(0,0,0,.15);
         width: 100%;
         max-width: 100%;
@@ -78,23 +146,18 @@ export default function App() {
       .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
       .grid { display:grid; gap:10px; }
       .btn {
-        background:#12183a; border:1px solid #1c244e; border-radius:14px;
-        padding:10px 12px; color:#fff; cursor:pointer;
+        background:#12183a; border:1px solid #1c244e; border-radius:12px;
+        padding:8px 10px; color:#fff; cursor:pointer;
         white-space: nowrap; text-align: center;
         touch-action: manipulation;
+        font-size: 12px;
+        font-weight: 600;
       }
       .btn:hover { background:#1a2260; }
       .btn:disabled { opacity:0.5; cursor:not-allowed; }
       .btn.primary { background:#132049; border-color:#1f2a5c; font-weight:700; }
       .btn.primary:hover { background:#1a2768; }
       .btn.block { width:100%; }
-
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-shrink: 0;
-      }
 
       .list > * {
         background:#12183a; border:1px solid #1c244e; border-radius:14px;
@@ -105,15 +168,17 @@ export default function App() {
       .tab:hover { background:#1a2260; }
       .tab.active { background:#132049; border-color:#1f2a5c; font-weight:700; }
 
-      /* Board - enhanced for smooth rendering */
-      .board-wrap { display:grid; gap:10px; }
+      /* Board - maximized for full screen experience */
+      .board-wrap { display:grid; gap:8px; }
       .board {
-        position:relative; background:#0f1533; border-radius:18px;
+        position:relative; background:#0f1533; border-radius:16px;
         outline:1px solid var(--line);
-        box-shadow:0 10px 34px rgba(0,0,0,.35); 
+        box-shadow:0 8px 28px rgba(0,0,0,.35); 
         margin: 0 auto;
         touch-action: none;
         user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
       .gridlines { position:absolute; inset:0; opacity:.15; pointer-events:none; }
       .tile {
@@ -168,8 +233,8 @@ export default function App() {
           opacity: 1; 
         }
       }
-      .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; }
-      .combo { position:absolute; left:50%; transform:translateX(-50%); top:6px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 8px; font-size:12px; }
+      .controls { display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; }
+      .combo { position:absolute; left:50%; transform:translateX(-50%); top:4px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:3px 6px; font-size:11px; }
       @keyframes poof { 
         from { 
           opacity:1; 
@@ -212,10 +277,10 @@ export default function App() {
 
       /* Responsive breakpoints */
       @media (max-width: 480px) {
-        .header { padding: 8px 12px; }
-        .content { padding: 8px 12px 12px 12px; }
-        .brand .name { font-size: 14px; }
-        .btn { padding: 8px 10px; font-size: 14px; }
+        .content { padding: 6px 10px 10px 10px; }
+        .brand-compact .name { font-size: 13px; }
+        .btn { padding: 6px 8px; font-size: 11px; }
+        .score-info { font-size: 12px; gap: 8px; }
       }
     `;
     document.head.appendChild(style);
@@ -233,15 +298,24 @@ export default function App() {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // Telegram WebApp initialization with vertical swipes disabled
+  // Telegram WebApp initialization with better touch handling
   useEffect(() => {
     const tg = getTG();
     try { 
       tg?.ready(); 
       tg?.expand(); 
-      // Disable vertical swipes to prevent app closing during game
-      tg?.disableVerticalSwipes?.();
-    } catch {}
+      // CRITICAL: Disable vertical swipes to prevent app closing during gameplay
+      if (tg?.disableVerticalSwipes) {
+        tg.disableVerticalSwipes();
+        console.log("✅ Vertical swipes disabled for game");
+      }
+      // Set viewport to stable height
+      if (tg?.viewportStableHeight) {
+        document.documentElement.style.setProperty("--vh", `${tg.viewportStableHeight / 100}px`);
+      }
+    } catch (e) {
+      console.warn("Telegram WebApp features not available:", e);
+    }
   }, []);
 
   // Splash gating (3s + tg.ready + image loaded)
@@ -311,28 +385,32 @@ export default function App() {
     
     return (
       <div className="header">
-        <div className="brand">
-          <span className="logo">🐱</span>
-          <div className="name">Meowchi</div>
-          <span className="pill">{screen.toUpperCase()}</span>
-        </div>
-        <div className="header-actions">
-          <div>
-            <span className="muted" style={{ marginRight: 6 }}>
-              $Meow
-            </span>
-            <b>{coins}</b>
+        {/* Line 1: Navigation Buttons */}
+        {!isHome && (
+          <div className="header-line1">
+            <button className="btn" onClick={goBack}>
+              ← Back
+            </button>
+            <button className="btn" onClick={goHome}>
+              🏠 Home
+            </button>
           </div>
-          {!isHome && (
-            <>
-              <button className="btn" onClick={goBack}>
-                ← Back
-              </button>
-              <button className="btn" onClick={goHome}>
-                🏠 Home
-              </button>
-            </>
-          )}
+        )}
+        
+        {/* Line 2: Brand and Stats */}
+        <div className="header-line2">
+          <div className="brand-compact">
+            <span className="logo">🐱</span>
+            <div className="name">Meowchi</div>
+            <span className="pill-compact">{screen.toUpperCase()}</span>
+          </div>
+          
+          <div className="score-info">
+            {screen === "game" && (
+              <div className="score-item">Score: {score || 0}</div>
+            )}
+            <div className="score-item">$Meow {coins}</div>
+          </div>
         </div>
       </div>
     );
@@ -609,25 +687,36 @@ function GameView({ onExit, onBack, onCoins }) {
   // Track newly added tiles for drop animation
   const [newTiles, setNewTiles] = useState(new Set());
 
+  // Expose score to parent component
+  useEffect(() => {
+    window.currentGameScore = score;
+  }, [score]);
+
   function haptic(ms = 12) {
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  // Enhanced touch and drag support optimized for Telegram WebApp
+  // FIXED: Proper Telegram WebApp touch handling
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
     
-    let dragState = null; // {startR, startC, startX, startY, isDragging, startTime}
-    const dragThreshold = 15; // Reduced threshold for better responsiveness
-    const tapTimeout = 300; // Maximum time for a tap vs drag
+    let dragState = null;
+    const dragThreshold = 20; // Optimal for mobile
+    
+    // Ensure document is scrollable for Telegram WebApp
+    const ensureScrollable = () => {
+      if (document.documentElement.scrollHeight <= window.innerHeight) {
+        document.documentElement.style.height = "calc(100vh + 1px)";
+      }
+    };
+    ensureScrollable();
     
     const rcFromEvent = (e) => {
       const rect = el.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const x = Math.max(0, Math.min(rect.width - 1, clientX - rect.left));
-      const y = Math.max(0, Math.min(rect.height - 1, clientY - rect.top));
+      const touch = e.touches ? e.touches[0] : e;
+      const x = Math.max(0, Math.min(rect.width - 1, touch.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height - 1, touch.clientY - rect.top));
       const c = Math.floor(x / cell);
       const r = Math.floor(y / cell);
       return { r, c, x, y };
@@ -635,22 +724,25 @@ function GameView({ onExit, onBack, onCoins }) {
 
     const onTouchStart = (e) => {
       if (paused) return;
-      e.preventDefault();
       
+      // Prevent Telegram app closing
+      if (window.scrollY === 0) {
+        window.scrollTo(0, 1);
+      }
+      
+      e.preventDefault();
       const p = rcFromEvent(e);
       if (!inBounds(p.r, p.c)) return;
       
       dragState = {
-        startR: p.r,
-        startC: p.c,
-        startX: p.x,
-        startY: p.y,
+        startR: p.r, startC: p.c,
+        startX: p.x, startY: p.y,
         isDragging: false,
         startTime: Date.now()
       };
       
       setSel({ r: p.r, c: p.c });
-      haptic(5); // Light haptic feedback on touch start
+      haptic(5);
     };
 
     const onTouchMove = (e) => {
@@ -664,21 +756,18 @@ function GameView({ onExit, onBack, onCoins }) {
       
       if (distance > dragThreshold && !dragState.isDragging) {
         dragState.isDragging = true;
-        haptic(8); // Slightly stronger feedback when drag starts
+        haptic(8);
         
-        // Determine direction and target cell
+        // Determine drag direction
         let targetR = dragState.startR;
         let targetC = dragState.startC;
         
         if (Math.abs(dx) > Math.abs(dy)) {
-          // Horizontal movement
           targetC = dragState.startC + (dx > 0 ? 1 : -1);
         } else {
-          // Vertical movement
           targetR = dragState.startR + (dy > 0 ? 1 : -1);
         }
         
-        // Update selection to show drag target
         if (inBounds(targetR, targetC)) {
           setSel({ r: targetR, c: targetC });
         }
@@ -689,16 +778,12 @@ function GameView({ onExit, onBack, onCoins }) {
       if (paused || !dragState) return;
       e.preventDefault();
       
-      const currentTime = Date.now();
-      const timeDiff = currentTime - dragState.startTime;
-      
       if (dragState.isDragging) {
-        // This was a drag - perform swap
+        // Complete the drag swap
         const p = rcFromEvent(e);
         const dx = p.x - dragState.startX;
         const dy = p.y - dragState.startY;
         
-        // Determine final direction
         let dr = 0, dc = 0;
         if (Math.abs(dx) > Math.abs(dy)) {
           dc = dx > 0 ? 1 : -1;
@@ -711,74 +796,43 @@ function GameView({ onExit, onBack, onCoins }) {
         
         if (inBounds(targetR, targetC)) {
           trySwap(dragState.startR, dragState.startC, targetR, targetC);
-          haptic(12); // Success haptic
-        } else {
-          haptic(8); // Invalid move haptic
+          haptic(12);
         }
         setSel(null);
-      } else if (timeDiff < tapTimeout) {
-        // This was a quick tap - keep selection or swap with previous selection
-        if (sel && 
-            sel.r !== dragState.startR || sel.c !== dragState.startC) {
-          // We have a previous selection, try to swap
-          const distance = Math.abs(sel.r - dragState.startR) + Math.abs(sel.c - dragState.startC);
-          if (distance === 1) {
-            trySwap(sel.r, sel.c, dragState.startR, dragState.startC);
-            setSel(null);
-            haptic(12);
-          } else {
-            // Too far, just update selection
-            setSel({ r: dragState.startR, c: dragState.startC });
-            haptic(5);
-          }
-        } else {
-          // Just selecting this tile
-          setSel({ r: dragState.startR, c: dragState.startC });
-          haptic(5);
-        }
+      } else {
+        // Quick tap - just select
+        setSel({ r: dragState.startR, c: dragState.startC });
+        haptic(5);
       }
       
       dragState = null;
     };
 
-    const onTouchCancel = () => {
-      setSel(null);
-      dragState = null;
-    };
-
-    // Touch events with proper passive: false for preventDefault
+    // Use proper passive: false for preventDefault
     el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: false });
-    el.addEventListener("touchcancel", onTouchCancel, { passive: false });
-
-    // Desktop mouse events for development/testing
+    
+    // Desktop fallback
     const onMouseDown = (e) => {
       if (paused) return;
-      
       const p = rcFromEvent(e);
       if (!inBounds(p.r, p.c)) return;
       
-      // Desktop convenience: if already selected and clicking adjacent, swap immediately
       if (sel && Math.abs(sel.r - p.r) + Math.abs(sel.c - p.c) === 1) {
         trySwap(sel.r, sel.c, p.r, p.c);
         setSel(null);
-        return;
+      } else {
+        setSel({ r: p.r, c: p.c });
       }
-      
-      setSel({ r: p.r, c: p.c });
     };
-
+    
     el.addEventListener("mousedown", onMouseDown);
 
     return () => {
-      // Touch cleanup
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchCancel);
-      
-      // Mouse cleanup
       el.removeEventListener("mousedown", onMouseDown);
     };
   }, [cell, paused, sel]);
@@ -921,14 +975,7 @@ function GameView({ onExit, onBack, onCoins }) {
 
   return (
     <div className="section board-wrap" ref={containerRef}>
-      <div className="row">
-        <button className="btn" onClick={onBack}>← Back</button>
-        <div className="muted">
-          🍬 Touch and drag to swap adjacent candies! 🍭
-        </div>
-      </div>
-
-      {/* HUD */}
+      {/* Game HUD */}
       <div className="row">
         <div><span className="muted">Score</span> <b>{score}</b></div>
         <div><span className="muted">Moves</span> <b>{moves}</b></div>
@@ -1024,7 +1071,7 @@ function GameView({ onExit, onBack, onCoins }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              borderRadius: 18,
+              borderRadius: 16,
             }}
           >
             <div className="section" style={{ textAlign: "center" }}>
@@ -1075,7 +1122,7 @@ function GameView({ onExit, onBack, onCoins }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 12,
+            fontSize: 11,
           }}
         >
           8×8
@@ -1083,6 +1130,7 @@ function GameView({ onExit, onBack, onCoins }) {
       </div>
     </div>
   );
+}
 }
 
 // ---------- Helpers ----------
@@ -1248,10 +1296,10 @@ function useResizeCell(containerRef, setCell) {
     const compute = () => {
       const el = containerRef.current;
       if (!el) return;
-      // Reserve space for HUD + controls (~180px), then fill the rest.
-      const pad = 24;
+      // Maximize available space - reserve minimal space for HUD + controls
+      const pad = 16;
       const w = el.clientWidth - pad * 2;
-      const h = el.clientHeight - 180;
+      const h = el.clientHeight - 120; // Reduced from 180 to maximize board
       const size = Math.floor(Math.min(w / COLS, h / ROWS));
       setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
     };
