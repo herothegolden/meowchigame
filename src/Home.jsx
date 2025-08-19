@@ -33,23 +33,18 @@ export default function Home({ coins = 0, onNavigate }) {
             <button className="home-item primary" onClick={() => onNavigate?.("game")}>
               <div className="home-icon">🎮</div><div className="home-text">Play Game</div>
             </button>
-
             <button className="home-item" onClick={() => onNavigate?.("shop")}>
               <div className="home-icon">🛍️</div><div className="home-text">Shop</div>
             </button>
-
             <button className="home-item" onClick={() => onNavigate?.("leaderboard")}>
               <div className="home-icon">🏆</div><div className="home-text">Leaderboard</div>
             </button>
-
             <button className="home-item" onClick={() => onNavigate?.("daily")}>
               <div className="home-icon">🎁</div><div className="home-text">Daily Treats</div>
             </button>
-
             <button className="home-item" onClick={() => onNavigate?.("invite")}>
               <div className="home-icon">💝</div><div className="home-text">Share & Invite</div>
             </button>
-
             <button className="home-item" onClick={() => onNavigate?.("settings")}>
               <div className="home-icon">⚙️</div><div className="home-text">Settings</div>
             </button>
@@ -58,10 +53,8 @@ export default function Home({ coins = 0, onNavigate }) {
           <div className="home-instructions">
             <h3><span className="home-emoji">✨</span> How to Play</h3>
             <p>
-              Swipe to match 3 or more treats in a row! Match cats <span className="home-emoji">😺</span>,
-              pretzels <span className="home-emoji">🥨</span>, strawberries <span className="home-emoji">🍓</span>,
-              cookies <span className="home-emoji">🍪</span>, and marshmallows <span className="home-emoji">🍡</span>.
-              Create combos for bonus points and help feed all the hungry cats!
+              Swipe to match 3+ treats! Cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, marshmallows 🍡.
+              Create combos for bonus points.
             </p>
           </div>
         </div>
