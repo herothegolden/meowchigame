@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Home from "./Home.jsx";
 import GameView from "./GameView.jsx";
+import Splash from "./Splash.jsx";
 
 // Small helpers for Telegram WebApp viewport quirks
 const getTG = () =>
@@ -30,7 +31,7 @@ export default function App() {
     } catch {}
   }, []);
 
-  // splash (optional—but keeps layout from flashing)
+  // splash (keeps layout from flashing)
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setShowSplash(false), 600);
@@ -40,9 +41,13 @@ export default function App() {
   // ------------ App state (routing kept as before) ------------
   const [screen, setScreen] = useState("home");
   const [screenHistory, setScreenHistory] = useState(["home"]);
-  const [coins, setCoins] = useState(500);
+  const [coins, setCoins] = useState(150);
   const [lastRun, setLastRun] = useState(null);
-  const [settings, setSettings] = useState({ haptics: true, sounds: false });
+  const [settings, setSettings] = useState({
+    haptics: true,
+    sound: false,
+    theme: "system",
+  });
   const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
   const [lbScope, setLbScope] = useState("daily");
   const leaders = {
@@ -73,37 +78,65 @@ export default function App() {
 
   // ------------ Small inline screens (UI only) ------------
   function Header() {
-    const isHome = screen === "home";
+    const backable = screenHistory.length > 1;
     return (
       <header className="header">
-        {!isHome && (
-          <div className="header-line1">
-            <button className="btn" onClick={goBack}>← Back</button>
-            <button className="btn" onClick={goHome}>🏠 Home</button>
-          </div>
-        )}
-        <div className="header-line2">
+        <div className="header-line1">
           <div className="brand-compact">
-            <span className="logo">🐱</span>
+            <div className="logo">😺</div>
             <div className="name">Meowchi</div>
-            <span className="pill-compact">{screen.toUpperCase()}</span>
           </div>
-          <div className="score-info">
-            {screen === "game" && (
-              <div className="score-item">
-                Score: {typeof window !== "undefined" ? (window.currentGameScore || 0) : 0}
-              </div>
+          <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
+        </div>
+        <div className="header-line2">
+          <div className="row" style={{ gap: 8 }}>
+            {backable ? (
+              <button className="btn" onClick={goBack}>Back</button>
+            ) : (
+              <button className="btn" onClick={goHome}>Home</button>
             )}
-            <div className="score-item">$Meow {coins}</div>
+            <button className="btn" onClick={() => setScreen("shop")}>Shop</button>
+            <button className="btn" onClick={() => setScreen("leaderboard")}>Leaderboard</button>
+            <button className="btn" onClick={() => setScreen("daily")}>Daily</button>
+            <button className="btn" onClick={() => setScreen("invite")}>Invite</button>
+            <button className="btn" onClick={() => setScreen("settings")}>Settings</button>
           </div>
+          <div className="pill">${coins} $Meow</div>
         </div>
       </header>
     );
   }
 
+  function Leaderboard() {
+    const scopes = ["daily", "weekly", "all"];
+    return (
+      <section className="section">
+        <div className="title">🏆 Leaderboard</div>
+        <div className="tabs">
+          {scopes.map((s) => (
+            <div
+              key={s}
+              className={`tab ${lbScope === s ? "active" : ""}`}
+              onClick={() => setLbScope(s)}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+        <div className="list grid-gap" style={{ marginTop: 10 }}>
+          {leaders[lbScope].map(([name, sc]) => (
+            <div key={name} className="row">
+              <div className="ellipsis">{name}</div>
+              <b>{sc}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   function Shop() {
     const items = [
-      { key: "hint", name: "Candy Hint", desc: "Highlight a sweet swap", price: 20, icon: "💡" },
       { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
       { key: "hammer", name: "Candy Crusher", desc: "Smash any candy", price: 60, icon: "🔨" },
       { key: "bomb", name: "Candy Bomb", desc: "Explode 3×3 area", price: 80, icon: "💥" },
@@ -135,36 +168,26 @@ export default function App() {
     );
   }
 
-  function Leaderboard() {
-    const scopes = [["daily", "Daily"], ["weekly", "Weekly"], ["all", "All-time"]];
-    const rows = leaders[lbScope] || [];
+  function Settings() {
     return (
       <section className="section">
-        <div className="row">
-          <div className="title">🏆 Sweet Leaderboard</div>
-          <div className="tabs">
-            {scopes.map(([k, label]) => (
-              <button
-                key={k}
-                className={`tab ${lbScope === k ? "active" : ""}`}
-                onClick={() => setLbScope(k)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="list grid-gap-6">
-          {rows.map(([u, s], i) => (
-            <div key={u} className="row">
-              <div className="row" style={{ gap: 8 }}>
-                <span className="muted small" style={{ width: 20, textAlign: "right" }}>{i + 1}.</span>
-                <b>{u}</b>
-              </div>
-              <b>{s}</b>
-            </div>
-          ))}
-        </div>
+        <div className="title">⚙️ Settings</div>
+        <label className="row">
+          <div>Haptics</div>
+          <input
+            type="checkbox"
+            checked={settings.haptics}
+            onChange={(e) => setSettings((s) => ({ ...s, haptics: e.target.checked }))}
+          />
+        </label>
+        <label className="row">
+          <div>Sound</div>
+          <input
+            type="checkbox"
+            checked={settings.sound}
+            onChange={(e) => setSettings((s) => ({ ...s, sound: e.target.checked }))}
+          />
+        </label>
       </section>
     );
   }
@@ -198,51 +221,19 @@ export default function App() {
     return (
       <section className="section">
         <div className="title">🍭 Share the Sweetness</div>
-        <div className="muted small">
-          Invite friends! When your friend finishes their first level, you both get 200 $Meow.
-        </div>
+        <div className="muted small">Invite friends and earn $Meow.</div>
         <div className="row" style={{ gap: 8 }}>
-          <div className="pill ellipsis">{link}</div>
+          <div className="pill ellipsis" style={{ maxWidth: 260 }}>{link}</div>
           <button className="btn" onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
         </div>
       </section>
     );
   }
 
-  function Settings() {
-    return (
-      <section className="section">
-        <div className="title">Settings</div>
-        <label className="row">
-          <div>Haptics</div>
-          <input
-            type="checkbox"
-            checked={settings.haptics}
-            onChange={(e) => setSettings((s) => ({ ...s, haptics: e.target.checked }))}
-          />
-        </label>
-        <label className="row">
-          <div>Sounds (preview only)</div>
-          <input
-            type="checkbox"
-            checked={settings.sounds}
-            onChange={(e) => setSettings((s) => ({ ...s, sounds: e.target.checked }))}
-          />
-        </label>
-      </section>
-    );
-  }
-
+  // ------------ Render ------------
   return (
     <>
-      {showSplash && (
-        <div className="splash" role="status" aria-live="polite">
-          <div className="splash-min">
-            <div className="loader-ring" />
-            <div className="splash-text">Loading sweet meowchi…</div>
-          </div>
-        </div>
-      )}
+      <Splash show={showSplash} text="Loading sweet meowchi…" />
 
       <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
         <Header />
