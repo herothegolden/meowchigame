@@ -108,6 +108,7 @@ body{
   position:absolute; display:grid; place-items:center;
   user-select:none; touch-action:none;
   border-radius:10px;
+  overflow: hidden; /* clip bigger emojis inside tile */
   /* Animate position & transform; nicer easing */
   transition:
     left .22s cubic-bezier(.2,.8,.2,1),
@@ -174,7 +175,10 @@ body{
     opacity .18s linear;
 }
 
-.tile .tile-emoji{ filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+.tile .tile-emoji{
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+  line-height: 1; /* keep tall emojis tidy */
+}
 
 /* combo banner */
 .combo{
