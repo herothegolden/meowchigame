@@ -3,12 +3,11 @@ import Home from "./Home.jsx";
 import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
 
-// Small helpers for Telegram WebApp viewport quirks
 const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
 export default function App() {
-  // stable viewport units for mobile webview
+  // Stable viewport for Telegram webview
   useEffect(() => {
     const setVH = () => {
       const tg = getTG();
@@ -31,14 +30,18 @@ export default function App() {
     } catch {}
   }, []);
 
-  // splash (keeps layout from flashing)
+  // Splash: show for at least 2.4s AND until window 'load'
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
-    const t = setTimeout(() => setShowSplash(false), 600);
-    return () => clearTimeout(t);
+    const minDelay = new Promise((r) => setTimeout(r, 2400));
+    const pageReady =
+      document.readyState === "complete"
+        ? Promise.resolve()
+        : new Promise((r) => window.addEventListener("load", r, { once: true }));
+    Promise.all([minDelay, pageReady]).then(() => setShowSplash(false));
   }, []);
 
-  // ------------ App state (routing kept as before) ------------
+  // ------------ App state / routing ------------
   const [screen, setScreen] = useState("home");
   const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(150);
@@ -76,7 +79,7 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
-  // ------------ Small inline screens (UI only) ------------
+  // ------------ Minimal header (Issue 3: remove top nav row) ------------
   function Header() {
     const backable = screenHistory.length > 1;
     return (
@@ -88,6 +91,8 @@ export default function App() {
           </div>
           <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
         </div>
+
+        {/* No more Home/Shop/Leaderboard/Daily/Invite/Settings buttons */}
         <div className="header-line2">
           <div className="row" style={{ gap: 8 }}>
             {backable ? (
@@ -95,11 +100,6 @@ export default function App() {
             ) : (
               <button className="btn" onClick={goHome}>Home</button>
             )}
-            <button className="btn" onClick={() => setScreen("shop")}>Shop</button>
-            <button className="btn" onClick={() => setScreen("leaderboard")}>Leaderboard</button>
-            <button className="btn" onClick={() => setScreen("daily")}>Daily</button>
-            <button className="btn" onClick={() => setScreen("invite")}>Invite</button>
-            <button className="btn" onClick={() => setScreen("settings")}>Settings</button>
           </div>
           <div className="pill">${coins} $Meow</div>
         </div>
@@ -107,6 +107,7 @@ export default function App() {
     );
   }
 
+  // Optional inline pages (unchanged)
   function Leaderboard() {
     const scopes = ["daily", "weekly", "all"];
     return (
