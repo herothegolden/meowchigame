@@ -16,7 +16,7 @@ const CELL_MAX = 88;
 const EMOJI_SIZE = 0.86;
 
 // Your emojis
-const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🡠"];
+const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
 export default function GameView({ onExit, onCoins, settings, userTelegramId }) {
