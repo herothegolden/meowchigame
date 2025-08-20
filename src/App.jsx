@@ -7,7 +7,7 @@ const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
 export default function App() {
-  // Stable viewport for Telegram webview
+  // viewport height fix
   useEffect(() => {
     const setVH = () => {
       const tg = getTG();
@@ -20,7 +20,7 @@ export default function App() {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // Telegram init (safe no-op outside Telegram)
+  // Telegram init
   useEffect(() => {
     const tg = getTG();
     try {
@@ -30,7 +30,18 @@ export default function App() {
     } catch {}
   }, []);
 
-  // ------------ App state / routing ------------
+  // splash logic
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => {
+    const minTime = new Promise((r) => setTimeout(r, 2400));
+    const onLoad = new Promise((r) => {
+      if (document.readyState === "complete") r();
+      else window.addEventListener("load", r, { once: true });
+    });
+    Promise.all([minTime, onLoad]).then(() => setShowSplash(false));
+  }, []);
+
+  // app state
   const [screen, setScreen] = useState("home");
   const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(150);
@@ -68,7 +79,6 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
-  // ------------ Minimal header ------------
   function Header() {
     const backable = screenHistory.length > 1;
     return (
@@ -80,8 +90,6 @@ export default function App() {
           </div>
           <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
         </div>
-
-        {/* No more top nav row */}
         <div className="header-line2">
           <div className="row" style={{ gap: 8 }}>
             {backable ? (
@@ -96,15 +104,14 @@ export default function App() {
     );
   }
 
-  // Leaderboard / Shop / Settings / Daily / Invite unchanged (omitted here for brevity)
-
-  // ------------ Render ------------
   return (
     <>
       <Splash show={showSplash} />
 
-      <div className="shell" /* visibility controlled in your Splash */>
-        {/* Hide Header on Home to remove old dark strip */}
+      <div
+        className="shell"
+        style={{ visibility: showSplash ? "hidden" : "visible" }}
+      >
         {screen !== "home" && <Header />}
 
         <main className="content">
@@ -112,23 +119,25 @@ export default function App() {
             <Home coins={coins} onNavigate={navigateTo} />
           )}
 
-          {screen === "shop" && <Shop />}
-          {screen === "leaderboard" && <Leaderboard />}
-          {screen === "daily" && <Daily />}
-          {screen === "invite" && <Invite />}
-          {screen === "settings" && <Settings />}
+          {screen === "shop" && <div className="section">🛍️ Shop coming soon</div>}
+          {screen === "leaderboard" && <div className="section">🏆 Leaderboard</div>}
+          {screen === "daily" && <div className="section">🎁 Daily Treats</div>}
+          {screen === "invite" && <div className="section">💝 Invite Friends</div>}
+          {screen === "settings" && <div className="section">⚙️ Settings</div>}
 
           {screen === "game" && (
-            <GameView
-              onExit={(run) => {
-                setLastRun(run);
-                setCoins((c) => c + (run?.coins || 0));
-                setScreen("gameover");
-                setScreenHistory((h) => [...h, "gameover"]);
-              }}
-              onCoins={(d) => setCoins((c) => c + d)}
-              settings={settings}
-            />
+            <div className="game-screen">
+              <GameView
+                onExit={(run) => {
+                  setLastRun(run);
+                  setCoins((c) => c + (run?.coins || 0));
+                  setScreen("gameover");
+                  setScreenHistory((h) => [...h, "gameover"]);
+                }}
+                onCoins={(d) => setCoins((c) => c + d)}
+                settings={settings}
+              />
+            </div>
           )}
 
           {screen === "gameover" && lastRun && (
