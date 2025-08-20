@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * POLISH PATCHES ONLY — mechanics preserved.
- * 1) Invalid-swap shake + press "grab"
- * 2) Distance-based fall stagger by actual drop distance
- * 3) Cleaner pop -> fall sequencing + input lock during cascades
- * + Bigger emojis (visual only)
+ * ENHANCED GameView with Backend Integration
+ * - Preserves ALL existing game mechanics
+ * - Adds game completion tracking
+ * - Integrates with leaderboard system
  */
 
 const COLS = 8;
@@ -17,10 +16,10 @@ const CELL_MAX = 88;
 const EMOJI_SIZE = 0.86;
 
 // Your emojis
-const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
+const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🡠"];
 const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
-export default function GameView({ onExit, onCoins, settings }) {
+export default function GameView({ onExit, onCoins, settings, userTelegramId }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
@@ -43,6 +42,11 @@ export default function GameView({ onExit, onCoins, settings }) {
   const [fx, setFx] = useState([]);
   const [blast, setBlast] = useState(new Set());
 
+  // Game tracking for backend
+  const [gameStartTime, setGameStartTime] = useState(Date.now());
+  const [moveCount, setMoveCount] = useState(0);
+  const [maxComboAchieved, setMaxComboAchieved] = useState(0);
+
   // New tiles (for drop-in) + fall delay map (by distance)
   const [newTiles, setNewTiles] = useState(new Set());
   const [fallDelay, setFallDelay] = useState({}); // {"r-c": seconds}
@@ -60,12 +64,59 @@ export default function GameView({ onExit, onCoins, settings }) {
 
   useEffect(() => { window.currentGameScore = score; }, [score]);
 
+  // Track max combo achieved
+  useEffect(() => {
+    if (combo > maxComboAchieved) {
+      setMaxComboAchieved(combo);
+    }
+  }, [combo, maxComboAchieved]);
+
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  // Pointer events (Telegram WebView friendly) — preserved
+  // Submit game score to backend
+  async function submitGameScore(finalScore, coinsEarned) {
+    if (!userTelegramId) {
+      console.log('No Telegram ID, skipping score submission');
+      return { user_needs_profile: false };
+    }
+
+    try {
+      const gameData = {
+        telegram_id: userTelegramId,
+        score: finalScore,
+        coins_earned: coinsEarned,
+        moves_used: moveCount,
+        max_combo: maxComboAchieved,
+        game_duration: Math.floor((Date.now() - gameStartTime) / 1000)
+      };
+
+      const response = await fetch('/api/game/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(gameData)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Score submission failed:', result.error);
+        return { user_needs_profile: false };
+      }
+
+      console.log('Score submitted successfully:', result);
+      return result;
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      return { user_needs_profile: false };
+    }
+  }
+
+  // Pointer events (Telegram WebView friendly) – preserved
   useEffect(() => {
     const el = boardRef.current; if (!el || paused) return;
     let drag = null; const thresholdBase = 18;
@@ -155,6 +206,9 @@ export default function GameView({ onExit, onCoins, settings }) {
       return;
     }
 
+    // Valid swap - increment move count
+    setMoveCount(prev => prev + 1);
+    
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     // Let CSS animate swap; then commit the grid
     setTimeout(() => {
@@ -163,7 +217,7 @@ export default function GameView({ onExit, onCoins, settings }) {
     }, 300);
   }
 
-  // Cascade resolver — timing staged; input locked; distance-based fall delay computed
+  // Cascade resolver – timing staged; input locked; distance-based fall delay computed
   function resolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start); let comboCount = 0;
@@ -257,7 +311,39 @@ export default function GameView({ onExit, onCoins, settings }) {
   }
   function shuffleBoard() { if (animating) return; const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
   function ensureSolvable() { if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current)); }
-  function finish() { onExit({ score, coins: Math.floor(score * 0.15) }); }
+  
+  async function finish() {
+    const finalCoins = Math.floor(score * 0.15);
+    
+    // Submit score to backend
+    const result = await submitGameScore(score, finalCoins);
+    
+    onExit({ 
+      score, 
+      coins: finalCoins,
+      moves_used: moveCount,
+      max_combo: maxComboAchieved,
+      user_needs_profile: result.user_needs_profile || false
+    });
+  }
+
+  function resetGame() {
+    if (animating) return;
+    setGrid(initSolvableGrid());
+    setScore(0);
+    setMoves(20);
+    setCombo(0);
+    setSel(null);
+    setHint(null);
+    setSwapping(null);
+    setFallDelay({});
+    setNewTiles(new Set());
+    
+    // Reset game tracking
+    setGameStartTime(Date.now());
+    setMoveCount(0);
+    setMaxComboAchieved(0);
+  }
 
   const boardW = cell * COLS, boardH = cell * ROWS;
 
@@ -337,15 +423,15 @@ export default function GameView({ onExit, onCoins, settings }) {
           })
         )}
         {fx.map((p, i) => <Poof key={p.id ?? i} x={p.x} y={p.y} size={cell} />)}
-        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
+        {combo > 0 && <div className="combo">🭠Sweet Combo x{combo + 1}! 🭠</div>}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>🍬 Game Paused</div>
+              <div className="title" style={{ marginBottom: 8 }}>🬠Game Paused</div>
               <div className="muted" style={{ marginBottom: 12 }}>Take a sweet break!</div>
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
-                <button className="btn" onClick={() => onExit({ score, coins: Math.floor(score * 0.15) })}>End Sweet Level</button>
+                <button className="btn" onClick={() => finish()}>End Sweet Level</button>
               </div>
             </div>
           </div>
@@ -354,7 +440,7 @@ export default function GameView({ onExit, onCoins, settings }) {
 
       <div className="controls">
         <button className="btn" onClick={() => setPaused((p) => !p)}>{paused ? "Resume" : "Pause"}</button>
-        <button className="btn" onClick={() => { if (animating) return; setGrid(initSolvableGrid()); setScore(0); setMoves(20); setCombo(0); setSel(null); setHint(null); setSwapping(null); setFallDelay({}); setNewTiles(new Set()); }}>Reset</button>
+        <button className="btn" onClick={resetGame}>Reset</button>
         <button className="btn" onClick={doHint}>💡 Sweet Hint</button>
         <button className="btn primary" onClick={shuffleBoard}>🔄 Sugar Shuffle</button>
         <div className="controls-size">8×8</div>
@@ -375,7 +461,7 @@ function Poof({ x, y, size }) {
         const ty = size / 2 + Math.sin(angle) * distance;
         const randomDelay = Math.random() * 0.2;
         const randomDuration = 1.2 + Math.random() * 0.6;
-        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🍬', '💎'];
+        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🬠', '💎'];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
         const style = {
           left: x, top: y, ["--cx"]: size / 2 + "px", ["--cy"]: size / 2 + "px",
