@@ -178,7 +178,7 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
             <p className="info-description">
               Match 3 or more treats to help feed the hungry cats! 
               Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
-              and cupcakes 🧁 to create sweet combos and earn $Meow coins.
+              and marshmallows 🍡 to create sweet combos and earn $Meow coins.
             </p>
           </div>
         </div>
