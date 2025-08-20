@@ -184,7 +184,7 @@ const requireDB = (req, res, next) => {
   next();
 };
 
-// Get or create user by Telegram ID
+// Get or create user by Telegram ID - AUTO-COMPLETE PROFILE
 app.post('/api/user/register', requireDB, async (req, res) => {
   try {
     const { telegram_id, telegram_username } = req.body;
@@ -203,10 +203,10 @@ app.post('/api/user/register', requireDB, async (req, res) => {
       return res.json({ user: existingUser.rows[0] });
     }
 
-    // Create new user with Stray Cat name
+    // Create new user with profile COMPLETED automatically
     const newUser = await pool.query(
       'INSERT INTO users (telegram_id, display_name, profile_completed) VALUES ($1, $2, $3) RETURNING *',
-      [telegram_id, `Stray Cat #${telegram_id.toString().slice(-5)}`, false]
+      [telegram_id, `Stray Cat #${telegram_id.toString().slice(-5)}`, true] // ← CHANGED: profile_completed = TRUE
     );
 
     res.json({ user: newUser.rows[0] });
@@ -277,7 +277,7 @@ app.put('/api/user/profile', requireDB, async (req, res) => {
   }
 });
 
-// Submit game score
+// Submit game score - AUTO-COMPLETE PROFILE
 app.post('/api/game/complete', requireDB, async (req, res) => {
   try {
     const { telegram_id, score, coins_earned, moves_used, max_combo, game_duration } = req.body;
@@ -292,7 +292,7 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
       return res.status(400).json({ error: 'Invalid score range' });
     }
 
-    // Get user
+    // Get user and AUTO-COMPLETE profile if needed
     const user = await pool.query(
       'SELECT id, profile_completed FROM users WHERE telegram_id = $1',
       [telegram_id]
@@ -302,11 +302,22 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Auto-complete profile for existing users
+    if (!user.rows[0].profile_completed) {
+      await pool.query(
+        'UPDATE users SET profile_completed = true WHERE telegram_id = $1',
+        [telegram_id]
+      );
+      console.log(`✅ Auto-completed profile for user ${telegram_id}`);
+    }
+
     // Save game
     const game = await pool.query(
       'INSERT INTO games (user_id, score, coins_earned, moves_used, max_combo, game_duration) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [user.rows[0].id, score, coins_earned || 0, moves_used, max_combo || 0, game_duration]
     );
+
+    console.log(`🎮 Game saved: User ${telegram_id}, Score ${score}`);
 
     res.json({ 
       message: 'Game saved successfully', 
