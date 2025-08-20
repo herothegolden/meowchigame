@@ -31,6 +31,18 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
+  // Animation limiting
+  const [animationCounts, setAnimationCounts] = useState({
+    hints: 0,
+    combos: 0,
+    particles: 0
+  });
+  const ANIMATION_LIMITS = {
+    hints: 3,        // Max 3 hint animations
+    combos: 5,       // Max 5 combo messages
+    particles: 8     // Max 8 particle explosions
+  };
+
   const [gameStartTime, setGameStartTime] = useState(Date.now());
   const [moveCount, setMoveCount] = useState(0);
   const [maxComboAchieved, setMaxComboAchieved] = useState(0);
@@ -265,12 +277,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setGrid(g);
         setNewTiles(new Set());
         setFallDelay({});
-        if (comboCount > 0) {
+        
+        // Show combo message only if under limit
+        if (comboCount > 0 && animationCounts.combos < ANIMATION_LIMITS.combos) {
           setCombo(comboCount);
+          setAnimationCounts(prev => ({ ...prev, combos: prev.combos + 1 }));
           haptic(15);
-          // Auto-hide combo after 500ms instead of 1500ms
+          // Auto-hide combo after 500ms
           setTimeout(() => setCombo(0), 500);
         }
+        
         ensureSolvable();
         setAnimating(false);
         done && done();
@@ -280,15 +296,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      const fxId = Date.now() + Math.random();
-      setFx((prev) => [
-        ...prev,
-        ...matches.map((m, i) => ({
-          id: fxId + i + Math.random(),
-          x: m[1] * cell,
-          y: m[0] * cell,
-        })),
-      ]);
+      // Create particles only if under limit
+      if (animationCounts.particles < ANIMATION_LIMITS.particles) {
+        const fxId = Date.now() + Math.random();
+        setFx((prev) => [
+          ...prev,
+          ...matches.map((m, i) => ({
+            id: fxId + i + Math.random(),
+            x: m[1] * cell,
+            y: m[0] * cell,
+          })),
+        ]);
+        setAnimationCounts(prev => ({ ...prev, particles: prev.particles + 1 }));
+      }
 
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
@@ -297,7 +317,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 100); // Reduced from 150ms
+      setTimeout(() => setBlast(new Set()), 100);
 
       setTimeout(() => {
         const delayMap = {};
@@ -313,7 +333,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.05, dist * 0.01); // Reduced delays
+                delayMap[`${newR}-${c}`] = Math.min(0.05, dist * 0.01);
               }
             }
           }
@@ -333,22 +353,39 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 60); // Reduced from 100ms
-        }, 120); // Reduced from 180ms
-      }, 100); // Reduced from 150ms
+          setTimeout(step, 60);
+        }, 120);
+      }, 100);
     };
     step();
   }
 
   function doHint() {
     if (animating || timeLeft <= 0) return;
+    
+    // Check if hint animations are still allowed
+    if (animationCounts.hints >= ANIMATION_LIMITS.hints) {
+      // Still find and highlight the move, just without animation
+      const m = findFirstMove(gridRef.current);
+      if (!m) {
+        shuffleBoard();
+        return;
+      }
+      setHint(m);
+      setTimeout(() => setHint(null), 300); // Shorter duration, no animation
+      haptic(10);
+      return;
+    }
+    
     const m = findFirstMove(gridRef.current);
     if (!m) {
       shuffleBoard();
       return;
     }
+    
     setHint(m);
-    setTimeout(() => setHint(null), 800); // Reduced from 1200ms
+    setAnimationCounts(prev => ({ ...prev, hints: prev.hints + 1 }));
+    setTimeout(() => setHint(null), 800);
     haptic(10);
   }
 
@@ -389,6 +426,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
+    
+    // Reset animation counters
+    setAnimationCounts({
+      hints: 0,
+      combos: 0,
+      particles: 0
+    });
+    
+    // Clear any remaining particles
+    setFx([]);
   }
 
   const boardW = cell * COLS;
@@ -456,6 +503,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               hint &&
               ((hint[0][0] === r && hint[0][1] === c) ||
                 (hint[1][0] === r && hint[1][1] === c));
+            
+            // Disable hint animation if limit reached
+            const hintClass = isHinted ? (animationCounts.hints < ANIMATION_LIMITS.hints ? "hint" : "hint-static") : "";
+            
             const isBlasting = blast.has(`${r}:${c}`);
 
             let swapTransform = "";
@@ -485,7 +536,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${
+                className={`tile ${isSelected ? "sel" : ""} ${hintClass} ${
                   isSwapping ? "swapping" : ""
                 } ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${
                   isGrab ? "grab" : ""
@@ -513,7 +564,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
+        {combo > 0 && animationCounts.combos <= ANIMATION_LIMITS.combos && (
+          <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>
+        )}
+        {combo > 0 && animationCounts.combos > ANIMATION_LIMITS.combos && (
+          <div className="combo-simple">Combo x{combo + 1}!</div>
+        )}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
