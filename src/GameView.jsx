@@ -51,7 +51,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
 
-  // Resize (kept your math)
+  // Responsive sizing
   useEffect(() => {
     const compute = () => {
       const el = containerRef.current;
@@ -75,14 +75,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     };
   }, []);
 
-  useEffect(() => { window.currentGameScore = score; }, [score]);
-  useEffect(() => { if (combo > maxComboAchieved) setMaxComboAchieved(combo); }, [combo, maxComboAchieved]);
+  useEffect(() => {
+    window.currentGameScore = score;
+  }, [score]);
 
-  // Timer (your earlier block here was corrupted)
+  useEffect(() => {
+    if (combo > maxComboAchieved) setMaxComboAchieved(combo);
+  }, [combo, maxComboAchieved]);
+
+  // Timer
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
+      setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
           setTimeout(() => finish(), 100);
@@ -96,11 +101,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
-    try { navigator.vibrate?.(ms); } catch {}
+    try {
+      navigator.vibrate?.(ms);
+    } catch {}
   }
 
   async function submitGameScore(finalScore, coinsEarned) {
-    if (!userTelegramId) return { user_needs_profile: false };
+    if (!userTelegramId) {
+      console.log("No Telegram ID, skipping score submission");
+      return { user_needs_profile: false };
+    }
     try {
       const gameData = {
         telegram_id: userTelegramId,
@@ -108,19 +118,23 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         coins_earned: coinsEarned,
         moves_used: moveCount,
         max_combo: maxComboAchieved,
-        game_duration: Math.floor((Date.now() - gameStartTime) / 1000)
+        game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
+
       const response = await fetch("/api/game/complete", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(gameData)
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gameData),
       });
+
       const result = await response.json();
       if (!response.ok) {
         console.error("Score submission failed:", result.error);
         return { user_needs_profile: false };
       }
       return result;
-    } catch (e) {
-      console.error("Error submitting score:", e);
+    } catch (error) {
+      console.error("Error submitting score:", error);
       return { user_needs_profile: false };
     }
   }
@@ -160,7 +174,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         drag.dragging = true;
         haptic(8);
         const horiz = Math.abs(dx) > Math.abs(dy);
-        const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
+        const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
         const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
         if (inBounds(tr, tc)) setSel({ r: tr, c: tc });
       }
@@ -176,7 +190,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       } else {
         if (!animatingRef.current && timeLeftRef.current > 0) {
           const horiz = Math.abs(dx) > Math.abs(dy);
-          const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
+          const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
           const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
           if (inBounds(tr, tc)) {
             trySwap(drag.r, drag.c, tr, tc);
@@ -211,12 +225,14 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
     if (matches.length === 0) {
       const s = new Set(shake);
-      s.add(`${r1}-${c1}`); s.add(`${r2}-${c2}`);
+      s.add(`${r1}-${c1}`);
+      s.add(`${r2}-${c2}`);
       setShake(s);
       setTimeout(() => {
-        setShake(prev => {
+        setShake((prev) => {
           const n = new Set(prev);
-          n.delete(`${r1}-${c1}`); n.delete(`${r2}-${c2}`);
+          n.delete(`${r1}-${c1}`);
+          n.delete(`${r2}-${c2}`);
           return n;
         });
       }, 220);
@@ -226,12 +242,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       return;
     }
 
-    setMoveCount(prev => prev + 1);
+    setMoveCount((prev) => prev + 1);
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     setTimeout(() => {
       setGrid(g);
       setSwapping(null);
-      setMoves(m => Math.max(0, m - 1));
+      setMoves((m) => Math.max(0, m - 1));
       resolveCascades(g, () => {
         if (timeLeftRef.current <= 0) finish();
       });
@@ -264,19 +280,21 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       setBlast(new Set(keys));
 
       const fxId = Date.now() + Math.random();
-      setFx(prev => [
+      setFx((prev) => [
         ...prev,
         ...matches.map((m, i) => ({
           id: fxId + i + Math.random(),
           x: m[1] * cell,
-          y: m[0] * cell
-        }))
+          y: m[0] * cell,
+        })),
       ]);
 
-      setScore(s => s + 10 * matches.length * Math.max(1, comboCount + 1));
+      setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
 
-      matches.forEach(([r, c]) => { g[r][c] = null; });
+      matches.forEach(([r, c]) => {
+        g[r][c] = null;
+      });
       setGrid(cloneGrid(g));
       setTimeout(() => setBlast(new Set()), 150);
 
@@ -293,7 +311,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             if (g[r][c] != null) {
               const dist = nullsBelow[r];
               const newR = r + dist;
-              if (dist > 0) delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
+              if (dist > 0) {
+                delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
+              }
             }
           }
         }
@@ -322,7 +342,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   function doHint() {
     if (animating || timeLeft <= 0) return;
     const m = findFirstMove(gridRef.current);
-    if (!m) { shuffleBoard(); return; }
+    if (!m) {
+      shuffleBoard();
+      return;
+    }
     setHint(m);
     setTimeout(() => setHint(null), 1200);
     haptic(10);
@@ -342,7 +365,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   async function finish() {
     const finalCoins = Math.floor(score * 0.15);
     await submitGameScore(score, finalCoins);
-    onExit({ score, coins: finalCoins, moves_used: moveCount, max_combo: maxComboAchieved });
+    onExit({
+      score,
+      coins: finalCoins,
+      moves_used: moveCount,
+      max_combo: maxComboAchieved,
+    });
   }
 
   function resetGame() {
@@ -379,32 +407,54 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   return (
     <div className="section board-wrap" ref={containerRef}>
-      <div className="timer-display" style={{
-        textAlign: "center", marginBottom: "12px", fontSize: "24px", fontWeight: "800",
-        color: getTimerColor(), padding: "8px 16px", background: "var(--card)",
-        borderRadius: "16px", border: "2px solid", borderColor: getTimerColor(),
-        boxShadow: `0 0 0 3px ${getTimerColor()}20`
-      }}>
+      <div
+        className="timer-display"
+        style={{
+          textAlign: "center",
+          marginBottom: "12px",
+          fontSize: "24px",
+          fontWeight: "800",
+          color: getTimerColor(),
+          padding: "8px 16px",
+          background: "var(--card)",
+          borderRadius: "16px",
+          border: "2px solid",
+          borderColor: getTimerColor(),
+          boxShadow: `0 0 0 3px ${getTimerColor()}20`,
+        }}
+      >
         ⏰ {formatTime(timeLeft)}
       </div>
 
       <div className="row">
-        <div><span className="muted">Score</span> <b>{score}</b></div>
-        <div><span className="muted">Moves</span> <b>{moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+        <div>
+          <span className="muted">Score</span> <b>{score}</b>
+        </div>
+        <div>
+          <span className="muted">Moves</span> <b>{moves}</b>
+        </div>
+        <div>
+          <span className="muted">Combo</span>{" "}
+          <b>{combo > 0 ? `x${combo + 1}` : "-"}</b>
+        </div>
       </div>
 
       <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
-        <div className="gridlines" style={{
-          backgroundImage:
-            "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-          backgroundSize: `${cell}px ${cell}px`
-        }} />
+        <div
+          className="gridlines"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
+            backgroundSize: `${cell}px ${cell}px`,
+          }}
+        />
         {grid.map((row, r) =>
           row.map((v, c) => {
             const isSelected = sel && sel.r === r && sel.c === c;
             const isHinted =
-              hint && ((hint[0][0] === r && hint[0][1] === c) || (hint[1][0] === r && hint[1][1] === c));
+              hint &&
+              ((hint[0][0] === r && hint[0][1] === c) ||
+                (hint[1][0] === r && hint[1][1] === c));
             const isBlasting = blast.has(`${r}:${c}`);
 
             let swapTransform = "";
@@ -420,45 +470,65 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               }
             }
             const isSwapping =
-              swapping &&
+              !!swapping &&
               ((swapping.from.r === r && swapping.from.c === c) ||
-                (swapping.to.r === r && swappin g.to.c === c));
+                (swapping.to.r === r && swapping.to.c === c));
 
             const tileKey = `${r}-${c}`;
             const isNewTile = newTiles.has(tileKey);
             const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
             const isShake = shake.has(tileKey);
 
-            const delaySeconds = isSwapping ? 0 : (fallDelay[tileKey] ?? 0);
+            const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
 
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${
+                  isSwapping ? "swapping" : ""
+                } ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${
+                  isGrab ? "grab" : ""
+                } ${isShake ? "shake" : ""}`}
                 style={{
-                  left: c * cell, top: r * cell, width: cell, height: cell,
+                  left: c * cell,
+                  top: r * cell,
+                  width: cell,
+                  height: cell,
                   transform: swapTransform || undefined,
-                  zIndex: isBlasting ? 10 : (isSwapping ? 20 : 1),
-                  transitionDelay: `${delaySeconds}s`
+                  zIndex: isBlasting ? 10 : isSwapping ? 20 : 1,
+                  transitionDelay: `${delaySeconds}s`,
                 }}
               >
-                <span className="tile-emoji" style={{ fontSize: Math.floor(cell * EMOJI_SIZE), lineHeight: 1 }}>
+                <span
+                  className="tile-emoji"
+                  style={{ fontSize: Math.floor(cell * EMOJI_SIZE), lineHeight: 1 }}
+                >
                   {v}
                 </span>
               </div>
             );
           })
         )}
-        {fx.map((p, i) => <Poof key={p.id ?? i} x={p.x} y={p.y} size={cell} />)}
+        {fx.map((p, i) => (
+          <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
+        ))}
         {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭 </div>}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>🍬 Game Paused</div>
-              <div className="muted" style={{ marginBottom: 12 }}>Take a sweet break!</div>
+              <div className="title" style={{ marginBottom: 8 }}>
+                🍬 Game Paused
+              </div>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Take a sweet break!
+              </div>
               <div className="row" style={{ gap: 8 }}>
-                <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
-                <button className="btn" onClick={() => finish()}>End Sweet Level</button>
+                <button className="btn primary" onClick={() => setPaused(false)}>
+                  Resume
+                </button>
+                <button className="btn" onClick={() => finish()}>
+                  End Sweet Level
+                </button>
               </div>
             </div>
           </div>
@@ -466,12 +536,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       </div>
 
       <div className="controls">
-        <button className="btn" onClick={() => setPaused(p => !p)} disabled={timeLeft <= 0}>
+        <button className="btn" onClick={() => setPaused((p) => !p)} disabled={timeLeft <= 0}>
           {paused ? "Resume" : "Pause"}
         </button>
         <button className="btn" onClick={resetGame}>Reset</button>
-        <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>💡 Sweet Hint</button>
-        <button className="btn primary" onClick={shuffleBoard} disabled={timeLeft <= 0}>🔄 Sugar Shuffle</button>
+        <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>
+          💡 Sweet Hint
+        </button>
+        <button className="btn primary" onClick={shuffleBoard} disabled={timeLeft <= 0}>
+          🔄 Sugar Shuffle
+        </button>
         <div className="controls-size">8×8</div>
       </div>
     </div>
@@ -480,6 +554,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
 function Poof({ x, y, size }) {
   const sparks = Array.from({ length: 30 });
+
   return (
     <>
       {sparks.map((_, i) => {
@@ -487,47 +562,83 @@ function Poof({ x, y, size }) {
         const distance = size * (0.8 + Math.random() * 1.0);
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
+
         const randomDelay = Math.random() * 0.05;
         const randomDuration = 0.6 + Math.random() * 0.4;
+
         const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
+
         const particleType = Math.random();
         let animationName = "fly";
         if (particleType < 0.2) animationName = "fly-bounce";
         else if (particleType < 0.4) animationName = "fly-spiral";
+
         const style = {
-          left: x, top: y,
-          "--cx": size / 2 + "px", "--cy": size / 2 + "px",
-          "--tx": tx + "px", "--ty": ty + "px",
-          position: "absolute", animationName,
+          left: x,
+          top: y,
+          "--cx": size / 2 + "px",
+          "--cy": size / 2 + "px",
+          "--tx": tx + "px",
+          "--ty": ty + "px",
+          position: "absolute",
+          animationName,
           animationDelay: `${randomDelay}s`,
           animationDuration: `${randomDuration}s`,
-          animationFillMode: "forwards", animationTimingFunction: "ease-out",
+          animationFillMode: "forwards",
+          animationTimingFunction: "ease-out",
           fontSize: Math.floor(size * (0.3 + Math.random() * 0.3)) + "px",
-          textShadow: "0 0 4px rgba(255,255,255,0.6)",
-          filter: "drop-shadow(0 0 3px rgba(255,255,255,0.5))",
-          zIndex: 15
+          textShadow: "0 0 4px rgba(255, 255, 255, 0.6)",
+          filter: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))",
+          zIndex: 15,
         };
-        return <span key={i} className="spark enhanced-spark" style={style}>{randomSpark}</span>;
+        return (
+          <span key={i} className="spark enhanced-spark" style={style}>
+            {randomSpark}
+          </span>
+        );
       })}
-      <div className="explosion-flash" style={{
-        position: "absolute", left: x - size * 0.5, top: y - size * 0.5,
-        width: size * 2, height: size * 2, borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,215,0,0.4) 50%, transparent 100%)",
-        animation: "explosion-flash 0.2s ease-out forwards", pointerEvents: "none", zIndex: 12
-      }} />
-      <div className="shockwave" style={{
-        position: "absolute", left: x + size / 2, top: y + size / 2, width: 0, height: 0,
-        border: "2px solid rgba(255,215,0,0.6)", borderRadius: "50%",
-        animation: "shockwave 0.3s ease-out forwards", pointerEvents: "none", zIndex: 11
-      }} />
+
+      <div
+        className="explosion-flash"
+        style={{
+          position: "absolute",
+          left: x - size * 0.5,
+          top: y - size * 0.5,
+          width: size * 2,
+          height: size * 2,
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,215,0,0.4) 50%, transparent 100%)",
+          animation: "explosion-flash 0.2s ease-out forwards",
+          pointerEvents: "none",
+          zIndex: 12,
+        }}
+      />
+
+      <div
+        className="shockwave"
+        style={{
+          position: "absolute",
+          left: x + size / 2,
+          top: y + size / 2,
+          width: 0,
+          height: 0,
+          border: "2px solid rgba(255,215,0,0.6)",
+          borderRadius: "50%",
+          animation: "shockwave 0.3s ease-out forwards",
+          pointerEvents: "none",
+          zIndex: 11,
+        }}
+      />
     </>
   );
 }
 
 /* ========= Helpers ========= */
 
-const makeGrid = (rows, cols) => Array.from({ length: rows }, () => Array(cols).fill(null));
+const makeGrid = (rows, cols) =>
+  Array.from({ length: rows }, () => Array(cols).fill(null));
 const cloneGrid = (g) => g.map((r) => r.slice());
 const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
 
@@ -538,7 +649,10 @@ function findMatches(g) {
     let c = 0;
     while (c < COLS) {
       const v = g[r][c];
-      if (!v) { c++; continue; }
+      if (!v) {
+        c++;
+        continue;
+      }
       let len = 1;
       while (c + len < COLS && g[r][c + len] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
@@ -550,14 +664,17 @@ function findMatches(g) {
     let r = 0;
     while (r < ROWS) {
       const v = g[r][c];
-      if (!v) { r++; continue; }
+      if (!v) {
+        r++;
+        continue;
+      }
       let len = 1;
       while (r + len < ROWS && g[r + len][c] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
       r += len;
     }
   }
-  return Array.from(hits).map(k => k.split(":").map(n => parseInt(n, 10)));
+  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
 }
 
 function applyGravity(g) {
@@ -571,7 +688,10 @@ function applyGravity(g) {
         write--;
       }
     }
-    while (write >= 0) { g[write][c] = null; write--; }
+    while (write >= 0) {
+      g[write][c] = null;
+      write--;
+    }
   }
 }
 
@@ -581,7 +701,9 @@ function refill(g) {
       if (g[r][c] == null) g[r][c] = randEmoji();
 }
 
-function hasAnyMove(g) { return !!findFirstMove(g); }
+function hasAnyMove(g) {
+  return !!findFirstMove(g);
+}
 
 function findFirstMove(g) {
   for (let r = 0; r < ROWS; r++)
@@ -618,7 +740,9 @@ function removeAllMatches(g) {
   while (true) {
     const m = findMatches(g);
     if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
+    m.forEach(([r, c]) => {
+      g[r][c] = randEmoji();
+    });
   }
 }
 
@@ -641,7 +765,7 @@ function shuffleToSolvable(g) {
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
 
-    // Remove any starter matches
+    // Remove starter matches; ensure a move exists
     removeAllMatches(t);
     if (hasAnyMove(t)) return t;
     attempts++;
