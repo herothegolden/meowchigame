@@ -7,9 +7,8 @@
   --accent: #667eea;
   --accent2:#764ba2;
 
-  /* Splash controls */
-  --bar-top: 60%;         /* vertical position of bar under the word */
-  --bar-width: 230px;     /* make bar same width as “MEOWCHI” on your art; tweak 220–280px */
+  --bar-top: 60%;
+  --bar-width: 230px;
 }
 
 *{box-sizing:border-box}
@@ -17,11 +16,11 @@ html,body,#root{height:100%}
 body{
   margin:0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
+  /* old: background: var(--bg); */
+  background: #fef9ea;   /* ✅ cream background full-bleed */
   color: var(--text);
 }
 
-/* app shell */
 .shell{
   max-width: 520px;
   margin: 0 auto;
@@ -31,7 +30,7 @@ body{
   padding: 12px;
 }
 
-/* header */
+/* header (unchanged for non-home screens) */
 .header{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .header-line1{display:flex;gap:8px}
 .header-line2{display:flex;align-items:center;justify-content:space-between}
@@ -80,26 +79,24 @@ body{
 }
 .tab.active{background:#21306a}
 
-/* ===== Splash (fullscreen image, no dim, bar width = word width) ===== */
+/* Splash */
 .splash{
   position:fixed; inset:0; z-index:9999;
   height: calc(var(--vh, 1vh) * 100);
   background: url("/splash.jpg") center center / cover no-repeat;
-  background-color:#090d1a; /* fallback while the image loads */
+  background-color:#090d1a;
   display:block;
   opacity:1; transition: opacity .35s ease;
 }
 .splash.hide{ opacity:0; pointer-events:none }
 .splash.show{ opacity:1 }
 
-/* Bar sits under the “MEOWCHI” word.
-   Width is controlled by --bar-width to match the printed word exactly. */
 .splash-bar-anchored{
   position: absolute;
   left: 50%;
   top: var(--bar-top);
   transform: translate(-50%, -50%);
-  width: var(--bar-width);     /* <<< match the word width */
+  width: var(--bar-width);
   text-align: center;
 }
 
@@ -107,7 +104,7 @@ body{
   width: 100%;
   height: 10px;
   border-radius: 999px;
-  background: rgba(0,0,0,.15); /* darker track so it reads on light BG */
+  background: rgba(0,0,0,.15);
   overflow: hidden;
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.12),
@@ -116,144 +113,6 @@ body{
 .splash-progress__bar{
   width:0; height:100%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
-  animation: splashbar 2.4s ease forwards; /* keep in sync with App’s min splash time */
+  animation: splashbar 2.4s ease forwards;
 }
 @keyframes splashbar{ to { width:100% } }
-
-/* Caption directly under the bar: black, larger, single line, same width as bar */
-.splash-caption{
-  margin-top: 8px;
-  width: 100%;
-  color: #111;                 /* black text as requested */
-  font-weight: 800;
-  font-size: clamp(14px, 4.2vw, 18px);
-  letter-spacing: .3px;
-  text-shadow: none;
-  white-space: nowrap;
-}
-
-/* ===== Board / GameView (animations, nudges, etc.) ===== */
-.section.board-wrap{position:relative}
-.board{
-  position:relative;
-  margin:10px auto 8px;
-  background:#0a1130;
-  border-radius:12px;
-  border:1px solid var(--line);
-  overflow:hidden;
-  overscroll-behavior: contain;
-}
-.gridlines{
-  position:absolute; inset:0;
-  opacity:.16; pointer-events:none;
-}
-
-.tile{
-  position:absolute; display:grid; place-items:center;
-  user-select:none; touch-action:none;
-  border-radius:10px;
-  overflow: hidden; /* clip bigger emojis inside tile */
-  transition:
-    left .22s cubic-bezier(.2,.8,.2,1),
-    top .22s cubic-bezier(.2,.8,.2,1),
-    transform .18s cubic-bezier(.2,.8,.2,1),
-    opacity .18s linear;
-  background:#111a32;
-  border:1px solid rgba(255,255,255,.06);
-  will-change: left, top, transform, opacity;
-}
-.tile.sel{outline:3px solid rgba(102,126,234,.6)}
-
-/* hint pulse */
-.tile.hint .tile-emoji{ animation: hint-pulse 0.9s ease-in-out infinite; }
-@keyframes hint-pulse{
-  0%{ transform:scale(1) }
-  50%{ transform:scale(1.08) }
-  100%{ transform:scale(1) }
-}
-
-/* press/grab feel */
-.tile.grab .tile-emoji{
-  transform: scale(0.96);
-  filter: drop-shadow(0 3px 6px rgba(0,0,0,.45));
-}
-
-/* invalid swap nudge */
-.tile.shake{ animation: shakeH .18s ease both; }
-@keyframes shakeH{
-  0%{ transform: translateX(0) }
-  25%{ transform: translateX(-4px) }
-  50%{ transform: translateX(4px) }
-  75%{ transform: translateX(-2px) }
-  100%{ transform: translateX(0) }
-}
-
-/* new spawn drop-in */
-.tile.drop-in{animation:drop .26s cubic-bezier(.2,.8,.2,1)}
-@keyframes drop{from{transform:translateY(-14px);opacity:.0}to{transform:translateY(0);opacity:1}}
-
-/* match pop / blasting */
-.tile.blasting{
-  animation:pop .23s ease forwards;
-  box-shadow:0 0 0 4px #ffd166 inset, 0 0 18px 5px rgba(255,209,102,.7), 0 0 36px 10px rgba(255,255,255,.25);
-  background:linear-gradient(135deg, #ffd166 0%, #ff9500 100%);
-}
-.tile.blasting .tile-emoji{ filter: drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
-@keyframes pop{
-  0%{ transform:scale(1); opacity:1 }
-  60%{ transform:scale(1.18) rotate(8deg); opacity:1 }
-  100%{ transform:scale(1); opacity:.0 }
-}
-
-/* faster easing while swapping */
-.tile.swapping{
-  transition:
-    left .18s cubic-bezier(.3,.9,.1,1),
-    top .18s cubic-bezier(.3,.9,.1,1),
-    transform .18s cubic-bezier(.3,.9,.1,1),
-    opacity .18s linear;
-}
-
-.tile .tile-emoji{
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
-  line-height: 1;
-}
-
-/* combo banner */
-.combo{
-  position:absolute; left:50%; top:-10px; transform:translate(-50%,-50%);
-  background:rgba(255,255,255,.1);
-  border:1px solid var(--line);
-  padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px
-}
-
-/* pause overlay */
-.pause-overlay{
-  position:absolute; inset:0; display:grid; place-items:center;
-  background:rgba(0,0,0,.5); backdrop-filter:saturate(120%) blur(2px);
-}
-
-/* controls under board */
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.controls .btn{padding:8px 12px}
-.controls-size{opacity:.7;font-size:12px}
-
-/* poof particles */
-.spark{
-  position:absolute; transform-origin:var(--cx) var(--cy);
-  animation:fly var(--dur,1.1s) ease-out forwards;
-}
-@keyframes fly{
-  from { transform: translate(0,0) scale(1); opacity:1 }
-  to   { transform: translate(var(--tx), var(--ty)) scale(.75); opacity:0 }
-}
-
-/* reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .tile, .tile.swapping, .tile.drop-in, .tile.blasting,
-  .splash-progress__bar{
-    transition: none;
-    animation: none;
-  }
-  .spark{ animation: none; opacity:0; }
-}
