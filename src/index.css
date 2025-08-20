@@ -827,7 +827,7 @@ body{
   font-weight: 500;
 }
 
-/* Loading and Error States */
+/* Loading and Error States - FIXED: No infinite animations */
 .loading-state, .error-state, .empty-state {
   text-align: center;
   padding: 40px 20px;
@@ -836,13 +836,10 @@ body{
 .loading-icon, .error-icon, .empty-icon {
   font-size: 48px;
   margin-bottom: 12px;
-  animation: gentle-bounce 2s ease-in-out infinite;
+  /* REMOVED: animation: gentle-bounce 2s ease-in-out infinite; */
 }
 
-@keyframes gentle-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
+/* REMOVED: @keyframes gentle-bounce - no longer needed */
 
 .loading-text, .error-text, .empty-text {
   font-size: 16px;
@@ -1234,12 +1231,8 @@ body{
 
 .loading-spinner {
   display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  /* REMOVED: animation: spin 1s linear infinite; */
+  /* Loading spinners only appear briefly, so no continuous animation needed */
 }
 
 /* Game Over Profile Prompt */
