@@ -9,21 +9,30 @@ const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.86;
 
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
-const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
+const randEmoji = () =>
+  CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
-export default function GameView({ onExit, onCoins, settings, userTelegramId }) {
+export default function GameView({
+  onExit,
+  onCoins,
+  settings,
+  userTelegramId,
+}) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
 
+  // Grid state
   const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
+  // Selection / hint / animation
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
 
+  // Stats
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(20);
   const [combo, setCombo] = useState(0);
@@ -46,12 +55,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  const movesRef = useRef(moves);
-  movesRef.current = moves;
+  // --- FIX: keep these refs defined exactly once ---
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
+  // -------------------------------------------------
 
   // Responsive sizing
   useEffect(() => {
@@ -118,12 +127,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         telegram_id: userTelegramId,
         score: finalScore,
         coins_earned: coinsEarned,
-        moves_used: Math.max(1, moveCount), // FIX: Ensure at least 1 move
+        moves_used: Math.max(1, moveCount),
         max_combo: maxComboAchieved,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
 
-      console.log("🎯 Submitting game score:", gameData); // DEBUG LINE 1
+      console.log("🎯 Submitting game score:", gameData);
 
       const response = await fetch("/api/game/complete", {
         method: "POST",
@@ -132,8 +141,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       });
 
       const result = await response.json();
-      console.log("📊 Score submission result:", result); // DEBUG LINE 2
-      
+      console.log("📊 Score submission result:", result);
+
       if (!response.ok) {
         console.error("Score submission failed:", result.error);
         return { user_needs_profile: false };
@@ -271,18 +280,15 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setGrid(g);
         setNewTiles(new Set());
         setFallDelay({});
-        
-        // Show combo message - but only set it ONCE, not repeatedly
+
         if (comboCount > 0) {
           setCombo(comboCount);
           haptic(15);
-          // Clear combo after animation completes
           setTimeout(() => setCombo(0), 1000);
         }
-        
-        // IMPORTANT: Clear particles array to prevent buildup
+
         setTimeout(() => setFx([]), 1200);
-        
+
         ensureSolvable();
         setAnimating(false);
         done && done();
@@ -292,10 +298,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      // Create particles for every match - but clear old ones first
       const fxId = Date.now() + Math.random();
       setFx((prev) => [
-        ...prev.slice(-10), // Keep only last 10 particle sets to prevent buildup
+        ...prev.slice(-10),
         ...matches.map((m, i) => ({
           id: fxId + i + Math.random(),
           x: m[1] * cell,
@@ -335,8 +340,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         applyGravity(g);
         const empties = new Set();
         for (let r = 0; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++)
-            if (g[r][c] === null) empties.add(`${r}-${c}`);
+          for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
 
         setNewTiles(empties);
@@ -355,16 +359,13 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   function doHint() {
     if (animating || timeLeft <= 0) return;
-    
     const m = findFirstMove(gridRef.current);
     if (!m) {
       shuffleBoard();
       return;
     }
-    
-    // Show hint - CSS handles the 2-pulse animation
     setHint(m);
-    setTimeout(() => setHint(null), 1200); // Match CSS animation duration
+    setTimeout(() => setHint(null), 1200);
     haptic(10);
   }
 
@@ -376,22 +377,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   }
 
   function ensureSolvable() {
-    if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current));
+    if (!hasAnyMove(gridRef.current))
+      setGrid(shuffleToSolvable(gridRef.current));
   }
 
   async function finish() {
     const finalCoins = Math.floor(score * 0.15);
-    
-    // Submit score to backend
     const result = await submitGameScore(score, finalCoins);
-    
-    // Exit game with results
     onExit({
       score,
       coins: finalCoins,
       moves_used: moveCount,
       max_combo: maxComboAchieved,
-      gameSubmitted: result ? true : false // Let parent know if score was saved
+      gameSubmitted: !!result,
     });
   }
 
@@ -462,7 +460,11 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         </div>
       </div>
 
-      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+      <div
+        ref={boardRef}
+        className="board"
+        style={{ width: boardW, height: boardH }}
+      >
         <div
           className="gridlines"
           style={{
@@ -507,11 +509,13 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${
-                  isSwapping ? "swapping" : ""
-                } ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${
-                  isGrab ? "grab" : ""
-                } ${isShake ? "shake" : ""}`}
+                className={`tile ${isSelected ? "sel" : ""} ${
+                  isHinted ? "hint" : ""
+                } ${isSwapping ? "swapping" : ""} ${
+                  isBlasting ? "blasting" : ""
+                } ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${
+                  isShake ? "shake" : ""
+                }`}
                 style={{
                   left: c * cell,
                   top: r * cell,
@@ -524,7 +528,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               >
                 <span
                   className="tile-emoji"
-                  style={{ fontSize: Math.floor(cell * EMOJI_SIZE), lineHeight: 1 }}
+                  style={{
+                    fontSize: Math.floor(cell * EMOJI_SIZE),
+                    lineHeight: 1,
+                  }}
                 >
                   {v}
                 </span>
@@ -535,7 +542,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
+        {combo > 0 && (
+          <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>
+        )}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
@@ -559,14 +568,24 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       </div>
 
       <div className="controls">
-        <button className="btn" onClick={() => setPaused((p) => !p)} disabled={timeLeft <= 0}>
+        <button
+          className="btn"
+          onClick={() => setPaused((p) => !p)}
+          disabled={timeLeft <= 0}
+        >
           {paused ? "Resume" : "Pause"}
         </button>
-        <button className="btn" onClick={resetGame}>Reset</button>
+        <button className="btn" onClick={resetGame}>
+          Reset
+        </button>
         <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>
           💡 Sweet Hint
         </button>
-        <button className="btn primary" onClick={shuffleBoard} disabled={timeLeft <= 0}>
+        <button
+          className="btn primary"
+          onClick={shuffleBoard}
+          disabled={timeLeft <= 0}
+        >
           🔄 Sugar Shuffle
         </button>
         <div className="controls-size">8×8</div>
@@ -576,7 +595,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 }
 
 function Poof({ x, y, size }) {
-  // Reduced particle count for better performance
+  // Reduced particle count for performance
   const sparks = Array.from({ length: 12 });
 
   return (
@@ -588,10 +607,11 @@ function Poof({ x, y, size }) {
         const ty = size / 2 + Math.sin(angle) * distance;
 
         const randomDelay = Math.random() * 0.02;
-        const randomDuration = 0.3 + Math.random() * 0.2; // Short duration
+        const randomDuration = 0.3 + Math.random() * 0.2;
 
         const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"];
-        const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
+        const randomSpark =
+          sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
 
         const particleType = Math.random();
         let animationName = "fly";
@@ -698,7 +718,9 @@ function findMatches(g) {
       r += len;
     }
   }
-  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
+  return Array.from(hits).map((k) =>
+    k.split(":").map((n) => parseInt(n, 10))
+  );
 }
 
 function applyGravity(g) {
@@ -721,8 +743,7 @@ function applyGravity(g) {
 
 function refill(g) {
   for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (g[r][c] == null) g[r][c] = randEmoji();
+    for (let c = 0; c < COLS; c++) if (g[r][c] == null) g[r][c] = randEmoji();
 }
 
 function hasAnyMove(g) {
