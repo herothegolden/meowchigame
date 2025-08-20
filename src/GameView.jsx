@@ -459,7 +459,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         </div>
       </div>
 
-      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+      <div ref={boardRef} className={`board ${animationCount >= MAX_ANIMATIONS ? 'no-animations' : ''}`} style={{ width: boardW, height: boardH }}>
         <div
           className="gridlines"
           style={{
@@ -480,6 +480,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             const hintClass = isHinted ? (animationCount < MAX_ANIMATIONS ? "hint" : "hint-static") : "";
             
             const isBlasting = blast.has(`${r}:${c}`);
+            
+            // Disable blasting animation if limit reached
+            const blastClass = isBlasting && animationCount < MAX_ANIMATIONS ? "blasting" : "";
 
             let swapTransform = "";
             if (swapping) {
@@ -510,7 +513,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
                 key={`tile-${r}-${c}`}
                 className={`tile ${isSelected ? "sel" : ""} ${hintClass} ${
                   isSwapping ? "swapping" : ""
-                } ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${
+                } ${blastClass} ${isNewTile && animationCount < MAX_ANIMATIONS ? "drop-in" : ""} ${
                   isGrab ? "grab" : ""
                 } ${isShake ? "shake" : ""}`}
                 style={{
@@ -533,7 +536,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             );
           })
         )}
-        {fx.map((p, i) => (
+        {/* Only show particles if animations allowed */}
+        {animationCount < MAX_ANIMATIONS && fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
         {/* Show combo message only if animations allowed */}
