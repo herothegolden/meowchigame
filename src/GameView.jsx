@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * ENHANCED GameView with Backend Integration
- * - Preserves ALL existing game mechanics
- * - Adds game completion tracking
- * - Integrates with leaderboard system
+ * ENHANCED GameView with 60-Second Timer
+ * - Added countdown timer from 60 seconds
+ * - Game ends when timer reaches 0
+ * - Timer positioned above score/moves/combo row
  */
 
 const COLS = 8;
 const ROWS = 8;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
+const GAME_DURATION = 60; // 60 seconds
 
 // Tune this to adjust emoji size relative to the cell.
 const EMOJI_SIZE = 0.86;
@@ -35,12 +36,13 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
 
-  // Score / moves / combo FX
+  // Score / moves / combo FX + TIMER
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(20);
   const [combo, setCombo] = useState(0);
   const [fx, setFx] = useState([]);
   const [blast, setBlast] = useState(new Set());
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
   // Game tracking for backend
   const [gameStartTime, setGameStartTime] = useState(Date.now());
@@ -61,6 +63,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [shake, setShake] = useState(new Set());  // tiles shaking after invalid swap
 
   const movesRef = useRef(moves); movesRef.current = moves;
+  const timeLeftRef = useRef(timeLeft); timeLeftRef.current = timeLeft;
 
   useEffect(() => { window.currentGameScore = score; }, [score]);
 
@@ -70,6 +73,25 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       setMaxComboAchieved(combo);
     }
   }, [combo, maxComboAchieved]);
+
+  // 60-second countdown timer
+  useEffect(() => {
+    if (paused) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          // Time's up! End the game
+          clearInterval(timer);
+          setTimeout(() => finish(), 100);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [paused]);
 
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
@@ -116,7 +138,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     }
   }
 
-  // Pointer events (Telegram WebView friendly) – preserved
+  // Pointer events (Telegram WebView friendly) — preserved
   useEffect(() => {
     const el = boardRef.current; if (!el || paused) return;
     let drag = null; const thresholdBase = 18;
@@ -129,7 +151,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     };
 
     const down = (e) => {
-      if (animatingRef.current) return; // lock during cascades
+      if (animatingRef.current || timeLeftRef.current <= 0) return; // lock during cascades or when time is up
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e); if (!inBounds(p.r, p.c)) return;
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
@@ -139,7 +161,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     };
 
     const move = (e) => {
-      if (!drag || animatingRef.current) return;
+      if (!drag || animatingRef.current || timeLeftRef.current <= 0) return;
       const p = rc(e);
       const dx = p.x - drag.x, dy = p.y - drag.y;
       const threshold = Math.min(thresholdBase, Math.floor(cell * 0.35));
@@ -158,7 +180,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       if (!drag.dragging) {
         setSel({ r: drag.r, c: drag.c });
       } else {
-        if (!animatingRef.current) {
+        if (!animatingRef.current && timeLeftRef.current > 0) {
           const horiz = Math.abs(dx) > Math.abs(dy);
           const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
           const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
@@ -183,6 +205,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   }, [cell, paused, settings?.haptics]);
 
   function trySwap(r1, c1, r2, c2) {
+    if (timeLeft <= 0) return; // Don't allow swaps when time is up
+    
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
     const g = cloneGrid(gridRef.current);
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
@@ -213,11 +237,11 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     // Let CSS animate swap; then commit the grid
     setTimeout(() => {
       setGrid(g); setSwapping(null); setMoves((m) => Math.max(0, m - 1));
-      resolveCascades(g, () => { if (movesRef.current === 0) finish(); });
+      resolveCascades(g, () => { if (timeLeftRef.current <= 0) finish(); });
     }, 300);
   }
 
-  // Cascade resolver – timing staged; input locked; distance-based fall delay computed
+  // Cascade resolver — timing staged; input locked; distance-based fall delay computed
   function resolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start); let comboCount = 0;
@@ -302,14 +326,14 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   }
 
   function doHint() {
-    if (animating) return;
+    if (animating || timeLeft <= 0) return;
     const m = findFirstMove(gridRef.current);
     if (!m) { shuffleBoard(); return; }
     setHint(m);
     setTimeout(() => setHint(null), 1200);
     haptic(10);
   }
-  function shuffleBoard() { if (animating) return; const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
+  function shuffleBoard() { if (animating || timeLeft <= 0) return; const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
   function ensureSolvable() { if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current)); }
   
   async function finish() {
@@ -337,6 +361,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     setSwapping(null);
     setFallDelay({});
     setNewTiles(new Set());
+    setTimeLeft(GAME_DURATION);
     
     // Reset game tracking
     setGameStartTime(Date.now());
@@ -346,8 +371,39 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   const boardW = cell * COLS, boardH = cell * ROWS;
 
+  // Format timer display
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Timer color based on remaining time
+  const getTimerColor = () => {
+    if (timeLeft <= 10) return '#e74c3c'; // Red
+    if (timeLeft <= 30) return '#f39c12'; // Orange
+    return '#27ae60'; // Green
+  };
+
   return (
     <div className="section board-wrap" ref={containerRef}>
+      {/* TIMER DISPLAY */}
+      <div className="timer-display" style={{
+        textAlign: 'center',
+        marginBottom: '12px',
+        fontSize: '24px',
+        fontWeight: '800',
+        color: getTimerColor(),
+        padding: '8px 16px',
+        background: 'var(--card)',
+        borderRadius: '16px',
+        border: '2px solid',
+        borderColor: getTimerColor(),
+        boxShadow: `0 0 0 3px ${getTimerColor()}20`
+      }}>
+        ⏰ {formatTime(timeLeft)}
+      </div>
+
       <div className="row">
         <div><span className="muted">Score</span> <b>{score}</b></div>
         <div><span className="muted">Moves</span> <b>{moves}</b></div>
@@ -438,23 +494,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       </div>
 
       <div className="controls">
-        <button className="btn" onClick={() => setPaused((p) => !p)}>{paused ? "Resume" : "Pause"}</button>
+        <button className="btn" onClick={() => setPaused((p) => !p)} disabled={timeLeft <= 0}>
+          {paused ? "Resume" : "Pause"}
+        </button>
         <button className="btn" onClick={resetGame}>Reset</button>
-        <button className="btn" onClick={doHint}>💡 Sweet Hint</button>
-        <button className="btn primary" onClick={shuffleBoard}>🔄 Sugar Shuffle</button>
+        <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>💡 Sweet Hint</button>
+        <button className="btn primary" onClick={shuffleBoard} disabled={timeLeft <= 0}>🔄 Sugar Shuffle</button>
         <div className="controls-size">8×8</div>
       </div>
     </div>
   );
 }
 
-/* ------------ helpers & hook (logic unchanged) ------------ */
-function Poof({ x, y, size }) {
-  const sparks = Array.from({ length: 20 });
-  return (
-    <>
-      {sparks.map((_, i) => {
-        const angle = (i / 20) * Math.PI * 2;
+i / 20) * Math.PI * 2;
         const distance = size * (0.8 + Math.random() * 0.6);
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
