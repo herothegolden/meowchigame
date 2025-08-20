@@ -1,15 +1,18 @@
 import React from "react";
 
 /**
- * Fullscreen splash that shows while the app boots.
- * Uses /splash.jpg from the public/ folder.
+ * Fullscreen splash using /splash.jpg (public/).
+ * Shows a "Meowchi" title with a progress bar.
  */
-export default function Splash({ show = true, text = "Loading…" }) {
+export default function Splash({ show = true, text = "Loading sweet meowchi…" }) {
   return (
-    <div className={`splash ${show ? "show" : "hide"}`} role="status" aria-live="polite" aria-hidden={!show}>
-      <div className="splash-min">
-        <div className="loader-ring" />
-        <div className="splash-text">{text}</div>
+    <div className={`splash ${show ? "show" : "hide"}`} role="status" aria-hidden={!show}>
+      <div className="splash-box">
+        <div className="splash-brand">Meowchi</div>
+        <div className="splash-progress" aria-label="Loading">
+          <div className="splash-progress__bar" />
+        </div>
+        <div className="splash-caption">{text}</div>
       </div>
     </div>
   );
