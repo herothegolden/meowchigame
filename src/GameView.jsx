@@ -48,8 +48,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   const movesRef = useRef(moves);
   movesRef.current = moves;
-  const scoreRef = useRef(score);
-  scoreRef.current = score;
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
+  const timeLeftRef = useRef(timeLeft);
+  timeLeftRef.current = timeLeft;
 
   // Responsive sizing
   useEffect(() => {
