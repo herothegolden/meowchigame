@@ -120,14 +120,37 @@ body{
 }
 @keyframes splashbar{ to { width:100% } }
 
-/* ===== Game board styles (unchanged mechanics) ===== */
-.board-wrap{position:relative;background:#0e1430;border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 10px 24px rgba(0,0,0,.25)}
-.stats{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
-.stat{display:flex;gap:6px;align-items:center}
-.board{position:relative}
-.board .row{justify-content:flex-start;gap:0}
+/* Caption directly under the bar: black, larger, single line, same width as bar */
+.splash-caption{
+  margin-top: 8px;
+  width: 100%;
+  color: #111;                 /* black text as requested */
+  font-weight: 800;
+  font-size: clamp(14px, 4.2vw, 18px);
+  letter-spacing: .3px;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+/* ===== Board / GameView (animations, nudges, etc.) ===== */
+.section.board-wrap{position:relative}
+.board{
+  position:relative;
+  margin:10px auto 8px;
+  background:#0a1130;
+  border-radius:12px;
+  border:1px solid var(--line);
+  overflow:hidden;
+  overscroll-behavior: contain;
+}
+.gridlines{
+  position:absolute; inset:0;
+  opacity:.16; pointer-events:none;
+}
+
 .tile{
-  position:absolute; width:44px; height:44px; /* updated via inline style in JS */
+  position:absolute; display:grid; place-items:center;
+  user-select:none; touch-action:none;
   border-radius:10px;
   overflow: hidden; /* clip bigger emojis inside tile */
   transition:
@@ -159,16 +182,58 @@ body{
 .tile.shake{ animation: shakeH .18s ease both; }
 @keyframes shakeH{
   0%{ transform: translateX(0) }
-  33%{ transform: translateX(-4px) }
-  66%{ transform: translateX(4px) }
+  25%{ transform: translateX(-4px) }
+  50%{ transform: translateX(4px) }
+  75%{ transform: translateX(-2px) }
   100%{ transform: translateX(0) }
 }
 
-/* tile emoji visuals */
-.tile-emoji{font-size:30px;line-height:1;display:grid;place-items:center;filter: drop-shadow(0 6px 14px rgba(0,0,0,.45))}
-.tile-emoji.big{font-size:36px}
-.tile-emoji.tiny{font-size:24px}
+/* new spawn drop-in */
+.tile.drop-in{animation:drop .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes drop{from{transform:translateY(-14px);opacity:.0}to{transform:translateY(0);opacity:1}}
 
+/* match pop / blasting */
+.tile.blasting{
+  animation:pop .23s ease forwards;
+  box-shadow:0 0 0 4px #ffd166 inset, 0 0 18px 5px rgba(255,209,102,.7), 0 0 36px 10px rgba(255,255,255,.25);
+  background:linear-gradient(135deg, #ffd166 0%, #ff9500 100%);
+}
+.tile.blasting .tile-emoji{ filter: drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
+@keyframes pop{
+  0%{ transform:scale(1); opacity:1 }
+  60%{ transform:scale(1.18) rotate(8deg); opacity:1 }
+  100%{ transform:scale(1); opacity:.0 }
+}
+
+/* faster easing while swapping */
+.tile.swapping{
+  transition:
+    left .18s cubic-bezier(.3,.9,.1,1),
+    top .18s cubic-bezier(.3,.9,.1,1),
+    transform .18s cubic-bezier(.3,.9,.1,1),
+    opacity .18s linear;
+}
+
+.tile .tile-emoji{
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+  line-height: 1;
+}
+
+/* combo banner */
+.combo{
+  position:absolute; left:50%; top:-10px; transform:translate(-50%,-50%);
+  background:rgba(255,255,255,.1);
+  border:1px solid var(--line);
+  padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px
+}
+
+/* pause overlay */
+.pause-overlay{
+  position:absolute; inset:0; display:grid; place-items:center;
+  background:rgba(0,0,0,.5); backdrop-filter:saturate(120%) blur(2px);
+}
+
+/* controls under board */
 .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .controls .btn{padding:8px 12px}
 .controls-size{opacity:.7;font-size:12px}
