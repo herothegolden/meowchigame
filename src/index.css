@@ -371,12 +371,12 @@ body{
   width: 0;
   height: 100%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
-  animation: splashbar 2.4s ease forwards;
+  animation: splashbar 2.4s ease forwards; /* NO INFINITE - runs once then stops */
   box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
 }
 
 @keyframes splashbar{
-  to { width: 100%; }
+  to { width: 100%; } /* Fills once then stops */
 }
 
 .splash-caption{
@@ -439,7 +439,7 @@ body{
 
 /* FIXED: hint pulse - 2 cycles then stop */
 .tile.hint .tile-emoji{
-  animation: hint-pulse 1.2s ease-in-out; /* 2 cycles: 0.6s x 2 = 1.2s, then STOPS */
+  animation: hint-pulse 1.2s ease-in-out; /* NO INFINITE - runs 2 cycles then stops */
 }
 
 @keyframes hint-pulse{
@@ -447,7 +447,7 @@ body{
   25%{ transform: scale(1.08); }  /* First pulse */
   50%{ transform: scale(1); }
   75%{ transform: scale(1.08); }  /* Second pulse */
-  100%{ transform: scale(1); }    /* Then stops */
+  100%{ transform: scale(1); }    /* Then stops completely */
 }
 
 /* press/grab feel */
@@ -1245,15 +1245,15 @@ body{
   border: 1px solid rgba(212, 175, 55, 0.3);
 }
 
-/* reduced motion */
+/* reduced motion - FIXED: Remove all animations completely for accessibility */
 @media (prefers-reduced-motion: reduce){
   .tile, .tile.swapping, .tile.drop-in, .tile.blasting,
-  .splash-progress__bar{
-    transition: none;
-    animation: none;
+  .splash-progress__bar, .combo, .tile.hint .tile-emoji{
+    transition: none !important;
+    animation: none !important;
   }
   .spark{
-    animation: none;
+    animation: none !important;
     opacity: 0;
   }
 }
