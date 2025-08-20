@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import "./home.css";
 
-export default function Home({ coins = 0, onNavigate, userStats, userProfile }) {
+export default function Home({ coins = 0, onNavigate, userStats, userProfile, onProfileUpdate }) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
+  
   // Format numbers with commas
   const formatNumber = (num) => {
     return parseInt(num || 0).toLocaleString();
@@ -9,18 +12,64 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile }) 
 
   // Get display name
   const getDisplayName = () => {
-    if (userProfile?.display_name && userProfile?.profile_completed) {
+    if (userProfile?.display_name) {
       return userProfile.display_name;
     }
-    return userProfile?.display_name || "Meowchi Player";
+    return `Stray Cat #${userProfile?.telegram_id?.toString().slice(-5) || '00000'}`;
   };
 
-  // Get subtitle based on profile status
-  const getSubtitle = () => {
-    if (userProfile?.profile_completed) {
-      return "Sweet Match Master";
+  // Handle name editing
+  const startEditingName = () => {
+    if (userProfile?.name_changed) {
+      // TODO: Show message about paid name changes
+      return;
     }
-    return "Complete profile to join rankings";
+    setTempName(getDisplayName());
+    setIsEditingName(true);
+  };
+
+  const saveName = async () => {
+    if (!tempName.trim() || tempName === getDisplayName()) {
+      setIsEditingName(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          telegram_id: userProfile?.telegram_id,
+          display_name: tempName.trim(),
+          country_flag: userProfile?.country_flag
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        onProfileUpdate?.(result.user);
+      }
+    } catch (error) {
+      console.error('Failed to update name:', error);
+    }
+    
+    setIsEditingName(false);
+  };
+
+  const cancelEdit = () => {
+    setIsEditingName(false);
+    setTempName('');
+  };
+
+  // Handle profile picture upload
+  const handleProfilePicUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // TODO: Implement image upload logic
+      console.log('Profile picture upload:', file);
+    }
   };
 
   return (
@@ -28,24 +77,62 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile }) 
       <div className="home-center">
         <div className="profile-card">
           <div className="profile-header">
-            <div className="profile-avatar">
-              <img
-                src="https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"
-                alt="Meowchi Player"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                  e.currentTarget.parentElement.textContent = "😺";
-                }}
+            <div className="profile-avatar-container">
+              <div className="profile-avatar" onClick={() => document.getElementById('profile-pic-upload').click()}>
+                <img
+                  src={userProfile?.profile_picture || "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"}
+                  alt="Profile"
+                  onError={(e) => {
+                    e.currentTarget.src = "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png";
+                  }}
+                />
+                <div className="avatar-upload-overlay">
+                  <span>📷</span>
+                </div>
+                {userProfile?.country_flag && (
+                  <div className="country-flag-badge">
+                    {userProfile.country_flag}
+                  </div>
+                )}
+              </div>
+              <input
+                id="profile-pic-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleProfilePicUpload}
+                style={{ display: 'none' }}
               />
             </div>
             <div className="profile-info">
-              <h2 className="profile-name">
-                {userProfile?.country_flag && (
-                  <span style={{ marginRight: '8px' }}>{userProfile.country_flag}</span>
+              <div className="profile-name-section">
+                {isEditingName ? (
+                  <div className="name-edit-container">
+                    <input
+                      type="text"
+                      value={tempName}
+                      onChange={(e) => setTempName(e.target.value)}
+                      className="name-edit-input"
+                      onBlur={saveName}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveName();
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      autoFocus
+                      maxLength={50}
+                    />
+                  </div>
+                ) : (
+                  <h2 className="profile-name" onClick={startEditingName}>
+                    {getDisplayName()}
+                    <button className="edit-name-btn" onClick={startEditingName}>
+                      ✏️
+                    </button>
+                  </h2>
                 )}
-                {getDisplayName()}
-              </h2>
-              <p className="profile-subtitle">{getSubtitle()}</p>
+              </div>
+              <p className="profile-subtitle">
+                ID: {userProfile?.telegram_id || 'Loading...'}
+              </p>
             </div>
           </div>
 
@@ -70,18 +157,18 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile }) 
 
           <div className="quick-actions">
             <button className="action-btn primary" onClick={() => onNavigate?.("game")}>
-              <div class="action-icon">🎮</div>
-              <div class="action-text">
-                <div class="action-title">Play Game</div>
-                <div class="action-desc">Start matching treats</div>
+              <div className="action-icon">🎮</div>
+              <div className="action-text">
+                <div className="action-title">Play Game</div>
+                <div className="action-desc">Start matching treats</div>
               </div>
             </button>
 
             <button className="action-btn" onClick={() => onNavigate?.("leaderboard")}>
-              <div class="action-icon">🏆</div>
-              <div class="action-text">
-                <div class="action-title">Rankings</div>
-                <div class="action-desc">See top players</div>
+              <div className="action-icon">🏆</div>
+              <div className="action-text">
+                <div className="action-title">Rankings</div>
+                <div className="action-desc">See top players</div>
               </div>
             </button>
           </div>
@@ -91,12 +178,7 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile }) 
             <p className="info-description">
               Match 3 or more treats to help feed the hungry cats! 
               Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
-              and marshmallows 🍡 to create sweet combos and earn $Meow coins.
-              {!userProfile?.profile_completed && (
-                <strong style={{ display: 'block', marginTop: '12px', color: 'var(--accent)' }}>
-                  💡 Complete your profile to join the global leaderboard and compete with players worldwide!
-                </strong>
-              )}
+              and cupcakes 🧁 to create sweet combos and earn $Meow coins.
             </p>
           </div>
         </div>
