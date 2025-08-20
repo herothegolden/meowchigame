@@ -1,74 +1,50 @@
+// server.js
 import express from "express";
 import compression from "compression";
 import helmet from "helmet";
 import path from "path";
-import { fileURLToPath } from "url";
 import fs from "fs";
+import { fileURLToPath } from "url";
+import { Pool } from "pg";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.use(express.json({ limit: "5mb" }));
+app.use(compression());
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
 
-// --------------------- Database setup ---------------------
+// ---------- Database ----------
+const DATABASE_URL = process.env.DATABASE_URL;
 let pool = null;
 let dbConnected = false;
 
-async function initDatabase() {
-  try {
-    if (!process.env.DATABASE_URL) {
-      console.log("⚠️ No DATABASE_URL found, running without database");
-      return;
-    }
-
-    // dynamic import for ESM
-    const pg = await import("pg");
-    const { Pool } = pg.default || pg;
-
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-    });
-
-    const result = await pool.query("SELECT NOW()");
-    console.log("✅ Database connected at:", result.rows[0].now);
-    dbConnected = true;
-  } catch (error) {
-    console.error("❌ Database connection failed:", error.message);
-    console.log("⚠️ Continuing without database...");
-    dbConnected = false;
-    pool = null;
-  }
+if (DATABASE_URL) {
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+  });
+  pool.connect()
+    .then(() => { dbConnected = true; console.log("✅ Database connected"); })
+    .catch((err) => { dbConnected = false; console.error("❌ Database connection failed:", err.message); });
+} else {
+  console.warn("⚠️  DATABASE_URL not set. API routes will return 503.");
 }
-initDatabase();
 
-// --------------------- Middleware ---------------------
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+function requireDB(req, res, next) {
+  if (!pool || !dbConnected) {
+    return res.status(503).json({ error: "Database unavailable" });
+  }
   next();
-});
+}
 
-app.use(compression());
-app.use(express.json());
-
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "https://telegram.org"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:", "https:"],
-        "connect-src": ["'self'", "https://ipapi.co"],
-        "frame-ancestors": ["'self'", "https://*.t.me", "https://web.telegram.org"],
-      },
-    },
-  })
-);
-
-// --------------------- Static files ---------------------
+// ---------- Static build checks ----------
 const dist = path.join(__dirname, "dist");
+
+// Fail fast if build missing (helps Railway/Nixpacks)
 if (!fs.existsSync(dist)) {
   console.error("❌ dist folder not found! Make sure the build completed successfully.");
   process.exit(1);
@@ -81,26 +57,23 @@ if (!fs.existsSync(indexPath)) {
 console.log("✅ Static files found, setting up server...");
 app.use(express.static(dist, { maxAge: "1y", index: false }));
 
-// --------------------- Helpers ---------------------
-const requireDB = (req, res, next) => {
+// ---------- Setup endpoint (optional utility) ----------
+app.get("/api/setup/database", async (req, res) => {
   if (!pool || !dbConnected) {
     return res.status(503).json({
-      error: "Database not available",
-      message: "Leaderboard and user features require database connection",
+      success: false,
+      error: "Database not connected",
+      message: "Please check your DATABASE_URL environment variable",
     });
   }
-  next();
-};
 
-// --------------------- One-time setup endpoint ---------------------
-// WARNING: Drops and recreates tables (use once after deploying with DATABASE_URL)
-app.get("/api/setup/database", requireDB, async (req, res) => {
   try {
-    console.log("🔧 Setting up database tables... (dropping existing)");
+    console.log("🔧 Setting up database tables.");
+
+    // Drop & recreate (idempotent setup for demos)
     await pool.query("DROP TABLE IF EXISTS games CASCADE");
     await pool.query("DROP TABLE IF EXISTS users CASCADE");
 
-    // users table
     await pool.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
@@ -113,21 +86,20 @@ app.get("/api/setup/database", requireDB, async (req, res) => {
         picture_changed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      )
+      );
     `);
 
-    // games table (constraints relaxed to avoid rejecting legit results)
     await pool.query(`
       CREATE TABLE games (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        score INTEGER NOT NULL CHECK (score >= 0),
+        score INTEGER NOT NULL CHECK (score >= 0 AND score <= 10000),
         coins_earned INTEGER DEFAULT 0,
-        moves_used INTEGER CHECK (moves_used >= 0 AND moves_used <= 200),
+        moves_used INTEGER CHECK (moves_used > 0 AND moves_used <= 50),
         max_combo INTEGER DEFAULT 0,
         game_duration INTEGER,
         played_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      )
+      );
     `);
 
     await pool.query("CREATE INDEX idx_games_user_id ON games(user_id)");
@@ -135,89 +107,75 @@ app.get("/api/setup/database", requireDB, async (req, res) => {
     await pool.query("CREATE INDEX idx_games_score ON games(score)");
     await pool.query("CREATE INDEX idx_users_telegram_id ON users(telegram_id)");
 
-    const tables = await pool.query(`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-      ORDER BY table_name
-    `);
-
-    console.log("✅ Database setup complete!");
-    res.json({
-      success: true,
-      message: "Database tables created successfully!",
-      tables: tables.rows.map((r) => r.table_name),
-      timestamp: new Date().toISOString(),
-    });
+    res.json({ success: true, message: "Database tables created successfully!" });
   } catch (error) {
     console.error("❌ Database setup failed:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      message: "Failed to create database tables",
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// --------------------- API: users ---------------------
+// ---------- API: user register/upsert ----------
 app.post("/api/user/register", requireDB, async (req, res) => {
   try {
     const { telegram_id, telegram_username } = req.body;
-    if (!telegram_id) return res.status(400).json({ error: "Telegram ID is required" });
+    if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
 
-    const existing = await pool.query("SELECT * FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (existing.rows.length > 0) {
-      return res.json({ user: existing.rows[0] });
-    }
-
-    const display = `Stray Cat #${telegram_id.toString().slice(-5)}`;
-    const created = await pool.query(
-      "INSERT INTO users (telegram_id, display_name, profile_completed) VALUES ($1, $2, $3) RETURNING *",
-      [telegram_id, display, false]
+    const result = await pool.query(
+      `
+      INSERT INTO users (telegram_id, display_name)
+      VALUES ($1, $2)
+      ON CONFLICT (telegram_id)
+      DO UPDATE SET updated_at = NOW()
+      RETURNING *;
+      `,
+      [telegram_id, telegram_username ? String(telegram_username).slice(0, 50) : null]
     );
 
-    res.json({ user: created.rows[0] });
-  } catch (error) {
-    console.error("User registration error:", error);
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error("Register error:", err);
     res.status(500).json({ error: "Failed to register user" });
   }
 });
 
-// FIXED: parameterized update with proper $ placeholders
+// ---------- API: update profile ----------
 app.put("/api/user/profile", requireDB, async (req, res) => {
   try {
     const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
-    if (!telegram_id) return res.status(400).json({ error: "Telegram ID is required" });
+    if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
 
-    const sets = [];
+    const updates = [];
     const values = [];
     let i = 1;
 
     if (display_name !== undefined) {
-      sets.push(`display_name = $${i++}`);
+      updates.push(`display_name = $${i++}`);
       values.push(display_name);
     }
     if (country_flag !== undefined) {
-      sets.push(`country_flag = $${i++}`);
+      updates.push(`country_flag = $${i++}`);
       values.push(country_flag);
     }
     if (profile_picture !== undefined) {
-      sets.push(`profile_picture = $${i++}`);
+      updates.push(`profile_picture = $${i++}`);
       values.push(profile_picture);
+      // mark picture_changed if not default
       if (profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
-        sets.push(`picture_changed = true`);
+        updates.push(`picture_changed = $${i++}`);
+        values.push(true);
       }
     }
     if (name_changed !== undefined) {
-      sets.push(`name_changed = $${i++}`);
+      updates.push(`name_changed = $${i++}`);
       values.push(name_changed);
     }
 
-    sets.push(`updated_at = NOW()`);
+    updates.push(`updated_at = NOW()`);
+    const whereParam = `$${i}`;
     values.push(telegram_id);
 
-    const sql = `UPDATE users SET ${sets.join(", ")} WHERE telegram_id = $${i} RETURNING *`;
-    const updated = await pool.query(sql, values);
+    const q = `UPDATE users SET ${updates.join(", ")} WHERE telegram_id = ${whereParam} RETURNING *;`;
+    const updated = await pool.query(q, values);
 
     if (updated.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json({ user: updated.rows[0] });
@@ -227,32 +185,29 @@ app.put("/api/user/profile", requireDB, async (req, res) => {
   }
 });
 
-// --------------------- API: games ---------------------
+// ---------- API: save game (NO profile gating) ----------
 app.post("/api/game/complete", requireDB, async (req, res) => {
   try {
     const { telegram_id, score, coins_earned, moves_used, max_combo, game_duration } = req.body;
-
     if (!telegram_id || score === undefined) {
       return res.status(400).json({ error: "Telegram ID and score are required" });
     }
-
-    // Relaxed anti-cheat to avoid rejecting legit sessions
-    if (score < 0 || score > 1_000_000) {
+    if (score < 0 || score > 10000) {
       return res.status(400).json({ error: "Invalid score range" });
     }
-    if (moves_used < 0 || moves_used > 200) {
-      return res.status(400).json({ error: "Invalid moves_used" });
-    }
 
-    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (user.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    // fetch only id (we do NOT care about profile_completed)
+    const user = await pool.query(
+      "SELECT id FROM users WHERE telegram_id = $1",
+      [telegram_id]
+    );
+    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
 
     const game = await pool.query(
       `INSERT INTO games (user_id, score, coins_earned, moves_used, max_combo, game_duration)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [user.rows[0].id, score, coins_earned || 0, moves_used ?? 0, max_combo || 0, game_duration ?? null]
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [user.rows[0].id, score, coins_earned || 0, moves_used ?? null, max_combo || 0, game_duration ?? null]
     );
 
     res.json({ message: "Game saved successfully", game: game.rows[0] });
@@ -262,7 +217,7 @@ app.post("/api/game/complete", requireDB, async (req, res) => {
   }
 });
 
-// --------------------- API: leaderboard & stats ---------------------
+// ---------- API: leaderboard (no profile gating; optional country filter) ----------
 app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
   try {
     const { type } = req.params;
@@ -277,61 +232,38 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
         dateFilter = `AND DATE_TRUNC('week', g.played_at AT TIME ZONE 'Asia/Tashkent') = DATE_TRUNC('week', NOW() AT TIME ZONE 'Asia/Tashkent')`;
         break;
       case "alltime":
-        dateFilter = "";
+        dateFilter = ``;
         break;
       default:
         return res.status(400).json({ error: "Invalid leaderboard type" });
     }
 
-    const countryFilter = country && country !== "false" ? "AND u.country_flag IS NOT NULL" : "";
+    let countryFilter = "";
+    if (country && country !== "false") {
+      countryFilter = "AND u.country_flag IS NOT NULL";
+    }
 
-    const leaderboard = await pool.query(
-      `
+    const leaderboard = await pool.query(`
       SELECT 
         u.display_name,
         u.country_flag,
         u.telegram_id,
-        SUM(g.score) AS total_score,
-        COUNT(g.id) AS games_played,
-        MAX(g.score) AS best_score,
-        MAX(g.max_combo) AS best_combo,
-        ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) AS rank
+        SUM(g.score) as total_score,
+        COUNT(g.id) as games_played,
+        MAX(g.score) as best_score,
+        MAX(g.max_combo) as best_combo,
+        ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) as rank
       FROM users u
       JOIN games g ON u.id = g.user_id
       WHERE 1=1 ${dateFilter} ${countryFilter}
       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
       ORDER BY total_score DESC
       LIMIT 100
-    `
-    );
-
-    // Optional: compute userRank if telegram_id provided
-    let userRank = null;
-    if (telegram_id) {
-      const ur = await pool.query(
-        `
-        WITH totals AS (
-          SELECT u.id, SUM(g.score) AS total_score
-          FROM users u
-          JOIN games g ON u.id = g.user_id
-          WHERE 1=1 ${dateFilter}
-          GROUP BY u.id
-        )
-        SELECT rnk FROM (
-          SELECT id, RANK() OVER (ORDER BY total_score DESC) AS rnk
-          FROM totals
-        ) x
-        JOIN users u ON u.id = x.id
-        WHERE u.telegram_id = $1
-        `,
-        [telegram_id]
-      );
-      userRank = ur.rows[0]?.rnk ?? null;
-    }
+    `);
 
     res.json({
       leaderboard: leaderboard.rows,
-      userRank,
+      userRank: null,
       type,
       country: country || null,
       timestamp: new Date().toISOString(),
@@ -342,28 +274,25 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
   }
 });
 
+// ---------- API: user stats ----------
 app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
   try {
     const { telegram_id } = req.params;
-
-    const stats = await pool.query(
-      `
+    const stats = await pool.query(`
       SELECT 
         u.display_name,
         u.country_flag,
         u.profile_completed,
-        COUNT(g.id) AS games_played,
-        COALESCE(SUM(g.score), 0) AS total_score,
-        COALESCE(MAX(g.score), 0) AS best_score,
-        COALESCE(MAX(g.max_combo), 0) AS best_combo,
-        COALESCE(SUM(g.coins_earned), 0) AS total_coins_earned
+        COUNT(g.id) as games_played,
+        COALESCE(SUM(g.score), 0) as total_score,
+        COALESCE(MAX(g.score), 0) as best_score,
+        COALESCE(MAX(g.max_combo), 0) as best_combo,
+        COALESCE(SUM(g.coins_earned), 0) as total_coins_earned
       FROM users u
       LEFT JOIN games g ON u.id = g.user_id
       WHERE u.telegram_id = $1
       GROUP BY u.id, u.display_name, u.country_flag, u.profile_completed
-    `,
-      [telegram_id]
-    );
+    `, [telegram_id]);
 
     if (stats.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json({ stats: stats.rows[0] });
@@ -373,82 +302,34 @@ app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
   }
 });
 
-// --------------------- Health & SPA fallback ---------------------
-app.get("/health", (req, res) => {
-  const health = {
+// ---------- Health ----------
+app.get("/api/db/health", async (_req, res) => {
+  if (!pool || !dbConnected) {
+    return res.status(503).json({ status: "unhealthy", database: "disconnected" });
+  }
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "healthy", database: "connected" });
+  } catch (e) {
+    res.status(500).json({ status: "unhealthy", error: e.message });
+  }
+});
+
+app.get("/health", (_req, res) => {
+  res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    memory: process.memoryUsage(),
     env: process.env.NODE_ENV || "development",
     database: dbConnected ? "connected" : "disconnected",
-  };
-  console.log("🏥 Health check requested:", health);
-  res.json(health);
-});
-
-app.get("/api/db/health", async (req, res) => {
-  if (!pool || !dbConnected) {
-    return res.status(503).json({
-      status: "unhealthy",
-      database: "disconnected",
-      error: "No database connection",
-    });
-  }
-  try {
-    const result = await pool.query("SELECT NOW() as server_time");
-    res.json({ status: "healthy", database: "connected", server_time: result.rows[0].server_time });
-  } catch (error) {
-    console.error("Database health check failed:", error);
-    res.status(500).json({
-      status: "unhealthy",
-      database: "disconnected",
-      error: error.message,
-    });
-  }
-});
-
-// SPA fallback
-app.get("*", (req, res) => {
-  try {
-    console.log(`📄 Serving index.html for: ${req.url}`);
-    res.sendFile(indexPath);
-  } catch (error) {
-    console.error("❌ Error serving index.html:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-// --------------------- Server start & shutdown ---------------------
-const port = process.env.PORT || 3000;
-const server = app.listen(port, "0.0.0.0", () => {
-  console.log(`🍬 Candy Crush Cats server running on port ${port}`);
-  console.log(`🌐 Local: http://localhost:${port}`);
-  console.log(`🚀 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`📁 Serving from: ${dist}`);
-  console.log(`🗄️ Database: ${dbConnected ? "Connected" : "Not available"}`);
-});
-
-process.on("SIGTERM", () => {
-  console.log("🛑 SIGTERM received, shutting down gracefully");
-  server.close(() => {
-    console.log("✅ Process terminated");
   });
 });
 
-process.on("SIGINT", () => {
-  console.log("🛑 SIGINT received, shutting down gracefully");
-  server.close(() => {
-    console.log("✅ Process terminated");
-  });
+// ---------- SPA fallback ----------
+app.get("*", (_req, res) => {
+  res.sendFile(indexPath);
 });
 
-process.on("uncaughtException", (err) => {
-  console.error("💥 Uncaught Exception:", err);
-  process.exit(1);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
-  process.exit(1);
-});
+// ---------- Start ----------
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
