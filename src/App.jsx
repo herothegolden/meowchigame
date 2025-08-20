@@ -66,7 +66,7 @@ export default function App() {
     initializeUser();
   }, []);
 
-  // Auto-detect Telegram user
+  // Auto-detect Telegram user and country
   const initializeUser = async () => {
     try {
       const tg = getTG();
@@ -99,11 +99,64 @@ export default function App() {
         const data = await response.json();
         setUserProfile(data.user);
         
+        // Auto-detect country if not set
+        if (!data.user.country_flag) {
+          detectAndSetCountry(telegramId);
+        }
+        
         // Fetch user stats
         fetchUserStats(telegramId);
       }
     } catch (error) {
       console.error('User initialization failed:', error);
+    }
+  };
+
+  // Detect and set country automatically
+  const detectAndSetCountry = async (telegramId) => {
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      
+      if (data.country_code) {
+        const countryMap = {
+          'US': '🇺🇸', 'GB': '🇬🇧', 'CA': '🇨🇦', 'AU': '🇦🇺',
+          'DE': '🇩🇪', 'FR': '🇫🇷', 'IT': '🇮🇹', 'ES': '🇪🇸',
+          'JP': '🇯🇵', 'KR': '🇰🇷', 'CN': '🇨🇳', 'IN': '🇮🇳',
+          'BR': '🇧🇷', 'MX': '🇲🇽', 'RU': '🇷🇺', 'UZ': '🇺🇿',
+          'TR': '🇹🇷', 'SA': '🇸🇦', 'AE': '🇦🇪', 'NL': '🇳🇱',
+          'SE': '🇸🇪', 'NO': '🇳🇴', 'DK': '🇩🇰', 'PL': '🇵🇱',
+          'CZ': '🇨🇿', 'HU': '🇭🇺', 'AT': '🇦🇹', 'CH': '🇨🇭',
+          'BE': '🇧🇪', 'PT': '🇵🇹', 'GR': '🇬🇷', 'IL': '🇮🇱',
+          'EG': '🇪🇬', 'ZA': '🇿🇦', 'NG': '🇳🇬', 'KE': '🇰🇪',
+          'MA': '🇲🇦', 'AR': '🇦🇷', 'CL': '🇨🇱', 'CO': '🇨🇴',
+          'PE': '🇵🇪', 'VE': '🇻🇪', 'TH': '🇹🇭', 'VN': '🇻🇳',
+          'ID': '🇮🇩', 'MY': '🇲🇾', 'SG': '🇸🇬', 'PH': '🇵🇭',
+          'BD': '🇧🇩', 'PK': '🇵🇰', 'LK': '🇱🇰', 'NP': '🇳🇵'
+        };
+        
+        const countryFlag = countryMap[data.country_code.toUpperCase()];
+        if (countryFlag) {
+          // Update user's country flag
+          const updateResponse = await fetch('/api/user/profile', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              telegram_id: telegramId,
+              country_flag: countryFlag
+            })
+          });
+          
+          if (updateResponse.ok) {
+            const result = await updateResponse.json();
+            setUserProfile(result.user);
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Country detection failed:', error);
     }
   };
 
@@ -125,7 +178,16 @@ export default function App() {
     }
   };
 
-  // Handle profile completion
+  // Handle profile updates
+  const handleProfileUpdate = (updatedUser) => {
+    setUserProfile(updatedUser);
+    // Refresh user stats
+    if (userTelegramId) {
+      fetchUserStats(userTelegramId);
+    }
+  };
+
+  // Handle profile completion (simplified)
   const handleProfileSaved = (updatedUser) => {
     setUserProfile(updatedUser);
     setShowProfileModal(false);
@@ -133,13 +195,6 @@ export default function App() {
     // Refresh user stats
     if (userTelegramId) {
       fetchUserStats(userTelegramId);
-    }
-  };
-
-  // Show profile modal when needed
-  const promptProfileCompletion = () => {
-    if (userProfile && !userProfile.profile_completed) {
-      setShowProfileModal(true);
     }
   };
 
@@ -201,7 +256,7 @@ export default function App() {
   // ------------ Bottom Navigation Panel ------------
   function BottomNav() {
     const navItems = [
-      { key: "home", label: "Profile", icon: "👤", screen: "home" },
+      { key: "home", label: "Home", icon: "🏠", screen: "home" },
       { key: "shop", label: "Shop", icon: "🛒", screen: "shop" },
       { key: "leaderboard", label: "Rankings", icon: "🏆", screen: "leaderboard" },
       { key: "wallet", label: "Wallet", icon: "💎", screen: "daily" },
@@ -284,16 +339,16 @@ export default function App() {
         {/* Profile management */}
         <div className="row">
           <div>
-            <div style={{ fontWeight: 600 }}>Profile</div>
+            <div style={{ fontWeight: 600 }}>Profile Settings</div>
             <div className="muted small">
-              {userProfile?.profile_completed ? 'Profile completed' : 'Complete your profile to join rankings'}
+              Manage your display name and country
             </div>
           </div>
           <button 
             className="btn" 
             onClick={() => setShowProfileModal(true)}
           >
-            {userProfile?.profile_completed ? 'Edit' : 'Complete'}
+            Edit Profile
           </button>
         </div>
       </section>
@@ -338,17 +393,10 @@ export default function App() {
     );
   }
 
-  // Handle game completion with backend integration
+  // Handle game completion (simplified)
   const handleGameExit = async (gameResult) => {
     setLastRun(gameResult);
     setCoins((c) => c + (gameResult?.coins || 0));
-    
-    // Show profile completion modal if needed after game
-    if (gameResult.user_needs_profile) {
-      setTimeout(() => {
-        setShowProfileModal(true);
-      }, 1000); // Show after a brief delay
-    }
     
     setScreen("gameover");
     setScreenHistory((h) => [...h, "gameover"]);
@@ -368,6 +416,7 @@ export default function App() {
               onNavigate={navigateTo} 
               userStats={userStats}
               userProfile={userProfile}
+              onProfileUpdate={handleProfileUpdate}
             />
           )}
 
@@ -375,7 +424,7 @@ export default function App() {
           {screen === "leaderboard" && (
             <Leaderboard 
               userTelegramId={userTelegramId}
-              userNeedsProfile={userProfile && !userProfile.profile_completed}
+              userNeedsProfile={false}
             />
           )}
           {screen === "daily" && <Daily />}
@@ -414,19 +463,6 @@ export default function App() {
                   🏆 View Rankings
                 </button>
               </div>
-              
-              {lastRun.user_needs_profile && (
-                <div className="profile-prompt">
-                  <p className="muted small">Great score! Complete your profile to join the leaderboard!</p>
-                  <button 
-                    className="btn" 
-                    onClick={() => setShowProfileModal(true)}
-                    style={{ marginTop: 8 }}
-                  >
-                    Complete Profile
-                  </button>
-                </div>
-              )}
             </section>
           )}
         </main>
