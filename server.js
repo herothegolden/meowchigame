@@ -118,6 +118,7 @@ app.get('/api/setup/database', async (req, res) => {
         profile_picture TEXT,
         profile_completed BOOLEAN DEFAULT FALSE,
         name_changed BOOLEAN DEFAULT FALSE,
+        picture_changed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
@@ -218,7 +219,7 @@ app.post('/api/user/register', requireDB, async (req, res) => {
 // Update user profile (flexible)
 app.put('/api/user/profile', requireDB, async (req, res) => {
   try {
-    const { telegram_id, display_name, country_flag, profile_picture } = req.body;
+    const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
     
     if (!telegram_id) {
       return res.status(400).json({ error: 'Telegram ID is required' });
@@ -230,25 +231,35 @@ app.put('/api/user/profile', requireDB, async (req, res) => {
     let paramIndex = 1;
 
     if (display_name !== undefined) {
-      updates.push(`display_name = $${paramIndex++}`);
+      updates.push(`display_name = ${paramIndex++}`);
       values.push(display_name);
     }
 
     if (country_flag !== undefined) {
-      updates.push(`country_flag = $${paramIndex++}`);
+      updates.push(`country_flag = ${paramIndex++}`);
       values.push(country_flag);
     }
 
     if (profile_picture !== undefined) {
-      updates.push(`profile_picture = $${paramIndex++}`);
+      updates.push(`profile_picture = ${paramIndex++}`);
       values.push(profile_picture);
+      // Mark picture as changed if it's not the default
+      if (profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
+        updates.push(`picture_changed = ${paramIndex++}`);
+        values.push(true);
+      }
+    }
+
+    if (name_changed !== undefined) {
+      updates.push(`name_changed = ${paramIndex++}`);
+      values.push(name_changed);
     }
 
     // Always update the updated_at timestamp
     updates.push(`updated_at = NOW()`);
     values.push(telegram_id);
 
-    const query = `UPDATE users SET ${updates.join(', ')} WHERE telegram_id = $${paramIndex} RETURNING *`;
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE telegram_id = ${paramIndex} RETURNING *`;
     
     const updatedUser = await pool.query(query, values);
 
