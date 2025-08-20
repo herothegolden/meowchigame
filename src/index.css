@@ -443,6 +443,12 @@ body{
   animation: hint-pulse 0.6s ease-in-out infinite; /* reduced from 0.9s */
 }
 
+/* Static hint (no animation) */
+.tile.hint-static{
+  outline: 3px solid var(--accent2);
+  box-shadow: 0 0 0 1px rgba(244, 208, 63, 0.5);
+}
+
 @keyframes hint-pulse{
   0%{ transform: scale(1); }
   50%{ transform: scale(1.08); }
@@ -522,6 +528,24 @@ body{
     transform: scale(2.0) rotate(15deg); 
     opacity: 0; 
   }
+}
+
+/* Simple combo message (no animation) */
+.combo-simple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 12px;
+  z-index: 20;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0.8;
 }
 
 @keyframes emoji-glow {
