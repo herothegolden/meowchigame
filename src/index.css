@@ -422,7 +422,6 @@ body{
   touch-action: none;
   border-radius: 12px;
   overflow: hidden;
-  /* FASTER TRANSITIONS - reduced from 0.22s to 0.15s */
   transition:
     left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
     top 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -438,21 +437,17 @@ body{
   box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.3);
 }
 
-/* hint pulse - FASTER */
+/* FIXED: hint pulse - 2 cycles then stop */
 .tile.hint .tile-emoji{
-  animation: hint-pulse 0.6s ease-in-out infinite; /* reduced from 0.9s */
-}
-
-/* Static hint (no animation) */
-.tile.hint-static{
-  outline: 3px solid var(--accent2);
-  box-shadow: 0 0 0 1px rgba(244, 208, 63, 0.5);
+  animation: hint-pulse 1.2s ease-in-out; /* 2 cycles: 0.6s x 2 = 1.2s, then STOPS */
 }
 
 @keyframes hint-pulse{
   0%{ transform: scale(1); }
-  50%{ transform: scale(1.08); }
-  100%{ transform: scale(1); }
+  25%{ transform: scale(1.08); }  /* First pulse */
+  50%{ transform: scale(1); }
+  75%{ transform: scale(1.08); }  /* Second pulse */
+  100%{ transform: scale(1); }    /* Then stops */
 }
 
 /* press/grab feel */
@@ -461,9 +456,9 @@ body{
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.15));
 }
 
-/* invalid swap nudge - FASTER */
+/* invalid swap nudge */
 .tile.shake{
-  animation: shakeH 0.12s ease both; /* reduced from 0.18s */
+  animation: shakeH 0.12s ease both;
 }
 
 @keyframes shakeH{
@@ -474,9 +469,9 @@ body{
   100%{ transform: translateX(0); }
 }
 
-/* new spawn drop-in - FASTER */
+/* new spawn drop-in */
 .tile.drop-in{
-  animation: drop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); /* reduced from 0.26s */
+  animation: drop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes drop{
@@ -486,9 +481,9 @@ body{
 
 /* ========== FAST BLASTING ANIMATIONS ========== */
 
-/* FASTER DRAMATIC BLASTING EFFECT */
+/* FIXED: Blasting effect - short duration then stops */
 .tile.blasting {
-  animation: mega-pop 0.2s ease forwards; /* reduced from 0.3s */
+  animation: mega-pop 0.2s ease forwards;
   box-shadow: 
     0 0 0 4px var(--accent2) inset,
     0 0 20px 6px rgba(244, 208, 63, 0.8),
@@ -498,7 +493,6 @@ body{
   z-index: 10 !important;
 }
 
-/* KEEP EMOJI VISIBLE during blast - FASTER */
 .tile.blasting .tile-emoji {
   filter: 
     drop-shadow(0 0 8px rgba(255, 255, 255, 0.8))
@@ -508,7 +502,7 @@ body{
     0 0 8px rgba(255, 255, 255, 0.8),
     0 0 15px rgba(255, 215, 0, 0.6);
   transform: scale(1.1);
-  animation: emoji-glow 0.2s ease forwards; /* reduced from 0.3s */
+  animation: emoji-glow 0.2s ease forwards;
 }
 
 @keyframes mega-pop {
@@ -528,24 +522,6 @@ body{
     transform: scale(2.0) rotate(15deg); 
     opacity: 0; 
   }
-}
-
-/* Simple combo message (no animation) */
-.combo-simple {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--accent);
-  color: white;
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 12px;
-  z-index: 20;
-  pointer-events: none;
-  white-space: nowrap;
-  opacity: 0.8;
 }
 
 @keyframes emoji-glow {
@@ -570,7 +546,7 @@ body{
   }
 }
 
-/* FASTER PARTICLE ANIMATIONS - reduced durations */
+/* Particle animations - short duration */
 @keyframes fly {
   0% { 
     transform: translate(0, 0) scale(1) rotate(0deg); 
@@ -612,7 +588,7 @@ body{
   }
 }
 
-/* FASTER EXPLOSION FLASH EFFECT */
+/* Explosion effects - short duration */
 @keyframes explosion-flash {
   0% { 
     transform: scale(0); 
@@ -628,7 +604,6 @@ body{
   }
 }
 
-/* FASTER SHOCKWAVE RING EFFECT */
 @keyframes shockwave {
   0% { 
     width: 0; 
@@ -648,18 +623,15 @@ body{
   }
 }
 
-/* ENHANCED SPARK STYLING */
 .enhanced-spark {
   will-change: transform, opacity;
   pointer-events: none;
 }
 
-/* ========== END FAST BLASTING ========== */
-
 /* faster easing while swapping */
 .tile.swapping{
   transition:
-    left 0.12s cubic-bezier(0.3, 0.9, 0.1, 1), /* reduced from 0.18s */
+    left 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
     top 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
     transform 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
     opacity 0.12s linear;
@@ -670,39 +642,39 @@ body{
   line-height: 1;
 }
 
-/* FASTER combo banner - FIXED POSITIONING */
+/* FIXED: combo banner - plays once then stops */
 .combo {
   position: absolute;
-  top: 50%; /* CENTER VERTICALLY */
-  left: 50%; /* CENTER HORIZONTALLY */
-  transform: translate(-50%, -50%); /* PERFECT CENTER */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: white;
   border: 2px solid white;
-  padding: 8px 16px; /* slightly reduced padding */
+  padding: 8px 16px;
   border-radius: 20px;
   font-weight: 800;
-  font-size: 14px; /* slightly smaller font */
+  font-size: 14px;
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.2),
     0 0 20px rgba(255, 215, 0, 0.6);
-  animation: combo-pulse 0.5s ease-in-out; /* SHORTER duration, no infinite */
+  animation: combo-show 1.0s ease-in-out; /* Plays once for 1 second then stops */
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 20;
-  pointer-events: none; /* ensure it doesn't block interactions */
-  white-space: nowrap; /* prevent text wrapping */
+  pointer-events: none;
+  white-space: nowrap;
 }
 
-@keyframes combo-pulse {
+@keyframes combo-show {
   0% { 
     transform: translate(-50%, -50%) scale(0.8); 
     opacity: 0;
   }
-  20% { 
+  15% { 
     transform: translate(-50%, -50%) scale(1.1); 
     opacity: 1;
   }
-  80% { 
+  85% { 
     transform: translate(-50%, -50%) scale(1); 
     opacity: 1;
   }
@@ -743,11 +715,11 @@ body{
   margin-left: auto;
 }
 
-/* poof particles - FASTER durations */
+/* poof particles - short duration */
 .spark{
   position: absolute;
   transform-origin: var(--cx) var(--cy);
-  animation: fly var(--dur, 0.4s) ease-out forwards; /* reduced from 0.8s */
+  animation: fly var(--dur, 0.4s) ease-out forwards;
 }
 
 /* ===== Leaderboard Styles ===== */
@@ -1369,7 +1341,6 @@ body{
     font-size: 16px;
   }
   
-  /* Mobile combo message - even smaller font */
   .combo {
     font-size: 12px;
     padding: 6px 12px;
