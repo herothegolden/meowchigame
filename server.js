@@ -4,28 +4,42 @@ import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import pg from 'pg';
 
-const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+// Try to import and setup PostgreSQL, but don't crash if it fails
+let pool = null;
+let dbConnected = false;
 
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Database connection failed:', err);
+try {
+  const pg = await import('pg');
+  const { Pool } = pg.default || pg;
+  
+  if (process.env.DATABASE_URL) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    // Test database connection
+    pool.query('SELECT NOW()', (err, res) => {
+      if (err) {
+        console.error('❌ Database connection failed:', err.message);
+        dbConnected = false;
+      } else {
+        console.log('✅ Database connected at:', res.rows[0].now);
+        dbConnected = true;
+      }
+    });
   } else {
-    console.log('✅ Database connected at:', res.rows[0].now);
+    console.log('⚠️ No DATABASE_URL found, running without database');
   }
-});
+} catch (error) {
+  console.log('⚠️ PostgreSQL not available, running without database:', error.message);
+}
 
 // Add request logging
 app.use((req, res, next) => {
@@ -74,6 +88,14 @@ app.use(express.static(dist, { maxAge: "1y", index: false }));
 
 // ============= DATABASE SETUP ENDPOINT =============
 app.get('/api/setup/database', async (req, res) => {
+  if (!pool || !dbConnected) {
+    return res.status(503).json({
+      success: false,
+      error: 'Database not connected',
+      message: 'Please check your DATABASE_URL environment variable'
+    });
+  }
+
   try {
     console.log('🔧 Setting up database tables...');
     
@@ -162,8 +184,19 @@ app.get('/api/setup/database', async (req, res) => {
 
 // ============= LEADERBOARD API ROUTES =============
 
+// Database check middleware
+const requireDB = (req, res, next) => {
+  if (!pool || !dbConnected) {
+    return res.status(503).json({ 
+      error: 'Database not available',
+      message: 'Leaderboard features require database connection'
+    });
+  }
+  next();
+};
+
 // Get or create user by Telegram ID
-app.post('/api/user/register', async (req, res) => {
+app.post('/api/user/register', requireDB, async (req, res) => {
   try {
     const { telegram_id, telegram_username } = req.body;
     
@@ -195,7 +228,7 @@ app.post('/api/user/register', async (req, res) => {
 });
 
 // Update user profile
-app.put('/api/user/profile', async (req, res) => {
+app.put('/api/user/profile', requireDB, async (req, res) => {
   try {
     const { telegram_id, display_name, country_flag } = req.body;
     
@@ -220,7 +253,7 @@ app.put('/api/user/profile', async (req, res) => {
 });
 
 // Submit game score
-app.post('/api/game/complete', async (req, res) => {
+app.post('/api/game/complete', requireDB, async (req, res) => {
   try {
     const { telegram_id, score, coins_earned, moves_used, max_combo, game_duration } = req.body;
     
@@ -280,7 +313,7 @@ app.post('/api/game/complete', async (req, res) => {
 });
 
 // Get leaderboard (daily/weekly/alltime)
-app.get('/api/leaderboard/:type', async (req, res) => {
+app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
   try {
     const { type } = req.params;
     const { country, telegram_id } = req.query;
@@ -369,7 +402,7 @@ app.get('/api/leaderboard/:type', async (req, res) => {
 });
 
 // Get user stats
-app.get('/api/user/:telegram_id/stats', async (req, res) => {
+app.get('/api/user/:telegram_id/stats', requireDB, async (req, res) => {
   try {
     const { telegram_id } = req.params;
     
@@ -409,7 +442,8 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    env: process.env.NODE_ENV || "development"
+    env: process.env.NODE_ENV || "development",
+    database: dbConnected ? "connected" : "disconnected"
   };
   console.log("🥕 Health check requested:", health);
   res.json(health);
@@ -417,6 +451,14 @@ app.get("/health", (req, res) => {
 
 // Database health check
 app.get('/api/db/health', async (req, res) => {
+  if (!pool || !dbConnected) {
+    return res.status(503).json({ 
+      status: 'unhealthy', 
+      database: 'disconnected',
+      error: 'No database connection' 
+    });
+  }
+
   try {
     const result = await pool.query('SELECT NOW() as server_time');
     res.json({ 
@@ -436,7 +478,10 @@ app.get('/api/db/health', async (req, res) => {
 
 // API test endpoint
 app.get("/api/test", (req, res) => {
-  res.json({ message: "🍬 Candy Crush Cats API is working!" });
+  res.json({ 
+    message: "🍬 Candy Crush Cats API is working!",
+    database: dbConnected ? "connected" : "not available"
+  });
 });
 
 // SPA fallback with error handling
@@ -466,6 +511,7 @@ const server = app.listen(port, "0.0.0.0", () => {
   console.log(`🌐 Local: http://localhost:${port}`);
   console.log(`🚀 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`📁 Serving from: ${dist}`);
+  console.log(`🗄️ Database: ${dbConnected ? 'Connected' : 'Not available'}`);
 });
 
 // Graceful shutdown
