@@ -234,7 +234,7 @@ export default function App() {
   // ------------ Render ------------
   return (
     <>
-      <Splash show={showSplash} text="Loading sweet meowchi…" />
+      <Splash show={showSplash} />
 
       <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
         <Header />
