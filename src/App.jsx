@@ -79,35 +79,61 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
-  // ------------ Minimal header (Issue 3: remove top nav row) ------------
+  // ------------ Minimal header with just branding and coins ------------
   function Header() {
-    const backable = screenHistory.length > 1;
+    const backable = screenHistory.length > 1 && screen !== "home";
     return (
       <header className="header">
-        <div className="header-line1">
-          <div className="brand-compact">
+        <div className="header-content">
+          <div className="brand">
             <div className="logo">😺</div>
-            <div className="name">Meowchi</div>
+            <div className="brand-text">Meowchi</div>
           </div>
-          <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
-        </div>
-
-        {/* No more Home/Shop/Leaderboard/Daily/Invite/Settings buttons */}
-        <div className="header-line2">
-          <div className="row" style={{ gap: 8 }}>
-            {backable ? (
-              <button className="btn" onClick={goBack}>Back</button>
-            ) : (
-              <button className="btn" onClick={goHome}>Home</button>
-            )}
+          
+          {backable && (
+            <button className="back-btn" onClick={goBack}>
+              <span className="back-icon">←</span>
+            </button>
+          )}
+          
+          <div className="coins-display">
+            <span className="coins-icon">💰</span>
+            <span className="coins-amount">{coins}</span>
           </div>
-          <div className="pill">${coins} $Meow</div>
         </div>
       </header>
     );
   }
 
-  // Optional inline pages (unchanged)
+  // ------------ Bottom Navigation Panel ------------
+  function BottomNav() {
+    const navItems = [
+      { key: "home", label: "Profile", icon: "👤", screen: "home" },
+      { key: "shop", label: "Shop", icon: "🛒", screen: "shop" },
+      { key: "invite", label: "Invite", icon: "👥", screen: "invite" },
+      { key: "wallet", label: "Wallet", icon: "💎", screen: "daily" },
+      { key: "settings", label: "Settings", icon: "⚙️", screen: "settings" },
+    ];
+
+    return (
+      <nav className="bottom-nav">
+        <div className="nav-container">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={`nav-item ${screen === item.screen ? "active" : ""}`}
+              onClick={() => navigateTo(item.screen)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    );
+  }
+
+  // Optional inline pages (unchanged functionality)
   function Leaderboard() {
     const scopes = ["daily", "weekly", "all"];
     return (
@@ -144,7 +170,7 @@ export default function App() {
     ];
     return (
       <section className="section">
-        <div className="title" style={{ marginBottom: 10 }}>🛍 Meowchi Shop</div>
+        <div className="title" style={{ marginBottom: 10 }}>🛒 Meowchi Shop</div>
         <div className="list grid-gap">
           {items.map((it) => (
             <div key={it.key} className="row">
@@ -203,12 +229,12 @@ export default function App() {
     }
     return (
       <section className="section">
-        <div className="title">🍯 Daily Sweet Treats</div>
+        <div className="title">💎 Daily Rewards</div>
         <div className="muted">Streak: <b>{daily.streak}</b> {daily.lastClaim ? `• last: ${daily.lastClaim}` : ""}</div>
         <button className="btn primary" onClick={claim} disabled={!canClaim}>
           {canClaim ? "Claim 50 $Meow" : "Come back tomorrow"}
         </button>
-        <div className="muted small">Keep your sweet streak alive! Resets if you miss a day.</div>
+        <div className="muted small">Keep your streak alive! Resets if you miss a day.</div>
       </section>
     );
   }
@@ -221,8 +247,8 @@ export default function App() {
     }
     return (
       <section className="section">
-        <div className="title">🍭 Share the Sweetness</div>
-        <div className="muted small">Invite friends and earn $Meow.</div>
+        <div className="title">👥 Invite Friends</div>
+        <div className="muted small">Share Meowchi and earn rewards together.</div>
         <div className="row" style={{ gap: 8 }}>
           <div className="pill ellipsis" style={{ maxWidth: 260 }}>{link}</div>
           <button className="btn" onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
@@ -264,15 +290,17 @@ export default function App() {
 
           {screen === "gameover" && lastRun && (
             <section className="section">
-              <div className="title">🍬 Sweet Level Complete!</div>
+              <div className="title">🎯 Level Complete!</div>
               <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
               <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
               <button className="btn primary" onClick={() => setScreen("game")}>
-                🍭 Play More Meowchi
+                🎮 Play Again
               </button>
             </section>
           )}
         </main>
+        
+        <BottomNav />
       </div>
     </>
   );
