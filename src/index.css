@@ -390,7 +390,7 @@ body{
   white-space: nowrap;
 }
 
-/* ===== Board / GameView (ENHANCED ANIMATIONS) ===== */
+/* ===== Board / GameView (FAST ANIMATIONS) ===== */
 .section.board-wrap{
   position: relative;
   margin: 12px 16px;
@@ -477,34 +477,31 @@ body{
   to{ transform: translateY(0); opacity: 1; }
 }
 
-/* ========== ENHANCED BLASTING ANIMATIONS ========== */
+/* ========== FAST BLASTING ANIMATIONS ========== */
 
-/* MEGA DRAMATIC BLASTING EFFECT */
+/* FAST DRAMATIC BLASTING EFFECT */
 .tile.blasting {
-  animation: mega-pop 0.5s ease forwards;
+  animation: mega-pop 0.3s ease forwards;
   box-shadow: 
-    0 0 0 6px var(--accent2) inset,
-    0 0 30px 8px rgba(244, 208, 63, 0.9),
-    0 0 60px 15px rgba(255, 255, 255, 0.4),
-    0 0 100px 25px rgba(255, 215, 0, 0.3);
+    0 0 0 4px var(--accent2) inset,
+    0 0 20px 6px rgba(244, 208, 63, 0.8),
+    0 0 40px 10px rgba(255, 255, 255, 0.3);
   background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 50%, #ff6b6b 100%);
   border-radius: 20%;
   z-index: 10 !important;
 }
 
-/* KEEP EMOJI VISIBLE during blast with enhanced effects */
+/* KEEP EMOJI VISIBLE during blast - FASTER */
 .tile.blasting .tile-emoji {
   filter: 
-    drop-shadow(0 0 10px rgba(255, 255, 255, 1))
-    drop-shadow(0 0 20px rgba(255, 215, 0, 0.8))
-    drop-shadow(0 0 30px rgba(255, 140, 0, 0.6));
+    drop-shadow(0 0 8px rgba(255, 255, 255, 0.8))
+    drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
   color: white;
   text-shadow: 
-    0 0 10px rgba(255, 255, 255, 1),
-    0 0 20px rgba(255, 215, 0, 0.8),
-    0 0 30px rgba(255, 140, 0, 0.6);
-  transform: scale(1.2);
-  animation: emoji-glow 0.5s ease forwards;
+    0 0 8px rgba(255, 255, 255, 0.8),
+    0 0 15px rgba(255, 215, 0, 0.6);
+  transform: scale(1.1);
+  animation: emoji-glow 0.3s ease forwards;
 }
 
 @keyframes mega-pop {
@@ -512,24 +509,16 @@ body{
     transform: scale(1) rotate(0deg); 
     opacity: 1; 
   }
-  20% { 
-    transform: scale(1.4) rotate(5deg); 
+  30% { 
+    transform: scale(1.4) rotate(8deg); 
     opacity: 1; 
   }
-  40% { 
-    transform: scale(1.6) rotate(-8deg); 
-    opacity: 1; 
-  }
-  60% { 
-    transform: scale(1.8) rotate(12deg); 
-    opacity: 0.9; 
-  }
-  80% { 
-    transform: scale(2.2) rotate(-15deg); 
-    opacity: 0.6; 
+  70% { 
+    transform: scale(1.8) rotate(-12deg); 
+    opacity: 0.7; 
   }
   100% { 
-    transform: scale(2.5) rotate(20deg); 
+    transform: scale(2.0) rotate(15deg); 
     opacity: 0; 
   }
 }
@@ -538,57 +527,47 @@ body{
   0% { 
     transform: scale(1) rotate(0deg);
     filter: 
-      drop-shadow(0 0 5px rgba(255, 255, 255, 0.5))
-      drop-shadow(0 0 10px rgba(255, 215, 0, 0.4));
+      drop-shadow(0 0 4px rgba(255, 255, 255, 0.4))
+      drop-shadow(0 0 8px rgba(255, 215, 0, 0.3));
   }
-  30% { 
+  50% { 
     transform: scale(1.3) rotate(10deg);
     filter: 
-      drop-shadow(0 0 15px rgba(255, 255, 255, 1))
-      drop-shadow(0 0 25px rgba(255, 215, 0, 0.9));
-  }
-  60% { 
-    transform: scale(1.5) rotate(-15deg);
-    filter: 
-      drop-shadow(0 0 20px rgba(255, 255, 255, 1))
-      drop-shadow(0 0 35px rgba(255, 215, 0, 1));
+      drop-shadow(0 0 12px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 20px rgba(255, 215, 0, 0.7));
   }
   100% { 
-    transform: scale(1.8) rotate(25deg);
+    transform: scale(1.6) rotate(20deg);
     filter: 
-      drop-shadow(0 0 25px rgba(255, 255, 255, 0))
-      drop-shadow(0 0 40px rgba(255, 215, 0, 0));
+      drop-shadow(0 0 15px rgba(255, 255, 255, 0))
+      drop-shadow(0 0 25px rgba(255, 215, 0, 0));
     opacity: 0;
   }
 }
 
-/* ENHANCED PARTICLE ANIMATIONS */
+/* FASTER PARTICLE ANIMATIONS */
 @keyframes fly {
   0% { 
     transform: translate(0, 0) scale(1) rotate(0deg); 
     opacity: 1; 
   }
   100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.3) rotate(720deg); 
+    transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
     opacity: 0; 
   }
 }
 
 @keyframes fly-bounce {
   0% { 
-    transform: translate(0, 0) scale(1) rotate(0deg); 
+    transform: translate(0, 0) scale(1); 
     opacity: 1; 
   }
-  30% { 
-    transform: translate(calc(var(--tx) * 0.3), calc(var(--ty) * 0.1)) scale(1.2) rotate(180deg); 
+  40% { 
+    transform: translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.2)) scale(1.1); 
     opacity: 1; 
-  }
-  60% { 
-    transform: translate(calc(var(--tx) * 0.7), calc(var(--ty) * 0.4)) scale(0.8) rotate(360deg); 
-    opacity: 0.8; 
   }
   100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(720deg); 
+    transform: translate(var(--tx), var(--ty)) scale(0.1); 
     opacity: 0; 
   }
 }
@@ -598,67 +577,47 @@ body{
     transform: translate(0, 0) scale(1) rotate(0deg); 
     opacity: 1; 
   }
-  25% { 
-    transform: translate(calc(var(--tx) * 0.2), calc(var(--ty) * 0.8)) scale(1.1) rotate(180deg); 
-    opacity: 1; 
-  }
   50% { 
-    transform: translate(calc(var(--tx) * 0.8), calc(var(--ty) * 0.2)) scale(0.9) rotate(360deg); 
-    opacity: 0.9; 
-  }
-  75% { 
-    transform: translate(calc(var(--tx) * 1.2), calc(var(--ty) * 1.1)) scale(0.6) rotate(540deg); 
-    opacity: 0.5; 
+    transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.3)) scale(0.8) rotate(180deg); 
+    opacity: 0.8; 
   }
   100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(720deg); 
+    transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(360deg); 
     opacity: 0; 
   }
 }
 
-/* EXPLOSION FLASH EFFECT */
+/* FASTER EXPLOSION FLASH EFFECT */
 @keyframes explosion-flash {
   0% { 
     transform: scale(0); 
-    opacity: 0.9; 
+    opacity: 0.8; 
   }
-  20% { 
-    transform: scale(0.8); 
-    opacity: 0.7; 
-  }
-  40% { 
-    transform: scale(1.2); 
+  50% { 
+    transform: scale(1); 
     opacity: 0.4; 
   }
   100% { 
-    transform: scale(2); 
+    transform: scale(1.5); 
     opacity: 0; 
   }
 }
 
-/* SHOCKWAVE RING EFFECT */
+/* FASTER SHOCKWAVE RING EFFECT */
 @keyframes shockwave {
   0% { 
     width: 0; 
     height: 0; 
     margin-left: 0; 
     margin-top: 0; 
-    opacity: 1; 
-    border-width: 3px;
-  }
-  50% { 
-    width: 150px; 
-    height: 150px; 
-    margin-left: -75px; 
-    margin-top: -75px; 
-    opacity: 0.6; 
+    opacity: 0.8; 
     border-width: 2px;
   }
   100% { 
-    width: 300px; 
-    height: 300px; 
-    margin-left: -150px; 
-    margin-top: -150px; 
+    width: 120px; 
+    height: 120px; 
+    margin-left: -60px; 
+    margin-top: -60px; 
     opacity: 0; 
     border-width: 1px;
   }
@@ -670,26 +629,7 @@ body{
   pointer-events: none;
 }
 
-/* Screen shake effect for big combos */
-@keyframes screen-shake {
-  0%, 100% { transform: translateX(0) translateY(0); }
-  10% { transform: translateX(-2px) translateY(-1px); }
-  20% { transform: translateX(2px) translateY(1px); }
-  30% { transform: translateX(-1px) translateY(2px); }
-  40% { transform: translateX(1px) translateY(-1px); }
-  50% { transform: translateX(-2px) translateY(1px); }
-  60% { transform: translateX(2px) translateY(-2px); }
-  70% { transform: translateX(-1px) translateY(1px); }
-  80% { transform: translateX(1px) translateY(-1px); }
-  90% { transform: translateX(-1px) translateY(2px); }
-}
-
-/* Apply screen shake to board during big combos */
-.board.mega-combo {
-  animation: screen-shake 0.5s ease-in-out;
-}
-
-/* ========== END ENHANCED BLASTING ========== */
+/* ========== END FAST BLASTING ========== */
 
 /* faster easing while swapping */
 .tile.swapping{
@@ -705,7 +645,7 @@ body{
   line-height: 1;
 }
 
-/* ENHANCED combo banner */
+/* FAST combo banner */
 .combo {
   position: absolute;
   left: 50%;
@@ -721,7 +661,7 @@ body{
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.2),
     0 0 20px rgba(255, 215, 0, 0.6);
-  animation: combo-pulse 1.5s ease-in-out infinite;
+  animation: combo-pulse 1s ease-in-out infinite;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 20;
 }
@@ -729,15 +669,9 @@ body{
 @keyframes combo-pulse {
   0%, 100% { 
     transform: translate(-50%, -50%) scale(1); 
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.2),
-      0 0 20px rgba(255, 215, 0, 0.6);
   }
   50% { 
-    transform: translate(-50%, -50%) scale(1.1); 
-    box-shadow: 
-      0 6px 16px rgba(0, 0, 0, 0.3),
-      0 0 30px rgba(255, 215, 0, 0.8);
+    transform: translate(-50%, -50%) scale(1.05); 
   }
 }
 
@@ -772,11 +706,11 @@ body{
   margin-left: auto;
 }
 
-/* poof particles - enhanced */
+/* poof particles - fast */
 .spark{
   position: absolute;
   transform-origin: var(--cx) var(--cy);
-  animation: fly var(--dur, 1.1s) ease-out forwards;
+  animation: fly var(--dur, 0.8s) ease-out forwards;
 }
 
 /* ===== Leaderboard Styles ===== */
@@ -946,15 +880,15 @@ body{
 }
 
 .leaderboard-item:nth-child(1) .rank-display {
-  color: #FFD700; /* Gold */
+  color: #FFD700;
 }
 
 .leaderboard-item:nth-child(2) .rank-display {
-  color: #C0C0C0; /* Silver */
+  color: #C0C0C0;
 }
 
 .leaderboard-item:nth-child(3) .rank-display {
-  color: #CD7F32; /* Bronze */
+  color: #CD7F32;
 }
 
 .player-info {
