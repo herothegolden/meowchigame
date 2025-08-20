@@ -7,7 +7,7 @@ const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
 export default function App() {
-  // viewport height fix
+  // Stable viewport for Telegram webview
   useEffect(() => {
     const setVH = () => {
       const tg = getTG();
@@ -20,7 +20,7 @@ export default function App() {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
-  // Telegram init
+  // Telegram init (safe no-op outside Telegram)
   useEffect(() => {
     const tg = getTG();
     try {
@@ -30,18 +30,18 @@ export default function App() {
     } catch {}
   }, []);
 
-  // splash logic
+  // Splash: show for at least 2.4s AND until window 'load'
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
-    const minTime = new Promise((r) => setTimeout(r, 2400));
-    const onLoad = new Promise((r) => {
-      if (document.readyState === "complete") r();
-      else window.addEventListener("load", r, { once: true });
-    });
-    Promise.all([minTime, onLoad]).then(() => setShowSplash(false));
+    const minDelay = new Promise((r) => setTimeout(r, 2400));
+    const pageReady =
+      document.readyState === "complete"
+        ? Promise.resolve()
+        : new Promise((r) => window.addEventListener("load", r, { once: true }));
+    Promise.all([minDelay, pageReady]).then(() => setShowSplash(false));
   }, []);
 
-  // app state
+  // ------------ App state / routing ------------
   const [screen, setScreen] = useState("home");
   const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(150);
@@ -79,6 +79,7 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
+  // ------------ Minimal header (clean, compact) ------------
   function Header() {
     const backable = screenHistory.length > 1;
     return (
@@ -90,6 +91,7 @@ export default function App() {
           </div>
           <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
         </div>
+
         <div className="header-line2">
           <div className="row" style={{ gap: 8 }}>
             {backable ? (
@@ -104,14 +106,127 @@ export default function App() {
     );
   }
 
+  // ------------ Inline pages (as before) ------------
+  function Shop() {
+    const items = [
+      { id: "hint", name: "Sweet Hint", price: 120, desc: "Reveals a juicy match." },
+      { id: "shuffle", name: "Sugar Shuffle", price: 150, desc: "Shuffles the board once." },
+      { id: "extra", name: "Extra Moves +5", price: 240, desc: "More time to feed the cats." },
+    ];
+    return (
+      <section className="section">
+        <div className="title">🛍️ Shop</div>
+        <div className="list grid-gap">
+          {items.map((it) => (
+            <div key={it.id} className="row">
+              <div className="ellipsis"><b>{it.name}</b><div className="small muted">{it.desc}</div></div>
+              <button className="btn primary">Buy {it.price}</button>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function Leaderboard() {
+    const scopes = ["daily", "weekly", "all"];
+    return (
+      <section className="section">
+        <div className="title">🏆 Leaderboard</div>
+        <div className="tabs">
+          {scopes.map((s) => (
+            <div
+              key={s}
+              className={`tab ${lbScope === s ? "active" : ""}`}
+              onClick={() => setLbScope(s)}
+            >
+              {s[0].toUpperCase() + s.slice(1)}
+            </div>
+          ))}
+        </div>
+        <div className="list grid-gap" style={{ marginTop: 12 }}>
+          {leaders[lbScope].map(([name, score], i) => (
+            <div key={name} className="row">
+              <div className="ellipsis">
+                <b>#{i + 1} {name}</b>
+              </div>
+              <div><b>{score}</b></div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function Settings() {
+    return (
+      <section className="section">
+        <div className="title">⚙️ Settings</div>
+        <label className="row">
+          <div>Haptics</div>
+          <input
+            type="checkbox"
+            checked={settings.haptics}
+            onChange={(e) => setSettings((s) => ({ ...s, haptics: e.target.checked }))}
+          />
+        </label>
+        <label className="row">
+          <div>Sound</div>
+          <input
+            type="checkbox"
+            checked={settings.sound}
+            onChange={(e) => setSettings((s) => ({ ...s, sound: e.target.checked }))}
+          />
+        </label>
+      </section>
+    );
+  }
+
+  function Daily() {
+    const today = new Date().toISOString().slice(0, 10);
+    const canClaim = daily.lastClaim !== today;
+    function claim() {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      setDaily((d) => ({ streak: d.lastClaim === yesterday ? d.streak + 1 : 1, lastClaim: today }));
+      setCoins((c) => c + 50);
+    }
+    return (
+      <section className="section">
+        <div className="title">🎁 Daily Treats</div>
+        <div className="list grid-gap">
+          <div className="row">
+            <div>Streak</div><b>{daily.streak} days</b>
+          </div>
+          <button className="btn primary" onClick={claim} disabled={!canClaim}>
+            {canClaim ? "Claim 50 $Meow" : "Already claimed"}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  function Invite() {
+    const link = "https://t.me/share/url?url=https://t.me/yourbot";
+    return (
+      <section className="section">
+        <div className="title">💝 Share & Invite</div>
+        <div className="list grid-gap">
+          <div className="row">
+            <div className="muted">Invite friends to earn bonuses.</div>
+            <a className="btn" href={link}>Share</a>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ------------ Render ------------
   return (
     <>
       <Splash show={showSplash} />
 
-      <div
-        className="shell"
-        style={{ visibility: showSplash ? "hidden" : "visible" }}
-      >
+      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+        {/* Header is shown on every page EXCEPT Home */}
         {screen !== "home" && <Header />}
 
         <main className="content">
@@ -119,25 +234,23 @@ export default function App() {
             <Home coins={coins} onNavigate={navigateTo} />
           )}
 
-          {screen === "shop" && <div className="section">🛍️ Shop coming soon</div>}
-          {screen === "leaderboard" && <div className="section">🏆 Leaderboard</div>}
-          {screen === "daily" && <div className="section">🎁 Daily Treats</div>}
-          {screen === "invite" && <div className="section">💝 Invite Friends</div>}
-          {screen === "settings" && <div className="section">⚙️ Settings</div>}
+          {screen === "shop" && <Shop />}
+          {screen === "leaderboard" && <Leaderboard />}
+          {screen === "daily" && <Daily />}
+          {screen === "invite" && <Invite />}
+          {screen === "settings" && <Settings />}
 
           {screen === "game" && (
-            <div className="game-screen">
-              <GameView
-                onExit={(run) => {
-                  setLastRun(run);
-                  setCoins((c) => c + (run?.coins || 0));
-                  setScreen("gameover");
-                  setScreenHistory((h) => [...h, "gameover"]);
-                }}
-                onCoins={(d) => setCoins((c) => c + d)}
-                settings={settings}
-              />
-            </div>
+            <GameView
+              onExit={(run) => {
+                setLastRun(run);
+                setCoins((c) => c + (run?.coins || 0));
+                setScreen("gameover");
+                setScreenHistory((h) => [...h, "gameover"]);
+              }}
+              onCoins={(d) => setCoins((c) => c + d)}
+              settings={settings}
+            />
           )}
 
           {screen === "gameover" && lastRun && (
