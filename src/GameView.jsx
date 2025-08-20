@@ -60,7 +60,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     if (combo > maxComboAchieved) setMaxComboAchieved(combo);
   }, [combo, maxComboAchieved]);
 
-  // ✅ Correct timer effect (the broken block was here before)
+  // ✅ Correct timer effect
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
@@ -273,7 +273,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 200);
+      setTimeout(() => setBlast(new Set()), 150); // Faster blast clear
 
       setTimeout(() => {
         const delayMap = {};
@@ -289,7 +289,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.14, dist * 0.03);
+                delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02); // Faster delays
               }
             }
           }
@@ -298,6 +298,14 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         applyGravity(g);
         const empties = new Set();
         for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
+
+    removeAllMatches(t);
+    if (hasAnyMove(t)) return t;
+    attempts++;
+  }
+  return initSolvableGrid();
+}; r < ROWS; r++)
           for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
 
@@ -308,9 +316,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 140);
-        }, 220);
-      }, 200);
+          setTimeout(step, 100); // Faster cascade steps
+        }, 180);
+      }, 150); // Faster cascade timing
     };
     step();
   }
@@ -528,50 +536,30 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   );
 }
 
+// FAST POOF COMPONENT
 function Poof({ x, y, size }) {
-  const sparks = Array.from({ length: 60 });
+  const sparks = Array.from({ length: 30 }); // Reduced from 60
+  
   return (
     <>
       {sparks.map((_, i) => {
-        const angle = (i / 60) * Math.PI * 2 + (Math.random() * 0.5 - 0.25);
-        const distance = size * (1.5 + Math.random() * 1.5);
+        const angle = (i / 30) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
+        const distance = size * (0.8 + Math.random() * 1.0);
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
-        const randomDelay = Math.random() * 0.1;
-        const randomDuration = 1.8 + Math.random() * 1.2;
+        
+        const randomDelay = Math.random() * 0.05; // Much faster
+        const randomDuration = 0.6 + Math.random() * 0.4; // Much faster
 
         const sparkTypes = [
-          "✨",
-          "💫",
-          "⭐",
-          "🌟",
-          "💥",
-          "🎉",
-          "🍬",
-          "💎",
-          "🎆",
-          "🎇",
-          "🔥",
-          "💖",
-          "🌈",
-          "⚡",
-          "🌸",
-          "🎊",
-          "💜",
-          "💛",
-          "💚",
-          "🧡",
-          "❤️",
-          "🤍",
-          "💙",
-          "🖤",
+          "✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"
         ];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
 
         const particleType = Math.random();
         let animationName = "fly";
-        if (particleType < 0.3) animationName = "fly-bounce";
-        else if (particleType < 0.6) animationName = "fly-spiral";
+        if (particleType < 0.2) animationName = "fly-bounce";
+        else if (particleType < 0.4) animationName = "fly-spiral";
 
         const style = {
           left: x,
@@ -585,13 +573,12 @@ function Poof({ x, y, size }) {
           animationDelay: `${randomDelay}s`,
           animationDuration: `${randomDuration}s`,
           animationFillMode: "forwards",
-          animationTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-          fontSize: Math.floor(size * (0.4 + Math.random() * 0.6)) + "px",
-          fontWeight: "bold",
-          textShadow:
-            "0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6)",
-          filter: "drop-shadow(0 0 8px rgba(255, 255, 255, 0.7))",
-          zIndex: 15,
+          animationTimingFunction: "ease-out",
+          fontSize: Math.floor(size * (0.3 + Math.random() * 0.3)) + "px",
+          fontWeight: "normal",
+          textShadow: "0 0 4px rgba(255, 255, 255, 0.6)",
+          filter: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))",
+          zIndex: 15
         };
         return (
           <span key={i} className="spark enhanced-spark" style={style}>
@@ -604,16 +591,15 @@ function Poof({ x, y, size }) {
         className="explosion-flash"
         style={{
           position: "absolute",
-          left: x - size,
-          top: y - size,
-          width: size * 3,
-          height: size * 3,
+          left: x - size * 0.5,
+          top: y - size * 0.5,
+          width: size * 2,
+          height: size * 2,
           borderRadius: "50%",
-          background:
-            "radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,215,0,0.6) 30%, rgba(255,140,0,0.3) 60%, transparent 100%)",
-          animation: "explosion-flash 0.4s ease-out forwards",
+          background: "radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,215,0,0.4) 50%, transparent 100%)",
+          animation: "explosion-flash 0.2s ease-out forwards",
           pointerEvents: "none",
-          zIndex: 12,
+          zIndex: 12
         }}
       />
 
@@ -625,11 +611,11 @@ function Poof({ x, y, size }) {
           top: y + size / 2,
           width: 0,
           height: 0,
-          border: "3px solid rgba(255,215,0,0.8)",
+          border: "2px solid rgba(255,215,0,0.6)",
           borderRadius: "50%",
-          animation: "shockwave 0.6s ease-out forwards",
+          animation: "shockwave 0.3s ease-out forwards",
           pointerEvents: "none",
-          zIndex: 11,
+          zIndex: 11
         }}
       />
     </>
@@ -772,28 +758,15 @@ function removeAllMatches(g) {
 }
 
 function shuffleToSolvable(g) {
-  // Flatten current grid
   const flat = [];
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
 
   let attempts = 0;
   while (attempts < 100) {
-    // Fisher–Yates
     for (let i = flat.length - 1; i > 0; i--) {
       const j = (Math.random() * (i + 1)) | 0;
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
-    // Rebuild grid
     const t = makeGrid(ROWS, COLS);
     let idx = 0;
-    for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-
-    // Remove accidental starter matches
-    removeAllMatches(t);
-    if (hasAnyMove(t)) return t;
-    attempts++;
-  }
-  // Fallback: fresh solvable grid
-  return initSolvableGrid();
-}
+    for (let r = 0
