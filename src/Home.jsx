@@ -5,62 +5,67 @@ export default function Home({ coins = 0, onNavigate }) {
   return (
     <div className="home-root">
       <div className="home-center">
-        <div className="home-card">
-          <div className="home-topbar">
-            <div className="home-logo">
-              <div className="home-logo-icon">
-                <img
-                  src="https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"
-                  alt="Meowchi-The-Cat"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                    e.currentTarget.parentElement.textContent = "🐱";
-                  }}
-                />
-              </div>
-              <div className="home-logo-text">Meowchi</div>
+        <div className="profile-card">
+          <div className="profile-header">
+            <div className="profile-avatar">
+              <img
+                src="https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"
+                alt="Meowchi-The-Cat"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  e.currentTarget.parentElement.textContent = "😺";
+                }}
+              />
             </div>
-            <div className="home-currency">$Meow {coins}</div>
+            <div className="profile-info">
+              <h2 className="profile-name">Meowchi Player</h2>
+              <p className="profile-subtitle">Sweet Match Master</p>
+            </div>
           </div>
 
-          <div className="home-title">
-            <h1>Welcome to Meowchi!</h1>
-            <p>Match cute treats and help the cats</p>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <div className="stat-value">{coins}</div>
+              <div className="stat-label">$Meow Coins</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-value">127</div>
+              <div className="stat-label">Games Played</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-value">2,450</div>
+              <div className="stat-label">Best Score</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-value">15</div>
+              <div className="stat-label">Win Streak</div>
+            </div>
           </div>
 
-          <div className="home-menu">
-            <button className="home-item primary" onClick={() => onNavigate?.("game")}>
-              <div className="home-icon">🎮</div><div className="home-text">Play Game</div>
+          <div className="quick-actions">
+            <button className="action-btn primary" onClick={() => onNavigate?.("game")}>
+              <div className="action-icon">🎮</div>
+              <div className="action-text">
+                <div className="action-title">Play Game</div>
+                <div className="action-desc">Start matching treats</div>
+              </div>
             </button>
 
-            <button className="home-item" onClick={() => onNavigate?.("shop")}>
-              <div className="home-icon">🛍️</div><div className="home-text">Shop</div>
-            </button>
-
-            <button className="home-item" onClick={() => onNavigate?.("leaderboard")}>
-              <div className="home-icon">🏆</div><div className="home-text">Leaderboard</div>
-            </button>
-
-            <button className="home-item" onClick={() => onNavigate?.("daily")}>
-              <div className="home-icon">🎁</div><div className="home-text">Daily Treats</div>
-            </button>
-
-            <button className="home-item" onClick={() => onNavigate?.("invite")}>
-              <div className="home-icon">💝</div><div className="home-text">Share & Invite</div>
-            </button>
-
-            <button className="home-item" onClick={() => onNavigate?.("settings")}>
-              <div className="home-icon">⚙️</div><div className="home-text">Settings</div>
+            <button className="action-btn" onClick={() => onNavigate?.("leaderboard")}>
+              <div className="action-icon">🏆</div>
+              <div className="action-text">
+                <div className="action-title">Leaderboard</div>
+                <div className="action-desc">See top players</div>
+              </div>
             </button>
           </div>
 
-          <div className="home-instructions">
-            <h3><span className="home-emoji">✨</span> How to Play</h3>
-            <p>
-              Swipe to match 3 or more treats in a row! Match cats <span className="home-emoji">😺</span>,
-              pretzels <span className="home-emoji">🥨</span>, strawberries <span className="home-emoji">🍓</span>,
-              cookies <span className="home-emoji">🍪</span>, and marshmallows <span className="home-emoji">🍡</span>.
-              Create combos for bonus points and help feed all the hungry cats!
+          <div className="game-info">
+            <h3 className="info-title">About Meowchi</h3>
+            <p className="info-description">
+              Match 3 or more treats to help feed the hungry cats! 
+              Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
+              and marshmallows 🡠to create sweet combos and earn $Meow coins.
             </p>
           </div>
         </div>
