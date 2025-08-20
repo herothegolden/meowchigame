@@ -121,6 +121,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
 
+      console.log("🎯 Submitting game score:", gameData); // DEBUG LINE 1
+
       const response = await fetch("/api/game/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -128,6 +130,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       });
 
       const result = await response.json();
+      console.log("📊 Score submission result:", result); // DEBUG LINE 2
+      
       if (!response.ok) {
         console.error("Score submission failed:", result.error);
         return { user_needs_profile: false };
