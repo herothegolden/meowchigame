@@ -9,7 +9,7 @@
 
   /* Splash controls */
   --bar-top: 60%;         /* vertical position of bar under the word */
-  --bar-width: 240px;     /* make bar same width as “MEOWCHI” on your art; tweak 220–280px */
+  --bar-width: 220px;     /* make bar same width as “MEOWCHI” on your art; tweak 220–280px */
 }
 
 *{box-sizing:border-box}
