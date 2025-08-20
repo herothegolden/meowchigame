@@ -235,10 +235,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
           n.delete(`${r2}-${c2}`);
           return n;
         });
-      }, 220);
+      }, 140); // Reduced from 220ms
       haptic(8);
       setSel({ r: r1, c: c1 });
-      setTimeout(() => setSel(null), 120);
+      setTimeout(() => setSel(null), 80); // Reduced from 120ms
       return;
     }
 
@@ -251,7 +251,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       resolveCascades(g, () => {
         if (timeLeftRef.current <= 0) finish();
       });
-    }, 300);
+    }, 200); // Reduced from 300ms
   }
 
   function resolveCascades(start, done) {
@@ -268,7 +268,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         if (comboCount > 0) {
           setCombo(comboCount);
           haptic(15);
-          setTimeout(() => setCombo(0), 1500);
+          // Auto-hide combo after 500ms instead of 1500ms
+          setTimeout(() => setCombo(0), 500);
         }
         ensureSolvable();
         setAnimating(false);
@@ -296,7 +297,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 150);
+      setTimeout(() => setBlast(new Set()), 100); // Reduced from 150ms
 
       setTimeout(() => {
         const delayMap = {};
@@ -312,7 +313,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
+                delayMap[`${newR}-${c}`] = Math.min(0.05, dist * 0.01); // Reduced delays
               }
             }
           }
@@ -332,9 +333,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 100);
-        }, 180);
-      }, 150);
+          setTimeout(step, 60); // Reduced from 100ms
+        }, 120); // Reduced from 180ms
+      }, 100); // Reduced from 150ms
     };
     step();
   }
@@ -347,7 +348,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       return;
     }
     setHint(m);
-    setTimeout(() => setHint(null), 1200);
+    setTimeout(() => setHint(null), 800); // Reduced from 1200ms
     haptic(10);
   }
 
@@ -512,7 +513,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭 </div>}
+        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
@@ -553,18 +554,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 }
 
 function Poof({ x, y, size }) {
-  const sparks = Array.from({ length: 30 });
+  // REDUCED PARTICLE COUNT from 30 to 15 for better performance
+  const sparks = Array.from({ length: 15 });
 
   return (
     <>
       {sparks.map((_, i) => {
-        const angle = (i / 30) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
-        const distance = size * (0.8 + Math.random() * 1.0);
+        const angle = (i / 15) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
+        const distance = size * (0.6 + Math.random() * 0.8); // Slightly reduced distance
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
 
-        const randomDelay = Math.random() * 0.05;
-        const randomDuration = 0.6 + Math.random() * 0.4;
+        const randomDelay = Math.random() * 0.02; // Reduced from 0.05
+        const randomDuration = 0.3 + Math.random() * 0.2; // Reduced from 0.6 + 0.4
 
         const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
@@ -587,7 +589,7 @@ function Poof({ x, y, size }) {
           animationDuration: `${randomDuration}s`,
           animationFillMode: "forwards",
           animationTimingFunction: "ease-out",
-          fontSize: Math.floor(size * (0.3 + Math.random() * 0.3)) + "px",
+          fontSize: Math.floor(size * (0.25 + Math.random() * 0.25)) + "px", // Slightly smaller particles
           textShadow: "0 0 4px rgba(255, 255, 255, 0.6)",
           filter: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))",
           zIndex: 15,
@@ -610,7 +612,7 @@ function Poof({ x, y, size }) {
           borderRadius: "50%",
           background:
             "radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,215,0,0.4) 50%, transparent 100%)",
-          animation: "explosion-flash 0.2s ease-out forwards",
+          animation: "explosion-flash 0.15s ease-out forwards", // Reduced from 0.2s
           pointerEvents: "none",
           zIndex: 12,
         }}
@@ -626,7 +628,7 @@ function Poof({ x, y, size }) {
           height: 0,
           border: "2px solid rgba(255,215,0,0.6)",
           borderRadius: "50%",
-          animation: "shockwave 0.3s ease-out forwards",
+          animation: "shockwave 0.2s ease-out forwards", // Reduced from 0.3s
           pointerEvents: "none",
           zIndex: 11,
         }}
