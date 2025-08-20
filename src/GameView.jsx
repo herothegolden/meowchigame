@@ -266,13 +266,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setNewTiles(new Set());
         setFallDelay({});
         
-        // Show combo message - CSS handles the animation duration
+        // Show combo message - but only set it ONCE, not repeatedly
         if (comboCount > 0) {
           setCombo(comboCount);
           haptic(15);
-          // Auto-hide combo after 1 second (matches CSS animation)
+          // Clear combo after animation completes
           setTimeout(() => setCombo(0), 1000);
         }
+        
+        // IMPORTANT: Clear particles array to prevent buildup
+        setTimeout(() => setFx([]), 1200);
         
         ensureSolvable();
         setAnimating(false);
@@ -283,10 +286,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      // Create particles for every match - CSS handles the short duration
+      // Create particles for every match - but clear old ones first
       const fxId = Date.now() + Math.random();
       setFx((prev) => [
-        ...prev,
+        ...prev.slice(-10), // Keep only last 10 particle sets to prevent buildup
         ...matches.map((m, i) => ({
           id: fxId + i + Math.random(),
           x: m[1] * cell,
