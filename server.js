@@ -216,7 +216,7 @@ app.post('/api/user/register', requireDB, async (req, res) => {
   }
 });
 
-// Update user profile (flexible)
+// FIXED: Update user profile with correct SQL syntax
 app.put('/api/user/profile', requireDB, async (req, res) => {
   try {
     const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
@@ -225,33 +225,33 @@ app.put('/api/user/profile', requireDB, async (req, res) => {
       return res.status(400).json({ error: 'Telegram ID is required' });
     }
 
-    // Build update query dynamically
+    // Build update query dynamically with CORRECT SQL syntax
     const updates = [];
     const values = [];
     let paramIndex = 1;
 
     if (display_name !== undefined) {
-      updates.push(`display_name = ${paramIndex++}`);
+      updates.push(`display_name = $${paramIndex++}`); // FIXED: Added $ before paramIndex
       values.push(display_name);
     }
 
     if (country_flag !== undefined) {
-      updates.push(`country_flag = ${paramIndex++}`);
+      updates.push(`country_flag = $${paramIndex++}`); // FIXED: Added $ before paramIndex
       values.push(country_flag);
     }
 
     if (profile_picture !== undefined) {
-      updates.push(`profile_picture = ${paramIndex++}`);
+      updates.push(`profile_picture = $${paramIndex++}`); // FIXED: Added $ before paramIndex
       values.push(profile_picture);
       // Mark picture as changed if it's not the default
       if (profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
-        updates.push(`picture_changed = ${paramIndex++}`);
+        updates.push(`picture_changed = $${paramIndex++}`); // FIXED: Added $ before paramIndex
         values.push(true);
       }
     }
 
     if (name_changed !== undefined) {
-      updates.push(`name_changed = ${paramIndex++}`);
+      updates.push(`name_changed = $${paramIndex++}`); // FIXED: Added $ before paramIndex
       values.push(name_changed);
     }
 
@@ -259,7 +259,10 @@ app.put('/api/user/profile', requireDB, async (req, res) => {
     updates.push(`updated_at = NOW()`);
     values.push(telegram_id);
 
-    const query = `UPDATE users SET ${updates.join(', ')} WHERE telegram_id = ${paramIndex} RETURNING *`;
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE telegram_id = $${paramIndex} RETURNING *`;
+    
+    console.log('Executing query:', query);
+    console.log('With values:', values);
     
     const updatedUser = await pool.query(query, values);
 
@@ -315,7 +318,7 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
   }
 });
 
-// Get leaderboard (daily/weekly/alltime) - removed profile completion requirement
+// Get leaderboard (daily/weekly/alltime)
 app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
   try {
     const { type } = req.params;
@@ -342,7 +345,7 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
       countryFilter = 'AND u.country_flag IS NOT NULL';
     }
 
-    // Get top 100 players (removed profile_completed requirement)
+    // Get top 100 players
     const leaderboard = await pool.query(`
       SELECT 
         u.display_name,
@@ -361,9 +364,36 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
       LIMIT 100
     `);
 
+    // Get user's rank if not in top 100
+    let userRank = null;
+    if (telegram_id) {
+      const userRankQuery = await pool.query(`
+        WITH ranked_users AS (
+          SELECT 
+            u.display_name,
+            u.country_flag,
+            u.telegram_id,
+            SUM(g.score) as total_score,
+            COUNT(g.id) as games_played,
+            MAX(g.score) as best_score,
+            MAX(g.max_combo) as best_combo,
+            ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) as rank
+          FROM users u
+          JOIN games g ON u.id = g.user_id
+          WHERE 1=1 ${dateFilter} ${countryFilter}
+          GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
+        )
+        SELECT * FROM ranked_users WHERE telegram_id = $1
+      `, [telegram_id]);
+
+      if (userRankQuery.rows.length > 0) {
+        userRank = userRankQuery.rows[0];
+      }
+    }
+
     res.json({ 
       leaderboard: leaderboard.rows,
-      userRank: null,
+      userRank: userRank,
       type,
       country: country || null,
       timestamp: new Date().toISOString()
