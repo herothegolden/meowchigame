@@ -7,6 +7,7 @@ const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
 export default function App() {
+  // Stable viewport for Telegram webview
   useEffect(() => {
     const setVH = () => {
       const tg = getTG();
@@ -19,6 +20,7 @@ export default function App() {
     return () => window.removeEventListener("resize", setVH);
   }, []);
 
+  // Telegram init (safe no-op outside Telegram)
   useEffect(() => {
     const tg = getTG();
     try {
@@ -28,6 +30,7 @@ export default function App() {
     } catch {}
   }, []);
 
+  // ------------ App state / routing ------------
   const [screen, setScreen] = useState("home");
   const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(150);
@@ -65,6 +68,7 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
+  // ------------ Minimal header ------------
   function Header() {
     const backable = screenHistory.length > 1;
     return (
@@ -76,6 +80,8 @@ export default function App() {
           </div>
           <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
         </div>
+
+        {/* No more top nav row */}
         <div className="header-line2">
           <div className="row" style={{ gap: 8 }}>
             {backable ? (
@@ -90,12 +96,15 @@ export default function App() {
     );
   }
 
+  // Leaderboard / Shop / Settings / Daily / Invite unchanged (omitted here for brevity)
+
+  // ------------ Render ------------
   return (
     <>
       <Splash show={true} />
 
-      <div className="shell">
-        {/* ✅ Hide Header on Home (so no old dark strip) */}
+      <div className="shell" /* visibility controlled in your Splash */>
+        {/* Hide Header on Home to remove old dark strip */}
         {screen !== "home" && <Header />}
 
         <main className="content">
