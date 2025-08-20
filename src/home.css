@@ -1,30 +1,26 @@
-/* Full-bleed cream background for Home (single background only) */
 .home-root{
-  position:relative;
   width:100%;
   min-height:calc(var(--vh,1vh)*100 - 8px);
   display:grid;
-  align-items:start;
   justify-items:center;
-  background:#fef9ea;   /* the only background */
-  /* remove rounded container look */
-  border-radius:0;
+  align-items:start;
+  background:#fef9ea;
 }
 
-/* center wrapper stays narrow but can be tweaked */
-.home-center{position:relative;z-index:1;width:100%;max-width:420px;padding:16px;box-sizing:border-box}
+.home-center{
+  width:100%;
+  max-width:420px;
+  padding:16px;
+  box-sizing:border-box;
+}
 
-/* kill inner panel look (no extra background, no shadow, no radius) */
 .home-card{
   background:transparent;
   border-radius:0;
   box-shadow:none;
   padding:24px;
-  position:relative;
-  overflow:visible;
 }
 
-/* header/topbar */
 .home-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px}
 .home-logo{display:flex;align-items:center;gap:10px}
 .home-logo-icon{
@@ -34,22 +30,19 @@
 .home-logo-icon img{width:100%;height:100%;object-fit:contain;background:transparent}
 .home-logo-text{font-size:28px;font-weight:800;color:#2d3748;letter-spacing:-.3px}
 
-/* currency pill */
 .home-currency{
   background:linear-gradient(135deg,#4ecdc4,#45b7d1);color:#fff;padding:10px 16px;border-radius:20px;font-weight:700;font-size:14px;
   box-shadow:0 4px 12px rgba(78,205,196,.3);white-space:nowrap
 }
 
-/* title */
 .home-title{text-align:center;margin:8px 0 18px}
 .home-title h1{font-size:22px;font-weight:700;color:#2d3748;margin-bottom:6px}
 .home-title p{color:#718096;font-size:14px}
 
-/* menu */
 .home-menu{display:grid;gap:12px;margin-bottom:22px}
 .home-item{
   width:100%;border:2px solid #f7fafc;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:14px;
-  cursor:pointer;transition:transform .2s,box-shadow .2s,border-color .2s;background:#fff;text-align:left
+  cursor:pointer;transition:transform .2s,box-shadow .2s,border-color .2s;background:#fff
 }
 .home-item .home-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#f7fafc;font-size:22px;flex-shrink:0}
 .home-item .home-text{font-size:16px;font-weight:700;color:#2d3748}
@@ -58,7 +51,6 @@
 .home-item.primary .home-icon{background:rgba(255,255,255,.22)}
 .home-item.primary .home-text{color:#fff}
 
-/* instructions */
 .home-instructions{
   background:linear-gradient(135deg,#f8f9ff,#f1f3ff);border-radius:16px;padding:18px;border:1px solid #e6f3ff
 }
@@ -66,9 +58,12 @@
 .home-instructions p{color:#4a5568;line-height:1.55;font-size:14px}
 .home-emoji{font-size:18px}
 
-/* responsive */
-@media (max-width:480px){
-  .home-center{padding:12px}
-  .home-logo-text{font-size:24px}
-  .home-currency{font-size:13px;padding:8px 14px}
+.home-bottom-nav{display:flex;justify-content:space-between;gap:12px;margin-top:18px}
+.home-nav-item{
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;
+  border-radius:12px;background:#fff;border:2px solid #f7fafc;box-shadow:0 4px 12px rgba(0,0,0,.08);
+  flex:1;cursor:pointer;transition:all .2s
 }
+.home-nav-item:hover{background:#f7fafc;transform:translateY(-2px)}
+.home-nav-icon{font-size:18px}
+.home-nav-text{font-size:12px;font-weight:700;color:#4a5568;text-align:center}
