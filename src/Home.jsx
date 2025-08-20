@@ -65,13 +65,20 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
     setTempName('');
   };
 
+  // Check if user can change profile picture
+  const canChangeProfilePicture = () => {
+    return !userProfile?.picture_changed && 
+           (!userProfile?.profile_picture || 
+            userProfile?.profile_picture === "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png");
+  };
+
   // Handle profile picture upload
   const handleProfilePicUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     // Check if user already changed their profile picture
-    if (userProfile?.profile_picture && userProfile?.profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
+    if (!canChangeProfilePicture()) {
       alert('You can only change your profile picture once for free. Future changes will cost coins!');
       return;
     }
@@ -113,7 +120,10 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
         <div className="profile-card">
           <div className="profile-header">
             <div className="profile-avatar-container">
-              <div className="profile-avatar" onClick={() => document.getElementById('profile-pic-upload').click()}>
+              <div 
+                className={`profile-avatar ${!canChangeProfilePicture() ? 'no-upload' : ''}`}
+                onClick={() => canChangeProfilePicture() && document.getElementById('profile-pic-upload').click()}
+              >
                 <img
                   src={userProfile?.profile_picture || "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"}
                   alt="Profile"
@@ -122,7 +132,7 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
                   }}
                 />
                 <div className="avatar-upload-overlay">
-                  <span>📷</span>
+                  <span>{canChangeProfilePicture() ? '📷' : '🚫'}</span>
                 </div>
                 {userProfile?.country_flag && (
                   <div className="country-flag-badge">
@@ -130,13 +140,15 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
                   </div>
                 )}
               </div>
-              <input
-                id="profile-pic-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleProfilePicUpload}
-                style={{ display: 'none' }}
-              />
+              {canChangeProfilePicture() && (
+                <input
+                  id="profile-pic-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePicUpload}
+                  style={{ display: 'none' }}
+                />
+              )}
             </div>
             <div className="profile-info">
               <div className="profile-name-section">
@@ -159,8 +171,12 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
                 ) : (
                   <h2 className="profile-name" onClick={startEditingName}>
                     {getDisplayName()}
-                    <button className="edit-name-btn" onClick={startEditingName}>
-                      ✏️
+                    <button 
+                      className={`edit-name-btn ${userProfile?.name_changed ? 'disabled' : ''}`}
+                      onClick={startEditingName}
+                      title={userProfile?.name_changed ? 'Name already changed (future changes cost coins)' : 'Click to edit name (free)'}
+                    >
+                      {userProfile?.name_changed ? '🚫' : '✏️'}
                     </button>
                   </h2>
                 )}
