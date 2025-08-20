@@ -31,17 +31,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
-  // Animation limiting
-  const [animationCounts, setAnimationCounts] = useState({
-    hints: 0,
-    combos: 0,
-    particles: 0
-  });
-  const ANIMATION_LIMITS = {
-    hints: 3,        // Max 3 hint animations
-    combos: 5,       // Max 5 combo messages
-    particles: 8     // Max 8 particle explosions
-  };
+  // Animation limiting - SIMPLE: Only 2 times total
+  const [animationCount, setAnimationCount] = useState(0);
+  const MAX_ANIMATIONS = 2; // Only 2 animations total
 
   const [gameStartTime, setGameStartTime] = useState(Date.now());
   const [moveCount, setMoveCount] = useState(0);
@@ -279,11 +271,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setFallDelay({});
         
         // Show combo message only if under limit
-        if (comboCount > 0 && animationCounts.combos < ANIMATION_LIMITS.combos) {
+        if (comboCount > 0 && animationCount < MAX_ANIMATIONS) {
           setCombo(comboCount);
-          setAnimationCounts(prev => ({ ...prev, combos: prev.combos + 1 }));
+          setAnimationCount(prev => prev + 1);
           haptic(15);
-          // Auto-hide combo after 500ms
           setTimeout(() => setCombo(0), 500);
         }
         
@@ -297,7 +288,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       setBlast(new Set(keys));
 
       // Create particles only if under limit
-      if (animationCounts.particles < ANIMATION_LIMITS.particles) {
+      if (animationCount < MAX_ANIMATIONS) {
         const fxId = Date.now() + Math.random();
         setFx((prev) => [
           ...prev,
@@ -307,7 +298,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             y: m[0] * cell,
           })),
         ]);
-        setAnimationCounts(prev => ({ ...prev, particles: prev.particles + 1 }));
       }
 
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
@@ -363,29 +353,15 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   function doHint() {
     if (animating || timeLeft <= 0) return;
     
-    // Check if hint animations are still allowed
-    if (animationCounts.hints >= ANIMATION_LIMITS.hints) {
-      // Still find and highlight the move, just without animation
-      const m = findFirstMove(gridRef.current);
-      if (!m) {
-        shuffleBoard();
-        return;
-      }
-      setHint(m);
-      setTimeout(() => setHint(null), 300); // Shorter duration, no animation
-      haptic(10);
-      return;
-    }
-    
     const m = findFirstMove(gridRef.current);
     if (!m) {
       shuffleBoard();
       return;
     }
     
+    // Show hint with or without animation based on limit
     setHint(m);
-    setAnimationCounts(prev => ({ ...prev, hints: prev.hints + 1 }));
-    setTimeout(() => setHint(null), 800);
+    setTimeout(() => setHint(null), animationCount < MAX_ANIMATIONS ? 800 : 300);
     haptic(10);
   }
 
@@ -427,12 +403,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     setMoveCount(0);
     setMaxComboAchieved(0);
     
-    // Reset animation counters
-    setAnimationCounts({
-      hints: 0,
-      combos: 0,
-      particles: 0
-    });
+    // Reset animation counter
+    setAnimationCount(0);
     
     // Clear any remaining particles
     setFx([]);
@@ -505,7 +477,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
                 (hint[1][0] === r && hint[1][1] === c));
             
             // Disable hint animation if limit reached
-            const hintClass = isHinted ? (animationCounts.hints < ANIMATION_LIMITS.hints ? "hint" : "hint-static") : "";
+            const hintClass = isHinted ? (animationCount < MAX_ANIMATIONS ? "hint" : "hint-static") : "";
             
             const isBlasting = blast.has(`${r}:${c}`);
 
@@ -564,11 +536,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {combo > 0 && animationCounts.combos <= ANIMATION_LIMITS.combos && (
+        {/* Show combo message only if animations allowed */}
+        {combo > 0 && animationCount <= MAX_ANIMATIONS && (
           <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>
-        )}
-        {combo > 0 && animationCounts.combos > ANIMATION_LIMITS.combos && (
-          <div className="combo-simple">Combo x{combo + 1}!</div>
         )}
         {paused && (
           <div className="pause-overlay">
