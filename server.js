@@ -318,7 +318,7 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
   }
 });
 
-// Get leaderboard (daily/weekly/alltime)
+// Get leaderboard (daily/weekly/alltime) - NO profile completion required
 app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
   try {
     const { type } = req.params;
@@ -345,7 +345,7 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
       countryFilter = 'AND u.country_flag IS NOT NULL';
     }
 
-    // Get top 100 players
+    // Get top 100 players - NO profile_completed filter
     const leaderboard = await pool.query(`
       SELECT 
         u.display_name,
@@ -364,7 +364,7 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
       LIMIT 100
     `);
 
-    // Get user's rank if not in top 100
+    // Get user's rank if not in top 100 - NO profile_completed filter
     let userRank = null;
     if (telegram_id) {
       const userRankQuery = await pool.query(`
