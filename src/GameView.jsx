@@ -31,10 +31,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
-  // Animation limiting - SIMPLE: Only 2 times total
-  const [animationCount, setAnimationCount] = useState(0);
-  const MAX_ANIMATIONS = 2; // Only 2 animations total
-
   const [gameStartTime, setGameStartTime] = useState(Date.now());
   const [moveCount, setMoveCount] = useState(0);
   const [maxComboAchieved, setMaxComboAchieved] = useState(0);
@@ -239,10 +235,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
           n.delete(`${r2}-${c2}`);
           return n;
         });
-      }, 140); // Reduced from 220ms
+      }, 140);
       haptic(8);
       setSel({ r: r1, c: c1 });
-      setTimeout(() => setSel(null), 80); // Reduced from 120ms
+      setTimeout(() => setSel(null), 80);
       return;
     }
 
@@ -255,7 +251,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       resolveCascades(g, () => {
         if (timeLeftRef.current <= 0) finish();
       });
-    }, 200); // Reduced from 300ms
+    }, 200);
   }
 
   function resolveCascades(start, done) {
@@ -270,12 +266,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setNewTiles(new Set());
         setFallDelay({});
         
-        // Show combo message only if under limit
-        if (comboCount > 0 && animationCount < MAX_ANIMATIONS) {
+        // Show combo message - CSS handles the animation duration
+        if (comboCount > 0) {
           setCombo(comboCount);
-          setAnimationCount(prev => prev + 1);
           haptic(15);
-          setTimeout(() => setCombo(0), 500);
+          // Auto-hide combo after 1 second (matches CSS animation)
+          setTimeout(() => setCombo(0), 1000);
         }
         
         ensureSolvable();
@@ -287,18 +283,16 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      // Create particles only if under limit
-      if (animationCount < MAX_ANIMATIONS) {
-        const fxId = Date.now() + Math.random();
-        setFx((prev) => [
-          ...prev,
-          ...matches.map((m, i) => ({
-            id: fxId + i + Math.random(),
-            x: m[1] * cell,
-            y: m[0] * cell,
-          })),
-        ]);
-      }
+      // Create particles for every match - CSS handles the short duration
+      const fxId = Date.now() + Math.random();
+      setFx((prev) => [
+        ...prev,
+        ...matches.map((m, i) => ({
+          id: fxId + i + Math.random(),
+          x: m[1] * cell,
+          y: m[0] * cell,
+        })),
+      ]);
 
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
@@ -359,9 +353,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       return;
     }
     
-    // Show hint with or without animation based on limit
+    // Show hint - CSS handles the 2-pulse animation
     setHint(m);
-    setTimeout(() => setHint(null), animationCount < MAX_ANIMATIONS ? 800 : 300);
+    setTimeout(() => setHint(null), 1200); // Match CSS animation duration
     haptic(10);
   }
 
@@ -402,11 +396,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
-    
-    // Reset animation counter
-    setAnimationCount(0);
-    
-    // Clear any remaining particles
     setFx([]);
   }
 
@@ -459,7 +448,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         </div>
       </div>
 
-      <div ref={boardRef} className={`board ${animationCount >= MAX_ANIMATIONS ? 'no-animations' : ''}`} style={{ width: boardW, height: boardH }}>
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
         <div
           className="gridlines"
           style={{
@@ -475,14 +464,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               hint &&
               ((hint[0][0] === r && hint[0][1] === c) ||
                 (hint[1][0] === r && hint[1][1] === c));
-            
-            // Disable hint animation if limit reached
-            const hintClass = isHinted ? (animationCount < MAX_ANIMATIONS ? "hint" : "hint-static") : "";
-            
             const isBlasting = blast.has(`${r}:${c}`);
-            
-            // Disable blasting animation if limit reached
-            const blastClass = isBlasting && animationCount < MAX_ANIMATIONS ? "blasting" : "";
 
             let swapTransform = "";
             if (swapping) {
@@ -511,9 +493,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${hintClass} ${
+                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${
                   isSwapping ? "swapping" : ""
-                } ${blastClass} ${isNewTile && animationCount < MAX_ANIMATIONS ? "drop-in" : ""} ${
+                } ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${
                   isGrab ? "grab" : ""
                 } ${isShake ? "shake" : ""}`}
                 style={{
@@ -536,14 +518,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             );
           })
         )}
-        {/* Only show particles if animations allowed */}
-        {animationCount < MAX_ANIMATIONS && fx.map((p, i) => (
+        {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {/* Show combo message only if animations allowed */}
-        {combo > 0 && animationCount <= MAX_ANIMATIONS && (
-          <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>
-        )}
+        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
@@ -584,19 +562,19 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 }
 
 function Poof({ x, y, size }) {
-  // REDUCED PARTICLE COUNT from 30 to 15 for better performance
-  const sparks = Array.from({ length: 15 });
+  // Reduced particle count for better performance
+  const sparks = Array.from({ length: 12 });
 
   return (
     <>
       {sparks.map((_, i) => {
-        const angle = (i / 15) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
-        const distance = size * (0.6 + Math.random() * 0.8); // Slightly reduced distance
+        const angle = (i / 12) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
+        const distance = size * (0.6 + Math.random() * 0.8);
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
 
-        const randomDelay = Math.random() * 0.02; // Reduced from 0.05
-        const randomDuration = 0.3 + Math.random() * 0.2; // Reduced from 0.6 + 0.4
+        const randomDelay = Math.random() * 0.02;
+        const randomDuration = 0.3 + Math.random() * 0.2; // Short duration
 
         const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
@@ -619,7 +597,7 @@ function Poof({ x, y, size }) {
           animationDuration: `${randomDuration}s`,
           animationFillMode: "forwards",
           animationTimingFunction: "ease-out",
-          fontSize: Math.floor(size * (0.25 + Math.random() * 0.25)) + "px", // Slightly smaller particles
+          fontSize: Math.floor(size * (0.25 + Math.random() * 0.25)) + "px",
           textShadow: "0 0 4px rgba(255, 255, 255, 0.6)",
           filter: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))",
           zIndex: 15,
@@ -642,7 +620,7 @@ function Poof({ x, y, size }) {
           borderRadius: "50%",
           background:
             "radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,215,0,0.4) 50%, transparent 100%)",
-          animation: "explosion-flash 0.15s ease-out forwards", // Reduced from 0.2s
+          animation: "explosion-flash 0.15s ease-out forwards",
           pointerEvents: "none",
           zIndex: 12,
         }}
@@ -658,7 +636,7 @@ function Poof({ x, y, size }) {
           height: 0,
           border: "2px solid rgba(255,215,0,0.6)",
           borderRadius: "50%",
-          animation: "shockwave 0.2s ease-out forwards", // Reduced from 0.3s
+          animation: "shockwave 0.2s ease-out forwards",
           pointerEvents: "none",
           zIndex: 11,
         }}
