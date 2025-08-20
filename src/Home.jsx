@@ -1,22 +1,7 @@
-import React, { useEffect } from "react";
+import React from "react";
 import "./home.css";
 
 export default function Home({ coins = 0, onNavigate }) {
-  // Switch the *page* background to cream on Home; restore dark when leaving.
-  useEffect(() => {
-    const prev = document.body.style.background;
-    document.body.style.background = "#fef9ea";
-    try {
-      window.Telegram?.WebApp?.setBackgroundColor?.("#fef9ea");
-    } catch {}
-    return () => {
-      document.body.style.background = "var(--bg)";
-      try {
-        window.Telegram?.WebApp?.setBackgroundColor?.("#0b1020");
-      } catch {}
-    };
-  }, []);
-
   return (
     <div className="home-root">
       <div className="home-center">
