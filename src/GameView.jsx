@@ -322,8 +322,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       score, 
       coins: finalCoins,
       moves_used: moveCount,
-      max_combo: maxComboAchieved,
-      user_needs_profile: result.user_needs_profile || false
+      max_combo: maxComboAchieved
     });
   }
 
@@ -423,11 +422,11 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
           })
         )}
         {fx.map((p, i) => <Poof key={p.id ?? i} x={p.x} y={p.y} size={cell} />)}
-        {combo > 0 && <div className="combo">🭠Sweet Combo x{combo + 1}! 🭠</div>}
+        {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭 </div>}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>🬠Game Paused</div>
+              <div className="title" style={{ marginBottom: 8 }}>🍬 Game Paused</div>
               <div className="muted" style={{ marginBottom: 12 }}>Take a sweet break!</div>
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
@@ -461,7 +460,7 @@ function Poof({ x, y, size }) {
         const ty = size / 2 + Math.sin(angle) * distance;
         const randomDelay = Math.random() * 0.2;
         const randomDuration = 1.2 + Math.random() * 0.6;
-        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🬠', '💎'];
+        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🍬', '💎'];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
         const style = {
           left: x, top: y, ["--cx"]: size / 2 + "px", ["--cy"]: size / 2 + "px",
