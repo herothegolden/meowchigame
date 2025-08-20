@@ -174,13 +174,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
           </div>
         </div>
         
-        {/* Profile completion notice */}
-        {userNeedsProfile && (
-          <div className="profile-notice">
-            <span className="notice-icon">🏆</span>
-            <span className="notice-text">Complete your profile to join the rankings!</span>
-          </div>
-        )}
+        {/* Profile completion notice - removed as per new UX */}
       </div>
 
       {/* Tabs for Daily/Weekly/All-time */}
