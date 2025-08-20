@@ -375,12 +375,17 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   async function finish() {
     const finalCoins = Math.floor(score * 0.15);
-    await submitGameScore(score, finalCoins);
+    
+    // Submit score to backend
+    const result = await submitGameScore(score, finalCoins);
+    
+    // Exit game with results
     onExit({
       score,
       coins: finalCoins,
       moves_used: moveCount,
       max_combo: maxComboAchieved,
+      gameSubmitted: result ? true : false // Let parent know if score was saved
     });
   }
 
