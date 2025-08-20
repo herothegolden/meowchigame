@@ -1,22 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 
-/**
- * ENHANCED GameView with 60-Second Timer
- * - Added countdown timer from 60 seconds
- * - Game ends when timer reaches 0
- * - Timer positioned above score/moves/combo row
- */
-
 const COLS = 8;
 const ROWS = 8;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
-const GAME_DURATION = 60; // 60 seconds
-
-// Tune this to adjust emoji size relative to the cell.
+const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.86;
 
-// Your emojis
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () => CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
@@ -26,17 +16,14 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [cell, setCell] = useState(48);
   useResizeCell(containerRef, setCell);
 
-  // Board state
   const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
-  // Selection / hint / swap
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
 
-  // Score / moves / combo FX + TIMER
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(20);
   const [combo, setCombo] = useState(0);
@@ -44,44 +31,51 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
-  // Game tracking for backend
   const [gameStartTime, setGameStartTime] = useState(Date.now());
   const [moveCount, setMoveCount] = useState(0);
   const [maxComboAchieved, setMaxComboAchieved] = useState(0);
 
-  // New tiles (for drop-in) + fall delay map (by distance)
   const [newTiles, setNewTiles] = useState(new Set());
-  const [fallDelay, setFallDelay] = useState({}); // {"r-c": seconds}
+  const [fallDelay, setFallDelay] = useState({});
 
-  // Input/animation helpers
   const [paused, setPaused] = useState(false);
-  const [animating, setAnimating] = useState(false); // lock input during cascades
-  const animatingRef = useRef(animating); animatingRef.current = animating;
+  const [animating, setAnimating] = useState(false);
+  const animatingRef = useRef(animating);
+  animatingRef.current = animating;
 
-  // Press/invalid-swap feedback
-  const [grabTile, setGrabTile] = useState(null); // {r,c} while pressed
-  const [shake, setShake] = useState(new Set());  // tiles shaking after invalid swap
+  const [grabTile, setGrabTile] = useState(null);
+  const [shake, setShake] = useState(new Set());
 
-  const movesRef = useRef(moves); movesRef.current = moves;
-  const timeLeftRef = useRef(timeLeft); timeLeftRef.current = timeLeft;
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
+  const timeLeftRef = useRef(timeLeft);
+  timeLeftRef.current = timeLeft;
 
-  useEffect(() => { window.currentGameScore = score; }, [score]);
+  useEffect(() => {
+    window.currentGameScore = score;
+  }, [score]);
 
-  // Track max combo achieved
   useEffect(() => {
     if (combo > maxComboAchieved) {
       setMaxComboAchieved(combo);
     }
   }, [combo, maxComboAchieved]);
 
-  // 60-second countdown timer
   useEffect(() => {
     if (paused) return;
 
-    const timer = setInterval(() => {
+    const t = makeGrid(ROWS, COLS);
+    let idx = 0;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
+    removeAllMatches(t);
+    if (hasAnyMove(t)) return t;
+    attempts++;
+  }
+  return initSolvableGrid();
+} timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          // Time's up! End the game
           clearInterval(timer);
           setTimeout(() => finish(), 100);
           return 0;
@@ -95,10 +89,11 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
-    try { navigator.vibrate?.(ms); } catch {}
+    try {
+      navigator.vibrate?.(ms);
+    } catch {}
   }
 
-  // Submit game score to backend
   async function submitGameScore(finalScore, coinsEarned) {
     if (!userTelegramId) {
       console.log('No Telegram ID, skipping score submission');
@@ -124,7 +119,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       });
 
       const result = await response.json();
-      
+
       if (!response.ok) {
         console.error('Score submission failed:', result.error);
         return { user_needs_profile: false };
@@ -138,10 +133,11 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     }
   }
 
-  // Pointer events (Telegram WebView friendly) — preserved
   useEffect(() => {
-    const el = boardRef.current; if (!el || paused) return;
-    let drag = null; const thresholdBase = 18;
+    const el = boardRef.current;
+    if (!el || paused) return;
+    let drag = null;
+    const thresholdBase = 18;
 
     const rc = (e) => {
       const rect = el.getBoundingClientRect();
@@ -151,9 +147,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     };
 
     const down = (e) => {
-      if (animatingRef.current || timeLeftRef.current <= 0) return; // lock during cascades or when time is up
+      if (animatingRef.current || timeLeftRef.current <= 0) return;
       el.setPointerCapture?.(e.pointerId);
-      const p = rc(e); if (!inBounds(p.r, p.c)) return;
+      const p = rc(e);
+      if (!inBounds(p.r, p.c)) return;
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
       setSel({ r: p.r, c: p.c });
       setGrabTile({ r: p.r, c: p.c });
@@ -163,10 +160,12 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     const move = (e) => {
       if (!drag || animatingRef.current || timeLeftRef.current <= 0) return;
       const p = rc(e);
-      const dx = p.x - drag.x, dy = p.y - drag.y;
+      const dx = p.x - drag.x;
+      const dy = p.y - drag.y;
       const threshold = Math.min(thresholdBase, Math.floor(cell * 0.35));
       if (!drag.dragging && Math.hypot(dx, dy) > threshold) {
-        drag.dragging = true; haptic(8);
+        drag.dragging = true;
+        haptic(8);
         const horiz = Math.abs(dx) > Math.abs(dy);
         const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
         const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
@@ -176,7 +175,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
 
     const up = (e) => {
       if (!drag) return;
-      const p = rc(e); const dx = p.x - drag.x, dy = p.y - drag.y;
+      const p = rc(e);
+      const dx = p.x - drag.x;
+      const dy = p.y - drag.y;
       if (!drag.dragging) {
         setSel({ r: drag.r, c: drag.c });
       } else {
@@ -184,7 +185,10 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
           const horiz = Math.abs(dx) > Math.abs(dy);
           const tr = drag.r + (horiz ? 0 : (dy > 0 ? 1 : -1));
           const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
-          if (inBounds(tr, tc)) { trySwap(drag.r, drag.c, tr, tc); haptic(12); }
+          if (inBounds(tr, tc)) {
+            trySwap(drag.r, drag.c, tr, tc);
+            haptic(12);
+          }
         }
         setSel(null);
       }
@@ -193,34 +197,35 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     };
 
     el.addEventListener("pointerdown", down, { passive: true });
-    el.addEventListener("pointermove",  move, { passive: true });
-    el.addEventListener("pointerup",    up,   { passive: true });
-    el.addEventListener("pointercancel",up,   { passive: true });
+    el.addEventListener("pointermove", move, { passive: true });
+    el.addEventListener("pointerup", up, { passive: true });
+    el.addEventListener("pointercancel", up, { passive: true });
     return () => {
       el.removeEventListener("pointerdown", down);
-      el.removeEventListener("pointermove",  move);
-      el.removeEventListener("pointerup",    up);
-      el.removeEventListener("pointercancel",up);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
     };
   }, [cell, paused, settings?.haptics]);
 
   function trySwap(r1, c1, r2, c2) {
-    if (timeLeft <= 0) return; // Don't allow swaps when time is up
-    
+    if (timeLeft <= 0) return;
+
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
     const g = cloneGrid(gridRef.current);
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
     const matches = findMatches(g);
 
     if (matches.length === 0) {
-      // INVALID SWAP: shake both tiles briefly
       const s = new Set(shake);
-      s.add(`${r1}-${c1}`); s.add(`${r2}-${c2}`);
+      s.add(`${r1}-${c1}`);
+      s.add(`${r2}-${c2}`);
       setShake(s);
       setTimeout(() => {
         setShake((prev) => {
           const n = new Set(prev);
-          n.delete(`${r1}-${c1}`); n.delete(`${r2}-${c2}`);
+          n.delete(`${r1}-${c1}`);
+          n.delete(`${r2}-${c2}`);
           return n;
         });
       }, 220);
@@ -230,27 +235,35 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       return;
     }
 
-    // Valid swap - increment move count
     setMoveCount(prev => prev + 1);
-    
+
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
-    // Let CSS animate swap; then commit the grid
     setTimeout(() => {
-      setGrid(g); setSwapping(null); setMoves((m) => Math.max(0, m - 1));
-      resolveCascades(g, () => { if (timeLeftRef.current <= 0) finish(); });
+      setGrid(g);
+      setSwapping(null);
+      setMoves((m) => Math.max(0, m - 1));
+      resolveCascades(g, () => {
+        if (timeLeftRef.current <= 0) finish();
+      });
     }, 300);
   }
 
-  // Cascade resolver — timing staged; input locked; distance-based fall delay computed
   function resolveCascades(start, done) {
     setAnimating(true);
-    let g = cloneGrid(start); let comboCount = 0;
+    let g = cloneGrid(start);
+    let comboCount = 0;
 
     const step = () => {
       const matches = findMatches(g);
       if (matches.length === 0) {
-        setGrid(g); setNewTiles(new Set()); setFallDelay({});
-        if (comboCount > 0) { setCombo(comboCount); haptic(15); setTimeout(() => setCombo(0), 1500); }
+        setGrid(g);
+        setNewTiles(new Set());
+        setFallDelay({});
+        if (comboCount > 0) {
+          setCombo(comboCount);
+          haptic(15);
+          setTimeout(() => setCombo(0), 1500);
+        }
         ensureSolvable();
         setAnimating(false);
         done && done();
@@ -260,7 +273,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      // FX points
       const fxId = Date.now() + Math.random();
       setFx((prev) => [
         ...prev,
@@ -274,53 +286,49 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
       setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
       onCoins(Math.ceil(matches.length / 4));
 
-      // 1) Mark matches null in a copy (pop phase)
-      matches.forEach(([r, c]) => { g[r][c] = null; });
-      setGrid(cloneGrid(g)); // show holes so pop anim is clear
-      setTimeout(() => setBlast(new Set()), 200); // let pop finish ~200ms
+      matches.forEach(([r, c]) => {
+        g[r][c] = null;
+      });
+      setGrid(cloneGrid(g));
+      setTimeout(() => setBlast(new Set()), 200);
 
-      // 2) Gravity + refill (after pop)
       setTimeout(() => {
-        // Compute distance-based delays BEFORE gravity: how many nulls below each tile
         const delayMap = {};
         for (let c = 0; c < COLS; c++) {
-          // Precompute cumulative nulls from bottom for speed
           const nullsBelow = new Array(ROWS).fill(0);
           let count = 0;
           for (let r = ROWS - 1; r >= 0; r--) {
             nullsBelow[r] = count;
             if (g[r][c] === null) count++;
           }
-          // Each non-null will fall by `nullsBelow[r]` rows
           for (let r = ROWS - 1; r >= 0; r--) {
             if (g[r][c] != null) {
-              const dist = nullsBelow[r]; // rows to fall
+              const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                // 0.03s per row, capped to 0.14s for snappiness
                 delayMap[`${newR}-${c}`] = Math.min(0.14, dist * 0.03);
               }
             }
           }
         }
 
-        // Apply gravity + refill
         applyGravity(g);
         const empties = new Set();
-        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++)
+            if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
 
-        setNewTiles(empties);       // new tiles get drop-in animation
-        setFallDelay(delayMap);     // per-tile delay by actual distance
-        setGrid(cloneGrid(g));      // left/top transitions + delays handle slide
+        setNewTiles(empties);
+        setFallDelay(delayMap);
+        setGrid(cloneGrid(g));
 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          // Short cadence between cascade steps
           setTimeout(step, 140);
         }, 220);
-      }, 200); // wait until pop visually completes
+      }, 200);
     };
     step();
   }
@@ -328,22 +336,34 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   function doHint() {
     if (animating || timeLeft <= 0) return;
     const m = findFirstMove(gridRef.current);
-    if (!m) { shuffleBoard(); return; }
+    if (!m) {
+      shuffleBoard();
+      return;
+    }
     setHint(m);
     setTimeout(() => setHint(null), 1200);
     haptic(10);
   }
-  function shuffleBoard() { if (animating || timeLeft <= 0) return; const g = shuffleToSolvable(gridRef.current); setGrid(g); haptic(12); }
-  function ensureSolvable() { if (!hasAnyMove(gridRef.current)) setGrid(shuffleToSolvable(gridRef.current)); }
-  
+
+  function shuffleBoard() {
+    if (animating || timeLeft <= 0) return;
+    const g = shuffleToSolvable(gridRef.current);
+    setGrid(g);
+    haptic(12);
+  }
+
+  function ensureSolvable() {
+    if (!hasAnyMove(gridRef.current))
+      setGrid(shuffleToSolvable(gridRef.current));
+  }
+
   async function finish() {
     const finalCoins = Math.floor(score * 0.15);
-    
-    // Submit score to backend
+
     const result = await submitGameScore(score, finalCoins);
-    
-    onExit({ 
-      score, 
+
+    onExit({
+      score,
       coins: finalCoins,
       moves_used: moveCount,
       max_combo: maxComboAchieved
@@ -362,32 +382,29 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     setFallDelay({});
     setNewTiles(new Set());
     setTimeLeft(GAME_DURATION);
-    
-    // Reset game tracking
+
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
   }
 
-  const boardW = cell * COLS, boardH = cell * ROWS;
+  const boardW = cell * COLS;
+  const boardH = cell * ROWS;
 
-  // Format timer display
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Timer color based on remaining time
   const getTimerColor = () => {
-    if (timeLeft <= 10) return '#e74c3c'; // Red
-    if (timeLeft <= 30) return '#f39c12'; // Orange
-    return '#27ae60'; // Green
+    if (timeLeft <= 10) return '#e74c3c';
+    if (timeLeft <= 30) return '#f39c12';
+    return '#27ae60';
   };
 
   return (
     <div className="section board-wrap" ref={containerRef}>
-      {/* TIMER DISPLAY */}
       <div className="timer-display" style={{
         textAlign: 'center',
         marginBottom: '12px',
@@ -448,7 +465,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
             const isShake = shake.has(tileKey);
 
-            // Distance-based stagger (no delay during swaps); default 0 if none
             const delaySeconds = isSwapping ? 0 : (fallDelay[tileKey] ?? 0);
 
             return (
@@ -464,7 +480,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
                   height: cell,
                   transform: swapTransform || undefined,
                   zIndex: isBlasting ? 10 : (isSwapping ? 20 : 1),
-                  transitionDelay: `${delaySeconds}s`,
+                  transitionDelay: `${delaySeconds}s`
                 }}
               >
                 <span
@@ -506,22 +522,90 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   );
 }
 
-i / 20) * Math.PI * 2;
-        const distance = size * (0.8 + Math.random() * 0.6);
+function Poof({ x, y, size }) {
+  const sparks = Array.from({ length: 60 });
+
+  return (
+    <>
+      {sparks.map((_, i) => {
+        const angle = (i / 60) * Math.PI * 2 + (Math.random() * 0.5 - 0.25);
+        const distance = size * (1.5 + Math.random() * 1.5);
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
-        const randomDelay = Math.random() * 0.2;
-        const randomDuration = 1.2 + Math.random() * 0.6;
-        const sparkTypes = ['✨', '💫', '⭐', '🌟', '💥', '🎉', '🍬', '💎'];
+        const randomDelay = Math.random() * 0.1;
+        const randomDuration = 1.8 + Math.random() * 1.2;
+
+        const sparkTypes = [
+          '✨', '💫', '⭐', '🌟', '💥', '🎉', '🍬', '💎',
+          '🎆', '🎇', '🔥', '💖', '🌈', '⚡', '🌸', '🎊',
+          '💜', '💛', '💚', '🧡', '❤️', '🤍', '💙', '🖤'
+        ];
         const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
+
+        const particleType = Math.random();
+        let animationName = 'fly';
+
+        if (particleType < 0.3) {
+          animationName = 'fly-bounce';
+        } else if (particleType < 0.6) {
+          animationName = 'fly-spiral';
+        } else {
+          animationName = 'fly';
+        }
+
         const style = {
-          left: x, top: y, ["--cx"]: size / 2 + "px", ["--cy"]: size / 2 + "px",
-          ["--tx"]: tx + "px", ["--ty"]: ty + "px", position: "absolute",
-          animationDelay: `${randomDelay}s`, animationDuration: `${randomDuration}s`,
-          fontSize: Math.floor(size * (0.3 + Math.random() * 0.4)) + "px",
+          left: x,
+          top: y,
+          ["--cx"]: size / 2 + "px",
+          ["--cy"]: size / 2 + "px",
+          ["--tx"]: tx + "px",
+          ["--ty"]: ty + "px",
+          position: "absolute",
+          animationName: animationName,
+          animationDelay: `${randomDelay}s`,
+          animationDuration: `${randomDuration}s`,
+          animationFillMode: 'forwards',
+          animationTimingFunction: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          fontSize: Math.floor(size * (0.4 + Math.random() * 0.6)) + "px",
+          fontWeight: 'bold',
+          textShadow: '0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.6)',
+          filter: 'drop-shadow(0 0 8px rgba(255, 255, 255, 0.7))',
+          zIndex: 15
         };
-        return <span key={i} className="spark" style={style}>{randomSpark}</span>;
+        return <span key={i} className="spark enhanced-spark" style={style}>{randomSpark}</span>;
       })}
+
+      <div
+        className="explosion-flash"
+        style={{
+          position: 'absolute',
+          left: x - size,
+          top: y - size,
+          width: size * 3,
+          height: size * 3,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,215,0,0.6) 30%, rgba(255,140,0,0.3) 60%, transparent 100%)',
+          animation: 'explosion-flash 0.4s ease-out forwards',
+          pointerEvents: 'none',
+          zIndex: 12
+        }}
+      />
+
+      <div
+        className="shockwave"
+        style={{
+          position: 'absolute',
+          left: x + size / 2,
+          top: y + size / 2,
+          width: 0,
+          height: 0,
+          border: '3px solid rgba(255,215,0,0.8)',
+          borderRadius: '50%',
+          animation: 'shockwave 0.6s ease-out forwards',
+          pointerEvents: 'none',
+          zIndex: 11
+        }}
+      />
     </>
   );
 }
@@ -529,17 +613,25 @@ i / 20) * Math.PI * 2;
 function useResizeCell(containerRef, setCell) {
   useEffect(() => {
     const compute = () => {
-      const el = containerRef.current; if (!el) return;
-      const pad = 16; const w = el.clientWidth - pad * 2;
+      const el = containerRef.current;
+      if (!el) return;
+      const pad = 16;
+      const w = el.clientWidth - pad * 2;
       const h = el.clientHeight - 84;
       const size = Math.floor(Math.min(w / COLS, h / ROWS));
       setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
     };
     compute();
     let ro;
-    if (typeof ResizeObserver !== "undefined" && containerRef.current) { ro = new ResizeObserver(compute); ro.observe(containerRef.current); }
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(compute);
+      ro.observe(containerRef.current);
+    }
     window.addEventListener("resize", compute);
-    return () => { ro?.disconnect(); window.removeEventListener("resize", compute); };
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", compute);
+    };
   }, [containerRef, setCell]);
 }
 
@@ -552,8 +644,13 @@ function findMatches(g) {
   for (let r = 0; r < ROWS; r++) {
     let c = 0;
     while (c < COLS) {
-      const v = g[r][c]; if (!v) { c++; continue; }
-      let len = 1; while (c + len < COLS && g[r][c + len] === v) len++;
+      const v = g[r][c];
+      if (!v) {
+        c++;
+        continue;
+      }
+      let len = 1;
+      while (c + len < COLS && g[r][c + len] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
       c += len;
     }
@@ -561,8 +658,13 @@ function findMatches(g) {
   for (let c = 0; c < COLS; c++) {
     let r = 0;
     while (r < ROWS) {
-      const v = g[r][c]; if (!v) { r++; continue; }
-      let len = 1; while (r + len < ROWS && g[r + len][c] === v) len++;
+      const v = g[r][c];
+      if (!v) {
+        r++;
+        continue;
+      }
+      let len = 1;
+      while (r + len < ROWS && g[r + len][c] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
       r += len;
     }
@@ -574,48 +676,79 @@ function applyGravity(g) {
   for (let c = 0; c < COLS; c++) {
     let write = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
-      if (g[r][c] != null) { const v = g[r][c]; g[r][c] = null; g[write][c] = v; write--; }
+      if (g[r][c] != null) {
+        const v = g[r][c];
+        g[r][c] = null;
+        g[write][c] = v;
+        write--;
+      }
     }
-    while (write >= 0) { g[write][c] = null; write--; }
+    while (write >= 0) {
+      g[write][c] = null;
+      write--;
+    }
   }
 }
 
-function refill(g) { for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (g[r][c] == null) g[r][c] = randEmoji(); }
-function hasAnyMove(g) { return !!findFirstMove(g); }
+function refill(g) {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (g[r][c] == null) g[r][c] = randEmoji();
+}
+
+function hasAnyMove(g) {
+  return !!findFirstMove(g);
+}
 
 function findFirstMove(g) {
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    if (c + 1 < COLS) { const t = cloneGrid(g); [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]]; if (findMatches(t).length > 0) return [[r, c], [r, c + 1]]; }
-    if (r + 1 < ROWS) { const t = cloneGrid(g); [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]]; if (findMatches(t).length > 0) return [[r, c], [r + 1, c]]; }
-  }
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (c + 1 < COLS) {
+        const t = cloneGrid(g);
+        [t[r][c], t[r][c + 1]] = [t[r][c + 1], t[r][c]];
+        if (findMatches(t).length > 0) return [[r, c], [r, c + 1]];
+      }
+      if (r + 1 < ROWS) {
+        const t = cloneGrid(g);
+        [t[r][c], t[r + 1][c]] = [t[r + 1][c], t[r][c]];
+        if (findMatches(t).length > 0) return [[r, c], [r + 1, c]];
+      }
+    }
   return null;
 }
 
 function initSolvableGrid() {
-  let g; let tries = 0;
+  let g;
+  let tries = 0;
   do {
     g = makeGrid(ROWS, COLS);
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) g[r][c] = randEmoji();
-    removeAllMatches(g); tries++; if (tries > 50) break;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) g[r][c] = randEmoji();
+    removeAllMatches(g);
+    tries++;
+    if (tries > 50) break;
   } while (!hasAnyMove(g));
   return g;
 }
 
 function removeAllMatches(g) {
   while (true) {
-    const m = findMatches(g); if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
+    const m = findMatches(g);
+    if (m.length === 0) break;
+    m.forEach(([r, c]) => {
+      g[r][c] = randEmoji();
+    });
   }
 }
 
 function shuffleToSolvable(g) {
-  const flat = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
+  const flat = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
   let attempts = 0;
   while (attempts < 100) {
-    for (let i = flat.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [flat[i], flat[j]] = [flat[j], flat[i]]; }
-    const t = makeGrid(ROWS, COLS); let idx = 0;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-    removeAllMatches(t); if (hasAnyMove(t)) return t; attempts++;
-  }
-  return initSolvableGrid();
-}
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+    const
