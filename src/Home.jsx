@@ -2,10 +2,19 @@ import React, { useEffect } from "react";
 import "./home.css";
 
 export default function Home({ coins = 0, onNavigate }) {
+  // Switch the *page* background to cream on Home; restore dark when leaving.
   useEffect(() => {
-    if (window.Telegram?.WebApp?.setBackgroundColor) {
-      window.Telegram.WebApp.setBackgroundColor("#fef9ea");
-    }
+    const prev = document.body.style.background;
+    document.body.style.background = "#fef9ea";
+    try {
+      window.Telegram?.WebApp?.setBackgroundColor?.("#fef9ea");
+    } catch {}
+    return () => {
+      document.body.style.background = "var(--bg)";
+      try {
+        window.Telegram?.WebApp?.setBackgroundColor?.("#0b1020");
+      } catch {}
+    };
   }, []);
 
   return (
@@ -30,25 +39,33 @@ export default function Home({ coins = 0, onNavigate }) {
           </div>
 
           <div className="home-title">
-            <div className="home-ranking">
-              <div className="home-ranking-text">🏆 Rank #1,247 — Novice Hunter</div>
-            </div>
             <h1>Welcome to Meowchi!</h1>
             <p>Match cute treats and help the cats</p>
           </div>
 
           <div className="home-menu">
             <button className="home-item primary" onClick={() => onNavigate?.("game")}>
-              <div className="home-icon">🎮</div>
-              <div className="home-text">Play Game</div>
+              <div className="home-icon">🎮</div><div className="home-text">Play Game</div>
             </button>
+
+            <button className="home-item" onClick={() => onNavigate?.("shop")}>
+              <div className="home-icon">🛍️</div><div className="home-text">Shop</div>
+            </button>
+
             <button className="home-item" onClick={() => onNavigate?.("leaderboard")}>
-              <div className="home-icon">🏆</div>
-              <div className="home-text">Leaderboard</div>
+              <div className="home-icon">🏆</div><div className="home-text">Leaderboard</div>
             </button>
+
             <button className="home-item" onClick={() => onNavigate?.("daily")}>
-              <div className="home-icon">🎁</div>
-              <div className="home-text">Daily Treats</div>
+              <div className="home-icon">🎁</div><div className="home-text">Daily Treats</div>
+            </button>
+
+            <button className="home-item" onClick={() => onNavigate?.("invite")}>
+              <div className="home-icon">💝</div><div className="home-text">Share & Invite</div>
+            </button>
+
+            <button className="home-item" onClick={() => onNavigate?.("settings")}>
+              <div className="home-icon">⚙️</div><div className="home-text">Settings</div>
             </button>
           </div>
 
@@ -60,25 +77,6 @@ export default function Home({ coins = 0, onNavigate }) {
               cookies <span className="home-emoji">🍪</span>, and marshmallows <span className="home-emoji">🍡</span>.
               Create combos for bonus points and help feed all the hungry cats!
             </p>
-          </div>
-
-          <div className="home-bottom-nav">
-            <button className="home-nav-item" onClick={() => onNavigate?.("settings")}>
-              <div className="home-nav-icon">👤</div>
-              <div className="home-nav-text">Profile</div>
-            </button>
-            <button className="home-nav-item" onClick={() => onNavigate?.("shop")}>
-              <div className="home-nav-icon">🛍️</div>
-              <div className="home-nav-text">Shop</div>
-            </button>
-            <button className="home-nav-item" onClick={() => onNavigate?.("invite")}>
-              <div className="home-nav-icon">💝</div>
-              <div className="home-nav-text">Share</div>
-            </button>
-            <button className="home-nav-item" onClick={() => onNavigate?.("settings")}>
-              <div className="home-nav-icon">⚙️</div>
-              <div className="home-nav-text">Settings</div>
-            </button>
           </div>
         </div>
       </div>
