@@ -1,4 +1,3 @@
-// src/GameView.jsx
 import React, { useEffect, useRef, useState } from "react";
 
 const COLS = 8;
@@ -15,7 +14,6 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const [cell, setCell] = useState(48);
-  useResizeCell(containerRef, setCell);
 
   const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
@@ -52,6 +50,30 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
 
+  // Resize hook
+  useEffect(() => {
+    const compute = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const pad = 16;
+      const w = el.clientWidth - pad * 2;
+      const h = el.clientHeight - 84;
+      const size = Math.floor(Math.min(w / COLS, h / ROWS));
+      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
+    };
+    compute();
+    let ro;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(compute);
+      ro.observe(containerRef.current);
+    }
+    window.addEventListener("resize", compute);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", compute);
+    };
+  }, []);
+
   useEffect(() => {
     window.currentGameScore = score;
   }, [score]);
@@ -60,7 +82,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     if (combo > maxComboAchieved) setMaxComboAchieved(combo);
   }, [combo, maxComboAchieved]);
 
-  // ✅ Correct timer effect
+  // Timer effect
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
@@ -116,7 +138,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
     }
   }
 
-  // Pointer interactions (drag-to-swap)
+  // Pointer interactions
   useEffect(() => {
     const el = boardRef.current;
     if (!el || paused) return;
@@ -249,7 +271,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         }
         ensureSolvable();
         setAnimating(false);
-        done && done();
+        if (done) done();
         return;
       }
 
@@ -273,7 +295,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 150); // Faster blast clear
+      setTimeout(() => setBlast(new Set()), 150);
 
       setTimeout(() => {
         const delayMap = {};
@@ -289,7 +311,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
               const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02); // Faster delays
+                delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
               }
             }
           }
@@ -298,15 +320,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         applyGravity(g);
         const empties = new Set();
         for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
-
-    removeAllMatches(t);
-    if (hasAnyMove(t)) return t;
-    attempts++;
-  }
-  return initSolvableGrid();
-}; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
+          for (let c = 0; c < COLS; c++) 
+            if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
 
         setNewTiles(empties);
@@ -316,9 +331,9 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 100); // Faster cascade steps
+          setTimeout(step, 100);
         }, 180);
-      }, 150); // Faster cascade timing
+      }, 150);
     };
     step();
   }
@@ -463,7 +478,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
             const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
             const isShake = shake.has(tileKey);
 
-            const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] ?? 0;
+            const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
 
             return (
               <div
@@ -494,7 +509,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
           })
         )}
         {fx.map((p, i) => (
-          <Poof key={p.id ?? i} x={p.x} y={p.y} size={cell} />
+          <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
         {combo > 0 && <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭 </div>}
         {paused && (
@@ -536,9 +551,8 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
   );
 }
 
-// FAST POOF COMPONENT
 function Poof({ x, y, size }) {
-  const sparks = Array.from({ length: 30 }); // Reduced from 60
+  const sparks = Array.from({ length: 30 });
   
   return (
     <>
@@ -548,8 +562,8 @@ function Poof({ x, y, size }) {
         const tx = size / 2 + Math.cos(angle) * distance;
         const ty = size / 2 + Math.sin(angle) * distance;
         
-        const randomDelay = Math.random() * 0.05; // Much faster
-        const randomDuration = 0.6 + Math.random() * 0.4; // Much faster
+        const randomDelay = Math.random() * 0.05;
+        const randomDuration = 0.6 + Math.random() * 0.4;
 
         const sparkTypes = [
           "✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"
@@ -564,10 +578,10 @@ function Poof({ x, y, size }) {
         const style = {
           left: x,
           top: y,
-          ["--cx"]: size / 2 + "px",
-          ["--cy"]: size / 2 + "px",
-          ["--tx"]: tx + "px",
-          ["--ty"]: ty + "px",
+          "--cx": size / 2 + "px",
+          "--cy": size / 2 + "px",
+          "--tx": tx + "px",
+          "--ty": ty + "px",
           position: "absolute",
           animationName,
           animationDelay: `${randomDelay}s`,
@@ -622,35 +636,8 @@ function Poof({ x, y, size }) {
   );
 }
 
-// -------- Utils
-
-function useResizeCell(containerRef, setCell) {
-  useEffect(() => {
-    const compute = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const pad = 16;
-      const w = el.clientWidth - pad * 2;
-      const h = el.clientHeight - 84;
-      const size = Math.floor(Math.min(w / COLS, h / ROWS));
-      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
-    };
-    compute();
-    let ro;
-    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
-      ro = new ResizeObserver(compute);
-      ro.observe(containerRef.current);
-    }
-    window.addEventListener("resize", compute);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", compute);
-    };
-  }, [containerRef, setCell]);
-}
-
-const makeGrid = (rows, cols) =>
-  Array.from({ length: rows }, () => Array(cols).fill(null));
+// Helper functions
+const makeGrid = (rows, cols) => Array.from({ length: rows }, () => Array(cols).fill(null));
 const cloneGrid = (g) => g.map((r) => r.slice());
 const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
 
@@ -709,7 +696,8 @@ function applyGravity(g) {
 
 function refill(g) {
   for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++) if (g[r][c] == null) g[r][c] = randEmoji();
+    for (let c = 0; c < COLS; c++) 
+      if (g[r][c] == null) g[r][c] = randEmoji();
 }
 
 function hasAnyMove(g) {
@@ -740,7 +728,12 @@ function initSolvableGrid() {
     g = makeGrid(ROWS, COLS);
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) g[r][c] = randEmoji();
-    removeAllMatches(g);
+    removeAllMatches(t);
+    if (hasAnyMove(t)) return t;
+    attempts++;
+  }
+  return initSolvableGrid();
+}AllMatches(g);
     tries++;
     if (tries > 50) break;
   } while (!hasAnyMove(g));
@@ -759,14 +752,18 @@ function removeAllMatches(g) {
 
 function shuffleToSolvable(g) {
   const flat = [];
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
+  for (let r = 0; r < ROWS; r++) 
+    for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
 
   let attempts = 0;
   while (attempts < 100) {
     for (let i = flat.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
+      const j = Math.floor(Math.random() * (i + 1));
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
     const t = makeGrid(ROWS, COLS);
     let idx = 0;
-    for (let r = 0
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
+
+    remove
