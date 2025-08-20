@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import Home from "./Home.jsx";
 import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
+import Leaderboard from "./Leaderboard.jsx";
+import ProfileModal from "./ProfileModal.jsx";
 
 const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
@@ -52,11 +54,93 @@ export default function App() {
     theme: "system",
   });
   const [daily, setDaily] = useState({ streak: 0, lastClaim: null });
-  const [lbScope, setLbScope] = useState("daily");
-  const leaders = {
-    daily: [["mira", 220], ["zeno", 180], ["kira", 150]],
-    weekly: [["mira", 820], ["kira", 760], ["alex", 700]],
-    all: [["neo", 4120], ["mira", 3880], ["alex", 3550]],
+
+  // User system state
+  const [userTelegramId, setUserTelegramId] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userStats, setUserStats] = useState(null);
+
+  // Initialize user system
+  useEffect(() => {
+    initializeUser();
+  }, []);
+
+  // Auto-detect Telegram user
+  const initializeUser = async () => {
+    try {
+      const tg = getTG();
+      let telegramId = null;
+
+      // Try to get Telegram ID from WebApp
+      if (tg?.initDataUnsafe?.user?.id) {
+        telegramId = tg.initDataUnsafe.user.id;
+      } else {
+        // Fallback for testing (use a demo ID)
+        telegramId = Math.floor(Math.random() * 1000000) + 100000;
+        console.log('Demo mode - using random Telegram ID:', telegramId);
+      }
+
+      setUserTelegramId(telegramId);
+
+      // Register or get existing user
+      const response = await fetch('/api/user/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          telegram_id: telegramId,
+          telegram_username: tg?.initDataUnsafe?.user?.username || null
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile(data.user);
+        
+        // Fetch user stats
+        fetchUserStats(telegramId);
+      }
+    } catch (error) {
+      console.error('User initialization failed:', error);
+    }
+  };
+
+  // Fetch user statistics
+  const fetchUserStats = async (telegramId) => {
+    try {
+      const response = await fetch(`/api/user/${telegramId}/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setUserStats(data.stats);
+        
+        // Update coins from backend if different
+        if (data.stats.total_coins_earned) {
+          setCoins(prev => Math.max(prev, data.stats.total_coins_earned));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user stats:', error);
+    }
+  };
+
+  // Handle profile completion
+  const handleProfileSaved = (updatedUser) => {
+    setUserProfile(updatedUser);
+    setShowProfileModal(false);
+    
+    // Refresh user stats
+    if (userTelegramId) {
+      fetchUserStats(userTelegramId);
+    }
+  };
+
+  // Show profile modal when needed
+  const promptProfileCompletion = () => {
+    if (userProfile && !userProfile.profile_completed) {
+      setShowProfileModal(true);
+    }
   };
 
   const navigateTo = (s) => {
@@ -86,7 +170,16 @@ export default function App() {
       <header className="header">
         <div className="header-content">
           <div className="brand">
-            <div className="logo">😺</div>
+            <div className="logo">
+              <img
+                src="https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"
+                alt="Meowchi"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  e.currentTarget.parentElement.textContent = "😺";
+                }}
+              />
+            </div>
             <div className="brand-text">Meowchi</div>
           </div>
           
@@ -110,7 +203,7 @@ export default function App() {
     const navItems = [
       { key: "home", label: "Profile", icon: "👤", screen: "home" },
       { key: "shop", label: "Shop", icon: "🛒", screen: "shop" },
-      { key: "invite", label: "Invite", icon: "👥", screen: "invite" },
+      { key: "leaderboard", label: "Rankings", icon: "🏆", screen: "leaderboard" },
       { key: "wallet", label: "Wallet", icon: "💎", screen: "daily" },
       { key: "settings", label: "Settings", icon: "⚙️", screen: "settings" },
     ];
@@ -133,35 +226,7 @@ export default function App() {
     );
   }
 
-  // Optional inline pages (unchanged functionality)
-  function Leaderboard() {
-    const scopes = ["daily", "weekly", "all"];
-    return (
-      <section className="section">
-        <div className="title">🏆 Leaderboard</div>
-        <div className="tabs">
-          {scopes.map((s) => (
-            <div
-              key={s}
-              className={`tab ${lbScope === s ? "active" : ""}`}
-              onClick={() => setLbScope(s)}
-            >
-              {s}
-            </div>
-          ))}
-        </div>
-        <div className="list grid-gap" style={{ marginTop: 10 }}>
-          {leaders[lbScope].map(([name, sc]) => (
-            <div key={name} className="row">
-              <div className="ellipsis">{name}</div>
-              <b>{sc}</b>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
+  // Optional inline pages (updated with backend integration)
   function Shop() {
     const items = [
       { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
@@ -215,6 +280,22 @@ export default function App() {
             onChange={(e) => setSettings((s) => ({ ...s, sound: e.target.checked }))}
           />
         </label>
+        
+        {/* Profile management */}
+        <div className="row">
+          <div>
+            <div style={{ fontWeight: 600 }}>Profile</div>
+            <div className="muted small">
+              {userProfile?.profile_completed ? 'Profile completed' : 'Complete your profile to join rankings'}
+            </div>
+          </div>
+          <button 
+            className="btn" 
+            onClick={() => setShowProfileModal(true)}
+          >
+            {userProfile?.profile_completed ? 'Edit' : 'Complete'}
+          </button>
+        </div>
       </section>
     );
   }
@@ -257,6 +338,22 @@ export default function App() {
     );
   }
 
+  // Handle game completion with backend integration
+  const handleGameExit = async (gameResult) => {
+    setLastRun(gameResult);
+    setCoins((c) => c + (gameResult?.coins || 0));
+    
+    // Show profile completion modal if needed after game
+    if (gameResult.user_needs_profile) {
+      setTimeout(() => {
+        setShowProfileModal(true);
+      }, 1000); // Show after a brief delay
+    }
+    
+    setScreen("gameover");
+    setScreenHistory((h) => [...h, "gameover"]);
+  };
+
   // ------------ Render ------------
   return (
     <>
@@ -266,25 +363,31 @@ export default function App() {
         <Header />
         <main className="content">
           {screen === "home" && (
-            <Home coins={coins} onNavigate={navigateTo} />
+            <Home 
+              coins={coins} 
+              onNavigate={navigateTo} 
+              userStats={userStats}
+              userProfile={userProfile}
+            />
           )}
 
           {screen === "shop" && <Shop />}
-          {screen === "leaderboard" && <Leaderboard />}
+          {screen === "leaderboard" && (
+            <Leaderboard 
+              userTelegramId={userTelegramId}
+              userNeedsProfile={userProfile && !userProfile.profile_completed}
+            />
+          )}
           {screen === "daily" && <Daily />}
           {screen === "invite" && <Invite />}
           {screen === "settings" && <Settings />}
 
           {screen === "game" && (
             <GameView
-              onExit={(run) => {
-                setLastRun(run);
-                setCoins((c) => c + (run?.coins || 0));
-                setScreen("gameover");
-                setScreenHistory((h) => [...h, "gameover"]);
-              }}
+              onExit={handleGameExit}
               onCoins={(d) => setCoins((c) => c + d)}
               settings={settings}
+              userTelegramId={userTelegramId}
             />
           )}
 
@@ -293,15 +396,52 @@ export default function App() {
               <div className="title">🎯 Level Complete!</div>
               <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
               <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
-              <button className="btn primary" onClick={() => setScreen("game")}>
-                🎮 Play Again
-              </button>
+              {lastRun.max_combo > 0 && (
+                <div className="row"><div className="muted">Best combo</div><b>x{lastRun.max_combo + 1}</b></div>
+              )}
+              
+              <div className="row" style={{ gap: 8, marginTop: 16 }}>
+                <button 
+                  className="btn primary" 
+                  onClick={() => setScreen("game")}
+                >
+                  🎮 Play Again
+                </button>
+                <button 
+                  className="btn" 
+                  onClick={() => navigateTo("leaderboard")}
+                >
+                  🏆 View Rankings
+                </button>
+              </div>
+              
+              {lastRun.user_needs_profile && (
+                <div className="profile-prompt">
+                  <p className="muted small">Great score! Complete your profile to join the leaderboard!</p>
+                  <button 
+                    className="btn" 
+                    onClick={() => setShowProfileModal(true)}
+                    style={{ marginTop: 8 }}
+                  >
+                    Complete Profile
+                  </button>
+                </div>
+              )}
             </section>
           )}
         </main>
         
         <BottomNav />
       </div>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        show={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSave={handleProfileSaved}
+        userTelegramId={userTelegramId}
+        currentProfile={userProfile}
+      />
     </>
   );
 }
