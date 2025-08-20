@@ -7,8 +7,9 @@
   --accent: #667eea;
   --accent2:#764ba2;
 
-  /* tweak to place the loading bar under the word on your art */
-  --bar-top: 60%;
+  /* Splash controls */
+  --bar-top: 60%;         /* vertical position of bar under the word */
+  --bar-width: 240px;     /* make bar same width as “MEOWCHI” on your art; tweak 220–280px */
 }
 
 *{box-sizing:border-box}
@@ -79,48 +80,56 @@ body{
 }
 .tab.active{background:#21306a}
 
-/* ===== Splash (fullscreen image, no dim, anchored bar) ===== */
+/* ===== Splash (fullscreen image, no dim, bar width = word width) ===== */
 .splash{
   position:fixed; inset:0; z-index:9999;
   height: calc(var(--vh, 1vh) * 100);
   background: url("/splash.jpg") center center / cover no-repeat;
-  background-color:#090d1a; /* fallback while image loads */
+  background-color:#090d1a; /* fallback while the image loads */
   display:block;
   opacity:1; transition: opacity .35s ease;
 }
 .splash.hide{ opacity:0; pointer-events:none }
 .splash.show{ opacity:1 }
 
-/* anchor the progress bar roughly under "MEOWCHI" text in the artwork */
+/* Bar sits under the “MEOWCHI” word.
+   Width is controlled by --bar-width to match the printed word exactly. */
 .splash-bar-anchored{
-  position:absolute;
-  left:50%;
+  position: absolute;
+  left: 50%;
   top: var(--bar-top);
   transform: translate(-50%, -50%);
-  width: min(72%, 320px);
+  width: var(--bar-width);     /* <<< match the word width */
   text-align: center;
 }
+
 .splash-progress{
   width: 100%;
   height: 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,.25);
+  background: rgba(0,0,0,.15); /* darker track so it reads on light BG */
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15),
-              0 2px 6px rgba(0,0,0,.25);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.12),
+    0 2px 6px rgba(0,0,0,.20);
 }
 .splash-progress__bar{
   width:0; height:100%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
-  animation: splashbar 2.4s ease forwards; /* sync with App splash delay */
+  animation: splashbar 2.4s ease forwards; /* keep in sync with App’s min splash time */
 }
 @keyframes splashbar{ to { width:100% } }
+
+/* Caption directly under the bar: black, larger, single line, same width as bar */
 .splash-caption{
-  margin-top: 10px;
-  color: #fff;
-  font-size: 14px;
-  text-shadow: 0 2px 6px rgba(0,0,0,.45);
-  opacity: .95;
+  margin-top: 8px;
+  width: 100%;
+  color: #111;                 /* black text as requested */
+  font-weight: 800;
+  font-size: clamp(14px, 4.2vw, 18px);
+  letter-spacing: .3px;
+  text-shadow: none;
+  white-space: nowrap;
 }
 
 /* ===== Board / GameView (animations, nudges, etc.) ===== */
