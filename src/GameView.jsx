@@ -116,7 +116,7 @@ export default function GameView({ onExit, onCoins, settings, userTelegramId }) 
         telegram_id: userTelegramId,
         score: finalScore,
         coins_earned: coinsEarned,
-        moves_used: moveCount,
+        moves_used: Math.max(1, moveCount), // FIX: Ensure at least 1 move
         max_combo: maxComboAchieved,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
