@@ -79,7 +79,7 @@ export default function App() {
     setScreenHistory(["home"]);
   };
 
-  // ------------ Minimal header (clean, compact) ------------
+  // ------------ Minimal header (Issue 3: remove top nav row) ------------
   function Header() {
     const backable = screenHistory.length > 1;
     return (
@@ -92,6 +92,7 @@ export default function App() {
           <div className="pill-compact ellipsis">Sweet Match • Telegram</div>
         </div>
 
+        {/* No more Home/Shop/Leaderboard/Daily/Invite/Settings buttons */}
         <div className="header-line2">
           <div className="row" style={{ gap: 8 }}>
             {backable ? (
@@ -106,28 +107,7 @@ export default function App() {
     );
   }
 
-  // ------------ Inline pages (as before) ------------
-  function Shop() {
-    const items = [
-      { id: "hint", name: "Sweet Hint", price: 120, desc: "Reveals a juicy match." },
-      { id: "shuffle", name: "Sugar Shuffle", price: 150, desc: "Shuffles the board once." },
-      { id: "extra", name: "Extra Moves +5", price: 240, desc: "More time to feed the cats." },
-    ];
-    return (
-      <section className="section">
-        <div className="title">🛍️ Shop</div>
-        <div className="list grid-gap">
-          {items.map((it) => (
-            <div key={it.id} className="row">
-              <div className="ellipsis"><b>{it.name}</b><div className="small muted">{it.desc}</div></div>
-              <button className="btn primary">Buy {it.price}</button>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
+  // Optional inline pages (unchanged)
   function Leaderboard() {
     const scopes = ["daily", "weekly", "all"];
     return (
@@ -140,17 +120,48 @@ export default function App() {
               className={`tab ${lbScope === s ? "active" : ""}`}
               onClick={() => setLbScope(s)}
             >
-              {s[0].toUpperCase() + s.slice(1)}
+              {s}
             </div>
           ))}
         </div>
-        <div className="list grid-gap" style={{ marginTop: 12 }}>
-          {leaders[lbScope].map(([name, score], i) => (
+        <div className="list grid-gap" style={{ marginTop: 10 }}>
+          {leaders[lbScope].map(([name, sc]) => (
             <div key={name} className="row">
-              <div className="ellipsis">
-                <b>#{i + 1} {name}</b>
+              <div className="ellipsis">{name}</div>
+              <b>{sc}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function Shop() {
+    const items = [
+      { key: "shuffle", name: "Sugar Shuffle", desc: "Mix up the candy board", price: 40, icon: "🔄" },
+      { key: "hammer", name: "Candy Crusher", desc: "Smash any candy", price: 60, icon: "🔨" },
+      { key: "bomb", name: "Candy Bomb", desc: "Explode 3×3 area", price: 80, icon: "💥" },
+    ];
+    return (
+      <section className="section">
+        <div className="title" style={{ marginBottom: 10 }}>🛍 Meowchi Shop</div>
+        <div className="list grid-gap">
+          {items.map((it) => (
+            <div key={it.key} className="row">
+              <div>
+                <div style={{ fontWeight: 600 }}>{it.icon} {it.name}</div>
+                <div className="muted small">{it.desc}</div>
               </div>
-              <div><b>{score}</b></div>
+              <div className="row" style={{ gap: 8 }}>
+                <div className="muted small">{it.price} $Meow</div>
+                <button
+                  className="btn"
+                  onClick={() => setCoins((c) => Math.max(0, c - it.price))}
+                  disabled={coins < it.price}
+                >
+                  Buy
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -192,29 +203,29 @@ export default function App() {
     }
     return (
       <section className="section">
-        <div className="title">🎁 Daily Treats</div>
-        <div className="list grid-gap">
-          <div className="row">
-            <div>Streak</div><b>{daily.streak} days</b>
-          </div>
-          <button className="btn primary" onClick={claim} disabled={!canClaim}>
-            {canClaim ? "Claim 50 $Meow" : "Already claimed"}
-          </button>
-        </div>
+        <div className="title">🍯 Daily Sweet Treats</div>
+        <div className="muted">Streak: <b>{daily.streak}</b> {daily.lastClaim ? `• last: ${daily.lastClaim}` : ""}</div>
+        <button className="btn primary" onClick={claim} disabled={!canClaim}>
+          {canClaim ? "Claim 50 $Meow" : "Come back tomorrow"}
+        </button>
+        <div className="muted small">Keep your sweet streak alive! Resets if you miss a day.</div>
       </section>
     );
   }
 
   function Invite() {
-    const link = "https://t.me/share/url?url=https://t.me/yourbot";
+    const link = "https://t.me/meowchi_game_bot?start=sweet";
+    const [copied, setCopied] = useState(false);
+    async function copy() {
+      try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1000); } catch {}
+    }
     return (
       <section className="section">
-        <div className="title">💝 Share & Invite</div>
-        <div className="list grid-gap">
-          <div className="row">
-            <div className="muted">Invite friends to earn bonuses.</div>
-            <a className="btn" href={link}>Share</a>
-          </div>
+        <div className="title">🍭 Share the Sweetness</div>
+        <div className="muted small">Invite friends and earn $Meow.</div>
+        <div className="row" style={{ gap: 8 }}>
+          <div className="pill ellipsis" style={{ maxWidth: 260 }}>{link}</div>
+          <button className="btn" onClick={copy}>{copied ? "Copied!" : "Copy"}</button>
         </div>
       </section>
     );
@@ -226,9 +237,7 @@ export default function App() {
       <Splash show={showSplash} />
 
       <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        {/* Header is shown on every page EXCEPT Home */}
-        {screen !== "home" && <Header />}
-
+        <Header />
         <main className="content">
           {screen === "home" && (
             <Home coins={coins} onNavigate={navigateTo} />
