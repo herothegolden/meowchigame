@@ -7,9 +7,8 @@
   --accent: #667eea;
   --accent2:#764ba2;
 
-  /* Splash controls */
-  --bar-top: 60%;         /* vertical position of bar under the word */
-  --bar-width: 230px;     /* make bar same width as “MEOWCHI” on your art; tweak 220–280px */
+  --bar-top: 60%;
+  --bar-width: 230px;
 }
 
 *{box-sizing:border-box}
@@ -17,12 +16,11 @@ html,body,#root{height:100%}
 body{
   margin:0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  /* was: background: var(--bg);  */
-  background: #fef9ea;          /* <- cream page background (removes navy gutters) */
+  background:#fef9ea;   /* ✅ cream background */
   color: var(--text);
 }
 
-/* app shell */
+/* App shell */
 .shell{
   max-width: 520px;
   margin: 0 auto;
@@ -32,19 +30,7 @@ body{
   padding: 12px;
 }
 
-/* header */
-.header{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
-.header-line1{display:flex;gap:8px}
-.header-line2{display:flex;align-items:center;justify-content:space-between}
-.brand-compact{display:flex;align-items:center;gap:8px}
-.logo{font-size:20px}
-.name{font-weight:800}
-.pill-compact{font-size:11px;padding:4px 8px;border-radius:999px;background:#1b2647;color:#cfe0ff}
-
-/* content area */
-.content{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
-
-/* sections & lists */
+/* Section styling (for non-game screens) */
 .section{
   background:#0e1430;
   border:1px solid var(--line);
@@ -52,55 +38,32 @@ body{
   padding:16px;
   box-shadow:0 10px 24px rgba(0,0,0,.25);
 }
-.title{font-weight:800;margin-bottom:8px}
-.row{display:flex;align-items:center;justify-content:space-between}
-.list{display:grid}
-.grid-gap{gap:8px}
-.grid-gap-6{gap:6px}
-.muted{color:var(--muted)}
-.small{font-size:12px}
-.pill{
-  background:#101a3a;border:1px solid var(--line);
-  padding:8px 10px;border-radius:999px
-}
-.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* buttons & tabs */
-.btn{
-  appearance:none;border:0;border-radius:12px;
-  padding:10px 14px;font-weight:700;color:#fff;
-  background:#293a7a;cursor:pointer
+/* Game screen wrapper restores dark theme */
+.game-screen{
+  background:#0b1020;
+  color:#e8eeff;
+  min-height:calc(var(--vh,1vh)*100);
 }
-.btn.primary{background: linear-gradient(135deg, var(--accent), var(--accent2));}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.tabs{display:flex;gap:6px}
-.tab{
-  border:1px solid var(--line);background:#101735;color:#cfe0ff;
-  padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer;
-  user-select:none
-}
-.tab.active{background:#21306a}
 
-/* ===== Splash (fullscreen image, no dim, bar width = word width) ===== */
+/* Splash */
 .splash{
   position:fixed; inset:0; z-index:9999;
   height: calc(var(--vh, 1vh) * 100);
   background: url("/splash.jpg") center center / cover no-repeat;
-  background-color:#090d1a; /* fallback while the image loads */
+  background-color:#090d1a;
   display:block;
   opacity:1; transition: opacity .35s ease;
 }
 .splash.hide{ opacity:0; pointer-events:none }
 .splash.show{ opacity:1 }
 
-/* Bar sits under the “MEOWCHI” word.
-   Width is controlled by --bar-width to match the printed word exactly. */
 .splash-bar-anchored{
   position: absolute;
   left: 50%;
   top: var(--bar-top);
   transform: translate(-50%, -50%);
-  width: var(--bar-width);     /* <<< match the word width */
+  width: var(--bar-width);
   text-align: center;
 }
 
@@ -108,7 +71,7 @@ body{
   width: 100%;
   height: 10px;
   border-radius: 999px;
-  background: rgba(0,0,0,.15); /* darker track so it reads on light BG */
+  background: rgba(0,0,0,.15);
   overflow: hidden;
   box-shadow:
     inset 0 0 0 1px rgba(0,0,0,.12),
@@ -117,6 +80,6 @@ body{
 .splash-progress__bar{
   width:0; height:100%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
-  animation: splashbar 2.4s ease forwards; /* keep in sync with App’s min splash time */
+  animation: splashbar 2.4s ease forwards;
 }
 @keyframes splashbar{ to { width:100% } }
