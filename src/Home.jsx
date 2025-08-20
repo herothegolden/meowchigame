@@ -21,7 +21,8 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
   // Handle name editing
   const startEditingName = () => {
     if (userProfile?.name_changed) {
-      // TODO: Show message about paid name changes
+      // Show message about paid name changes
+      alert('You can only change your name once for free. Future changes will cost coins!');
       return;
     }
     setTempName(getDisplayName());
@@ -43,7 +44,8 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
         body: JSON.stringify({
           telegram_id: userProfile?.telegram_id,
           display_name: tempName.trim(),
-          country_flag: userProfile?.country_flag
+          country_flag: userProfile?.country_flag,
+          name_changed: true // Mark as changed
         })
       });
 
@@ -66,10 +68,43 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
   // Handle profile picture upload
   const handleProfilePicUpload = (event) => {
     const file = event.target.files[0];
-    if (file) {
-      // TODO: Implement image upload logic
-      console.log('Profile picture upload:', file);
+    if (!file) return;
+
+    // Check if user already changed their profile picture
+    if (userProfile?.profile_picture && userProfile?.profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
+      alert('You can only change your profile picture once for free. Future changes will cost coins!');
+      return;
     }
+
+    // Create preview URL
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const imageDataUrl = e.target.result;
+      
+      try {
+        const response = await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            telegram_id: userProfile?.telegram_id,
+            profile_picture: imageDataUrl,
+            country_flag: userProfile?.country_flag
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          onProfileUpdate?.(result.user);
+        }
+      } catch (error) {
+        console.error('Failed to update profile picture:', error);
+        alert('Failed to update profile picture. Please try again.');
+      }
+    };
+    
+    reader.readAsDataURL(file);
   };
 
   return (
