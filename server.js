@@ -65,7 +65,7 @@ app.use(
         "script-src": ["'self'", "'unsafe-inline'", "https://telegram.org"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:", "https:"],
-        "connect-src": ["'self'"],
+        "connect-src": ["'self'", "https://ipapi.co"],
         "frame-ancestors": ["'self'", "https://*.t.me", "https://web.telegram.org"]
       }
     }
@@ -108,14 +108,16 @@ app.get('/api/setup/database', async (req, res) => {
     await pool.query('DROP TABLE IF EXISTS games CASCADE');
     await pool.query('DROP TABLE IF EXISTS users CASCADE');
     
-    // Create users table
+    // Create users table (updated with new fields)
     await pool.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         display_name VARCHAR(50),
         country_flag VARCHAR(10),
+        profile_picture TEXT,
         profile_completed BOOLEAN DEFAULT FALSE,
+        name_changed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
@@ -213,19 +215,42 @@ app.post('/api/user/register', requireDB, async (req, res) => {
   }
 });
 
-// Update user profile
+// Update user profile (flexible)
 app.put('/api/user/profile', requireDB, async (req, res) => {
   try {
-    const { telegram_id, display_name, country_flag } = req.body;
+    const { telegram_id, display_name, country_flag, profile_picture } = req.body;
     
     if (!telegram_id) {
       return res.status(400).json({ error: 'Telegram ID is required' });
     }
 
-    const updatedUser = await pool.query(
-      'UPDATE users SET display_name = $1, country_flag = $2, profile_completed = $3 WHERE telegram_id = $4 RETURNING *',
-      [display_name, country_flag, true, telegram_id]
-    );
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (display_name !== undefined) {
+      updates.push(`display_name = $${paramIndex++}`);
+      values.push(display_name);
+    }
+
+    if (country_flag !== undefined) {
+      updates.push(`country_flag = $${paramIndex++}`);
+      values.push(country_flag);
+    }
+
+    if (profile_picture !== undefined) {
+      updates.push(`profile_picture = $${paramIndex++}`);
+      values.push(profile_picture);
+    }
+
+    // Always update the updated_at timestamp
+    updates.push(`updated_at = NOW()`);
+    values.push(telegram_id);
+
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE telegram_id = $${paramIndex} RETURNING *`;
+    
+    const updatedUser = await pool.query(query, values);
 
     if (updatedUser.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -271,8 +296,7 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
 
     res.json({ 
       message: 'Game saved successfully', 
-      game: game.rows[0],
-      user_needs_profile: !user.rows[0].profile_completed 
+      game: game.rows[0]
     });
   } catch (error) {
     console.error('Game save error:', error);
@@ -280,7 +304,7 @@ app.post('/api/game/complete', requireDB, async (req, res) => {
   }
 });
 
-// Get leaderboard (daily/weekly/alltime)
+// Get leaderboard (daily/weekly/alltime) - removed profile completion requirement
 app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
   try {
     const { type } = req.params;
@@ -307,7 +331,7 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
       countryFilter = 'AND u.country_flag IS NOT NULL';
     }
 
-    // Get top 100 players
+    // Get top 100 players (removed profile_completed requirement)
     const leaderboard = await pool.query(`
       SELECT 
         u.display_name,
@@ -320,7 +344,7 @@ app.get('/api/leaderboard/:type', requireDB, async (req, res) => {
         ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) as rank
       FROM users u
       JOIN games g ON u.id = g.user_id
-      WHERE u.profile_completed = true ${dateFilter} ${countryFilter}
+      WHERE 1=1 ${dateFilter} ${countryFilter}
       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
       ORDER BY total_score DESC
       LIMIT 100
@@ -383,7 +407,7 @@ app.get("/health", (req, res) => {
     env: process.env.NODE_ENV || "development",
     database: dbConnected ? "connected" : "disconnected"
   };
-  console.log("🥕 Health check requested:", health);
+  console.log("🏥 Health check requested:", health);
   res.json(health);
 });
 
