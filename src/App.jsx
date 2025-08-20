@@ -101,7 +101,7 @@ export default function App() {
   // ------------ Render ------------
   return (
     <>
-      <Splash show={true} />
+      <Splash show={showSplash} />
 
       <div className="shell" /* visibility controlled in your Splash */>
         {/* Hide Header on Home to remove old dark strip */}
