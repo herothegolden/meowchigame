@@ -65,6 +65,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [tashkentTime, setTashkentTime] = useState('');
+  const [currentUserCountry, setCurrentUserCountry] = useState(null);
 
   // Tashkent time clock
   useEffect(() => {
@@ -96,28 +97,46 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       });
 
       const response = await fetch(`/api/leaderboard/${leaderboardType}?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch leaderboard');
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      setLeaderboardData(data.leaderboard || []);
-      setUserRank(data.userRank);
+      // Validate response structure
+      if (!Array.isArray(data.leaderboard)) {
+        console.warn('Invalid leaderboard data structure:', data);
+        setLeaderboardData([]);
+      } else {
+        setLeaderboardData(data.leaderboard);
+      }
+      
+      setUserRank(data.userRank || null);
+      setCurrentUserCountry(data.country || null);
       setLastUpdated(new Date());
+
     } catch (err) {
       console.error('Leaderboard fetch error:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to load leaderboard');
+      setLeaderboardData([]);
+      setUserRank(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial load and real-time updates
+  // Initial load and updates when dependencies change
   useEffect(() => {
     fetchLeaderboard();
-    
-    // Update every 30 seconds while component is mounted
+  }, [leaderboardType, showCountryOnly, userTelegramId]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
     const interval = setInterval(fetchLeaderboard, 30000);
     return () => clearInterval(interval);
   }, [leaderboardType, showCountryOnly, userTelegramId]);
@@ -126,7 +145,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
   const getRankDisplay = (rank) => {
     switch (rank) {
       case 1: return '🥇';
-      case 2: return '🥈';
+      case 2: return '🥈'; 
       case 3: return '🥉';
       default: return `#${rank}`;
     }
@@ -134,10 +153,16 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
 
   // Format score with commas
   const formatScore = (score) => {
-    return parseInt(score).toLocaleString();
+    const num = parseInt(score) || 0;
+    return num.toLocaleString();
   };
 
-  // Loading states with cute messages
+  // Safe display name with fallback
+  const getDisplayName = (player) => {
+    return player.display_name || `Stray Cat #${player.telegram_id?.toString().slice(-5) || '00000'}`;
+  };
+
+  // Loading messages
   const getLoadingMessage = () => {
     const messages = [
       "Cats are calculating...",
@@ -151,6 +176,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
 
   // Empty state messages
   const getEmptyMessage = () => {
+    if (showCountryOnly) {
+      const countryName = currentUserCountry ? 
+        COUNTRY_FLAGS.find(c => c.flag === currentUserCountry)?.name || 'your country' :
+        'your country';
+      return `No players from ${countryName} yet... be the first! 😺`;
+    }
+    
     switch (leaderboardType) {
       case 'daily':
         return "No cats have played today... be the first! 😺";
@@ -163,6 +195,11 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     }
   };
 
+  // Check if user is in top 100
+  const isUserInTop100 = () => {
+    return leaderboardData.some(p => p.telegram_id == userTelegramId);
+  };
+
   return (
     <section className="section">
       <div className="leaderboard-header">
@@ -173,8 +210,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
             <span className="time-text">{tashkentTime} Tashkent</span>
           </div>
         </div>
-        
-        {/* Profile completion notice - removed as per new UX */}
       </div>
 
       {/* Tabs for Daily/Weekly/All-time */}
@@ -194,7 +229,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         ))}
       </div>
 
-      {/* Country filter */}
+      {/* Country filter and last updated */}
       <div className="filters">
         <label className="country-filter">
           <input
@@ -203,7 +238,14 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
             onChange={(e) => setShowCountryOnly(e.target.checked)}
           />
           <span className="checkbox-custom"></span>
-          <span className="filter-text">My Country Only</span>
+          <span className="filter-text">
+            My Country Only
+            {showCountryOnly && currentUserCountry && (
+              <span style={{ marginLeft: '8px' }}>
+                {currentUserCountry}
+              </span>
+            )}
+          </span>
         </label>
         
         {lastUpdated && (
@@ -222,7 +264,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       )}
 
       {/* Error state */}
-      {error && (
+      {error && !loading && (
         <div className="error-state">
           <div className="error-icon">😿</div>
           <div className="error-text">Oops! {error}</div>
@@ -240,7 +282,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
             <div className="leaderboard-list">
               {leaderboardData.map((player, index) => (
                 <div 
-                  key={player.telegram_id} 
+                  key={`${player.telegram_id}-${index}`}
                   className={`leaderboard-item ${player.telegram_id == userTelegramId ? 'current-user' : ''}`}
                 >
                   <div className="rank-display">
@@ -249,11 +291,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                   
                   <div className="player-info">
                     <div className="player-name">
-                      {player.country_flag && <span className="country-flag">{player.country_flag}</span>}
-                      <span className="name">{player.display_name}</span>
+                      {player.country_flag && (
+                        <span className="country-flag">{player.country_flag}</span>
+                      )}
+                      <span className="name">{getDisplayName(player)}</span>
                     </div>
                     <div className="player-stats">
-                      {player.games_played} games • Best: {formatScore(player.best_score)}
+                      {formatScore(player.games_played)} games • Best: {formatScore(player.best_score)}
                     </div>
                   </div>
                   
@@ -271,7 +315,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
           )}
 
           {/* User's rank if not in top 100 */}
-          {userRank && !leaderboardData.some(p => p.telegram_id == userTelegramId) && (
+          {userRank && !isUserInTop100() && (
             <div className="user-rank-section">
               <div className="section-divider">
                 <span className="divider-text">Your Rank</span>
@@ -284,11 +328,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                 
                 <div className="player-info">
                   <div className="player-name">
-                    {userRank.country_flag && <span className="country-flag">{userRank.country_flag}</span>}
-                    <span className="name">{userRank.display_name}</span>
+                    {userRank.country_flag && (
+                      <span className="country-flag">{userRank.country_flag}</span>
+                    )}
+                    <span className="name">{getDisplayName(userRank)}</span>
                   </div>
                   <div className="player-stats">
-                    You are here!
+                    {formatScore(userRank.games_played)} games • Best: {formatScore(userRank.best_score)}
                   </div>
                 </div>
                 
