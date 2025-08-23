@@ -55,12 +55,13 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  // --- FIX: keep these refs defined exactly once ---
+  // Keep refs for timer access
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
-  // -------------------------------------------------
+  const scoreRef = useRef(score);
+  scoreRef.current = score;
 
   // Responsive sizing
   useEffect(() => {
@@ -94,14 +95,18 @@ export default function GameView({
     if (combo > maxComboAchieved) setMaxComboAchieved(combo);
   }, [combo, maxComboAchieved]);
 
-  // Timer
+  // Timer - FIXED: Ensure proper game ending
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          setTimeout(() => finish(), 100);
+          // FIXED: Use setTimeout to ensure state is current
+          setTimeout(() => {
+            console.log('⏰ Time up! Final score:', scoreRef.current);
+            finish();
+          }, 100);
           return 0;
         }
         return prev - 1;
@@ -122,11 +127,16 @@ export default function GameView({
       console.log("No Telegram ID, skipping score submission");
       return { user_needs_profile: false };
     }
+
+    // FIXED: Ensure minimum score for games that were actually played
+    const gameScore = Math.max(finalScore, 0);
+    const actualCoins = Math.max(coinsEarned, 0);
+
     try {
       const gameData = {
         telegram_id: userTelegramId,
-        score: finalScore,
-        coins_earned: coinsEarned,
+        score: gameScore,
+        coins_earned: actualCoins,
         moves_used: Math.max(1, moveCount),
         max_combo: maxComboAchieved,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
@@ -308,8 +318,21 @@ export default function GameView({
         })),
       ]);
 
-      setScore((s) => s + 10 * matches.length * Math.max(1, comboCount + 1));
-      onCoins(Math.ceil(matches.length / 4));
+      // FIXED: Ensure proper scoring calculation
+      const basePoints = 10 * matches.length;
+      const comboMultiplier = Math.max(1, comboCount + 1);
+      const pointsEarned = basePoints * comboMultiplier;
+      
+      console.log(`🎯 Scoring: ${matches.length} matches × ${comboMultiplier} combo = ${pointsEarned} points`);
+      
+      setScore((s) => {
+        const newScore = s + pointsEarned;
+        console.log(`📊 Score updated: ${s} → ${newScore}`);
+        return newScore;
+      });
+      
+      const coinsEarned = Math.ceil(matches.length / 4);
+      onCoins(coinsEarned);
 
       matches.forEach(([r, c]) => {
         g[r][c] = null;
@@ -381,16 +404,28 @@ export default function GameView({
       setGrid(shuffleToSolvable(gridRef.current));
   }
 
+  // FIXED: Proper game completion logic
   async function finish() {
-    const finalCoins = Math.floor(score * 0.15);
-    const result = await submitGameScore(score, finalCoins);
-    onExit({
-      score,
+    console.log('🎮 Game finishing with score:', scoreRef.current);
+    
+    // Calculate final coins (minimum 10 for completing the game)
+    const finalCoins = Math.max(10, Math.floor(scoreRef.current * 0.15));
+    
+    // Submit score to backend
+    const result = await submitGameScore(scoreRef.current, finalCoins);
+    
+    // FIXED: Ensure we pass the current score values
+    const gameResult = {
+      score: scoreRef.current,
       coins: finalCoins,
       moves_used: moveCount,
       max_combo: maxComboAchieved,
       gameSubmitted: !!result,
-    });
+    };
+    
+    console.log('🏁 Game complete! Sending result:', gameResult);
+    
+    onExit(gameResult);
   }
 
   function resetGame() {
