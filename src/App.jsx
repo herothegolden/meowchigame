@@ -160,40 +160,49 @@ export default function App() {
     }
   };
 
-  // Fetch user statistics
+  // Fetch user statistics (FIXED: Better sync and error handling)
   const fetchUserStats = async (telegramId) => {
     try {
+      console.log('📊 Fetching updated user stats...');
+      
       const response = await fetch(`/api/user/${telegramId}/stats`);
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ User stats updated:', data.stats);
+        
         setUserStats(data.stats);
         
-        // Update coins from backend if different
+        // FIXED: Sync local coins with backend total
         if (data.stats.total_coins_earned) {
-          setCoins(prev => Math.max(prev, data.stats.total_coins_earned));
+          setCoins(data.stats.total_coins_earned);
         }
+      } else {
+        console.error('❌ Failed to fetch user stats:', response.status);
       }
     } catch (error) {
-      console.error('Failed to fetch user stats:', error);
+      console.error('❌ Failed to fetch user stats:', error);
     }
   };
 
-  // Handle profile updates
+  // Handle profile updates (FIXED: Ensure stats refresh)
   const handleProfileUpdate = (updatedUser) => {
     setUserProfile(updatedUser);
-    // Refresh user stats
+    
+    // FIXED: Always refresh user stats after profile updates
     if (userTelegramId) {
+      console.log('👤 Profile updated, refreshing stats...');
       fetchUserStats(userTelegramId);
     }
   };
 
-  // Handle profile completion (simplified)
+  // Handle profile completion (FIXED: Ensure stats refresh)
   const handleProfileSaved = (updatedUser) => {
     setUserProfile(updatedUser);
     setShowProfileModal(false);
     
-    // Refresh user stats
+    // FIXED: Always refresh user stats after profile completion
     if (userTelegramId) {
+      console.log('👤 Profile saved, refreshing stats...');
       fetchUserStats(userTelegramId);
     }
   };
@@ -316,6 +325,14 @@ export default function App() {
   }
 
   function Settings() {
+    // Manual stats refresh for debugging
+    const handleRefreshStats = () => {
+      if (userTelegramId) {
+        console.log('🔄 Manually refreshing user stats...');
+        fetchUserStats(userTelegramId);
+      }
+    };
+
     return (
       <section className="section">
         <div className="title">⚙️ Settings</div>
@@ -349,6 +366,22 @@ export default function App() {
             onClick={() => setShowProfileModal(true)}
           >
             Edit Profile
+          </button>
+        </div>
+
+        {/* Manual stats refresh (for debugging) */}
+        <div className="row">
+          <div>
+            <div style={{ fontWeight: 600 }}>Refresh Stats</div>
+            <div className="muted small">
+              Update homepage numbers manually
+            </div>
+          </div>
+          <button 
+            className="btn" 
+            onClick={handleRefreshStats}
+          >
+            🔄 Refresh
           </button>
         </div>
       </section>
@@ -393,10 +426,23 @@ export default function App() {
     );
   }
 
-  // Handle game completion (simplified)
+  // Handle game completion (FIXED: Refresh homepage stats)
   const handleGameExit = async (gameResult) => {
+    console.log('🎮 Game completed with result:', gameResult);
+    
     setLastRun(gameResult);
     setCoins((c) => c + (gameResult?.coins || 0));
+    
+    // FIXED: Refresh user stats from backend after game completion
+    // This ensures homepage numbers update with new game data
+    if (userTelegramId && gameResult?.gameSubmitted) {
+      console.log('📊 Refreshing user stats after game...');
+      
+      // Small delay to ensure backend has processed the game
+      setTimeout(() => {
+        fetchUserStats(userTelegramId);
+      }, 500);
+    }
     
     setScreen("gameover");
     setScreenHistory((h) => [...h, "gameover"]);
