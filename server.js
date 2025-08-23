@@ -1,4 +1,4 @@
-// server.js - COMPLETE UPDATED VERSION
+// server.js - COMPLETE FIXED VERSION WITH LEADERBOARD FIX
 import express from "express";
 import compression from "compression";
 import helmet from "helmet";
@@ -154,6 +154,8 @@ async function insertTestData() {
       { telegram_id: 123456789, display_name: 'Test Player 1', country_flag: '🇺🇸' },
       { telegram_id: 987654321, display_name: 'Test Player 2', country_flag: '🇬🇧' },
       { telegram_id: 456789123, display_name: 'Test Player 3', country_flag: '🇺🇿' },
+      { telegram_id: 111222333, display_name: 'Test Player 4', country_flag: '🇫🇷' },
+      { telegram_id: 444555666, display_name: 'Test Player 5', country_flag: '🇩🇪' },
     ];
 
     for (const user of testUsers) {
@@ -170,6 +172,7 @@ async function insertTestData() {
           { score: 1500, coins_earned: 225, moves_used: 15, max_combo: 3 },
           { score: 2100, coins_earned: 315, moves_used: 18, max_combo: 5 },
           { score: 890, coins_earned: 133, moves_used: 12, max_combo: 2 },
+          { score: 3200, coins_earned: 480, moves_used: 20, max_combo: 7 },
         ];
         
         for (const game of testGames) {
@@ -369,7 +372,7 @@ app.post("/api/game/complete", requireDB, async (req, res) => {
   }
 });
 
-// ---------- API: FIXED leaderboard WITH EXTENSIVE LOGGING ----------
+// ---------- API: COMPLETELY FIXED LEADERBOARD ----------
 app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
   try {
     const { type } = req.params;
@@ -382,19 +385,20 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
       return res.status(400).json({ error: "Invalid leaderboard type" });
     }
 
-    // Build date filter - FIXED TO BE LESS RESTRICTIVE
+    // Build date filter - COMPLETELY FIXED
     let dateFilter = "";
     
     switch (type) {
       case "daily":
-        // Get games from last 24 hours
-        dateFilter = `AND g.played_at >= NOW() - INTERVAL '1 day'`;
+        // Get games from today (last 24 hours)
+        dateFilter = `AND g.played_at >= CURRENT_DATE`;
         break;
       case "weekly":
-        // Get games from last 7 days
-        dateFilter = `AND g.played_at >= NOW() - INTERVAL '7 days'`;
+        // Get games from this week (last 7 days)
+        dateFilter = `AND g.played_at >= CURRENT_DATE - INTERVAL '7 days'`;
         break;
       case "alltime":
+        // No filter - get all games
         dateFilter = ``;
         break;
     }
@@ -424,22 +428,22 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
       }
     }
 
-    // Build the main leaderboard query
+    // COMPLETELY FIXED LEADERBOARD QUERY
     const baseQuery = `
       SELECT 
         u.display_name,
         u.country_flag,
         u.telegram_id,
-        SUM(g.score) as total_score,
+        COALESCE(SUM(g.score), 0) as total_score,
         COUNT(g.id) as games_played,
-        MAX(g.score) as best_score,
-        MAX(g.max_combo) as best_combo
+        COALESCE(MAX(g.score), 0) as best_score,
+        COALESCE(MAX(g.max_combo), 0) as best_combo
       FROM users u
-      JOIN games g ON u.id = g.user_id
-      WHERE 1=1 ${dateFilter} ${countryFilter}
+      LEFT JOIN games g ON u.id = g.user_id ${dateFilter}
+      WHERE 1=1 ${countryFilter}
       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
-      HAVING SUM(g.score) > 0
-      ORDER BY total_score DESC
+      HAVING COUNT(g.id) > 0
+      ORDER BY total_score DESC, best_score DESC
     `;
 
     console.log(`🔧 Executing query:`, baseQuery);
@@ -451,16 +455,16 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
     console.log(`🔧 Raw query results: ${allResults.rows.length} rows`);
     
     if (allResults.rows.length > 0) {
-      console.log(`🔧 Sample result:`, allResults.rows[0]);
+      console.log(`🔧 First few results:`, allResults.rows.slice(0, 3));
     }
 
     // Add ranks to all results
     const allResultsWithRank = allResults.rows.map((row, index) => ({
       ...row,
       rank: index + 1,
-      total_score: parseInt(row.total_score),
-      games_played: parseInt(row.games_played),
-      best_score: parseInt(row.best_score),
+      total_score: parseInt(row.total_score || 0),
+      games_played: parseInt(row.games_played || 0),
+      best_score: parseInt(row.best_score || 0),
       best_combo: parseInt(row.best_combo || 0)
     }));
 
@@ -525,8 +529,33 @@ app.get("/api/debug/database", requireDB, async (req, res) => {
     const gameCount = await pool.query("SELECT COUNT(*) as count FROM games");
     
     // Get sample data
-    const sampleUsers = await pool.query("SELECT * FROM users LIMIT 3");
-    const sampleGames = await pool.query("SELECT * FROM games LIMIT 3");
+    const sampleUsers = await pool.query("SELECT telegram_id, display_name, country_flag FROM users LIMIT 5");
+    const sampleGames = await pool.query(`
+      SELECT g.score, g.coins_earned, g.max_combo, u.display_name 
+      FROM games g 
+      JOIN users u ON g.user_id = u.id 
+      ORDER BY g.played_at DESC 
+      LIMIT 5
+    `);
+
+    // Test leaderboard query directly
+    const leaderboardTest = await pool.query(`
+      SELECT 
+        u.display_name,
+        u.country_flag,
+        u.telegram_id,
+        COALESCE(SUM(g.score), 0) as total_score,
+        COUNT(g.id) as games_played,
+        COALESCE(MAX(g.score), 0) as best_score,
+        COALESCE(MAX(g.max_combo), 0) as best_combo
+      FROM users u
+      LEFT JOIN games g ON u.id = g.user_id
+      WHERE 1=1
+      GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
+      HAVING COUNT(g.id) > 0
+      ORDER BY total_score DESC
+      LIMIT 10
+    `);
 
     res.json({
       tablesExist: tables.rows.map(t => t.table_name),
@@ -534,6 +563,7 @@ app.get("/api/debug/database", requireDB, async (req, res) => {
       gameCount: parseInt(gameCount.rows[0].count),
       sampleUsers: sampleUsers.rows,
       sampleGames: sampleGames.rows,
+      leaderboardTest: leaderboardTest.rows,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
