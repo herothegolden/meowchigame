@@ -642,18 +642,20 @@ body{
   line-height: 1;
 }
 
-/* NEW: 2X BIGGER COMBO CELEBRATION ABOVE STATS */
+/* FIXED: COMBO CELEBRATION AS FLOATING OVERLAY */
 .combo-celebration {
-  position: relative;
+  position: absolute;
+  top: -70px; /* Float above the board */
+  left: 50%;
+  transform: translateX(-50%);
   text-align: center;
-  margin: 16px 0;
-  padding: 16px;
+  padding: 12px 20px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: white;
   border: 3px solid white;
-  border-radius: 24px;
+  border-radius: 20px;
   font-weight: 900;
-  font-size: 28px; /* 2x bigger than original 14px */
+  font-size: 24px; /* Reduced from 28px for better visibility */
   box-shadow: 
     0 8px 24px rgba(0, 0, 0, 0.3),
     0 0 30px rgba(255, 215, 0, 0.8),
@@ -666,6 +668,8 @@ body{
   pointer-events: none;
   white-space: nowrap;
   transform-origin: center center;
+  width: auto;
+  max-width: 90%; /* Ensure it fits on screen */
 }
 
 /* Explosion effect above combo text */
