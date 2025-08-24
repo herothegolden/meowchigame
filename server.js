@@ -15,17 +15,30 @@ app.use(express.json({ limit: "5mb" }));
 app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
 }));
 
+// ---------- Static dist ----------
+const dist = path.join(__dirname, "dist");
+const indexPath = path.join(dist, "index.html");
+if (!fs.existsSync(indexPath)) {
+  console.error("❌ index.html not found in dist folder!");
+  process.exit(1);
+}
+console.log("✅ Static files found, setting up server...");
+app.use(express.static(dist, { maxAge: "1y", index: false }));
+
 // ---------- Database ----------
-const DATABASE_URL = process.env.DATABASE_URL;
 let pool = null;
 let dbConnected = false;
 
-if (DATABASE_URL) {
+if (process.env.DATABASE_URL) {
   pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL.includes("localhost")
+      ? false
+      : { rejectUnauthorized: false },
+    max: 10, // default pool size
   });
   pool.connect()
     .then(() => { dbConnected = true; console.log("✅ Database connected"); })
@@ -34,28 +47,37 @@ if (DATABASE_URL) {
   console.warn("⚠️  DATABASE_URL not set. API routes will return 503.");
 }
 
+// ---------- Economy config ----------
+const COIN_RATE = Number(process.env.COIN_RATE || 8);       // points per coin
+const COIN_MIN  = Number(process.env.COIN_MIN  || 10);      // floor per game
+const COIN_CAP  = process.env.COIN_CAP ? Number(process.env.COIN_CAP) : null; // optional cap
+const COIN_EVENT_MULT = Number(process.env.COIN_EVENT_MULT || 1.0); // promo multiplier
+
+function coinsFor(score) {
+  const S = Math.max(0, Number(score) || 0);
+  const base = Math.floor((COIN_EVENT_MULT * S) / Math.max(1, COIN_RATE));
+  const withMin = Math.max(COIN_MIN, base);
+  return COIN_CAP ? Math.min(withMin, COIN_CAP) : withMin;
+}
+
+// Public config for client to mirror Pending coins
+app.get("/api/config", (_req, res) => {
+  res.json({
+    coins: {
+      RATE: COIN_RATE,
+      MIN: COIN_MIN,
+      CAP: COIN_CAP,
+      MULT: COIN_EVENT_MULT
+    }
+  });
+});
+
 function requireDB(req, res, next) {
   if (!pool || !dbConnected) {
     return res.status(503).json({ error: "Database unavailable" });
   }
   next();
 }
-
-// ---------- Static build checks ----------
-const dist = path.join(__dirname, "dist");
-
-// Fail fast if build missing (helps Railway/Nixpacks)
-if (!fs.existsSync(dist)) {
-  console.error("❌ dist folder not found! Make sure the build completed successfully.");
-  process.exit(1);
-}
-const indexPath = path.join(dist, "index.html");
-if (!fs.existsSync(indexPath)) {
-  console.error("❌ index.html not found in dist folder!");
-  process.exit(1);
-}
-console.log("✅ Static files found, setting up server...");
-app.use(express.static(dist, { maxAge: "1y", index: false }));
 
 // ---------- Setup endpoint (optional utility) ----------
 app.get("/api/setup/database", async (req, res) => {
@@ -79,26 +101,25 @@ app.get("/api/setup/database", async (req, res) => {
         id SERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         display_name VARCHAR(50),
-        country_flag VARCHAR(10),
+        country_flag TEXT,
         profile_picture TEXT,
         profile_completed BOOLEAN DEFAULT FALSE,
         name_changed BOOLEAN DEFAULT FALSE,
-        picture_changed BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
 
     await pool.query(`
       CREATE TABLE games (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        score INTEGER NOT NULL CHECK (score >= 0 AND score <= 10000),
-        coins_earned INTEGER DEFAULT 0,
-        moves_used INTEGER CHECK (moves_used > 0 AND moves_used <= 50),
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        score INTEGER NOT NULL CHECK (score >= 0),
+        coins_earned INTEGER NOT NULL DEFAULT 0,
+        moves_used INTEGER,
         max_combo INTEGER DEFAULT 0,
         game_duration INTEGER,
-        played_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        played_at TIMESTAMP DEFAULT NOW()
       );
     `);
 
@@ -118,6 +139,7 @@ app.get("/api/setup/database", async (req, res) => {
 app.post("/api/user/register", requireDB, async (req, res) => {
   try {
     const { telegram_id, telegram_username } = req.body;
+
     if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
 
     const result = await pool.query(
@@ -138,7 +160,7 @@ app.post("/api/user/register", requireDB, async (req, res) => {
   }
 });
 
-// ---------- API: update profile ----------
+// ---------- API: profile update ----------
 app.put("/api/user/profile", requireDB, async (req, res) => {
   try {
     const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
@@ -159,11 +181,6 @@ app.put("/api/user/profile", requireDB, async (req, res) => {
     if (profile_picture !== undefined) {
       updates.push(`profile_picture = $${i++}`);
       values.push(profile_picture);
-      // mark picture_changed if not default
-      if (profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
-        updates.push(`picture_changed = $${i++}`);
-        values.push(true);
-      }
     }
     if (name_changed !== undefined) {
       updates.push(`name_changed = $${i++}`);
@@ -188,7 +205,7 @@ app.put("/api/user/profile", requireDB, async (req, res) => {
 // ---------- API: save game (NO profile gating) ----------
 app.post("/api/game/complete", requireDB, async (req, res) => {
   try {
-    const { telegram_id, score, coins_earned, moves_used, max_combo, game_duration } = req.body;
+    const { telegram_id, score, moves_used, max_combo, game_duration } = req.body;
     if (!telegram_id || score === undefined) {
       return res.status(400).json({ error: "Telegram ID and score are required" });
     }
@@ -203,11 +220,13 @@ app.post("/api/game/complete", requireDB, async (req, res) => {
     );
     if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
 
+    const creditedCoins = coinsFor(score);
+
     const game = await pool.query(
       `INSERT INTO games (user_id, score, coins_earned, moves_used, max_combo, game_duration)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [user.rows[0].id, score, coins_earned || 0, moves_used ?? null, max_combo || 0, game_duration ?? null]
+      [user.rows[0].id, score, creditedCoins, moves_used ?? null, max_combo || 0, game_duration ?? null]
     );
 
     res.json({ message: "Game saved successfully", game: game.rows[0] });
@@ -249,86 +268,63 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
         "SELECT country_flag FROM users WHERE telegram_id = $1",
         [telegram_id]
       );
-      
       if (userResult.rows.length > 0 && userResult.rows[0].country_flag) {
         currentUserCountry = userResult.rows[0].country_flag;
-        countryFilter = `AND u.country_flag = '${currentUserCountry}'`;
-      } else {
-        // If user has no country, show empty leaderboard for country filter
-        countryFilter = `AND u.country_flag IS NULL AND 1=0`; // Never matches
+        countryFilter = `AND u.country_flag = '${currentUserCountry.replace(/'/g, "''")}'`;
       }
     }
 
-    // Get top 100 leaderboard
-    const leaderboard = await pool.query(`
+    const leaderboardQuery = `
       SELECT 
         u.display_name,
         u.country_flag,
         u.telegram_id,
         SUM(g.score) as total_score,
-        COUNT(g.id) as games_played,
-        MAX(g.score) as best_score,
-        MAX(g.max_combo) as best_combo,
-        ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) as rank
+        COUNT(*) as games_played,
+        MAX(g.score) as best_score
       FROM users u
       JOIN games g ON u.id = g.user_id
-      WHERE 1=1 ${dateFilter} ${countryFilter}
-      GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
+      WHERE 1=1
+      ${dateFilter}
+      ${countryFilter}
+      GROUP BY u.id
       ORDER BY total_score DESC
-      LIMIT 100
-    `);
+      LIMIT 50;
+    `;
+    
+    const leaderboard = await pool.query(leaderboardQuery);
 
-    // FIXED: Calculate user's actual rank if not in top 100
+    // Get current user's rank if needed
     let userRank = null;
     if (telegram_id) {
-      const userInTop100 = leaderboard.rows.find(row => row.telegram_id == telegram_id);
-      
-      if (!userInTop100) {
-        // Get user's full rank
-        const userRankQuery = await pool.query(`
-          WITH ranked_users AS (
-            SELECT 
-              u.display_name,
-              u.country_flag,
-              u.telegram_id,
-              SUM(g.score) as total_score,
-              COUNT(g.id) as games_played,
-              MAX(g.score) as best_score,
-              MAX(g.max_combo) as best_combo,
-              ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) as rank
-            FROM users u
-            JOIN games g ON u.id = g.user_id
-            WHERE 1=1 ${dateFilter} ${countryFilter}
-            GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
-          )
-          SELECT * FROM ranked_users WHERE telegram_id = $1
-        `, [telegram_id]);
-
-        if (userRankQuery.rows.length > 0) {
-          userRank = userRankQuery.rows[0];
-        }
+      const rankQuery = `
+        SELECT rank FROM (
+          SELECT u.telegram_id, SUM(g.score) as total_score,
+                 RANK() OVER (ORDER BY SUM(g.score) DESC) as rank
+          FROM users u
+          JOIN games g ON u.id = g.user_id
+          WHERE 1=1
+          ${dateFilter}
+          ${countryFilter}
+          GROUP BY u.telegram_id
+        ) ranked
+        WHERE telegram_id = $1;
+      `;
+      const rankRes = await pool.query(rankQuery, [telegram_id]);
+      if (rankRes.rows.length > 0) {
+        userRank = Number(rankRes.rows[0].rank);
       }
     }
 
-    // Format display names with fallbacks
-    const formattedLeaderboard = leaderboard.rows.map(user => ({
-      ...user,
-      display_name: user.display_name || `Stray Cat #${user.telegram_id.toString().slice(-5)}`,
-      total_score: parseInt(user.total_score),
-      games_played: parseInt(user.games_played),
-      best_score: parseInt(user.best_score),
-      best_combo: parseInt(user.best_combo),
-      rank: parseInt(user.rank)
+    const formattedLeaderboard = leaderboard.rows.map((row, idx) => ({
+      rank: idx + 1,
+      username: row.display_name || "Anonymous",
+      country_flag: row.country_flag || null,
+      total_score: Number(row.total_score || 0),
+      games_played: Number(row.games_played || 0),
+      best_score: Number(row.best_score || 0),
+      telegram_id: String(row.telegram_id || ""),
     }));
-
-    if (userRank) {
-      userRank.display_name = userRank.display_name || `Stray Cat #${userRank.telegram_id.toString().slice(-5)}`;
-      userRank.total_score = parseInt(userRank.total_score);
-      userRank.games_played = parseInt(userRank.games_played);
-      userRank.best_score = parseInt(userRank.best_score);
-      userRank.best_combo = parseInt(userRank.best_combo);
-      userRank.rank = parseInt(userRank.rank);
-    }
 
     res.json({
       leaderboard: formattedLeaderboard,
@@ -361,34 +357,20 @@ app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
       FROM users u
       LEFT JOIN games g ON u.id = g.user_id
       WHERE u.telegram_id = $1
-      GROUP BY u.id, u.display_name, u.country_flag, u.profile_completed
-    `, [telegram_id]);
+      GROUP BY u.id;
+    `, [req.params.telegram_id]);
 
-    if (stats.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    res.json({ stats: stats.rows[0] });
+    res.json({ stats: stats.rows[0] || {} });
   } catch (error) {
-    console.error("User stats error:", error);
+    console.error("Stats error:", error);
     res.status(500).json({ error: "Failed to fetch user stats" });
   }
 });
 
 // ---------- Health ----------
-app.get("/api/db/health", async (_req, res) => {
-  if (!pool || !dbConnected) {
-    return res.status(503).json({ status: "unhealthy", database: "disconnected" });
-  }
-  try {
-    await pool.query("SELECT 1");
-    res.json({ status: "healthy", database: "connected" });
-  } catch (e) {
-    res.status(500).json({ status: "unhealthy", error: e.message });
-  }
-});
-
 app.get("/health", (_req, res) => {
   res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
+    ok: true,
     uptime: process.uptime(),
     env: process.env.NODE_ENV || "development",
     database: dbConnected ? "connected" : "disconnected",
