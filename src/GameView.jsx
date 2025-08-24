@@ -1,12 +1,12 @@
 // src/GameView.jsx
 import React, { useEffect, useRef, useState } from "react";
 
-const COLS = 8;
-const ROWS = 8;
+const COLS = 6;  // CHANGED: 8 → 6
+const ROWS = 6;  // CHANGED: 8 → 6
 const CELL_MIN = 36;
 const CELL_MAX = 88;
 const GAME_DURATION = 60;
-const EMOJI_SIZE = 0.86;
+const EMOJI_SIZE = 1.15;  // CHANGED: 0.86 → 1.15 (bigger emojis for 6x6)
 
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () =>
@@ -161,7 +161,7 @@ export default function GameView({
     }
   }
 
-  // Pointer interactions
+  // IMPROVED: Responsive pointer interactions (NO ANIMATION BLOCKING)
   useEffect(() => {
     const el = boardRef.current;
     if (!el || paused) return;
@@ -176,7 +176,8 @@ export default function GameView({
     };
 
     const down = (e) => {
-      if (animatingRef.current || timeLeftRef.current <= 0) return;
+      // REMOVED: if (animatingRef.current || timeLeftRef.current <= 0) return;
+      if (timeLeftRef.current <= 0) return; // Only block on game over
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
@@ -187,7 +188,8 @@ export default function GameView({
     };
 
     const move = (e) => {
-      if (!drag || animatingRef.current || timeLeftRef.current <= 0) return;
+      // REMOVED: if (!drag || animatingRef.current || timeLeftRef.current <= 0) return;
+      if (!drag || timeLeftRef.current <= 0) return; // Only block on game over
       const p = rc(e);
       const dx = p.x - drag.x;
       const dy = p.y - drag.y;
@@ -210,7 +212,8 @@ export default function GameView({
       if (!drag.dragging) {
         setSel({ r: drag.r, c: drag.c });
       } else {
-        if (!animatingRef.current && timeLeftRef.current > 0) {
+        // REMOVED: if (!animatingRef.current && timeLeftRef.current > 0)
+        if (timeLeftRef.current > 0) { // Only check game time, allow moves during animations
           const horiz = Math.abs(dx) > Math.abs(dy);
           const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
           const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
@@ -304,7 +307,7 @@ export default function GameView({
           // Show combo animation
           setCombo(comboCount);
           haptic(15);
-          setTimeout(() => setCombo(0), 1000);
+          setTimeout(() => setCombo(0), 1500); // Longer display for bigger animation
         }
 
         setTimeout(() => setFx([]), 1200);
@@ -394,7 +397,7 @@ export default function GameView({
   }
 
   function doHint() {
-    if (animating || timeLeft <= 0) return;
+    if (timeLeft <= 0) return; // REMOVED: animating check for responsiveness
     const m = findFirstMove(gridRef.current);
     if (!m) {
       shuffleBoard();
@@ -406,7 +409,7 @@ export default function GameView({
   }
 
   function shuffleBoard() {
-    if (animating || timeLeft <= 0) return;
+    if (timeLeft <= 0) return; // REMOVED: animating check for responsiveness
     const g = shuffleToSolvable(gridRef.current);
     setGrid(g);
     haptic(12);
@@ -445,7 +448,7 @@ export default function GameView({
   }
 
   function resetGame() {
-    if (animating) return;
+    if (timeLeft <= 0 && !paused) return; // Only prevent reset after game over
     console.log('🔄 Resetting game...');
     
     setGrid(initSolvableGrid());
@@ -518,6 +521,13 @@ export default function GameView({
           <b>{combo > 0 ? `x${combo + 1}` : "-"}</b>
         </div>
       </div>
+
+      {/* MOVED: Combo explosion above the stats */}
+      {combo > 0 && (
+        <div className="combo-celebration">
+          💥 🍬 Sweet Combo x{combo + 1}! 🍬 💥
+        </div>
+      )}
 
       <div
         ref={boardRef}
@@ -601,14 +611,11 @@ export default function GameView({
         {fx.map((p, i) => (
           <Poof key={p.id || i} x={p.x} y={p.y} size={cell} />
         ))}
-        {combo > 0 && (
-          <div className="combo">🍭 Sweet Combo x{combo + 1}! 🍭</div>
-        )}
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
               <div className="title" style={{ marginBottom: 8 }}>
-                🍬 Game Paused
+                � Game Paused
               </div>
               <div className="muted" style={{ marginBottom: 12 }}>
                 Take a sweet break!
@@ -647,7 +654,7 @@ export default function GameView({
         >
           🔄 Sugar Shuffle
         </button>
-        <div className="controls-size">8×8</div>
+        <div className="controls-size">6×6</div>
       </div>
     </div>
   );
@@ -667,7 +674,7 @@ function Poof({ x, y, size }) {
         const randomDelay = Math.random() * 0.02;
         const randomDuration = 0.3 + Math.random() * 0.2;
 
-        const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "🍬", "💎"];
+        const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "�", "💎"];
         const randomSpark =
           sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
 
