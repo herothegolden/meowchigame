@@ -55,13 +55,15 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  // Keep refs for timer access
+  // FIXED: Keep refs for proper state access during async operations
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
   const scoreRef = useRef(score);
   scoreRef.current = score;
+  const maxComboAchievedRef = useRef(maxComboAchieved);
+  maxComboAchievedRef.current = maxComboAchieved;
 
   // Responsive sizing
   useEffect(() => {
@@ -91,19 +93,15 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
-  // REMOVED: Combo tracking useEffect (now handled directly in resolveCascades)
-  // This was causing race condition issues with combo timing
-
-  // Timer - FIXED: Ensure proper game ending
+  // Timer
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // FIXED: Use setTimeout to ensure state is current
           setTimeout(() => {
-            console.log('⏰ Time up! Final score:', scoreRef.current);
+            console.log('⏰ Time up! Final score:', scoreRef.current, 'Max combo:', maxComboAchievedRef.current);
             finish();
           }, 100);
           return 0;
@@ -127,9 +125,9 @@ export default function GameView({
       return { user_needs_profile: false };
     }
 
-    // FIXED: Ensure minimum score for games that were actually played
     const gameScore = Math.max(finalScore, 0);
     const actualCoins = Math.max(coinsEarned, 0);
+    const currentMaxCombo = maxComboAchievedRef.current;
 
     try {
       const gameData = {
@@ -137,7 +135,7 @@ export default function GameView({
         score: gameScore,
         coins_earned: actualCoins,
         moves_used: Math.max(1, moveCount),
-        max_combo: maxComboAchieved,
+        max_combo: currentMaxCombo, // FIXED: Use ref value
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
 
@@ -278,6 +276,7 @@ export default function GameView({
     }, 200);
   }
 
+  // FIXED: Complete cascade resolution with proper combo tracking
   function resolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
@@ -290,17 +289,19 @@ export default function GameView({
         setNewTiles(new Set());
         setFallDelay({});
 
-        // FIXED: Update maxComboAchieved BEFORE setting combo display
+        // FIXED: Update max combo achieved immediately when cascade ends
         if (comboCount > 0) {
-          console.log(`🔥 Combo achieved: x${comboCount + 1}`);
+          console.log(`🔥 Combo sequence complete! Achieved x${comboCount + 1} combo (comboCount=${comboCount})`);
           
-          // FIXED: Update max combo directly here (no race condition)
+          // Update max combo immediately
           setMaxComboAchieved(prev => {
             const newMax = Math.max(prev, comboCount);
-            console.log(`🏆 Max combo updated: ${prev} → ${newMax}`);
+            console.log(`🏆 Max combo updated: ${prev} → ${newMax} (display will show x${newMax + 1})`);
+            maxComboAchievedRef.current = newMax; // Update ref immediately
             return newMax;
           });
           
+          // Show combo animation
           setCombo(comboCount);
           haptic(15);
           setTimeout(() => setCombo(0), 1000);
@@ -314,6 +315,7 @@ export default function GameView({
         return;
       }
 
+      // Process matches
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
@@ -327,28 +329,30 @@ export default function GameView({
         })),
       ]);
 
-      // FIXED: Ensure proper scoring calculation
+      // Calculate scoring
       const basePoints = 10 * matches.length;
       const comboMultiplier = Math.max(1, comboCount + 1);
       const pointsEarned = basePoints * comboMultiplier;
       
-      console.log(`🎯 Scoring: ${matches.length} matches × ${comboMultiplier} combo = ${pointsEarned} points`);
+      console.log(`🎯 Match ${comboCount + 1}: ${matches.length} items × ${comboMultiplier} multiplier = ${pointsEarned} points`);
       
       setScore((s) => {
         const newScore = s + pointsEarned;
-        console.log(`📊 Score updated: ${s} → ${newScore}`);
+        console.log(`📊 Score: ${s} + ${pointsEarned} = ${newScore}`);
         return newScore;
       });
       
       const coinsEarned = Math.ceil(matches.length / 4);
       onCoins(coinsEarned);
 
+      // Clear matches
       matches.forEach(([r, c]) => {
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
       setTimeout(() => setBlast(new Set()), 100);
 
+      // Apply gravity and continue cascade
       setTimeout(() => {
         const delayMap = {};
         for (let c = 0; c < COLS; c++) {
@@ -381,7 +385,7 @@ export default function GameView({
 
         setTimeout(() => {
           setNewTiles(new Set());
-          comboCount++;
+          comboCount++; // Increment for next cascade
           setTimeout(step, 60);
         }, 120);
       }, 100);
@@ -413,27 +417,29 @@ export default function GameView({
       setGrid(shuffleToSolvable(gridRef.current));
   }
 
-  // FIXED: Proper game completion logic
+  // FIXED: Use refs for accurate final values
   async function finish() {
-    console.log('🎮 Game finishing with score:', scoreRef.current);
-    console.log('🔥 Max combo achieved:', maxComboAchieved);
+    const finalScore = scoreRef.current;
+    const finalMaxCombo = maxComboAchievedRef.current;
+    
+    console.log('🎮 Game finishing with score:', finalScore, 'Max combo achieved:', finalMaxCombo);
     
     // Calculate final coins (minimum 10 for completing the game)
-    const finalCoins = Math.max(10, Math.floor(scoreRef.current * 0.15));
+    const finalCoins = Math.max(10, Math.floor(finalScore * 0.15));
     
     // Submit score to backend
-    const result = await submitGameScore(scoreRef.current, finalCoins);
+    const result = await submitGameScore(finalScore, finalCoins);
     
-    // FIXED: Ensure we pass the current score values
+    // Send results to parent
     const gameResult = {
-      score: scoreRef.current,
+      score: finalScore,
       coins: finalCoins,
       moves_used: moveCount,
-      max_combo: maxComboAchieved,
+      max_combo: finalMaxCombo,
       gameSubmitted: !!result,
     };
     
-    console.log('🏁 Game complete! Sending result:', gameResult);
+    console.log('🏁 Game complete! Final result:', gameResult);
     
     onExit(gameResult);
   }
@@ -454,8 +460,12 @@ export default function GameView({
     setTimeLeft(GAME_DURATION);
     setGameStartTime(Date.now());
     setMoveCount(0);
-    setMaxComboAchieved(0); // FIXED: Ensure max combo resets
+    setMaxComboAchieved(0);
     setFx([]);
+    
+    // Reset refs
+    maxComboAchievedRef.current = 0;
+    scoreRef.current = 0;
     
     console.log('✅ Game reset complete');
   }
@@ -644,7 +654,6 @@ export default function GameView({
 }
 
 function Poof({ x, y, size }) {
-  // Reduced particle count for performance
   const sparks = Array.from({ length: 12 });
 
   return (
