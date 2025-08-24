@@ -3,7 +3,7 @@ import Home from "./Home.jsx";
 import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
 import Leaderboard from "./Leaderboard.jsx";
-import ProfileModal from "./ProfileModal.jsx";
+import EnhancedProfileModal from "./EnhancedProfileModal.jsx";
 
 const getTG = () =>
   (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
@@ -492,6 +492,7 @@ export default function App() {
               userStats={userStats}
               userProfile={userProfile}
               onProfileUpdate={handleProfileUpdate}
+              onOpenProfileModal={() => setShowProfileModal(true)}
             />
           )}
 
@@ -560,8 +561,8 @@ export default function App() {
         <BottomNav />
       </div>
 
-      {/* Profile Modal */}
-      <ProfileModal
+      {/* Enhanced Profile Modal */}
+      <EnhancedProfileModal
         show={showProfileModal}
         onClose={() => setShowProfileModal(false)}
         onSave={handleProfileSaved}
