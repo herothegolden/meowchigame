@@ -642,46 +642,93 @@ body{
   line-height: 1;
 }
 
-/* FIXED: combo banner - plays once then stops */
-.combo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+/* NEW: 2X BIGGER COMBO CELEBRATION ABOVE STATS */
+.combo-celebration {
+  position: relative;
+  text-align: center;
+  margin: 16px 0;
+  padding: 16px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: white;
-  border: 2px solid white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: 800;
-  font-size: 14px;
+  border: 3px solid white;
+  border-radius: 24px;
+  font-weight: 900;
+  font-size: 28px; /* 2x bigger than original 14px */
   box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.2),
-    0 0 20px rgba(255, 215, 0, 0.6);
-  animation: combo-show 1.0s ease-in-out; /* Plays once for 1 second then stops */
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  z-index: 20;
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 0 30px rgba(255, 215, 0, 0.8),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  animation: combo-explosion 1.5s ease-in-out forwards;
+  text-shadow: 
+    0 0 10px rgba(255, 255, 255, 0.9),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
   pointer-events: none;
   white-space: nowrap;
+  transform-origin: center center;
 }
 
-@keyframes combo-show {
+/* Explosion effect above combo text */
+.combo-celebration::before {
+  content: '💥✨🎉💥';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 32px;
+  animation: explosion-burst 1.5s ease-out forwards;
+  z-index: 1001;
+}
+
+@keyframes combo-explosion {
   0% { 
-    transform: translate(-50%, -50%) scale(0.8); 
+    transform: scale(0.6) rotate(-5deg); 
     opacity: 0;
+    filter: blur(4px);
   }
   15% { 
-    transform: translate(-50%, -50%) scale(1.1); 
+    transform: scale(1.3) rotate(3deg); 
     opacity: 1;
+    filter: blur(0px);
+  }
+  30% {
+    transform: scale(1.1) rotate(-1deg);
   }
   85% { 
-    transform: translate(-50%, -50%) scale(1); 
+    transform: scale(1) rotate(0deg); 
     opacity: 1;
+    filter: blur(0px);
   }
   100% { 
-    transform: translate(-50%, -50%) scale(0.9); 
+    transform: scale(0.9) rotate(0deg); 
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+@keyframes explosion-burst {
+  0% {
+    transform: translateX(-50%) scale(0.5) rotate(0deg);
     opacity: 0;
   }
+  20% {
+    transform: translateX(-50%) scale(1.5) rotate(180deg);
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(-50%) scale(1.2) rotate(360deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(-50%) scale(2.0) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+/* OLD combo style - REMOVED (was positioned in board center) */
+.combo {
+  /* This class is no longer used - replaced by combo-celebration */
+  display: none;
 }
 
 /* pause overlay */
@@ -1446,7 +1493,7 @@ body{
 /* reduced motion - Remove all animations for accessibility */
 @media (prefers-reduced-motion: reduce){
   .tile, .tile.swapping, .tile.drop-in, .tile.blasting,
-  .splash-progress__bar, .combo, .tile.hint .tile-emoji{
+  .splash-progress__bar, .combo-celebration, .tile.hint .tile-emoji{
     transition: none !important;
     animation: none !important;
   }
@@ -1545,9 +1592,16 @@ body{
     font-size: 14px;
   }
   
-  .combo {
-    font-size: 12px;
-    padding: 6px 12px;
+  /* Mobile combo celebration adjustments */
+  .combo-celebration {
+    font-size: 20px; /* Smaller on mobile */
+    padding: 12px;
+    border-radius: 16px;
+  }
+  
+  .combo-celebration::before {
+    font-size: 24px; /* Smaller explosion on mobile */
+    top: -15px;
   }
 
   /* Avatar grid mobile adjustments */
