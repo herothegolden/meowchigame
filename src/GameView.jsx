@@ -6,7 +6,7 @@ const ROWS = 6;  // CHANGED: 8 → 6
 const CELL_MIN = 36;
 const CELL_MAX = 88;
 const GAME_DURATION = 60;
-const EMOJI_SIZE = 1.15;  // CHANGED: 0.86 → 1.15 (bigger emojis for 6x6)
+const EMOJI_SIZE = 0.95;  // FIXED: Reduced from 1.15 to fit cleanly in cells
 
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () =>
