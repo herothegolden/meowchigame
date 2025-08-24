@@ -255,7 +255,7 @@ export default function App() {
           
           <div className="coins-display">
             <span className="coins-icon">💰</span>
-            <span className="coins-amount">{coins}</span>
+            <span className="coins-amount">{Math.min(coins, 999999999)}</span>
           </div>
         </div>
       </header>
