@@ -10,6 +10,15 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
     return parseInt(num || 0).toLocaleString();
   };
 
+  // FIXED: Format combo display to match game logic
+  const formatCombo = (comboValue) => {
+    const combo = parseInt(comboValue || 0);
+    // Game shows "x3" for comboCount=2, so homepage should show the display value they saw
+    // If combo > 0, show what they saw in game (combo + 1)
+    // If combo = 0, they never got combos, so show 0
+    return combo === 0 ? '0' : `${combo + 1}`;
+  };
+
   // Get display name
   const getDisplayName = () => {
     if (userProfile?.display_name) {
@@ -201,7 +210,7 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
               <div className="stat-label">Best Score</div>
             </div>
             <div className="stat-item">
-              <div className="stat-value">{formatNumber(userStats?.best_combo)}</div>
+              <div className="stat-value">{formatCombo(userStats?.best_combo)}</div>
               <div className="stat-label">Best Combo</div>
             </div>
           </div>
@@ -231,6 +240,19 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
               Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
               and marshmallows 🍡 to create sweet combos and earn $Meow coins.
             </p>
+            
+            {/* DEBUGGING: Show raw stats values */}
+            {userStats && process.env.NODE_ENV === 'development' && (
+              <details style={{ marginTop: '16px', fontSize: '12px', opacity: 0.7 }}>
+                <summary>🔍 Debug Info</summary>
+                <div style={{ marginTop: '8px', fontFamily: 'monospace' }}>
+                  <div>Raw best_combo: {userStats.best_combo}</div>
+                  <div>Formatted combo: {formatCombo(userStats.best_combo)}</div>
+                  <div>Raw best_score: {userStats.best_score}</div>
+                  <div>Raw games_played: {userStats.games_played}</div>
+                </div>
+              </details>
+            )}
           </div>
         </div>
       </div>
