@@ -1,6 +1,45 @@
 import React, { useState, useEffect } from 'react';
 
-// Country flags for the dropdown (same as Leaderboard)
+// Predefined avatar options
+const AVATAR_OPTIONS = [
+  {
+    id: 'default',
+    url: 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png',
+    name: 'Default Meowchi'
+  },
+  {
+    id: 'zizi',
+    url: 'https://i.postimg.cc/3rDn1Ztt/Zizi.png',
+    name: 'Zizi'
+  },
+  {
+    id: 'chacha',
+    url: 'https://i.postimg.cc/N0MxH8y7/Chacha.png',
+    name: 'Chacha'
+  },
+  {
+    id: 'tofu',
+    url: 'https://i.postimg.cc/fLSjHwfV/Tofu.png',
+    name: 'Tofu'
+  },
+  {
+    id: 'boba',
+    url: 'https://i.postimg.cc/yYHXPCgN/Boba.png',
+    name: 'Boba'
+  },
+  {
+    id: 'oreo',
+    url: 'https://i.postimg.cc/YCX6M4X4/Oreo.png',
+    name: 'Oreo'
+  },
+  {
+    id: 'ginger',
+    url: 'https://i.postimg.cc/XNw9X1H6/Ginger.png',
+    name: 'Ginger'
+  }
+];
+
+// Country flags for the dropdown (same as existing)
 const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' },
   { flag: '🇬🇧', name: 'United Kingdom' },
@@ -53,32 +92,41 @@ const COUNTRY_FLAGS = [
   { flag: '🇧🇩', name: 'Bangladesh' },
   { flag: '🇵🇰', name: 'Pakistan' },
   { flag: '🇱🇰', name: 'Sri Lanka' },
-  { flag: '🇳🇵', name: 'Nepal' },
+  { flag: '🇳🇵', name: 'Nepal' }
 ];
 
-export default function ProfileModal({ show, onClose, onSave, userTelegramId, currentProfile }) {
+export default function EnhancedProfileModal({ show, onClose, onSave, userTelegramId, currentProfile }) {
   const [displayName, setDisplayName] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState('');
   const [countryFlag, setCountryFlag] = useState('');
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [detectedCountry, setDetectedCountry] = useState(null);
-
-  // Auto-detect country on mount
-  useEffect(() => {
-    if (show && !currentProfile?.country_flag) {
-      detectUserCountry();
-    }
-  }, [show]);
 
   // Initialize form with current profile data
   useEffect(() => {
     if (currentProfile) {
       setDisplayName(currentProfile.display_name || '');
       setCountryFlag(currentProfile.country_flag || '');
+      
+      // Match current profile picture to avatar options
+      const currentAvatar = AVATAR_OPTIONS.find(
+        avatar => avatar.url === currentProfile.profile_picture
+      );
+      setSelectedAvatar(currentAvatar ? currentAvatar.url : AVATAR_OPTIONS[0].url);
+    } else {
+      // Set defaults
+      setSelectedAvatar(AVATAR_OPTIONS[0].url);
     }
   }, [currentProfile]);
+
+  // Auto-detect country on first open if not set
+  useEffect(() => {
+    if (show && !currentProfile?.country_flag) {
+      detectUserCountry();
+    }
+  }, [show]);
 
   // Detect user's country via IP geolocation
   const detectUserCountry = async () => {
@@ -87,7 +135,6 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
       const data = await response.json();
       
       if (data.country_code) {
-        // Map country code to emoji flag
         const countryMap = {
           'US': '🇺🇸', 'GB': '🇬🇧', 'CA': '🇨🇦', 'AU': '🇦🇺',
           'DE': '🇩🇪', 'FR': '🇫🇷', 'IT': '🇮🇹', 'ES': '🇪🇸',
@@ -106,7 +153,6 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
         
         const detectedFlag = countryMap[data.country_code.toUpperCase()];
         if (detectedFlag) {
-          setDetectedCountry({ flag: detectedFlag, name: data.country_name });
           setCountryFlag(detectedFlag);
         }
       }
@@ -128,6 +174,11 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
       return;
     }
 
+    if (!selectedAvatar) {
+      setError('Please select an avatar');
+      return;
+    }
+
     if (!countryFlag) {
       setError('Please select your country');
       return;
@@ -145,7 +196,9 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
         body: JSON.stringify({
           telegram_id: userTelegramId,
           display_name: displayName.trim(),
-          country_flag: countryFlag
+          country_flag: countryFlag,
+          profile_picture: selectedAvatar,
+          picture_changed: selectedAvatar !== AVATAR_OPTIONS[0].url // Mark as changed if not default
         })
       });
 
@@ -177,8 +230,8 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
     <div className="modal-overlay">
       <div className="modal-content profile-modal">
         <div className="modal-header">
-          <h2 className="modal-title">🏆 Join the Leaderboard!</h2>
-          <p className="modal-subtitle">Complete your profile to start ranking</p>
+          <h2 className="modal-title">😺 Edit Your Profile</h2>
+          <p className="modal-subtitle">Customize your appearance and info</p>
         </div>
 
         <div className="modal-body">
@@ -189,12 +242,31 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
             </div>
           )}
 
-          {detectedCountry && (
-            <div className="detection-notice">
-              <span className="detection-icon">📍</span>
-              <span>Detected location: {detectedCountry.flag} {detectedCountry.name}</span>
+          {/* Avatar Selection */}
+          <div className="form-group">
+            <label className="form-label">Choose Your Avatar</label>
+            <div className="avatar-grid">
+              {AVATAR_OPTIONS.map((avatar) => (
+                <button
+                  key={avatar.id}
+                  type="button"
+                  className={`avatar-option ${selectedAvatar === avatar.url ? 'selected' : ''}`}
+                  onClick={() => setSelectedAvatar(avatar.url)}
+                  disabled={saving}
+                  title={avatar.name}
+                >
+                  <img 
+                    src={avatar.url} 
+                    alt={avatar.name}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentElement.textContent = '😺';
+                    }}
+                  />
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Display Name Input */}
           <div className="form-group">
@@ -271,12 +343,12 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
             onClick={onClose}
             disabled={saving}
           >
-            Skip for Now
+            Cancel
           </button>
           <button
             className="btn primary"
             onClick={handleSave}
-            disabled={saving || !displayName.trim() || !countryFlag}
+            disabled={saving || !displayName.trim() || !selectedAvatar || !countryFlag}
           >
             {saving ? (
               <>
@@ -284,7 +356,7 @@ export default function ProfileModal({ show, onClose, onSave, userTelegramId, cu
                 Saving...
               </>
             ) : (
-              'Join Leaderboard!'
+              'Save Changes'
             )}
           </button>
         </div>
