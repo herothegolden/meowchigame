@@ -642,34 +642,34 @@ body{
   line-height: 1;
 }
 
-/* FIXED: COMBO CELEBRATION AS FLOATING OVERLAY */
+/* FIXED: COMBO CELEBRATION OVER STATS ROW */
 .combo-celebration {
   position: absolute;
-  top: -70px; /* Float above the board */
+  top: 40px; /* Position over the "Score/Moves/Combo" row */
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  padding: 12px 20px;
+  padding: 8px 16px;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: white;
-  border: 3px solid white;
-  border-radius: 20px;
+  border: 2px solid white;
+  border-radius: 16px;
   font-weight: 900;
-  font-size: 24px; /* Reduced from 28px for better visibility */
+  font-size: 20px; /* Smaller to fit better */
   box-shadow: 
-    0 8px 24px rgba(0, 0, 0, 0.3),
-    0 0 30px rgba(255, 215, 0, 0.8),
-    inset 0 2px 0 rgba(255, 255, 255, 0.3);
+    0 6px 18px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(255, 215, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
   animation: combo-explosion 1.5s ease-in-out forwards;
   text-shadow: 
-    0 0 10px rgba(255, 255, 255, 0.9),
-    0 4px 8px rgba(0, 0, 0, 0.4);
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 2px 4px rgba(0, 0, 0, 0.4);
   z-index: 1000;
   pointer-events: none;
   white-space: nowrap;
   transform-origin: center center;
   width: auto;
-  max-width: 90%; /* Ensure it fits on screen */
+  max-width: 80%; /* Smaller max width */
 }
 
 /* Explosion effect above combo text */
