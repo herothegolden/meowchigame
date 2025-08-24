@@ -91,9 +91,8 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
-  useEffect(() => {
-    if (combo > maxComboAchieved) setMaxComboAchieved(combo);
-  }, [combo, maxComboAchieved]);
+  // REMOVED: Combo tracking useEffect (now handled directly in resolveCascades)
+  // This was causing race condition issues with combo timing
 
   // Timer - FIXED: Ensure proper game ending
   useEffect(() => {
@@ -291,7 +290,17 @@ export default function GameView({
         setNewTiles(new Set());
         setFallDelay({});
 
+        // FIXED: Update maxComboAchieved BEFORE setting combo display
         if (comboCount > 0) {
+          console.log(`🔥 Combo achieved: x${comboCount + 1}`);
+          
+          // FIXED: Update max combo directly here (no race condition)
+          setMaxComboAchieved(prev => {
+            const newMax = Math.max(prev, comboCount);
+            console.log(`🏆 Max combo updated: ${prev} → ${newMax}`);
+            return newMax;
+          });
+          
           setCombo(comboCount);
           haptic(15);
           setTimeout(() => setCombo(0), 1000);
@@ -407,6 +416,7 @@ export default function GameView({
   // FIXED: Proper game completion logic
   async function finish() {
     console.log('🎮 Game finishing with score:', scoreRef.current);
+    console.log('🔥 Max combo achieved:', maxComboAchieved);
     
     // Calculate final coins (minimum 10 for completing the game)
     const finalCoins = Math.max(10, Math.floor(scoreRef.current * 0.15));
@@ -430,6 +440,8 @@ export default function GameView({
 
   function resetGame() {
     if (animating) return;
+    console.log('🔄 Resetting game...');
+    
     setGrid(initSolvableGrid());
     setScore(0);
     setMoves(20);
@@ -442,8 +454,10 @@ export default function GameView({
     setTimeLeft(GAME_DURATION);
     setGameStartTime(Date.now());
     setMoveCount(0);
-    setMaxComboAchieved(0);
+    setMaxComboAchieved(0); // FIXED: Ensure max combo resets
     setFx([]);
+    
+    console.log('✅ Game reset complete');
   }
 
   const boardW = cell * COLS;
