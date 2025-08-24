@@ -333,6 +333,18 @@ export default function App() {
       }
     };
 
+    // Debug combo display logic
+    const debugComboDisplay = () => {
+      if (userStats?.best_combo !== undefined) {
+        const rawCombo = userStats.best_combo;
+        const displayCombo = rawCombo === 0 ? 0 : rawCombo + 1;
+        console.log(`🔍 Combo Debug: Database=${rawCombo}, Homepage Shows=${displayCombo}`);
+        alert(`Combo Debug:\nDatabase: ${rawCombo}\nHomepage Shows: ${displayCombo}\n\nIf you got combos but see 0, the game isn't tracking combos properly.`);
+      } else {
+        alert('No user stats available. Play a game first!');
+      }
+    };
+
     return (
       <section className="section">
         <div className="title">⚙️ Settings</div>
@@ -369,7 +381,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Manual stats refresh (for debugging) */}
+        {/* Manual stats refresh */}
         <div className="row">
           <div>
             <div style={{ fontWeight: 600 }}>Refresh Stats</div>
@@ -382,6 +394,22 @@ export default function App() {
             onClick={handleRefreshStats}
           >
             🔄 Refresh
+          </button>
+        </div>
+
+        {/* Debug combo tracking */}
+        <div className="row">
+          <div>
+            <div style={{ fontWeight: 600 }}>Debug Combo</div>
+            <div className="muted small">
+              Check combo tracking values
+            </div>
+          </div>
+          <button 
+            className="btn" 
+            onClick={debugComboDisplay}
+          >
+            🔍 Check Combo
           </button>
         </div>
       </section>
@@ -426,22 +454,23 @@ export default function App() {
     );
   }
 
-  // Handle game completion (FIXED: Refresh homepage stats)
+  // Handle game completion (FIXED: Refresh homepage stats + better logging)
   const handleGameExit = async (gameResult) => {
     console.log('🎮 Game completed with result:', gameResult);
     
     setLastRun(gameResult);
     setCoins((c) => c + (gameResult?.coins || 0));
     
-    // FIXED: Refresh user stats from backend after game completion
+    // FIXED: Always refresh user stats after game completion 
     // This ensures homepage numbers update with new game data
-    if (userTelegramId && gameResult?.gameSubmitted) {
+    if (userTelegramId) {
       console.log('📊 Refreshing user stats after game...');
+      console.log(`🔥 Game submitted combo: ${gameResult?.max_combo} (display will show: ${gameResult?.max_combo > 0 ? gameResult.max_combo + 1 : 0})`);
       
-      // Small delay to ensure backend has processed the game
+      // Delay to ensure backend has processed the game
       setTimeout(() => {
         fetchUserStats(userTelegramId);
-      }, 500);
+      }, 800); // Increased delay for better reliability
     }
     
     setScreen("gameover");
@@ -492,7 +521,22 @@ export default function App() {
               <div className="row"><div className="muted">Score</div><b>{lastRun.score}</b></div>
               <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
               {lastRun.max_combo > 0 && (
-                <div className="row"><div className="muted">Best combo</div><b>x{lastRun.max_combo + 1}</b></div>
+                <div className="row">
+                  <div className="muted">Best combo</div>
+                  <b>x{lastRun.max_combo + 1}</b>
+                  <div className="muted small" style={{ marginLeft: '8px' }}>
+                    (will show as {lastRun.max_combo + 1} on homepage)
+                  </div>
+                </div>
+              )}
+              
+              {/* Debug info for combo tracking */}
+              {lastRun.max_combo === 0 && (
+                <div className="row">
+                  <div className="muted small">
+                    ℹ️ No combos achieved this game. Try making matches that create cascading reactions!
+                  </div>
+                </div>
               )}
               
               <div className="row" style={{ gap: 8, marginTop: 16 }}>
