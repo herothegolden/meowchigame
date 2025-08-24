@@ -74,21 +74,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
   font-size: 36px;
   position: relative;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.profile-avatar:hover {
-  transform: scale(1.02);
-}
-
-.profile-avatar.no-upload {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.profile-avatar.no-upload:hover {
-  transform: none;
 }
 
 .profile-avatar img {
@@ -96,31 +81,6 @@
   height: 100%;
   object-fit: cover;
   background: transparent;
-}
-
-.avatar-upload-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: grid;
-  place-items: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  color: white;
-  font-size: 20px;
-}
-
-.profile-avatar:hover .avatar-upload-overlay {
-  opacity: 1;
-}
-
-.profile-avatar.no-upload .avatar-upload-overlay {
-  background: rgba(255, 0, 0, 0.6);
-}
-
-.profile-avatar.no-upload:hover .avatar-upload-overlay::after {
-  content: "🚫";
-  font-size: 24px;
 }
 
 .country-flag-badge {
@@ -178,39 +138,6 @@
 .edit-name-btn:hover {
   opacity: 1;
   background: var(--accent-light);
-}
-
-.edit-name-btn.disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.edit-name-btn.disabled:hover {
-  background: none;
-  opacity: 0.3;
-}
-
-.name-edit-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.name-edit-input {
-  font-size: 24px;
-  font-weight: 700;
-  color: #2c3e50;
-  background: var(--surface);
-  border: 2px solid var(--accent);
-  border-radius: 8px;
-  padding: 4px 8px;
-  letter-spacing: -0.2px;
-  min-width: 200px;
-}
-
-.name-edit-input:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
 }
 
 .profile-subtitle {
