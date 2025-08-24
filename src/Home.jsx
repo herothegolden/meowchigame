@@ -1,10 +1,14 @@
-import React, { useState } from "react";
+import React from "react";
 import "./home.css";
 
-export default function Home({ coins = 0, onNavigate, userStats, userProfile, onProfileUpdate }) {
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [tempName, setTempName] = useState('');
-  
+export default function Home({ 
+  coins = 0, 
+  onNavigate, 
+  userStats, 
+  userProfile, 
+  onProfileUpdate,
+  onOpenProfileModal 
+}) {
   // Format numbers with commas
   const formatNumber = (num) => {
     return parseInt(num || 0).toLocaleString();
@@ -27,112 +31,13 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
     return `Stray Cat #${userProfile?.telegram_id?.toString().slice(-5) || '00000'}`;
   };
 
-  // Handle name editing
-  const startEditingName = () => {
-    if (userProfile?.name_changed) {
-      // Show message about paid name changes
-      alert('You can only change your name once for free. Future changes will cost coins!');
-      return;
-    }
-    setTempName(getDisplayName());
-    setIsEditingName(true);
-  };
-
-  const saveName = async () => {
-    if (!tempName.trim() || tempName === getDisplayName()) {
-      setIsEditingName(false);
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          telegram_id: userProfile?.telegram_id,
-          display_name: tempName.trim(),
-          country_flag: userProfile?.country_flag,
-          name_changed: true // Mark as changed
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        onProfileUpdate?.(result.user);
-      }
-    } catch (error) {
-      console.error('Failed to update name:', error);
-    }
-    
-    setIsEditingName(false);
-  };
-
-  const cancelEdit = () => {
-    setIsEditingName(false);
-    setTempName('');
-  };
-
-  // Check if user can change profile picture
-  const canChangeProfilePicture = () => {
-    return !userProfile?.picture_changed && 
-           (!userProfile?.profile_picture || 
-            userProfile?.profile_picture === "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png");
-  };
-
-  // Handle profile picture upload
-  const handleProfilePicUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    // Check if user already changed their profile picture
-    if (!canChangeProfilePicture()) {
-      alert('You can only change your profile picture once for free. Future changes will cost coins!');
-      return;
-    }
-
-    // Create preview URL
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const imageDataUrl = e.target.result;
-      
-      try {
-        const response = await fetch('/api/user/profile', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            telegram_id: userProfile?.telegram_id,
-            profile_picture: imageDataUrl,
-            country_flag: userProfile?.country_flag
-          })
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          onProfileUpdate?.(result.user);
-        }
-      } catch (error) {
-        console.error('Failed to update profile picture:', error);
-        alert('Failed to update profile picture. Please try again.');
-      }
-    };
-    
-    reader.readAsDataURL(file);
-  };
-
   return (
     <div className="home-root">
       <div className="home-center">
         <div className="profile-card">
           <div className="profile-header">
             <div className="profile-avatar-container">
-              <div 
-                className={`profile-avatar ${!canChangeProfilePicture() ? 'no-upload' : ''}`}
-                onClick={() => canChangeProfilePicture() && document.getElementById('profile-pic-upload').click()}
-              >
+              <div className="profile-avatar">
                 <img
                   src={userProfile?.profile_picture || "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"}
                   alt="Profile"
@@ -140,55 +45,25 @@ export default function Home({ coins = 0, onNavigate, userStats, userProfile, on
                     e.currentTarget.src = "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png";
                   }}
                 />
-                <div className="avatar-upload-overlay">
-                  <span>{canChangeProfilePicture() ? '📷' : '🚫'}</span>
-                </div>
                 {userProfile?.country_flag && (
                   <div className="country-flag-badge">
                     {userProfile.country_flag}
                   </div>
                 )}
               </div>
-              {canChangeProfilePicture() && (
-                <input
-                  id="profile-pic-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleProfilePicUpload}
-                  style={{ display: 'none' }}
-                />
-              )}
             </div>
             <div className="profile-info">
               <div className="profile-name-section">
-                {isEditingName ? (
-                  <div className="name-edit-container">
-                    <input
-                      type="text"
-                      value={tempName}
-                      onChange={(e) => setTempName(e.target.value)}
-                      className="name-edit-input"
-                      onBlur={saveName}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveName();
-                        if (e.key === 'Escape') cancelEdit();
-                      }}
-                      autoFocus
-                      maxLength={50}
-                    />
-                  </div>
-                ) : (
-                  <h2 className="profile-name" onClick={startEditingName}>
-                    {getDisplayName()}
-                    <button 
-                      className={`edit-name-btn ${userProfile?.name_changed ? 'disabled' : ''}`}
-                      onClick={startEditingName}
-                      title={userProfile?.name_changed ? 'Name already changed (future changes cost coins)' : 'Click to edit name (free)'}
-                    >
-                      {userProfile?.name_changed ? '🚫' : '✏️'}
-                    </button>
-                  </h2>
-                )}
+                <h2 className="profile-name">
+                  {getDisplayName()}
+                  <button 
+                    className="edit-name-btn"
+                    onClick={onOpenProfileModal}
+                    title="Edit profile"
+                  >
+                    ✏️
+                  </button>
+                </h2>
               </div>
               <p className="profile-subtitle">
                 ID: {userProfile?.telegram_id || 'Loading...'}
