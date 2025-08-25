@@ -13,19 +13,29 @@ const getTG = () =>
 
 export default function App() {
   // Add html.ios/html.android classes for tiny CSS tweaks if needed
-  useEffect(() => { addPlatformClass(); }, []);
-
-  // Stable viewport for Telegram webview
   useEffect(() => {
+    try { addPlatformClass(); } catch {}
+  }, []);
+
+  // Stable viewport for Telegram webview (also reacts to Telegram viewportChanged)
+  useEffect(() => {
+    const tg = getTG();
     const setVH = () => {
-      const tg = getTG();
-      const height = tg?.viewportStableHeight || window.innerHeight;
-      const vh = height / 100;
-      document.documentElement.style.setProperty("--vh", `${vh}px`);
+      const height =
+        tg?.viewportStableHeight ??
+        tg?.viewportHeight ??
+        window.innerHeight;
+      document.documentElement.style.setProperty("--vh", `${height / 100}px`);
     };
+
     setVH();
-    window.addEventListener("resize", setVH);
-    return () => window.removeEventListener("resize", setVH);
+    window.addEventListener("resize", setVH, { passive: true });
+    tg?.onEvent?.("viewportChanged", setVH);
+
+    return () => {
+      window.removeEventListener("resize", setVH);
+      tg?.offEvent?.("viewportChanged", setVH);
+    };
   }, []);
 
   // Telegram init (safe no-op outside Telegram)
@@ -41,11 +51,13 @@ export default function App() {
   // Splash: small delay or until window 'load'
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
-    const minDelay = new Promise((r) => setTimeout(r, 900));
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 900));
     const pageReady =
       document.readyState === "complete"
         ? Promise.resolve()
-        : new Promise((r) => window.addEventListener("load", r, { once: true }));
+        : new Promise((resolve) =>
+            window.addEventListener("load", resolve, { once: true })
+          );
     Promise.all([minDelay, pageReady]).then(() => setShowSplash(false));
   }, []);
 
