@@ -69,15 +69,33 @@ export default function App() {
     initializeUser();
   }, []);
 
+  // Helper to create authenticated request body
+  const createAuthenticatedRequest = (data = {}) => {
+    const tg = getTG();
+    const request = {
+      telegram_id: userTelegramId, // Legacy support
+      ...data
+    };
+    
+    // Add secure initData if available
+    if (tg?.initData) {
+      request.initData = tg.initData;
+    }
+    
+    return request;
+  };
+
   // Auto-detect Telegram user and country
   const initializeUser = async () => {
     try {
       const tg = getTG();
       let telegramId = null;
+      let initData = null;
 
-      // Try to get Telegram ID from WebApp
+      // Try to get Telegram data from WebApp
       if (tg?.initDataUnsafe?.user?.id) {
         telegramId = tg.initDataUnsafe.user.id;
+        initData = tg.initData; // This is the signed data
       } else {
         // Fallback for testing (use a demo ID)
         telegramId = Math.floor(Math.random() * 1000000) + 100000;
@@ -86,16 +104,23 @@ export default function App() {
 
       setUserTelegramId(telegramId);
 
-      // Register or get existing user
+      // Register or get existing user with both old and new auth
+      const requestBody = {
+        telegram_id: telegramId, // Legacy support
+        telegram_username: tg?.initDataUnsafe?.user?.username || null
+      };
+
+      // Add secure initData if available
+      if (initData) {
+        requestBody.initData = initData;
+      }
+
       const response = await fetch('/api/user/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          telegram_id: telegramId,
-          telegram_username: tg?.initDataUnsafe?.user?.username || null
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (response.ok) {
