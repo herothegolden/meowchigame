@@ -107,6 +107,19 @@ app.get("/api/setup/database", async (req, res) => {
     await pool.query("CREATE INDEX idx_games_score ON games(score)");
     await pool.query("CREATE INDEX idx_users_telegram_id ON users(telegram_id)");
 
+    // 🔹 REFERRALS SCHEMA (added as requested)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id SERIAL PRIMARY KEY,
+        referrer_id BIGINT NOT NULL REFERENCES users(telegram_id),
+        referred_id BIGINT NOT NULL REFERENCES users(telegram_id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(referrer_id, referred_id)
+      );
+    `);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_coins INTEGER DEFAULT 0;`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);`);
+
     res.json({ success: true, message: "Database tables created successfully!" });
   } catch (error) {
     console.error("❌ Database setup failed:", error);
@@ -381,6 +394,85 @@ app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
   } catch (error) {
     console.error("User stats error:", error);
     res.status(500).json({ error: "Failed to fetch user stats" });
+  }
+});
+
+// ---------- 💎 REFERRAL SYSTEM (added exactly as requested) ----------
+
+// Create a referral and grant bonuses
+app.post("/api/user/refer", requireDB, async (req, res) => {
+  try {
+    const { referrer_id, referred_id } = req.body;
+
+    // Check if referral already exists
+    const existing = await pool.query(
+      "SELECT id FROM referrals WHERE referrer_id = $1 AND referred_id = $2",
+      [referrer_id, referred_id]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: "Referral already exists" });
+    }
+
+    // Add referral record
+    await pool.query(
+      "INSERT INTO referrals (referrer_id, referred_id, created_at) VALUES ($1, $2, NOW())",
+      [referrer_id, referred_id]
+    );
+
+    // Give bonus coins
+    const REFERRAL_BONUS = 500;  // 500 coins each
+    const REFERRER_BONUS = 1000; // 1000 coins for referrer
+
+    await pool.query(
+      "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE telegram_id = $2",
+      [REFERRER_BONUS, referrer_id]
+    );
+
+    await pool.query(
+      "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE telegram_id = $2",
+      [REFERRAL_BONUS, referred_id]
+    );
+
+    res.json({
+      success: true,
+      referrer_bonus: REFERRER_BONUS,
+      referred_bonus: REFERRAL_BONUS
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to process referral" });
+  }
+});
+
+// Get referral stats for a user
+app.get("/api/user/:telegram_id/referrals", requireDB, async (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_referrals,
+        SUM(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as today_referrals,
+        COUNT(*) * 1000 as total_bonus_earned
+      FROM referrals 
+      WHERE referrer_id = $1
+    `, [telegram_id]);
+
+    const recent = await pool.query(`
+      SELECT u.display_name, u.profile_picture, r.created_at
+      FROM referrals r
+      JOIN users u ON u.telegram_id = r.referred_id
+      WHERE r.referrer_id = $1
+      ORDER BY r.created_at DESC
+      LIMIT 10
+    `, [telegram_id]);
+
+    res.json({
+      stats: stats.rows[0],
+      recent_referrals: recent.rows
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch referral stats" });
   }
 });
 
