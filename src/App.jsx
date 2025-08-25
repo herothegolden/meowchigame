@@ -193,7 +193,23 @@ export default function App() {
     try {
       console.log('📊 Fetching updated user stats...');
       
-      const response = await fetch(`/api/user/${telegramId}/stats`);
+      const tg = getTG();
+      const requestBody = {
+        telegram_id: telegramId
+      };
+      
+      if (tg?.initData) {
+        requestBody.initData = tg.initData;
+      }
+      
+      const response = await fetch(`/api/user/${telegramId}/stats`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ User stats updated:', data.stats);
