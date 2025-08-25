@@ -622,4 +622,263 @@ export default function GameView({
             let swapTransform = "";
             if (swapping) {
               if (swapping.from.r === r && swapping.from.c === c) {
-                const dx = (swapping.to.c - swappin
+                const dx = (swapping.to.c - swapping.from.c) * cell;
+                const dy = (swapping.to.r - swapping.from.r) * cell;
+                swapTransform = `translate(${dx}px, ${dy}px)`;
+              } else if (swapping.to.r === r && swapping.to.c === c) {
+                const dx = (swapping.from.c - swapping.to.c) * cell;
+                const dy = (swapping.from.r - swapping.to.r) * cell;
+                swapTransform = `translate(${dx}px, ${dy}px)`;
+              }
+            }
+            const isSwapping =
+              !!swapping &&
+              ((swapping.from.r === r && swapping.from.c === c) ||
+                (swapping.to.r === r && swapping.to.c === c));
+
+            const tileKey = `${r}-${c}`;
+            const isNewTile = newTiles.has(tileKey);
+            const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
+            const isShake = shake.has(tileKey);
+
+            const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
+
+            return (
+              <div
+                key={`tile-${r}-${c}`}
+                className={`tile ${isSelected ? "selected" : ""} ${isHinted ? "hint" : ""}`}
+                style={{
+                  left: c * cell,
+                  top: r * cell,
+                  width: cell,
+                  height: cell,
+                  transform: swapTransform || undefined,
+                  zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
+                  transition: isSwapping
+                    ? "transform 0.16s ease"
+                    : delaySeconds
+                    ? `top 0.16s ease ${delaySeconds}s`
+                    : "top 0.16s ease",
+                }}
+              >
+                <div
+                  className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+                  style={{ fontSize: Math.floor(cell * EMOJI_SIZE) }}
+                >
+                  {v}
+                </div>
+                {/* small blast sparkles */}
+                {isBlasting && (
+                  <div className="blast">
+                    ✨
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
+          💡 Hint
+        </button>
+        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0}>
+          🔀 Shuffle
+        </button>
+        <button className="btn" onClick={() => resetGame()}>
+          ♻️ Reset
+        </button>
+        <button
+          className="btn"
+          onClick={() => setPaused((p) => !p)}
+        >
+          {paused ? "▶️ Resume" : "⏸ Pause"}
+        </button>
+      </div>
+
+      {/* Share buttons appear after finish via parent */}
+      {/* GameView only emits results; sharing UI is in parent Game Over screen */}
+
+      {/* Overlay timer bar */}
+      <div
+        className="progress"
+        style={{
+          width: `${(timeLeft / GAME_DURATION) * 100}%`,
+          height: 6,
+          background: getTimerColor(),
+          borderRadius: 6,
+          marginTop: 10,
+        }}
+      />
+    </div>
+  );
+}
+
+// ====== Helpers (unchanged) ======
+
+function initSolvableGrid() {
+  const g = Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => randEmoji())
+  );
+  // Ensure no initial 3-in-a-row
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (c >= 2 && g[r][c] === g[r][c - 1] && g[r][c] === g[r][c - 2]) {
+        g[r][c] = pickDifferent(g[r][c]);
+      }
+      if (r >= 2 && g[r][c] === g[r - 1][c] && g[r][c] === g[r - 2][c]) {
+        g[r][c] = pickDifferent(g[r][c]);
+      }
+    }
+  }
+  // Shuffle until at least one move exists
+  if (!hasAnyMove(g)) return shuffleToSolvable(g);
+  return g;
+}
+
+function pickDifferent(curr) {
+  const choices = CANDY_SET.filter((x) => x !== curr);
+  return choices[(Math.random() * choices.length) | 0];
+}
+
+function cloneGrid(g) {
+  return g.map((row) => row.slice());
+}
+
+function inBounds(r, c) {
+  return r >= 0 && c >= 0 && r < ROWS && c < COLS;
+}
+
+function findMatches(g) {
+  const matches = [];
+
+  // rows
+  for (let r = 0; r < ROWS; r++) {
+    let streak = 1;
+    for (let c = 1; c < COLS; c++) {
+      if (g[r][c] && g[r][c] === g[r][c - 1]) streak++;
+      else {
+        if (streak >= 3) {
+          for (let k = 0; k < streak; k++) matches.push([r, c - 1 - k]);
+        }
+        streak = 1;
+      }
+    }
+    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([r, COLS - 1 - k]);
+  }
+
+  // cols
+  for (let c = 0; c < COLS; c++) {
+    let streak = 1;
+    for (let r = 1; r < ROWS; r++) {
+      if (g[r][c] && g[r][c] === g[r - 1][c]) streak++;
+      else {
+        if (streak >= 3) {
+          for (let k = 0; k < streak; k++) matches.push([r - 1 - k, c]);
+        }
+        streak = 1;
+      }
+    }
+    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([ROWS - 1 - k, c]);
+  }
+
+  return matches;
+}
+
+function applyGravity(g) {
+  for (let c = 0; c < COLS; c++) {
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (g[r][c] === null) {
+        // find above
+        for (let rr = r - 1; rr >= 0; rr--) {
+          if (g[rr][c] != null) {
+            g[r][c] = g[rr][c];
+            g[rr][c] = null;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+function refill(g) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (g[r][c] === null) g[r][c] = randEmoji();
+    }
+  }
+}
+
+function hasAnyMove(g) {
+  // try swap neighbors
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const dirs = [
+        [0, 1],
+        [1, 0],
+      ];
+      for (const [dr, dc] of dirs) {
+        const r2 = r + dr;
+        const c2 = c + dc;
+        if (!inBounds(r2, c2)) continue;
+        const ng = cloneGrid(g);
+        [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
+        const m = findMatches(ng);
+        if (m.length > 0) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function shuffleToSolvable(g) {
+  let attempts = 0;
+  while (attempts++ < 200) {
+    const flat = g.flat();
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+    const ng = [];
+    for (let r = 0; r < ROWS; r++) {
+      ng.push(flat.slice(r * COLS, r * COLS + COLS));
+    }
+    // remove immediate matches
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (c >= 2 && ng[r][c] === ng[r][c - 1] && ng[r][c] === ng[r][c - 2]) {
+          ng[r][c] = pickDifferent(ng[r][c]);
+        }
+        if (r >= 2 && ng[r][c] === ng[r - 1][c] && ng[r][c] === ng[r - 2][c]) {
+          ng[r][c] = pickDifferent(ng[r][c]);
+        }
+      }
+    }
+    if (hasAnyMove(ng)) return ng;
+  }
+  return g; // fallback
+}
+
+function findFirstMove(g) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const dirs = [
+        [0, 1],
+        [1, 0],
+      ];
+      for (const [dr, dc] of dirs) {
+        const r2 = r + dr;
+        const c2 = c + dc;
+        if (!inBounds(r2, c2)) continue;
+        const ng = cloneGrid(g);
+        [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
+        const m = findMatches(ng);
+        if (m.length > 0) return [[r, c], [r2, c2]];
+      }
+    }
+  }
+  return null;
+}
