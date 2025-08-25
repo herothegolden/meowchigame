@@ -1,6 +1,6 @@
 // bot.js - Telegram Bot for Meowchi Notifications
-const { Telegraf, Markup } = require('telegraf');
-const { Pool } = require('pg');
+import { Telegraf } from 'telegraf';
+import { Pool } from 'pg';
 
 // Initialize bot
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -512,7 +512,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // === Export Functions for API Integration ===
 
-module.exports = {
+export {
   bot,
   notifyAchievement,
   notifyRankChange,
@@ -521,7 +521,7 @@ module.exports = {
 
 // === Start Bot ===
 
-if (require.main === module) {
+if (process.argv[1] === new URL(import.meta.url).pathname) {
   console.log('🤖 Starting Meowchi Telegram Bot...');
   
   if (!process.env.BOT_TOKEN) {
