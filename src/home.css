@@ -1,4 +1,4 @@
-/* Elegant home design with #fef9ea theme */
+/* Elegant home design with theme integration */
 .home-root {
   position: relative;
   width: 100%;
@@ -6,7 +6,7 @@
   display: grid;
   align-items: center;
   justify-items: center;
-  background: #fef9ea;
+  background: var(--bg);
   padding: 0 0 80px 0; /* Bottom padding for nav */
 }
 
@@ -20,7 +20,7 @@
 }
 
 .profile-card {
-  background: #ffffff;
+  background: var(--card);
   border-radius: 24px;
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.08),
@@ -28,7 +28,16 @@
   padding: 32px 28px;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border);
+}
+
+/* Dark theme shadow adjustment */
+@media (prefers-color-scheme: dark) {
+  .profile-card {
+    box-shadow: 
+      0 8px 32px rgba(0, 0, 0, 0.3),
+      0 2px 8px rgba(0, 0, 0, 0.2);
+  }
 }
 
 /* Subtle gradient accent */
@@ -39,7 +48,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #d4af37, #f4d03f, #d4af37);
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent));
   background-size: 200% 100%;
   animation: subtle-shine 4s ease-in-out infinite;
 }
@@ -67,11 +76,11 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #fef9ea, #f8f3e0);
-  border: 3px solid #ffffff;
+  background: linear-gradient(135deg, var(--surface), var(--bg));
+  border: 3px solid var(--card);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   font-size: 36px;
   position: relative;
 }
@@ -89,13 +98,13 @@
   right: -2px;
   width: 24px;
   height: 24px;
-  background: white;
+  background: var(--card);
   border-radius: 50%;
   display: grid;
   place-items: center;
   font-size: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 2px solid white;
+  border: 2px solid var(--card);
 }
 
 .profile-info {
@@ -109,7 +118,7 @@
 .profile-name {
   font-size: 24px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--text);
   margin: 0;
   letter-spacing: -0.2px;
   display: flex;
@@ -133,6 +142,7 @@
   transition: all 0.2s ease;
   padding: 4px;
   border-radius: 6px;
+  color: var(--text);
 }
 
 .edit-name-btn:hover {
@@ -141,7 +151,7 @@
 }
 
 .profile-subtitle {
-  color: #7f8c8d;
+  color: var(--muted);
   font-size: 14px;
   margin: 0;
   font-weight: 500;
@@ -155,24 +165,24 @@
 }
 
 .stat-item {
-  background: #fef9ea;
+  background: var(--surface);
   border-radius: 16px;
   padding: 20px 16px;
   text-align: center;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border);
 }
 
 .stat-value {
   font-size: 24px;
   font-weight: 800;
-  color: #2c3e50;
+  color: var(--text);
   margin-bottom: 4px;
   letter-spacing: -0.3px;
 }
 
 .stat-label {
   font-size: 12px;
-  color: #7f8c8d;
+  color: var(--muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -194,21 +204,28 @@
   gap: 16px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--card);
+  border: 1px solid var(--border);
   text-align: left;
 }
 
 .action-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: var(--accent);
+}
+
+/* Dark theme hover adjustments */
+@media (prefers-color-scheme: dark) {
+  .action-btn:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, #d4af37, #f4d03f);
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   border: none;
-  color: #ffffff;
+  color: var(--accent-text);
   box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
 }
 
@@ -222,7 +239,7 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--surface);
   font-size: 24px;
   flex-shrink: 0;
 }
@@ -238,18 +255,18 @@
 .action-title {
   font-size: 16px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--text);
   margin-bottom: 2px;
   letter-spacing: -0.1px;
 }
 
 .action-btn.primary .action-title {
-  color: #ffffff;
+  color: var(--accent-text);
 }
 
 .action-desc {
   font-size: 13px;
-  color: #7f8c8d;
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -258,22 +275,22 @@
 }
 
 .game-info {
-  background: #f8f9fa;
+  background: var(--surface);
   border-radius: 16px;
   padding: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border);
 }
 
 .info-title {
   font-size: 18px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--text);
   margin: 0 0 12px 0;
   letter-spacing: -0.2px;
 }
 
 .info-description {
-  color: #5a6c7d;
+  color: var(--muted);
   line-height: 1.6;
   font-size: 14px;
   margin: 0;
