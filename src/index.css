@@ -1,5 +1,5 @@
 :root{
-  /* Elegant color palette based on #fef9ea */
+  /* Default color palette - will be overridden by Telegram theme */
   --bg: #fef9ea;
   --card: #ffffff;
   --muted: #7f8c8d;
@@ -10,10 +10,24 @@
   --accent-light: rgba(212, 175, 55, 0.1);
   --surface: #f8f9fa;
   --border: rgba(0, 0, 0, 0.06);
+  --accent-text: #ffffff;
 
   /* Splash controls */
   --bar-top: 60%;
   --bar-width: 230px;
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --card: #2a2a2a;
+    --muted: #8e8e8e;
+    --line: rgba(255, 255, 255, 0.08);
+    --text: #ffffff;
+    --surface: #333333;
+    --border: rgba(255, 255, 255, 0.06);
+  }
 }
 
 *{box-sizing:border-box}
