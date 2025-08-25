@@ -1,60 +1,32 @@
-// src/audio.js
-import { IS_IOS } from "./platform";
+// Minimal audio helper; unlock on first user gesture
+let unlocked = false
+const buffers = new Map()
 
-let ctx;
-let buffers = {};
-let muted = false;
-let unlocked = false;
-let loaded = false;
-
-async function ensureCtx() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if (ctx.state === "suspended") {
-    try { await ctx.resume(); } catch {}
-  }
-  return ctx;
+export function unlockAudio() {
+  if (unlocked) return
+  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  gain.gain.value = 0
+  osc.connect(gain).connect(ctx.destination)
+  osc.start(0); osc.stop(0.05)
+  unlocked = true
 }
 
-export async function unlock() {
-  // must be called after a user gesture (e.g., Play tap)
-  await ensureCtx();
-  if (IS_IOS && ctx.state !== "running") {
-    // Extra safety for iOS WKWebView: resume on first touchend
-    const once = async () => { try { await ctx.resume(); } catch {} };
-    window.addEventListener("touchend", once, { once: true, passive: true });
-  }
-  unlocked = true;
+export async function loadSfx(url) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  if (buffers.has(url)) return buffers.get(url)
+  const res = await fetch(url)
+  const arr = await res.arrayBuffer()
+  const buf = await ctx.decodeAudioData(arr)
+  buffers.set(url, { ctx, buf })
+  return buffers.get(url)
 }
 
-async function loadOne(name, url) {
-  await ensureCtx();
-  const res = await fetch(url);
-  const arr = await res.arrayBuffer();
-  // Safari is most reliable with the callback form
-  buffers[name] = await new Promise((resolve, reject) => {
-    try { ctx.decodeAudioData(arr, resolve, reject); } catch (e) { reject(e); }
-  });
+export function play(bufObj) {
+  const { ctx, buf } = bufObj
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  src.connect(ctx.destination)
+  src.start(0)
 }
-
-export async function preload(map) {
-  if (loaded) return; // idempotent
-  await ensureCtx();
-  await Promise.all(Object.entries(map).map(([k, v]) => loadOne(k, v)));
-  loaded = true;
-}
-
-export function play(name, { volume = 0.8, rate = 1.0 } = {}) {
-  if (muted || !unlocked) return;
-  const buf = buffers[name];
-  if (!buf) return;
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.playbackRate.value = rate;
-  const gain = ctx.createGain();
-  gain.gain.value = volume;
-  src.connect(gain).connect(ctx.destination);
-  try { src.start(); } catch {}
-}
-
-export function setMuted(v) { muted = !!v; }
-export function isLoaded() { return loaded; }

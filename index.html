@@ -2,28 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Candy Crush Cats - Match-3 Game</title>
-    <meta name="description" content="Sweet match-3 puzzle game with cute cats, pretzels, strawberries, oreos and marshmallows!" />
-    <meta name="theme-color" content="#0a0f23" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Candy Crush Cats" />
-    <meta property="og:description" content="Sweet match-3 puzzle game with cute cats and candies!" />
-    <meta property="og:image" content="/splash.jpg" />
-    
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:title" content="Candy Crush Cats" />
-    <meta property="twitter:description" content="Sweet match-3 puzzle game with cute cats and candies!" />
-    <meta property="twitter:image" content="/splash.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <title>Meowchi Mini‑App</title>
+    <!-- Telegram WebApp SDK (works outside Telegram for local dev too) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      /* Safe area & full-bleed */
+      html, body, #root { height: 100%; }
+      body { margin: 0; background: #f7f7f9; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Telegram WebApp SDK (available inside Telegram; safe to load in browser too) -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
