@@ -16,9 +16,10 @@ async function ensureCtx() {
 }
 
 export async function unlock() {
+  // must be called after a user gesture (e.g., Play tap)
   await ensureCtx();
-  // Extra safety for WKWebView on iOS
   if (IS_IOS && ctx.state !== "running") {
+    // Extra safety for iOS WKWebView: resume on first touchend
     const once = async () => { try { await ctx.resume(); } catch {} };
     window.addEventListener("touchend", once, { once: true, passive: true });
   }
@@ -29,14 +30,14 @@ async function loadOne(name, url) {
   await ensureCtx();
   const res = await fetch(url);
   const arr = await res.arrayBuffer();
-  // Safari prefers the callback form for decodeAudioData
+  // Safari is most reliable with the callback form
   buffers[name] = await new Promise((resolve, reject) => {
-    ctx.decodeAudioData(arr, resolve, reject);
+    try { ctx.decodeAudioData(arr, resolve, reject); } catch (e) { reject(e); }
   });
 }
 
 export async function preload(map) {
-  if (loaded) return;
+  if (loaded) return; // idempotent
   await ensureCtx();
   await Promise.all(Object.entries(map).map(([k, v]) => loadOne(k, v)));
   loaded = true;
@@ -52,7 +53,7 @@ export function play(name, { volume = 0.8, rate = 1.0 } = {}) {
   const gain = ctx.createGain();
   gain.gain.value = volume;
   src.connect(gain).connect(ctx.destination);
-  src.start();
+  try { src.start(); } catch {}
 }
 
 export function setMuted(v) { muted = !!v; }
