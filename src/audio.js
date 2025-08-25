@@ -1,4 +1,6 @@
 // src/audio.js
+import { IS_IOS } from "./platform";
+
 let ctx;
 let buffers = {};
 let muted = false;
@@ -7,13 +9,19 @@ let loaded = false;
 
 async function ensureCtx() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if (ctx.state === "suspended") await ctx.resume();
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch {}
+  }
   return ctx;
 }
 
 export async function unlock() {
-  // must be called after a user gesture (e.g., Play tap)
   await ensureCtx();
+  // Extra safety for WKWebView on iOS
+  if (IS_IOS && ctx.state !== "running") {
+    const once = async () => { try { await ctx.resume(); } catch {} };
+    window.addEventListener("touchend", once, { once: true, passive: true });
+  }
   unlocked = true;
 }
 
@@ -21,11 +29,14 @@ async function loadOne(name, url) {
   await ensureCtx();
   const res = await fetch(url);
   const arr = await res.arrayBuffer();
-  buffers[name] = await ctx.decodeAudioData(arr);
+  // Safari prefers the callback form for decodeAudioData
+  buffers[name] = await new Promise((resolve, reject) => {
+    ctx.decodeAudioData(arr, resolve, reject);
+  });
 }
 
 export async function preload(map) {
-  if (loaded) return; // idempotent
+  if (loaded) return;
   await ensureCtx();
   await Promise.all(Object.entries(map).map(([k, v]) => loadOne(k, v)));
   loaded = true;
