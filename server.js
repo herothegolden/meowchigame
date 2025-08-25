@@ -630,8 +630,20 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ---------- SPA fallback ----------
+// ---------- SPA fallback with proper caching headers ----------
+app.get("/", (_req, res) => {
+  // Disable caching for HTML (Telegram WebApp requirement)
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(indexPath);
+});
+
 app.get("*", (_req, res) => {
+  // Disable caching for HTML fallback routes too
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');  
+  res.set('Expires', '0');
   res.sendFile(indexPath);
 });
 
