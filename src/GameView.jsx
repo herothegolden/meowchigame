@@ -1,6 +1,7 @@
 // src/GameView.jsx
 import React, { useEffect, useRef, useState } from "react";
 import * as audio from "./audio"; // minimal sound hooks
+import ShareButtons from "./ShareButtons.jsx";
 
 const COLS = 6;  // keep as in your working file
 const ROWS = 6;
@@ -502,19 +503,16 @@ export default function GameView({
 
     onCoins?.(serverCoins);
 
-    // 🔥 Trigger share compose after game completion (as requested)
-    try {
-      shareGameResult(finalScore, finalMaxCombo, serverCoins);
-    } catch {}
-
-    const gameResult = {
+    // Show share buttons instead of auto-sharing
+    const gameResultWithSharing = {
       score: finalScore,
       coins: serverCoins,
       moves_used: moveCount,
       max_combo: finalMaxCombo,
       gameSubmitted: !!result,
+      showSharing: true, // Flag to show sharing in game over screen
     };
-    onExit(gameResult);
+    onExit(gameResultWithSharing);
   }
 
   function resetGame() {
