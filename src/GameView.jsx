@@ -57,6 +57,25 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
+  const [grabTile, setGrabTile] = useState(null);
+  const [shake, setShake] = useState(new Set());
+
+  // Enable closing confirmation during gameplay
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.enableClosingConfirmation) {
+      tg.enableClosingConfirmation();
+      console.log('✅ Closing confirmation enabled');
+    }
+    
+    return () => {
+      if (tg?.disableClosingConfirmation) {
+        tg.disableClosingConfirmation();
+        console.log('✅ Closing confirmation disabled');
+      }
+    };
+  }, []);
+  
   // Keep refs for async
   const movesRef = useRef(moves);
   movesRef.current = moves;
