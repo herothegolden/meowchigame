@@ -1,15 +1,18 @@
 {
   "name": "meowchi-miniapp-golden-baseline",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=18" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 5173",
-    "start": "node server.js"
+    "preview": "vite preview --port 5173 --host",
+    "start": "node server.js",
+    "postinstall": "vite build"
   },
   "dependencies": {
+    "express": "^4.19.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
