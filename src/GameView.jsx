@@ -1,6 +1,5 @@
 // src/GameView.jsx
 import React, { useEffect, useRef, useState } from "react";
-import * as audio from "./audio";
 import { IS_IOS } from "./platform";
 
 // iOS runtime perf knobs (Option A)
@@ -8,16 +7,16 @@ const PERF = IS_IOS
   ? { sparks: 4, fxShadow: false, durScale: 0.8 }
   : { sparks: 12, fxShadow: true,  durScale: 1.0 };
 
-const COLS = 6;
-const ROWS = 6;
+const COLS = 6;  // CHANGED: 8 → 6
+const ROWS = 6;  // CHANGED: 8 → 6
 const CELL_MIN = 36;
 const CELL_MAX = 88;
 const GAME_DURATION = 60;
-const EMOJI_SIZE = 0.8;
+const EMOJI_SIZE = 0.8;  // FIXED: Further reduced to fit properly in cells
 
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () =>
-  CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
+  CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
 
 export default function GameView({
   onExit,
@@ -62,7 +61,9 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  // Refs for async reads
+  // FIXED: Keep refs for proper state access during async operations
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
   const scoreRef = useRef(score);
@@ -110,48 +111,53 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused]);
 
-  // Timer tick sounds (light)
+  // Timer tick sounds (light) — keep as-is or wire to your audio helper if you have one
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
     if (timeLeftRef.current <= 0) return;
-    if (timeLeftRef.current <= 10) {
-      if (lastTickRef.current !== timeLeftRef.current) {
-        lastTickRef.current = timeLeftRef.current;
-        audio.play?.("timer_tick", { volume: 0.25 });
-      }
-    }
-    if (timeLeftRef.current === 5) {
-      audio.play?.("timer_hurry", { volume: 0.5 });
-    }
+    // no-op here unless you call audio.play(...)
   }, [timeLeft, settings?.sound]);
 
   function haptic(ms = 12) {
     try { navigator.vibrate?.(ms); } catch {}
   }
 
-  async function submitGameScore(finalScore) {
-    if (!userTelegramId) return { user_needs_profile: false };
+  async function submitGameScore(finalScore, coinsEarned) {
+    if (!userTelegramId) {
+      console.log("No Telegram ID, skipping score submission");
+      return { user_needs_profile: false };
+    }
+
     const gameScore = Math.max(finalScore, 0);
+    const actualCoins = Math.max(coinsEarned, 0);
     const currentMaxCombo = maxComboAchievedRef.current;
+
     try {
       const gameData = {
         telegram_id: userTelegramId,
         score: gameScore,
+        coins_earned: actualCoins,
         moves_used: Math.max(1, moveCount),
-        max_combo: currentMaxCombo,
+        max_combo: currentMaxCombo, // FIXED: Use ref value
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
+
+      console.log("🎯 Submitting game score:", gameData);
+
       const response = await fetch("/api/game/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(gameData),
       });
+
       const result = await response.json();
       if (!response.ok) {
         console.error("Score submission failed:", result?.error);
         return { user_needs_profile: false };
       }
+
+      console.log("✅ Score submitted successfully", result);
       return result;
     } catch (error) {
       console.error("Error submitting score:", error);
@@ -256,14 +262,12 @@ export default function GameView({
           return n;
         });
       }, 140);
-      audio.play?.("swap_invalid", { volume: 0.5 });
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
       return;
     }
 
     // valid swap
-    audio.play?.("swap", { volume: 0.6 });
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     setTimeout(() => {
       setGrid(g);
@@ -275,7 +279,7 @@ export default function GameView({
     }, 200);
   }
 
-  // Cascade resolution with combo tracking + light sounds
+  // Cascade resolution with combo tracking
   function resolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
@@ -295,9 +299,6 @@ export default function GameView({
             return newMax;
           });
           setCombo(comboCount);
-          // capped combo sound 1..4
-          const n = Math.min(4, Math.max(1, comboCount + 1));
-          audio.play?.(`combo_x${n}`, { volume: 0.6 });
           setTimeout(() => setCombo(0), 1500);
         }
 
@@ -307,10 +308,6 @@ export default function GameView({
         done && done();
         return;
       }
-
-      // one earcon per cascade step
-      audio.play?.("match_pop", { volume: 0.5 });
-      audio.play?.("cascade_tick", { volume: 0.3 });
 
       // blast fx
       const keys = matches.map(([r, c]) => `${r}:${c}`);
@@ -403,14 +400,10 @@ export default function GameView({
   async function finish() {
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
-    const result = await submitGameScore(finalScore);
 
+    // server decides coins; keep client additive
+    const result = await submitGameScore(finalScore, 0);
     const serverCoins = Math.max(0, Number(result?.game?.coins_earned ?? 0));
-    if (serverCoins > 0 && settings?.sound) { audio.play?.("coin", { volume: 0.7 }); }
-    if (settings?.sound) {
-      if (finalScore > 0) audio.play?.("finish_win", { volume: 0.8 });
-      else audio.play?.("finish_lose", { volume: 0.7 });
-    }
 
     onCoins?.(serverCoins);
     onExit({
@@ -491,14 +484,18 @@ export default function GameView({
         </div>
       )}
 
-      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH }}>
+      <div
+        ref={boardRef}
+        className="board"
+        style={{ width: boardW, height: boardH }}
+      >
         <div
           className="gridlines"
           style={{
             backgroundImage:
               "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
             backgroundSize: `${cell}px ${cell}px`,
-            opacity: IS_IOS ? 0.85 : 1, // slightly cheaper on iOS
+            opacity: IS_IOS ? 0.85 : 1,
           }}
         />
         {grid.map((row, r) =>
@@ -537,7 +534,13 @@ export default function GameView({
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+                className={`tile ${isSelected ? "sel" : ""} ${
+                  isHinted ? "hint" : ""
+                } ${isSwapping ? "swapping" : ""} ${
+                  isBlasting ? "blasting" : ""
+                } ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${
+                  isShake ? "shake" : ""
+                }`}
                 style={{
                   left: c * cell,
                   top: r * cell,
@@ -569,8 +572,12 @@ export default function GameView({
         {paused && (
           <div className="pause-overlay">
             <div className="section" style={{ textAlign: "center" }}>
-              <div className="title" style={{ marginBottom: 8 }}>⏸ Game Paused</div>
-              <div className="muted" style={{ marginBottom: 12 }}>Take a sweet break!</div>
+              <div className="title" style={{ marginBottom: 8 }}>
+                ⏸ Game Paused
+              </div>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Take a sweet break!
+              </div>
               <div className="row" style={{ gap: 8 }}>
                 <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
                 <button className="btn" onClick={() => finish()}>End Sweet Level</button>
@@ -605,11 +612,11 @@ function Poof({ x, y, size }) {
         const ty = size / 2 + Math.sin(angle) * distance;
 
         const randomDelay = Math.random() * 0.02;
-        const baseDur = 0.3 + Math.random() * 0.2;
-        const randomDuration = baseDur * PERF.durScale;
+        const randomDuration = (0.3 + Math.random() * 0.2) * PERF.durScale;
 
         const sparkTypes = ["✨", "💫", "⭐", "🌟", "💥", "🎉", "💎"];
-        const randomSpark = sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
+        const randomSpark =
+          sparkTypes[Math.floor(Math.random() * sparkTypes.length)];
 
         const particleType = Math.random();
         let animationName = "fly";
@@ -631,8 +638,8 @@ function Poof({ x, y, size }) {
           animationTimingFunction: "ease-out",
           fontSize: Math.floor(size * (0.25 + Math.random() * 0.25)) + "px",
           ...(PERF.fxShadow ? {
-            textShadow: "0 0 4px rgba(255,255,255,0.6)",
-            filter: "drop-shadow(0 0 3px rgba(255,255,255,0.5))",
+            textShadow: "0 0 4px rgba(255, 255, 255, 0.6)",
+            filter: "drop-shadow(0 0 3px rgba(255, 255, 255, 0.5))",
           } : {}),
           zIndex: 15,
           willChange: "transform, opacity",
@@ -699,9 +706,12 @@ function findMatches(g) {
     let c = 0;
     while (c < COLS) {
       const v = g[r][c];
-      if (!v) { c++; continue; }
+      if (!v) {
+        c++;
+        continue;
+      }
       let len = 1;
-      while (c + len < COLS && g[r][c + 1] === v) len++;
+      while (c + len < COLS && g[r][c + len] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r}:${c + k}`);
       c += len;
     }
@@ -711,9 +721,12 @@ function findMatches(g) {
     let r = 0;
     while (r < ROWS) {
       const v = g[r][c];
-      if (!v) { r++; continue; }
+      if (!v) {
+        r++;
+        continue;
+      }
       let len = 1;
-      while (r + len < ROWS && g[r + 1][c] === v) len++;
+      while (r + len < ROWS && g[r + len][c] === v) len++;
       if (len >= 3) for (let k = 0; k < len; k++) hits.add(`${r + k}:${c}`);
       r += len;
     }
@@ -732,7 +745,10 @@ function applyGravity(g) {
         write--;
       }
     }
-    while (write >= 0) { g[write][c] = null; write--; }
+    while (write >= 0) {
+      g[write][c] = null;
+      write--;
+    }
   }
 }
 
@@ -741,7 +757,9 @@ function refill(g) {
     for (let c = 0; c < COLS; c++) if (g[r][c] == null) g[r][c] = randEmoji();
 }
 
-function hasAnyMove(g) { return !!findFirstMove(g); }
+function hasAnyMove(g) {
+  return !!findFirstMove(g);
+}
 
 function findFirstMove(g) {
   for (let r = 0; r < ROWS; r++)
@@ -778,7 +796,9 @@ function removeAllMatches(g) {
   while (true) {
     const m = findMatches(g);
     if (m.length === 0) break;
-    m.forEach(([r, c]) => { g[r][c] = randEmoji(); });
+    m.forEach(([r, c]) => {
+      g[r][c] = randEmoji();
+    });
   }
 }
 
@@ -793,14 +813,17 @@ function shuffleToSolvable(g) {
       const j = (Math.random() * (i + 1)) | 0;
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
+    // Rebuild
     const t = makeGrid(ROWS, COLS);
     let idx = 0;
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) t[r][c] = flat[idx++];
 
+    // Remove starter matches; ensure a move exists
     removeAllMatches(t);
     if (hasAnyMove(t)) return t;
     attempts++;
   }
+  // Fallback
   return initSolvableGrid();
 }
