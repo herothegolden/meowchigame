@@ -646,7 +646,7 @@ export default function GameView({
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "selected" : ""} ${isHinted ? "hint" : ""}`}
+                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
                 style={{
                   left: c * cell,
                   top: r * cell,
