@@ -57,9 +57,6 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  const [grabTile, setGrabTile] = useState(null);
-  const [shake, setShake] = useState(new Set());
-
   // Enable closing confirmation during gameplay
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
