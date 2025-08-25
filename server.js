@@ -481,7 +481,7 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
 });
 
 // ---------- API: user stats ----------
-app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
+app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id; // Use authenticated user ID
     const stats = await pool.query(`
