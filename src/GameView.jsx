@@ -171,6 +171,73 @@ export default function GameView({
     }
   }
 
+  // ========= 🔥 VIRAL SHARING HELPERS (added exactly as requested) =========
+
+  // 1. SHARE TO CHATS (Like Hamster Kombat)
+  const shareGameResult = (score, combo, coins) => {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.switchInlineQuery) {
+      const messages = [
+        `🐱 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
+        `😺 Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
+        `🎮 Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
+        `🔥 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
+      ];
+      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+      tg.switchInlineQuery(randomMessage, ['users', 'groups', 'channels']);
+    }
+  };
+
+  // 2. CHALLENGE FRIENDS (Like Notcoin)
+  const challengeFriend = (score) => {
+    const tg = window.Telegram?.WebApp;
+    const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
+    
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
+    }
+  };
+
+  // 3. AUTO-SHARE ON BIG ACHIEVEMENTS (Like all popular apps)
+  const autoShareMilestone = (achievement) => {
+    const milestones = {
+      first_1000: "🎉 Just hit 1,000 points in Meowchi for the first time!",
+      combo_5: "🔥 Got a 5x combo in Meowchi! This game is addictive!",
+      daily_streak_7: "🗓️ 7 days straight playing Meowchi! Who's joining me?",
+      coins_1000: "💰 Earned 1,000 $Meow coins! This cat game pays!"
+    };
+    
+    const tg = window.Telegram?.WebApp;
+    if (tg?.switchInlineQuery && milestones[achievement]) {
+      // Auto-suggest sharing (user can still cancel)
+      setTimeout(() => {
+        if (confirm("🎉 Amazing achievement! Share with friends?")) {
+          tg.switchInlineQuery(milestones[achievement], ['users', 'groups']);
+        }
+      }, 1500);
+    }
+  };
+
+  // 4. LEADERBOARD SHARING (What Hamster Kombat does)
+  const shareLeaderboardPosition = (rank, score) => {
+    const tg = window.Telegram?.WebApp;
+    const messages = {
+      top1: `👑 I'm #1 on the Meowchi leaderboard with ${score.toLocaleString()} points!`,
+      top10: `🏆 Made it to top 10 in Meowchi! Rank #${rank} with ${score.toLocaleString()} points!`,
+      top100: `📈 Climbing the Meowchi ranks! Currently #${rank}!`,
+      improved: `⬆️ Just improved my Meowchi ranking to #${rank}!`
+    };
+    
+    let message = messages.improved;
+    if (rank === 1) message = messages.top1;
+    else if (rank <= 10) message = messages.top10;
+    else if (rank <= 100) message = messages.top100;
+    
+    if (tg?.switchInlineQuery) {
+      tg.switchInlineQuery(message, ['users', 'groups']);
+    }
+  };
+
   // Pointer interactions
   useEffect(() => {
     const el = boardRef.current;
@@ -434,6 +501,12 @@ export default function GameView({
     }
 
     onCoins?.(serverCoins);
+
+    // 🔥 Trigger share compose after game completion (as requested)
+    try {
+      shareGameResult(finalScore, finalMaxCombo, serverCoins);
+    } catch {}
+
     const gameResult = {
       score: finalScore,
       coins: serverCoins,
@@ -545,7 +618,8 @@ export default function GameView({
             let swapTransform = "";
             if (swapping) {
               if (swapping.from.r === r && swapping.from.c === c) {
-                const dx = (swapping.to.c - swapping.from.c) * cell;
+                const dx = (swapping.to.c - swappin
+g.from.c) * cell;
                 const dy = (swapping.to.r - swapping.from.r) * cell;
                 swapTransform = `translate(${dx}px, ${dy}px)`;
               } else if (swapping.to.r === r && swapping.to.c === c) {
@@ -556,7 +630,8 @@ export default function GameView({
             }
             const isSwapping =
               !!swapping &&
-              ((swapping.from.r === r && swapping.from.c === c) ||
+              ((swapping.from.r === r && swappin
+g.from.c === c) ||
                 (swapping.to.r === r && swapping.to.c === c));
 
             const tileKey = `${r}-${c}`;
