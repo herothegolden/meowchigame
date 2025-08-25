@@ -1,22 +1,23 @@
 // src/GameView.jsx
 import React, { useEffect, useRef, useState } from "react";
+import * as audio from "./audio"; // minimal sound hooks
 import { IS_IOS } from "./platform";
 
-// iOS runtime perf knobs (Option A)
+// iOS-only perf knobs (Android unchanged)
 const PERF = IS_IOS
   ? { sparks: 4, fxShadow: false, durScale: 0.8 }
   : { sparks: 12, fxShadow: true,  durScale: 1.0 };
 
-const COLS = 6;  // CHANGED: 8 → 6
-const ROWS = 6;  // CHANGED: 8 → 6
+const COLS = 6;  // keep as in your working file
+const ROWS = 6;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
 const GAME_DURATION = 60;
-const EMOJI_SIZE = 0.8;  // FIXED: Further reduced to fit properly in cells
+const EMOJI_SIZE = 0.8;
 
 const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () =>
-  CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
+  CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
 export default function GameView({
   onExit,
@@ -61,7 +62,7 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  // FIXED: Keep refs for proper state access during async operations
+  // Keep refs for async
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
@@ -95,6 +96,10 @@ export default function GameView({
     };
   }, []);
 
+  useEffect(() => {
+    window.currentGameScore = score;
+  }, [score]);
+
   // Timer
   useEffect(() => {
     if (paused) return;
@@ -102,7 +107,9 @@ export default function GameView({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          setTimeout(() => { finish(); }, 100);
+          setTimeout(() => {
+            finish();
+          }, 100);
           return 0;
         }
         return prev - 1;
@@ -111,39 +118,46 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused]);
 
-  // Timer tick sounds (light) — keep as-is or wire to your audio helper if you have one
+  // Timer tick sounds (very light)
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
     if (timeLeftRef.current <= 0) return;
-    // no-op here unless you call audio.play(...)
+    if (timeLeftRef.current <= 10) {
+      if (lastTickRef.current !== timeLeftRef.current) {
+        lastTickRef.current = timeLeftRef.current;
+        audio.play?.("timer_tick", { volume: 0.25 });
+      }
+    }
+    if (timeLeftRef.current === 5) {
+      audio.play?.("timer_hurry", { volume: 0.5 });
+    }
   }, [timeLeft, settings?.sound]);
 
   function haptic(ms = 12) {
-    try { navigator.vibrate?.(ms); } catch {}
+    if (!settings?.haptics) return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {}
   }
 
-  async function submitGameScore(finalScore, coinsEarned) {
+  async function submitGameScore(finalScore) {
     if (!userTelegramId) {
       console.log("No Telegram ID, skipping score submission");
       return { user_needs_profile: false };
     }
 
     const gameScore = Math.max(finalScore, 0);
-    const actualCoins = Math.max(coinsEarned, 0);
     const currentMaxCombo = maxComboAchievedRef.current;
 
     try {
       const gameData = {
         telegram_id: userTelegramId,
         score: gameScore,
-        coins_earned: actualCoins,
         moves_used: Math.max(1, moveCount),
-        max_combo: currentMaxCombo, // FIXED: Use ref value
+        max_combo: currentMaxCombo,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
-
-      console.log("🎯 Submitting game score:", gameData);
 
       const response = await fetch("/api/game/complete", {
         method: "POST",
@@ -153,11 +167,9 @@ export default function GameView({
 
       const result = await response.json();
       if (!response.ok) {
-        console.error("Score submission failed:", result?.error);
+        console.error("Score submission failed:", result.error);
         return { user_needs_profile: false };
       }
-
-      console.log("✅ Score submitted successfully", result);
       return result;
     } catch (error) {
       console.error("Error submitting score:", error);
@@ -262,12 +274,16 @@ export default function GameView({
           return n;
         });
       }, 140);
+      haptic(8);
+      audio.play?.("swap_invalid", { volume: 0.5 });
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
       return;
     }
 
     // valid swap
+    audio.play?.("swap", { volume: 0.6 });
+    setMoveCount((prev) => prev + 1);
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     setTimeout(() => {
       setGrid(g);
@@ -279,7 +295,7 @@ export default function GameView({
     }, 200);
   }
 
-  // Cascade resolution with combo tracking
+  // Cascade resolution with combo tracking + light sounds
   function resolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
@@ -299,6 +315,9 @@ export default function GameView({
             return newMax;
           });
           setCombo(comboCount);
+          // play capped combo sound 1..4
+          const n = Math.min(4, Math.max(1, comboCount + 1));
+          audio.play?.(`combo_x${n}`, { volume: 0.6 });
           setTimeout(() => setCombo(0), 1500);
         }
 
@@ -308,6 +327,10 @@ export default function GameView({
         done && done();
         return;
       }
+
+      // one earcon per cascade step
+      audio.play?.("match_pop", { volume: 0.5 });
+      audio.play?.("cascade_tick", { volume: 0.3 });
 
       // blast fx
       const keys = matches.map(([r, c]) => `${r}:${c}`);
@@ -323,14 +346,16 @@ export default function GameView({
         })),
       ]);
 
-      // scoring (unchanged)
+      // scoring
       const basePoints = 10 * matches.length;
       const comboMultiplier = Math.max(1, comboCount + 1);
       const pointsEarned = basePoints * comboMultiplier;
       setScore((s) => s + pointsEarned);
 
       // clear
-      matches.forEach(([r, c]) => { g[r][c] = null; });
+      matches.forEach(([r, c]) => {
+        g[r][c] = null;
+      });
       setGrid(cloneGrid(g));
       setTimeout(() => setBlast(new Set()), 100);
 
@@ -378,7 +403,10 @@ export default function GameView({
   function doHint() {
     if (timeLeft <= 0) return;
     const m = findFirstMove(gridRef.current);
-    if (!m) { shuffleBoard(); return; }
+    if (!m) {
+      shuffleBoard();
+      return;
+    }
     setHint(m);
     setTimeout(() => setHint(null), 1200);
     haptic(10);
@@ -400,19 +428,26 @@ export default function GameView({
   async function finish() {
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
+    const result = await submitGameScore(finalScore);
 
-    // server decides coins; keep client additive
-    const result = await submitGameScore(finalScore, 0);
     const serverCoins = Math.max(0, Number(result?.game?.coins_earned ?? 0));
+    if (serverCoins > 0 && settings?.sound) {
+      audio.play?.("coin", { volume: 0.7 });
+    }
+    if (settings?.sound) {
+      if (finalScore > 0) audio.play?.("finish_win", { volume: 0.8 });
+      else audio.play?.("finish_lose", { volume: 0.7 });
+    }
 
     onCoins?.(serverCoins);
-    onExit({
+    const gameResult = {
       score: finalScore,
       coins: serverCoins,
       moves_used: moveCount,
       max_combo: finalMaxCombo,
       gameSubmitted: !!result,
-    });
+    };
+    onExit(gameResult);
   }
 
   function resetGame() {
@@ -472,9 +507,16 @@ export default function GameView({
       </div>
 
       <div className="row">
-        <div><span className="muted">Score</span> <b>{score}</b></div>
-        <div><span className="muted">Moves</span> <b>{moves}</b></div>
-        <div><span className="muted">Combo</span> <b>{combo > 0 ? `x${combo + 1}` : "-"}</b></div>
+        <div>
+          <span className="muted">Score</span> <b>{score}</b>
+        </div>
+        <div>
+          <span className="muted">Moves</span> <b>{moves}</b>
+        </div>
+        <div>
+          <span className="muted">Combo</span>{" "}
+          <b>{combo > 0 ? `x${combo + 1}` : "-"}</b>
+        </div>
       </div>
 
       {/* Combo banner */}
@@ -495,7 +537,7 @@ export default function GameView({
             backgroundImage:
               "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
             backgroundSize: `${cell}px ${cell}px`,
-            opacity: IS_IOS ? 0.85 : 1,
+            opacity: IS_IOS ? 0.85 : 1, // slightly cheaper on iOS
           }}
         />
         {grid.map((row, r) =>
@@ -534,13 +576,7 @@ export default function GameView({
             return (
               <div
                 key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${
-                  isHinted ? "hint" : ""
-                } ${isSwapping ? "swapping" : ""} ${
-                  isBlasting ? "blasting" : ""
-                } ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${
-                  isShake ? "shake" : ""
-                }`}
+                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
                 style={{
                   left: c * cell,
                   top: r * cell,
@@ -579,8 +615,12 @@ export default function GameView({
                 Take a sweet break!
               </div>
               <div className="row" style={{ gap: 8 }}>
-                <button className="btn primary" onClick={() => setPaused(false)}>Resume</button>
-                <button className="btn" onClick={() => finish()}>End Sweet Level</button>
+                <button className="btn primary" onClick={() => setPaused(false)}>
+                  Resume
+                </button>
+                <button className="btn" onClick={() => finish()}>
+                  End Sweet Level
+                </button>
               </div>
             </div>
           </div>
@@ -588,12 +628,26 @@ export default function GameView({
       </div>
 
       <div className="controls">
-        <button className="btn" onClick={() => setPaused((p) => !p)} disabled={timeLeft <= 0}>
+        <button
+          className="btn"
+          onClick={() => setPaused((p) => !p)}
+          disabled={timeLeft <= 0}
+        >
           {paused ? "Resume" : "Pause"}
         </button>
-        <button className="btn" onClick={resetGame}>Reset</button>
-        <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>💡 Sweet Hint</button>
-        <button className="btn primary" onClick={shuffleBoard} disabled={timeLeft <= 0}>🔄 Sugar Shuffle</button>
+        <button className="btn" onClick={resetGame}>
+          Reset
+        </button>
+        <button className="btn" onClick={doHint} disabled={timeLeft <= 0}>
+          💡 Sweet Hint
+        </button>
+        <button
+          className="btn primary"
+          onClick={shuffleBoard}
+          disabled={timeLeft <= 0}
+        >
+          🔄 Sugar Shuffle
+        </button>
         <div className="controls-size">6×6</div>
       </div>
     </div>
@@ -731,7 +785,9 @@ function findMatches(g) {
       r += len;
     }
   }
-  return Array.from(hits).map((k) => k.split(":").map((n) => parseInt(n, 10)));
+  return Array.from(hits).map((k) =>
+    k.split(":").map((n) => parseInt(n, 10))
+  );
 }
 
 function applyGravity(g) {
@@ -803,12 +859,14 @@ function removeAllMatches(g) {
 }
 
 function shuffleToSolvable(g) {
+  // Flatten
   const flat = [];
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++) flat.push(g[r][c]);
 
   let attempts = 0;
   while (attempts < 100) {
+    // Fisher–Yates shuffle
     for (let i = flat.length - 1; i > 0; i--) {
       const j = (Math.random() * (i + 1)) | 0;
       [flat[i], flat[j]] = [flat[j], flat[i]];
