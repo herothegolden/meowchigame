@@ -26,14 +26,70 @@ export default function App() {
   }, []);
 
   // Telegram init (safe no-op outside Telegram)
-  useEffect(() => {
-    const tg = getTG();
+useEffect(() => {
+  const tg = getTG();
+  try {
+    tg?.ready();
+    tg?.expand();
+    tg?.disableVerticalSwipes?.();
+  } catch {}
+}, []);
+
+// Telegram theme integration
+useEffect(() => {
+  const tg = getTG();
+  if (!tg) return;
+
+  const applyTheme = () => {
     try {
-      tg?.ready();
-      tg?.expand();
-      tg?.disableVerticalSwipes?.();
-    } catch {}
-  }, []);
+      const themeParams = tg.themeParams || {};
+      const root = document.documentElement.style;
+      
+      // Apply Telegram theme colors
+      if (themeParams.bg_color) {
+        root.setProperty('--bg', themeParams.bg_color);
+      }
+      if (themeParams.text_color) {
+        root.setProperty('--text', themeParams.text_color);
+      }
+      if (themeParams.hint_color) {
+        root.setProperty('--muted', themeParams.hint_color);
+      }
+      if (themeParams.button_color) {
+        root.setProperty('--accent', themeParams.button_color);
+      }
+      if (themeParams.button_text_color) {
+        root.setProperty('--accent-text', themeParams.button_text_color);
+      }
+      if (themeParams.secondary_bg_color) {
+        root.setProperty('--surface', themeParams.secondary_bg_color);
+        root.setProperty('--card', themeParams.secondary_bg_color);
+      }
+      
+      // Set header colors to match theme
+      if (tg.setHeaderColor && themeParams.bg_color) {
+        tg.setHeaderColor(themeParams.bg_color);
+      }
+      if (tg.setBottomBarColor && themeParams.bg_color) {
+        tg.setBottomBarColor(themeParams.bg_color);
+      }
+      
+      console.log('✅ Theme applied:', themeParams);
+    } catch (error) {
+      console.warn('⚠️ Theme application failed:', error);
+    }
+  };
+
+  // Apply theme immediately
+  applyTheme();
+  
+  // Listen for theme changes
+  tg.onEvent?.('themeChanged', applyTheme);
+  
+  return () => {
+    tg.offEvent?.('themeChanged', applyTheme);
+  };
+}, []);
 
   // Splash: show for at least 2.4s AND until window 'load'
   const [showSplash, setShowSplash] = useState(true);
