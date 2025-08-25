@@ -57,6 +57,56 @@ if (!fs.existsSync(indexPath)) {
 console.log("✅ Static files found, setting up server...");
 app.use(express.static(dist, { maxAge: "1y", index: false }));
 
+// ========== 📋 DAILY TASKS (added exactly as requested) ==========
+const DAILY_TASKS = [
+  {
+    id: 'play_3_games',
+    title: 'Play 3 Games',
+    description: 'Complete 3 matches today',
+    reward: 200,
+    icon: '🎮',
+    target: 3,
+    type: 'games_played'
+  },
+  {
+    id: 'score_5000',
+    title: 'Score 5,000 Points',
+    description: 'Get 5,000+ points in a single game',
+    reward: 300,
+    icon: '🎯',
+    target: 5000,
+    type: 'single_score'
+  },
+  {
+    id: 'combo_5x',
+    title: '5x Combo Master',
+    description: 'Achieve a 5x combo in any game',
+    reward: 400,
+    icon: '🔥',
+    target: 5,
+    type: 'max_combo'
+  },
+  {
+    id: 'invite_friend',
+    title: 'Invite a Friend',
+    description: 'Share with friends and get them to play',
+    reward: 500,
+    icon: '👥',
+    target: 1,
+    type: 'referrals'
+  },
+  {
+    id: 'leaderboard_check',
+    title: 'Check Rankings',
+    description: 'Visit the leaderboard',
+    reward: 100,
+    icon: '🏆',
+    target: 1,
+    type: 'page_visit'
+  }
+];
+// ================================================================
+
 // ---------- Setup endpoint (optional utility) ----------
 app.get("/api/setup/database", async (req, res) => {
   if (!pool || !dbConnected) {
@@ -107,18 +157,23 @@ app.get("/api/setup/database", async (req, res) => {
     await pool.query("CREATE INDEX idx_games_score ON games(score)");
     await pool.query("CREATE INDEX idx_users_telegram_id ON users(telegram_id)");
 
-    // 🔹 REFERRALS SCHEMA (added as requested)
+    // 🔹 DAILY TASKS TABLE (added exactly as requested)
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS referrals (
+      CREATE TABLE IF NOT EXISTS daily_tasks (
         id SERIAL PRIMARY KEY,
-        referrer_id BIGINT NOT NULL REFERENCES users(telegram_id),
-        referred_id BIGINT NOT NULL REFERENCES users(telegram_id),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        UNIQUE(referrer_id, referred_id)
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        task_id VARCHAR(50) NOT NULL,
+        progress INTEGER DEFAULT 0,
+        completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        task_date DATE DEFAULT CURRENT_DATE,
+        UNIQUE(user_id, task_id, task_date)
       );
     `);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_coins INTEGER DEFAULT 0;`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);`);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_daily_tasks_user_date
+      ON daily_tasks(user_id, task_date);
+    `);
 
     res.json({ success: true, message: "Database tables created successfully!" });
   } catch (error) {
@@ -172,7 +227,6 @@ app.put("/api/user/profile", requireDB, async (req, res) => {
     if (profile_picture !== undefined) {
       updates.push(`profile_picture = $${i++}`);
       values.push(profile_picture);
-      // mark picture_changed if not default
       if (profile_picture !== "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png") {
         updates.push(`picture_changed = $${i++}`);
         values.push(true);
@@ -221,7 +275,6 @@ computedCoins = Math.max(MIN, Math.min(computedCoins, CAP));
       return res.status(400).json({ error: "Invalid score range" });
     }
 
-    // fetch only id (we do NOT care about profile_completed)
     const user = await pool.query(
       "SELECT id FROM users WHERE telegram_id = $1",
       [telegram_id]
@@ -248,7 +301,6 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
     const { type } = req.params;
     const { country, telegram_id } = req.query;
 
-    // Validate leaderboard type
     let dateFilter = "";
     switch (type) {
       case "daily":
@@ -264,12 +316,10 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
         return res.status(400).json({ error: "Invalid leaderboard type" });
     }
 
-    // FIXED: Proper country filtering
     let countryFilter = "";
     let currentUserCountry = null;
     
     if (country && country !== "false" && telegram_id) {
-      // Get current user's country
       const userResult = await pool.query(
         "SELECT country_flag FROM users WHERE telegram_id = $1",
         [telegram_id]
@@ -279,12 +329,10 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
         currentUserCountry = userResult.rows[0].country_flag;
         countryFilter = `AND u.country_flag = '${currentUserCountry}'`;
       } else {
-        // If user has no country, show empty leaderboard for country filter
-        countryFilter = `AND u.country_flag IS NULL AND 1=0`; // Never matches
+        countryFilter = `AND u.country_flag IS NULL AND 1=0`;
       }
     }
 
-    // Get top 100 leaderboard
     const leaderboard = await pool.query(`
       SELECT 
         u.display_name,
@@ -303,13 +351,10 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
       LIMIT 100
     `);
 
-    // FIXED: Calculate user's actual rank if not in top 100
     let userRank = null;
     if (telegram_id) {
       const userInTop100 = leaderboard.rows.find(row => row.telegram_id == telegram_id);
-      
       if (!userInTop100) {
-        // Get user's full rank
         const userRankQuery = await pool.query(`
           WITH ranked_users AS (
             SELECT 
@@ -335,7 +380,6 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
       }
     }
 
-    // Format display names with fallbacks
     const formattedLeaderboard = leaderboard.rows.map(user => ({
       ...user,
       display_name: user.display_name || `Stray Cat #${user.telegram_id.toString().slice(-5)}`,
@@ -397,84 +441,104 @@ app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
   }
 });
 
-// ---------- 💎 REFERRAL SYSTEM (added exactly as requested) ----------
+// ========== 📋 DAILY TASKS ENDPOINTS (added exactly as requested) ==========
 
-// Create a referral and grant bonuses
-app.post("/api/user/refer", requireDB, async (req, res) => {
-  try {
-    const { referrer_id, referred_id } = req.body;
-
-    // Check if referral already exists
-    const existing = await pool.query(
-      "SELECT id FROM referrals WHERE referrer_id = $1 AND referred_id = $2",
-      [referrer_id, referred_id]
-    );
-
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: "Referral already exists" });
-    }
-
-    // Add referral record
-    await pool.query(
-      "INSERT INTO referrals (referrer_id, referred_id, created_at) VALUES ($1, $2, NOW())",
-      [referrer_id, referred_id]
-    );
-
-    // Give bonus coins
-    const REFERRAL_BONUS = 500;  // 500 coins each
-    const REFERRER_BONUS = 1000; // 1000 coins for referrer
-
-    await pool.query(
-      "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE telegram_id = $2",
-      [REFERRER_BONUS, referrer_id]
-    );
-
-    await pool.query(
-      "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE telegram_id = $2",
-      [REFERRAL_BONUS, referred_id]
-    );
-
-    res.json({
-      success: true,
-      referrer_bonus: REFERRER_BONUS,
-      referred_bonus: REFERRAL_BONUS
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to process referral" });
-  }
-});
-
-// Get referral stats for a user
-app.get("/api/user/:telegram_id/referrals", requireDB, async (req, res) => {
+// Get user's daily tasks
+app.get("/api/user/:telegram_id/daily-tasks", requireDB, async (req, res) => {
   try {
     const { telegram_id } = req.params;
+    const today = new Date().toISOString().split('T')[0];
 
-    const stats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_referrals,
-        SUM(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as today_referrals,
-        COUNT(*) * 1000 as total_bonus_earned
-      FROM referrals 
-      WHERE referrer_id = $1
-    `, [telegram_id]);
+    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = user.rows[0].id;
 
-    const recent = await pool.query(`
-      SELECT u.display_name, u.profile_picture, r.created_at
-      FROM referrals r
-      JOIN users u ON u.telegram_id = r.referred_id
-      WHERE r.referrer_id = $1
-      ORDER BY r.created_at DESC
-      LIMIT 10
-    `, [telegram_id]);
+    const userTasks = await pool.query(`
+      SELECT task_id, progress, completed, completed_at
+      FROM daily_tasks 
+      WHERE user_id = $1 AND task_date = $2
+    `, [userId, today]);
+
+    const tasksWithProgress = DAILY_TASKS.map(task => {
+      const userTask = userTasks.rows.find(ut => ut.task_id === task.id);
+      return {
+        ...task,
+        progress: userTask?.progress || 0,
+        completed: userTask?.completed || false,
+        completed_at: userTask?.completed_at || null
+      };
+    });
+
+    const totalRewards = tasksWithProgress.reduce((sum, t) => sum + (t.completed ? t.reward : 0), 0);
+    const availableRewards = tasksWithProgress.reduce((sum, t) => sum + (!t.completed ? t.reward : 0), 0);
 
     res.json({
-      stats: stats.rows[0],
-      recent_referrals: recent.rows
+      tasks: tasksWithProgress,
+      summary: {
+        total_tasks: DAILY_TASKS.length,
+        completed_tasks: tasksWithProgress.filter(t => t.completed).length,
+        total_rewards_earned: totalRewards,
+        available_rewards: availableRewards
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch referral stats" });
+    console.error("Daily tasks error:", error);
+    res.status(500).json({ error: "Failed to fetch daily tasks" });
   }
 });
+
+// Update task progress
+app.post("/api/user/:telegram_id/task-progress", requireDB, async (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const { task_id, progress_value } = req.body;
+
+    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = user.rows[0].id;
+
+    const today = new Date().toISOString().split('T')[0];
+    const task = DAILY_TASKS.find(t => t.id === task_id);
+    if (!task) return res.status(400).json({ error: "Invalid task" });
+
+    const isCompleted = progress_value >= task.target;
+
+    await pool.query(`
+      INSERT INTO daily_tasks (user_id, task_id, progress, completed, completed_at, task_date)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id, task_id, task_date)
+      DO UPDATE SET 
+        progress = GREATEST(daily_tasks.progress, $3),
+        completed = $4,
+        completed_at = CASE WHEN $4 AND NOT daily_tasks.completed THEN $5 ELSE daily_tasks.completed_at END
+    `, [userId, task_id, progress_value, isCompleted, isCompleted ? new Date() : null, today]);
+
+    if (isCompleted) {
+      await pool.query(
+        "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE id = $2",
+        [task.reward, userId]
+      );
+
+      res.json({ 
+        success: true, 
+        task_completed: true,
+        reward_earned: task.reward,
+        message: `🎉 Task completed! +${task.reward} coins!`
+      });
+    } else {
+      res.json({ 
+        success: true, 
+        task_completed: false,
+        progress: progress_value,
+        target: task.target
+      });
+    }
+  } catch (error) {
+    console.error("Task progress error:", error);
+    res.status(500).json({ error: "Failed to update task progress" });
+  }
+});
+// ==========================================================================
 
 // ---------- Health ----------
 app.get("/api/db/health", async (_req, res) => {
