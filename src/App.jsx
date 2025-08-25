@@ -5,6 +5,7 @@ import Splash from "./Splash.jsx";
 import Leaderboard from "./Leaderboard.jsx";
 import EnhancedProfileModal from "./EnhancedProfileModal.jsx";
 import DailyTasks from "./DailyTasks.jsx";
+import ShareButtons from "./ShareButtons.jsx";
 import * as audio from "./audio"; // audio helper (must exist in src/)
 
 const getTG = () =>
@@ -549,20 +550,17 @@ export default function App() {
                 <div className="row">
                   <div className="muted">Best combo</div>
                   <b>x{lastRun.max_combo + 1}</b>
-                  <div className="muted small" style={{ marginLeft: '8px' }}>
-                    (will show as {lastRun.max_combo + 1} on homepage)
-                  </div>
                 </div>
               )}
               
-              {/* Debug info for combo tracking */}
-              {lastRun.max_combo === 0 && (
-                <div className="row">
-                  <div className="muted small">
-                    ℹ️ No combos achieved this game. Try making matches that create cascading reactions!
-                  </div>
-                </div>
-              )}
+              {/* Add viral sharing */}
+              <ShareButtons 
+                variant="game-over"
+                score={lastRun.score}
+                combo={lastRun.max_combo}
+                coins={lastRun.coins}
+                userTelegramId={userTelegramId}
+              />
               
               <div className="row" style={{ gap: 8, marginTop: 16 }}>
                 <button 
