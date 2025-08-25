@@ -618,8 +618,7 @@ export default function GameView({
             let swapTransform = "";
             if (swapping) {
               if (swapping.from.r === r && swapping.from.c === c) {
-                const dx = (swapping.to.c - swappin
-g.from.c) * cell;
+                const dx = (swapping.to.c - swapping.from.c) * cell;
                 const dy = (swapping.to.r - swapping.from.r) * cell;
                 swapTransform = `translate(${dx}px, ${dy}px)`;
               } else if (swapping.to.r === r && swapping.to.c === c) {
@@ -630,8 +629,7 @@ g.from.c) * cell;
             }
             const isSwapping =
               !!swapping &&
-              ((swapping.from.r === r && swappin
-g.from.c === c) ||
+              ((swapping.from.r === r && swapping.from.c === c) ||
                 (swapping.to.r === r && swapping.to.c === c));
 
             const tileKey = `${r}-${c}`;
