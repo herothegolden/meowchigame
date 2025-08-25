@@ -4,6 +4,7 @@ import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
 import Leaderboard from "./Leaderboard.jsx";
 import EnhancedProfileModal from "./EnhancedProfileModal.jsx";
+import DailyTasks from "./DailyTasks.jsx";
 import * as audio from "./audio"; // audio helper (must exist in src/)
 
 const getTG = () =>
@@ -450,22 +451,15 @@ export default function App() {
   }
 
   function Daily() {
-    const today = new Date().toISOString().slice(0, 10);
-    const canClaim = daily.lastClaim !== today;
-    function claim() {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      setDaily((d) => ({ streak: d.lastClaim === yesterday ? d.streak + 1 : 1, lastClaim: today }));
-      setCoins((c) => c + 50);
-    }
     return (
-      <section className="section">
-        <div className="title">💎 Daily Rewards</div>
-        <div className="muted">Streak: <b>{daily.streak}</b> {daily.lastClaim ? `• last: ${daily.lastClaim}` : ""}</div>
-        <button className="btn primary" onClick={claim} disabled={!canClaim}>
-          {canClaim ? "Claim 50 $Meow" : "Come back tomorrow"}
-        </button>
-        <div className="muted small">Keep your streak alive! Resets if you miss a day.</div>
-      </section>
+      <DailyTasks 
+        userTelegramId={userTelegramId}
+        onTaskComplete={(message, coins) => {
+          setCoins(c => c + coins);
+          // Could add popup notification here later
+          console.log(`✅ Task completed: ${message}`);
+        }}
+      />
     );
   }
 
