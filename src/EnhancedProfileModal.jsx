@@ -188,18 +188,26 @@ export default function EnhancedProfileModal({ show, onClose, onSave, userTelegr
     setError(null);
 
     try {
+      const tg = window.Telegram?.WebApp;
+      const requestBody = {
+        telegram_id: userTelegramId,
+        display_name: displayName.trim(),
+        country_flag: countryFlag,
+        profile_picture: selectedAvatar,
+        picture_changed: selectedAvatar !== AVATAR_OPTIONS[0].url
+      };
+
+      // Add secure initData if available
+      if (tg?.initData) {
+        requestBody.initData = tg.initData;
+      }
+
       const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          telegram_id: userTelegramId,
-          display_name: displayName.trim(),
-          country_flag: countryFlag,
-          profile_picture: selectedAvatar,
-          picture_changed: selectedAvatar !== AVATAR_OPTIONS[0].url // Mark as changed if not default
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const result = await response.json();
