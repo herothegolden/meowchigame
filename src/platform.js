@@ -1,5 +1,4 @@
 // src/platform.js
-// Lightweight platform detection for Telegram WebApp
 const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 
 export const IS_IOS =
