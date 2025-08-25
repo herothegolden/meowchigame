@@ -45,37 +45,41 @@ function requireDB(req, res, next) {
 
 // Authentication middleware - supports both old and new methods during migration
 const validateUser = async (req, res, next) => {
-  try {
-    const { initData, telegram_id } = req.body;
-    
-    if (initData) {
-      // New secure method - validate with bot token
+  const { initData, telegram_id } = req.body;
+  
+  // Try secure authentication first
+  if (initData && process.env.BOT_TOKEN) {
+    try {
       const parsed = validate(initData, process.env.BOT_TOKEN);
-      if (!parsed.user) {
-        return res.status(401).json({ error: "Invalid Telegram authentication" });
+      if (parsed && parsed.user) {
+        req.user = { 
+          telegram_id: parsed.user.id, 
+          username: parsed.user.username,
+          first_name: parsed.user.first_name,
+          validated: true 
+        };
+        console.log(`✅ Secure auth successful for user ${parsed.user.id}`);
+        return next();
       }
-      req.user = { 
-        telegram_id: parsed.user.id, 
-        username: parsed.user.username,
-        first_name: parsed.user.first_name,
-        validated: true 
-      };
-    } else if (telegram_id && process.env.LEGACY_AUTH !== 'false') {
-      // Legacy method during migration (will be removed later)
-      console.warn(`⚠️ Legacy auth used for user ${telegram_id}`);
-      req.user = { 
-        telegram_id, 
-        validated: false 
-      };
-    } else {
-      return res.status(401).json({ error: "Authentication required" });
+    } catch (error) {
+      console.warn(`⚠️ initData validation failed: ${error.message}`);
+      // Fall through to legacy auth
     }
-    
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    return res.status(401).json({ error: "Invalid authentication data" });
   }
+  
+  // Fallback to legacy authentication
+  if (telegram_id && process.env.LEGACY_AUTH !== 'false') {
+    console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
+    req.user = { 
+      telegram_id, 
+      validated: false 
+    };
+    return next();
+  }
+  
+  // No valid authentication provided
+  console.error("No valid authentication provided");
+  return res.status(401).json({ error: "Authentication required" });
 };
 
 // Rate limiting for game endpoints
