@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build", 
     "preview": "vite preview --host",
-    "start": "node server.js"
+    "start": "node server.js",
+    "start:web": "node server.js",
+    "start:bot": "node bot.js",
+    "start:both": "concurrently -k -n web,bot -c blue,magenta \"npm:start:web\" \"npm:start:bot\""
   },
   "dependencies": {
     "compression": "^1.7.4",
@@ -20,7 +23,8 @@
     "@vitejs/plugin-react": "^4.3.1",
     "telegraf": "^4.16.3",
     "@telegram-apps/init-data-node": "^1.0.0",
-    "express-rate-limit": "^7.1.5"
+    "express-rate-limit": "^7.1.5",
+    "concurrently": "^8.2.2"
   },
   "engines": {
     "node": ">=18"
