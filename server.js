@@ -6,6 +6,8 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { Pool } from "pg";
+import { validate } from "@telegram-apps/init-data-node";
+import rateLimit from "express-rate-limit";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +42,57 @@ function requireDB(req, res, next) {
   }
   next();
 }
+
+// Authentication middleware - supports both old and new methods during migration
+const validateUser = async (req, res, next) => {
+  try {
+    const { initData, telegram_id } = req.body;
+    
+    if (initData) {
+      // New secure method - validate with bot token
+      const parsed = validate(initData, process.env.BOT_TOKEN);
+      if (!parsed.user) {
+        return res.status(401).json({ error: "Invalid Telegram authentication" });
+      }
+      req.user = { 
+        telegram_id: parsed.user.id, 
+        username: parsed.user.username,
+        first_name: parsed.user.first_name,
+        validated: true 
+      };
+    } else if (telegram_id && process.env.LEGACY_AUTH !== 'false') {
+      // Legacy method during migration (will be removed later)
+      console.warn(`⚠️ Legacy auth used for user ${telegram_id}`);
+      req.user = { 
+        telegram_id, 
+        validated: false 
+      };
+    } else {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return res.status(401).json({ error: "Invalid authentication data" });
+  }
+};
+
+// Rate limiting for game endpoints
+const gameRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // limit each user to 10 games per minute
+  keyGenerator: (req) => req.user?.telegram_id || req.ip,
+  message: { error: "Too many games submitted. Please wait." }
+});
+
+// Rate limiting for profile updates
+const profileRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute  
+  max: 5, // limit each user to 5 profile updates per minute
+  keyGenerator: (req) => req.user?.telegram_id || req.ip,
+  message: { error: "Too many profile updates. Please wait." }
+});
 
 // ---------- Static build checks ----------
 const dist = path.join(__dirname, "dist");
@@ -183,11 +236,10 @@ app.get("/api/setup/database", async (req, res) => {
 });
 
 // ---------- API: user register/upsert ----------
-app.post("/api/user/register", requireDB, async (req, res) => {
+app.post("/api/user/register", requireDB, validateUser, async (req, res) => {
   try {
-    const { telegram_id, telegram_username } = req.body;
-    if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
-
+    const user = req.user; // From validateUser middleware
+    
     const result = await pool.query(
       `
       INSERT INTO users (telegram_id, display_name)
@@ -196,10 +248,10 @@ app.post("/api/user/register", requireDB, async (req, res) => {
       DO UPDATE SET updated_at = NOW()
       RETURNING *;
       `,
-      [telegram_id, telegram_username ? String(telegram_username).slice(0, 50) : null]
+      [user.telegram_id, user.username || user.first_name || null]
     );
 
-    res.json({ user: result.rows[0] });
+    res.json({ user: result.rows[0], auth_method: user.validated ? 'secure' : 'legacy' });
   } catch (err) {
     console.error("Register error:", err);
     res.status(500).json({ error: "Failed to register user" });
@@ -207,7 +259,7 @@ app.post("/api/user/register", requireDB, async (req, res) => {
 });
 
 // ---------- API: update profile ----------
-app.put("/api/user/profile", requireDB, async (req, res) => {
+app.put("/api/user/profile", requireDB, validateUser, profileRateLimit, async (req, res) => {
   try {
     const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
     if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
@@ -253,7 +305,7 @@ app.put("/api/user/profile", requireDB, async (req, res) => {
 });
 
 // ---------- API: save game (NO profile gating) ----------
-app.post("/api/game/complete", requireDB, async (req, res) => {
+app.post("/api/game/complete", requireDB, validateUser, gameRateLimit, async (req, res) => {
   try {
     const { telegram_id, score, coins_earned, moves_used, max_combo, game_duration } = req.body;
 // --- Server-authoritative coin calculation ---
@@ -268,16 +320,27 @@ let computedCoins = Math.round(Math.max(0, Number(score || 0)) * RATE * bonusMul
 computedCoins = Math.max(MIN, Math.min(computedCoins, CAP));
 // ---------------------------------------------
 
-    if (!telegram_id || score === undefined) {
-      return res.status(400).json({ error: "Telegram ID and score are required" });
+    const telegramIdFromAuth = req.user.telegram_id; // From validateUser middleware
+
+    if (score === undefined) {
+      return res.status(400).json({ error: "Score is required" });
     }
     if (score < 0 || score > 10000) {
       return res.status(400).json({ error: "Invalid score range" });
     }
 
+    // Add basic anti-cheat checks
+    const duration = game_duration || 0;
+    if (duration > 0 && duration < 10) {
+      return res.status(400).json({ error: "Game duration too short" });
+    }
+    if (score > 0 && (moves_used || 0) < 1) {
+      return res.status(400).json({ error: "Invalid moves count" });
+    }
+
     const user = await pool.query(
       "SELECT id FROM users WHERE telegram_id = $1",
-      [telegram_id]
+      [telegramIdFromAuth]
     );
     if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
 
@@ -414,9 +477,9 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
 });
 
 // ---------- API: user stats ----------
-app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
+app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
   try {
-    const { telegram_id } = req.params;
+    const telegram_id = req.user.telegram_id; // Use authenticated user ID
     const stats = await pool.query(`
       SELECT 
         u.display_name,
@@ -444,9 +507,9 @@ app.get("/api/user/:telegram_id/stats", requireDB, async (req, res) => {
 // ========== 📋 DAILY TASKS ENDPOINTS (added exactly as requested) ==========
 
 // Get user's daily tasks
-app.get("/api/user/:telegram_id/daily-tasks", requireDB, async (req, res) => {
+app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (req, res) => {
   try {
-    const { telegram_id } = req.params;
+    const telegram_id = req.user.telegram_id; // Use authenticated user ID
     const today = new Date().toISOString().split('T')[0];
 
     const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
@@ -488,9 +551,9 @@ app.get("/api/user/:telegram_id/daily-tasks", requireDB, async (req, res) => {
 });
 
 // Update task progress
-app.post("/api/user/:telegram_id/task-progress", requireDB, async (req, res) => {
+app.post("/api/user/:telegram_id/task-progress", requireDB, validateUser, async (req, res) => {
   try {
-    const { telegram_id } = req.params;
+    const telegram_id = req.user.telegram_id; // Use authenticated user ID
     const { task_id, progress_value } = req.body;
 
     const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
