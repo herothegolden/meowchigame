@@ -137,18 +137,22 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     }
   };
 
-  // Expose method to parent components for tracking
-  React.useImperativeHandle(React.useRef(), () => ({
-    trackGamePlayed: () => updateTaskProgress('play_3_games', 1),
-    trackHighScore: (score) => {
-      if (score >= 5000) updateTaskProgress('score_5000', score);
-    },
-    trackCombo: (combo) => {
-      if (combo >= 5) updateTaskProgress('combo_5x', combo);
-    },
-    trackLeaderboardVisit: () => updateTaskProgress('check_leaderboard', 1),
-    trackReferral: () => updateTaskProgress('invite_friend', 1)
-  }), []);
+  // Tracker functions (exposed on the component)
+  const trackGamePlayed = () => updateTaskProgress('play_3_games', 1);
+  const trackHighScore = (score) => {
+    if (score >= 5000) updateTaskProgress('score_5000', score);
+  };
+  const trackCombo = (combo) => {
+    if (combo >= 5) updateTaskProgress('combo_5x', combo);
+  };
+  const trackLeaderboardVisit = () => updateTaskProgress('check_leaderboard', 1);
+  const trackReferral = () => updateTaskProgress('invite_friend', 1);
+  // Export these functions if needed by parent components
+  DailyTasks.trackGamePlayed = trackGamePlayed;
+  DailyTasks.trackHighScore = trackHighScore;
+  DailyTasks.trackCombo = trackCombo;
+  DailyTasks.trackLeaderboardVisit = trackLeaderboardVisit;
+  DailyTasks.trackReferral = trackReferral;
 
   useEffect(() => {
     fetchDailyTasks();
