@@ -13,9 +13,18 @@ export default function Squads({ userTelegramId }) {
       setLoading(true);
       const response = await fetch(`/api/user/${userTelegramId}/squad`);
       const data = await response.json();
-      setSquad(data.squad);
+      
+      if (data.squad && data.squad.id) {
+        // Fetch detailed squad info including members
+        const detailResponse = await fetch(`/api/squads/${data.squad.id}`);
+        const detailData = await detailResponse.json();
+        setSquad(detailData.squad);
+      } else {
+        setSquad(null);
+      }
     } catch (error) {
       console.error("Failed to fetch squad info", error);
+      setSquad(null);
     } finally {
       setLoading(false);
     }
@@ -39,7 +48,7 @@ export default function Squads({ userTelegramId }) {
       <section className="section">
         <div className="title">🐾 Meowchi Squads</div>
         {squad ? (
-          <SquadDashboard squad={squad} />
+          <SquadDashboard squad={squad} userTelegramId={userTelegramId} />
         ) : (
           <NoSquadView onCreate={() => setModalMode('create')} onJoin={() => setModalMode('join')} />
         )}
@@ -57,7 +66,7 @@ export default function Squads({ userTelegramId }) {
   );
 }
 
-const SquadDashboard = ({ squad }) => {
+const SquadDashboard = ({ squad, userTelegramId }) => {
   const [showInviteCode, setShowInviteCode] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -287,7 +296,7 @@ const SquadDashboard = ({ squad }) => {
           font-size: 12px;
           color: var(--muted);
           margin: 0;
-          text-align: center;
+          text-align: center.
         }
         
         .members-section {
@@ -352,7 +361,7 @@ const SquadDashboard = ({ squad }) => {
           padding: 2px 6px;
           border-radius: 4px;
           text-transform: uppercase;
-          font-weight: 700;
+          font-weight: 700.
         }
         
         .member-stats {
