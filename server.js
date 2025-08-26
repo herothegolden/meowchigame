@@ -164,24 +164,23 @@ const DAILY_TASKS = [
 // ================================================================
 
 
-// ---------- Setup endpoint (optional utility) ----------
+// ---------- Setup endpoint (UPDATED) ----------
 app.get("/api/setup/database", async (req, res) => {
   if (!pool || !dbConnected) {
     return res.status(503).json({ success: false, error: "Database not connected" });
   }
-
   try {
     console.log("🔧 Setting up database tables.");
     
-    // Drop tables in the correct order due to foreign keys
-    await pool.query("DROP TABLE IF EXISTS squad_members CASCADE"); // NEW
-    await pool.query("DROP TABLE IF EXISTS squads CASCADE");        // NEW
+    // Drop tables in correct order
+    await pool.query("DROP TABLE IF EXISTS squad_members CASCADE");
+    await pool.query("DROP TABLE IF EXISTS squads CASCADE");
     await pool.query("DROP TABLE IF EXISTS user_powerups CASCADE");
     await pool.query("DROP TABLE IF EXISTS daily_tasks CASCADE");
     await pool.query("DROP TABLE IF EXISTS games CASCADE");
     await pool.query("DROP TABLE IF EXISTS users CASCADE");
 
-    // CHANGE 1: Add bonus_coins to the users table schema
+    // Create tables
     await pool.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
@@ -189,7 +188,7 @@ app.get("/api/setup/database", async (req, res) => {
         display_name VARCHAR(50),
         country_flag VARCHAR(10),
         profile_picture TEXT,
-        bonus_coins INTEGER DEFAULT 0, -- <<< ADDED THIS LINE
+        bonus_coins INTEGER DEFAULT 0,
         profile_completed BOOLEAN DEFAULT FALSE,
         name_changed BOOLEAN DEFAULT FALSE,
         picture_changed BOOLEAN DEFAULT FALSE,
@@ -197,8 +196,8 @@ app.get("/api/setup/database", async (req, res) => {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
-
-    // NEW: Squads table
+    
+    // NEW: Squads Table
     await pool.query(`
       CREATE TABLE squads (
         id SERIAL PRIMARY KEY,
@@ -209,13 +208,13 @@ app.get("/api/setup/database", async (req, res) => {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
-
-    // NEW: Squad members table
+    
+    // NEW: Squad Members Table
     await pool.query(`
       CREATE TABLE squad_members (
         id SERIAL PRIMARY KEY,
         squad_id INTEGER REFERENCES squads(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE, -- User can only be in one squad
         joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
@@ -232,13 +231,7 @@ app.get("/api/setup/database", async (req, res) => {
         played_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
-
-    // Index creation
-    await pool.query("CREATE INDEX idx_games_user_id ON games(user_id)");
-    await pool.query("CREATE INDEX idx_games_played_at ON games(played_at)");
-    await pool.query("CREATE INDEX idx_games_score ON games(score)");
-    await pool.query("CREATE INDEX idx_users_telegram_id ON users(telegram_id)");
-
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS daily_tasks (
         id SERIAL PRIMARY KEY,
@@ -260,16 +253,6 @@ app.get("/api/setup/database", async (req, res) => {
         powerup_id VARCHAR(50) NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 0,
         UNIQUE(user_id, powerup_id)
-      );
-    `);
-
-    // NEW: Create the user_streaks table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_streaks (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
-        current_streak INTEGER DEFAULT 0,
-        last_check_in_date DATE
       );
     `);
 
@@ -870,64 +853,53 @@ app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res
   }
 });
 
-// POST to create a new squad
+// POST to create a new squad (FIXED ERROR HANDLING)
 app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
+  const { name, icon } = req.body;
+  const telegram_id = req.user.telegram_id;
+
+  if (!name || name.length < 3 || name.length > 50) {
+    return res.status(400).json({ error: "Squad name must be between 3 and 50 characters." });
+  }
+
+  const invite_code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  const client = await pool.connect();
   try {
-    const { name, icon } = req.body || {};
-    if (!name || typeof name !== "string" || name.trim().length < 3 || name.trim().length > 50) {
-      return res.status(400).json({ error: "Squad name must be 3–50 characters" });
+    await client.query('BEGIN');
+
+    const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userResult.rows.length === 0) throw new Error("User not found");
+    const userId = userResult.rows[0].id;
+
+    const existingSquad = await client.query("SELECT id FROM squad_members WHERE user_id = $1", [userId]);
+    if (existingSquad.rows.length > 0) {
+      return res.status(400).json({ error: "You are already in a squad." });
     }
 
-    const telegram_id = req.user.telegram_id;
-    const userRow = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userRow.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = userRow.rows[0].id;
+    const newSquad = await client.query(
+      `INSERT INTO squads (name, icon, invite_code, created_by) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [name, icon, invite_code, userId]
+    );
+    const squadId = newSquad.rows[0].id;
 
-    // Ensure user is not already in a squad
-    const existing = await pool.query("SELECT 1 FROM squad_members WHERE user_id = $1", [userId]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: "You are already in a squad" });
-    }
+    await client.query(
+      `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
+      [squadId, userId]
+    );
 
-    // Generate unique invite code
-    const gen = () => Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random()*32)]).join("");
-    let invite = gen();
-    for (let i = 0; i < 5; i++) {
-      const check = await pool.query("SELECT 1 FROM squads WHERE invite_code = $1", [invite]);
-      if (check.rows.length === 0) break;
-      invite = gen();
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-
-      const squad = await client.query(
-        `INSERT INTO squads (name, icon, invite_code, created_by)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, name, icon, invite_code, created_at`,
-        [name.trim(), icon || null, invite, userId]
-      );
-
-      await client.query(
-        `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
-        [squad.rows[0].id, userId]
-      );
-
-      await client.query("COMMIT");
-      res.json({ success: true, squad: { ...squad.rows[0], member_count: 1, total_score: 0 } });
-    } catch (e) {
-      await client.query("ROLLBACK");
-      if (String(e?.message || "").toLowerCase().includes("duplicate")) {
-        return res.status(400).json({ error: "Squad name already taken" });
-      }
-      throw e;
-    } finally {
-      client.release();
-    }
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, message: "Squad created!" });
   } catch (error) {
-    console.error("Create squad failed:", error);
+    await client.query('ROLLBACK');
+    // **THIS IS THE FIX**: Check for the unique violation error code
+    if (error.code === '23505') { // '23505' is the code for unique_violation
+      return res.status(400).json({ error: "A squad with this name already exists." });
+    }
+    console.error("Failed to create squad:", error);
     res.status(500).json({ error: "Failed to create squad" });
+  } finally {
+    client.release();
   }
 });
 
