@@ -222,6 +222,7 @@ app.get("/api/setup/database", async (req, res) => {
         task_id VARCHAR(50) NOT NULL,
         progress INTEGER DEFAULT 0,
         completed BOOLEAN DEFAULT FALSE,
+        claimed BOOLEAN DEFAULT FALSE,
         completed_at TIMESTAMP WITH TIME ZONE,
         task_date DATE DEFAULT CURRENT_DATE,
         UNIQUE(user_id, task_id, task_date)
@@ -231,6 +232,8 @@ app.get("/api/setup/database", async (req, res) => {
       CREATE INDEX IF NOT EXISTS idx_daily_tasks_user_date
       ON daily_tasks(user_id, task_date);
     `);
+    // Ensure claimed column exists even if table was created earlier
+    await pool.query(`ALTER TABLE IF EXISTS daily_tasks ADD COLUMN IF NOT EXISTS claimed BOOLEAN DEFAULT FALSE`);
 
     res.json({ success: true, message: "Database tables created successfully!" });
   } catch (error) {
@@ -508,20 +511,21 @@ app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, re
   }
 });
 
-// ========== 📋 DAILY TASKS ENDPOINTS (added exactly as requested) ==========
+// ========== 📋 DAILY TASKS ENDPOINTS (MODIFIED FOR CLAIM MECHANIC) ==========
 
 // Get user's daily tasks
 app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (req, res) => {
   try {
-    const telegram_id = req.user.telegram_id; // Use authenticated user ID
+    const telegram_id = req.user.telegram_id;
     const today = new Date().toISOString().split('T')[0];
 
     const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
     if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
     const userId = user.rows[0].id;
 
+    // Fetch the new 'claimed' status from the database
     const userTasks = await pool.query(`
-      SELECT task_id, progress, completed, completed_at
+      SELECT task_id, progress, completed, completed_at, claimed
       FROM daily_tasks 
       WHERE user_id = $1 AND task_date = $2
     `, [userId, today]);
@@ -532,12 +536,13 @@ app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (re
         ...task,
         progress: userTask?.progress || 0,
         completed: userTask?.completed || false,
+        claimed: userTask?.claimed || false, // Add claimed status
         completed_at: userTask?.completed_at || null
       };
     });
 
-    const totalRewards = tasksWithProgress.reduce((sum, t) => sum + (t.completed ? t.reward : 0), 0);
-    const availableRewards = tasksWithProgress.reduce((sum, t) => sum + (!t.completed ? t.reward : 0), 0);
+    const totalRewards = tasksWithProgress.reduce((sum, t) => sum + (t.claimed ? t.reward : 0), 0);
+    const availableRewards = tasksWithProgress.reduce((sum, t) => sum + (!t.claimed && t.completed ? t.reward : 0), 0);
 
     res.json({
       tasks: tasksWithProgress,
@@ -554,10 +559,10 @@ app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (re
   }
 });
 
-// Update task progress
+// Update task progress (MODIFIED: No longer gives coins)
 app.post("/api/user/:telegram_id/task-progress", requireDB, validateUser, async (req, res) => {
   try {
-    const telegram_id = req.user.telegram_id; // Use authenticated user ID
+    const telegram_id = req.user.telegram_id;
     const { task_id, progress_value } = req.body;
 
     const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
@@ -580,31 +585,66 @@ app.post("/api/user/:telegram_id/task-progress", requireDB, validateUser, async 
         completed_at = CASE WHEN $4 AND NOT daily_tasks.completed THEN $5 ELSE daily_tasks.completed_at END
     `, [userId, task_id, progress_value, isCompleted, isCompleted ? new Date() : null, today]);
 
-    if (isCompleted) {
-      await pool.query(
-        "UPDATE users SET bonus_coins = bonus_coins + $1 WHERE id = $2",
-        [task.reward, userId]
-      );
-
-      res.json({ 
-        success: true, 
-        task_completed: true,
-        reward_earned: task.reward,
-        message: `🎉 Task completed! +${task.reward} coins!`
-      });
-    } else {
-      res.json({ 
-        success: true, 
-        task_completed: false,
-        progress: progress_value,
-        target: task.target
-      });
-    }
+    res.json({ 
+      success: true, 
+      task_completed: isCompleted,
+      message: `Progress updated for ${task_id}`
+    });
   } catch (error) {
     console.error("Task progress error:", error);
     res.status(500).json({ error: "Failed to update task progress" });
   }
 });
+
+// NEW ENDPOINT: Claim task reward
+app.post("/api/user/:telegram_id/task-claim", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    const { task_id } = req.body;
+
+    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = user.rows[0].id;
+
+    const today = new Date().toISOString().split('T')[0];
+    const task = DAILY_TASKS.find(t => t.id === task_id);
+    if (!task) return res.status(400).json({ error: "Invalid task" });
+
+    // Check if the task is completed and not yet claimed
+    const taskStatus = await pool.query(
+      `SELECT completed, claimed FROM daily_tasks WHERE user_id = $1 AND task_id = $2 AND task_date = $3`,
+      [userId, task_id, today]
+    );
+
+    if (taskStatus.rows.length === 0 || !taskStatus.rows[0].completed) {
+      return res.status(400).json({ error: "Task not completed" });
+    }
+    if (taskStatus.rows[0].claimed) {
+      return res.status(400).json({ error: "Reward already claimed" });
+    }
+
+    // Give reward and mark as claimed
+    await pool.query(
+      "UPDATE users SET bonus_coins = COALESCE(bonus_coins, 0) + $1 WHERE id = $2",
+      [task.reward, userId]
+    );
+    await pool.query(
+      "UPDATE daily_tasks SET claimed = TRUE WHERE user_id = $1 AND task_id = $2 AND task_date = $3",
+      [userId, task_id, today]
+    );
+
+    res.json({
+      success: true,
+      reward_earned: task.reward,
+      message: `🎉 Reward claimed! +${task.reward} coins!`
+    });
+
+  } catch (error) {
+    console.error("Task claim error:", error);
+    res.status(500).json({ error: "Failed to claim reward" });
+  }
+});
+
 // ==========================================================================
 
 // ---------- Health ----------
