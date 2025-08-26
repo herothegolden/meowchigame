@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import compression from "compression";
 import helmet from "helmet";
@@ -758,7 +757,7 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
 
   const item = SHOP_ITEMS[item_id];
   if (!item) {
-    return res.status(400).json({ error: "Invalid item" });
+      return res.status(400).json({ error: "Invalid item" });
   }
 
   try {
@@ -851,7 +850,7 @@ app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res
     const result = await pool.query(`
       SELECT s.id, s.name, s.icon, s.invite_code,
              (SELECT COUNT(*) FROM squad_members sm_count WHERE sm_count.squad_id = s.id) as member_count,
-             (SELECT SUM(g.score) FROM games g 
+             (SELECT COALESCE(SUM(g.score), 0) FROM games g 
                 JOIN squad_members sm_sum ON g.user_id = sm_sum.user_id 
               WHERE sm_sum.squad_id = s.id) as total_score
       FROM squads s
