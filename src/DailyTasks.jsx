@@ -1,6 +1,7 @@
 // src/DailyTasks.jsx - Daily Tasks Component for Meowchi
 import React, { useState, useEffect } from 'react';
 
+// ... (DAILY_TASKS constant remains the same)
 const DAILY_TASKS = [
   {
     id: 'play_3_games',
@@ -53,9 +54,9 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [completingTask, setCompletingTask] = useState(null);
+  const [claimingId, setClaimingId] = useState(null); // NEW
 
-  // Fetch daily tasks from server
+  // Fetch daily tasks from server (unchanged)
   const fetchDailyTasks = async () => {
     if (!userTelegramId) return;
 
@@ -81,115 +82,53 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     }
   };
 
-  // Update task progress
-  const updateTaskProgress = async (taskId, progressValue) => {
-    if (!userTelegramId) return;
-
-    try {
-      setCompletingTask(taskId);
-
-      const response = await fetch(`/api/user/${userTelegramId}/task-progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_id: taskId,
-          progress_value: progressValue
-        })
-      });
-
-      const result = await response.json();
-      
-      if (response.ok) {
-        // Update local state
-        setTasks(prev => prev.map(task => {
-          if (task.id === taskId) {
-            return {
-              ...task,
-              progress: Math.max(task.progress, progressValue),
-              completed: result.task_completed || task.completed
-            };
-          }
-          return task;
-        }));
-
-        // Show completion notification
-        if (result.task_completed) {
-          const task = DAILY_TASKS.find(t => t.id === taskId);
-          const message = `🎉 Task completed! +${task?.reward || 0} coins!`;
-          
-          // Try to use Telegram haptics
-          try {
-            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
-          } catch {}
-          
-          // Show notification
-          if (typeof onTaskComplete === 'function') {
-            onTaskComplete(message, task?.reward || 0);
-          } else {
-            alert(message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to update task progress:', error);
-    } finally {
-      setCompletingTask(null);
-    }
-  };
-
-  // Tracker functions (exposed on the component)
-  const trackGamePlayed = () => updateTaskProgress('play_3_games', 1);
-  const trackHighScore = (score) => {
-    if (score >= 5000) updateTaskProgress('score_5000', score);
-  };
-  const trackCombo = (combo) => {
-    if (combo >= 5) updateTaskProgress('combo_5x', combo);
-  };
-  const trackLeaderboardVisit = () => updateTaskProgress('check_leaderboard', 1);
-  const trackReferral = () => updateTaskProgress('invite_friend', 1);
-  // Export these functions if needed by parent components
-  DailyTasks.trackGamePlayed = trackGamePlayed;
-  DailyTasks.trackHighScore = trackHighScore;
-  DailyTasks.trackCombo = trackCombo;
-  DailyTasks.trackLeaderboardVisit = trackLeaderboardVisit;
-  DailyTasks.trackReferral = trackReferral;
-
   useEffect(() => {
     fetchDailyTasks();
-    
-    // Refresh every 5 minutes
+    // Keep the auto-refresh behavior from the original file
     const interval = setInterval(fetchDailyTasks, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [userTelegramId]);
 
-  // Progress bar component
-  const TaskProgress = ({ current, target, completed }) => {
-    if (completed) {
-      return (
-        <div className="task-completed-badge">
-          ✅ Completed! +{tasks.find(t => t.progress === current)?.reward || 0} coins
-        </div>
-      );
-    }
+  // NEW: Claim button handler
+  const handleClaim = async (taskId) => {
+    if (claimingId || !userTelegramId) return;
 
-    const percentage = Math.min((current / target) * 100, 100);
-    
-    return (
-      <div className="task-progress-container">
-        <div className="task-progress-bar">
-          <div 
-            className="task-progress-fill" 
-            style={{ width: `${percentage}%` }}
-          ></div>
-        </div>
-        <div className="task-progress-text">
-          {Math.min(current, target)}/{target}
-        </div>
-      </div>
-    );
+    setClaimingId(taskId);
+    try {
+      const response = await fetch(`/api/user/${userTelegramId}/task-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId })
+      });
+      const result = await response.json();
+
+      if (response.ok) {
+        // Haptic feedback for success
+        try {
+          window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+        } catch {}
+
+        // Mark as claimed locally
+        setTasks(prevTasks =>
+          prevTasks.map(task => (task.id === taskId ? { ...task, claimed: true } : task))
+        );
+
+        // Inform parent to increase coin balance
+        if (typeof onTaskComplete === 'function') {
+          onTaskComplete(result.message, result.reward_earned);
+        }
+      } else {
+        throw new Error(result.error || 'Failed to claim');
+      }
+    } catch (err) {
+      console.error('Claim failed:', err);
+      // Optionally show UI error here
+    } finally {
+      setClaimingId(null);
+    }
   };
 
-  // Loading state
+  // ---------- Loading state (unchanged) ----------
   if (loading) {
     return (
       <section className="section">
@@ -202,7 +141,7 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     );
   }
 
-  // Error state
+  // ---------- Error state (unchanged) ----------
   if (error && tasks.length === 0) {
     return (
       <section className="section">
@@ -218,19 +157,19 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     );
   }
 
-  // Calculate summary
+  // ---------- Summary (UPDATED for 'claimed') ----------
   const completedTasks = tasks.filter(t => t.completed).length;
-  const totalRewards = tasks.reduce((sum, t) => sum + (t.completed ? t.reward : 0), 0);
-  const availableRewards = tasks.reduce((sum, t) => sum + (!t.completed ? t.reward : 0), 0);
+  const totalRewards = tasks.reduce((sum, t) => sum + (t.claimed ? t.reward : 0), 0);
+  const availableRewards = tasks.reduce((sum, t) => sum + (!t.claimed && t.completed ? t.reward : 0), 0);
 
   return (
     <section className="section">
       <div className="title">📋 Daily Tasks</div>
       <div className="muted" style={{ marginBottom: '20px' }}>
-        Complete tasks to earn bonus coins! Tasks reset daily at midnight.
+        Complete tasks to earn bonus coins! Tasks reset daily.
       </div>
 
-      {/* Summary Stats */}
+      {/* Summary Stats (unchanged layout) */}
       <div className="task-summary">
         <div className="summary-stat">
           <span className="summary-value">{completedTasks}/{tasks.length}</span>
@@ -251,9 +190,7 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         {tasks.map((task) => (
           <div 
             key={task.id}
-            className={`task-item ${task.completed ? 'completed' : ''} ${
-              completingTask === task.id ? 'updating' : ''
-            }`}
+            className={`task-item ${task.completed ? 'completed' : ''} ${task.claimed ? 'claimed' : ''}`}
           >
             <div className="task-icon">{task.icon}</div>
             
@@ -261,22 +198,44 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
               <div className="task-title">{task.title}</div>
               <div className="task-description">{task.description}</div>
               
-              <TaskProgress 
-                current={task.progress || 0} 
-                target={task.target}
-                completed={task.completed}
-              />
+              {/* Inline progress (kept consistent with original visuals) */}
+              <div className="task-progress-container">
+                <div className="task-progress-bar">
+                  <div 
+                    className="task-progress-fill" 
+                    style={{ width: `${Math.min((task.progress / task.target) * 100, 100)}%` }}
+                  ></div>
+                </div>
+                <div className="task-progress-text">
+                  {Math.min(task.progress, task.target)}/{task.target}
+                </div>
+              </div>
             </div>
             
-            <div className="task-reward">
-              <div className="reward-amount">+{task.reward}</div>
-              <div className="reward-currency">coins</div>
+            {/* NEW: Claim/Claimed/Reward area */}
+            <div className="task-reward-action">
+              {task.claimed ? (
+                <div className="claimed-badge">✅ Claimed</div>
+              ) : task.completed ? (
+                <button
+                  className="btn primary claim-btn"
+                  onClick={() => handleClaim(task.id)}
+                  disabled={claimingId === task.id}
+                >
+                  {claimingId === task.id ? '...' : 'Claim'}
+                </button>
+              ) : (
+                <>
+                  <div className="reward-amount">+{task.reward}</div>
+                  <div className="reward-currency">coins</div>
+                </>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Empty state */}
+      {/* Empty state (unchanged) */}
       {tasks.length === 0 && !loading && (
         <div className="empty-state">
           <div className="empty-icon">📋</div>
@@ -285,7 +244,7 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         </div>
       )}
 
-      {/* Styles */}
+      {/* Styles (original retained; new rules appended) */}
       <style jsx>{`
         .task-summary {
           display: grid;
@@ -341,10 +300,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         .task-item.completed {
           background: var(--accent-light);
           border-color: var(--accent);
-        }
-
-        .task-item.updating {
-          opacity: 0.7;
         }
 
         .task-icon {
@@ -409,21 +364,9 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
           min-width: 35px;
         }
 
-        .task-completed-badge {
-          color: var(--accent);
-          font-size: 12px;
-          font-weight: 600;
-        }
-
         .task-reward {
           text-align: center;
           flex-shrink: 0;
-        }
-
-        .reward-amount {
-          font-size: 16px;
-          font-weight: 800;
-          color: var(--accent);
         }
 
         .reward-currency {
@@ -436,21 +379,44 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
           .task-summary {
             grid-template-columns: repeat(2, 1fr);
           }
-          
           .summary-stat:nth-child(3) {
             grid-column: 1 / -1;
           }
-          
           .task-item {
             padding: 12px;
             gap: 12px;
           }
-          
           .task-icon {
             font-size: 24px;
             width: 36px;
             height: 36px;
           }
+        }
+
+        /* ===== NEW rules for claim mechanic ===== */
+        .task-item.claimed {
+          opacity: 0.7;
+          background: var(--surface);
+        }
+        .task-reward-action {
+          text-align: center;
+          width: 90px;
+          flex-shrink: 0;
+        }
+        .reward-amount {
+          font-size: 16px;
+          font-weight: 800;
+          color: var(--accent);
+        }
+        .claim-btn {
+          width: 100%;
+          padding: 8px 12px;
+          font-size: 14px;
+        }
+        .claimed-badge {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--accent);
         }
       `}</style>
     </section>
