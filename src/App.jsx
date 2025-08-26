@@ -107,6 +107,8 @@ useEffect(() => {
 
   // ------------ App state / routing ------------
   const [screen, setScreen] = useState("home");
+  const [contentKey, setContentKey] = useState(0); // For screen transitions
+  const [animateCoins, setAnimateCoins] = useState(false); // For coin counter animation
   const [screenHistory, setScreenHistory] = useState(["home"]);
   const [coins, setCoins] = useState(150);
   const [lastRun, setLastRun] = useState(null);
@@ -185,6 +187,14 @@ useEffect(() => {
       if (response.ok) {
         const data = await response.json();
         setUserProfile(data.user);
+        
+        // NEW: Onboarding prompt for new users
+        if (data.user && !data.user.profile_completed) {
+          // Use a timeout to let the main UI load first
+          setTimeout(() => {
+            setShowProfileModal(true);
+          }, 2000);
+        }
         
         // Auto-detect country if not set
         if (!data.user.country_flag) {
@@ -303,6 +313,9 @@ useEffect(() => {
     setUserProfile(updatedUser);
     setShowProfileModal(false);
     
+    // NEW: Add success haptic feedback
+    getTG()?.HapticFeedback?.notificationOccurred('success');
+    
     // FIXED: Always refresh user stats after profile completion
     if (userTelegramId) {
       console.log('👤 Profile saved, refreshing stats...');
@@ -338,13 +351,26 @@ useEffect(() => {
     }
   }
 
+  // NEW: Add a useEffect for the coin animation
+  useEffect(() => {
+    if (coins > 0) {
+      setAnimateCoins(true);
+      const timer = setTimeout(() => setAnimateCoins(false), 500); // Animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [coins]);
+
   // Navigation helpers
   const navigateTo = async (s) => {
     if (s === "game") {
       await ensureAudio(); // unlock + preload before entering game
     }
+    // NEW: Add selection haptic feedback
+    getTG()?.HapticFeedback?.selectionChanged();
+    
     setScreenHistory((p) => [...p, s]);
     setScreen(s);
+    setContentKey(prev => prev + 1); // Trigger transition animation
   };
   const goBack = () => {
     if (screenHistory.length > 1) {
@@ -361,6 +387,38 @@ useEffect(() => {
     setScreen("home");
     setScreenHistory(["home"]);
   };
+
+  // NEW: Add a useEffect to manage the Telegram Main Button
+  useEffect(() => {
+    const tg = getTG();
+    if (!tg?.MainButton) return;
+
+    const button = tg.MainButton;
+
+    const homeClick = () => navigateTo('game');
+    const dailyClick = () => alert('Claim All Rewards clicked! (Implement logic)');
+
+    // Remove previous handlers
+    button.offClick(homeClick);
+    button.offClick(dailyClick);
+
+    if (screen === 'home') {
+      button.setText('🎮 Play Game');
+      button.onClick(homeClick);
+      button.show();
+    } else if (screen === 'daily') {
+      button.setText('✅ Claim All Rewards');
+      button.onClick(dailyClick);
+      button.show();
+    } else {
+      button.hide();
+    }
+
+    return () => {
+      button.offClick(homeClick);
+      button.offClick(dailyClick);
+    }
+  }, [screen]);
 
   // ------------ Minimal header with just branding and coins ------------
   function Header() {
@@ -388,7 +446,7 @@ useEffect(() => {
             </button>
           )}
           
-          <div className="coins-display">
+          <div className={`coins-display ${animateCoins ? 'pop' : ''}`}>
             <span className="coins-icon">💰</span>
             <span className="coins-amount">{Math.min(coins, 999999999)}</span>
           </div>
@@ -609,7 +667,7 @@ useEffect(() => {
 
       <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
         <Header />
-        <main className="content">
+        <main className="content" key={contentKey}>
           {screen === "home" && (
             userStats ? (
               <Home 
