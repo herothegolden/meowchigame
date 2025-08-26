@@ -14,35 +14,54 @@ export default function Squads({ userTelegramId }) {
       return;
     }
     
+   // In src/Squads.jsx, replace the fetchUserSquad function with this one:
+
+  const fetchUserSquad = useCallback(async () => {
+    if (!userTelegramId) {
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     
     try {
       // First, find out which squad the user is in
       const userSquadResponse = await fetch(`/api/user/${userTelegramId}/squad`);
-      if (!userSquadResponse.ok) throw new Error("Could not check squad status.");
+      
+      // Better error checking
+      if (!userSquadResponse.ok) {
+        const errorBody = await userSquadResponse.text();
+        throw new Error(`Failed to check squad status: ${userSquadResponse.status} ${errorBody}`);
+      }
       
       const userSquadData = await userSquadResponse.json();
       
       if (userSquadData.squad && userSquadData.squad.id) {
         // If they are in a squad, fetch its full details (including members)
         const detailResponse = await fetch(`/api/squads/${userSquadData.squad.id}`);
-        if (!detailResponse.ok) throw new Error("Could not fetch squad details.");
+
+        if (!detailResponse.ok) {
+          const errorBody = await detailResponse.text();
+          throw new Error(`Failed to fetch squad details: ${detailResponse.status} ${errorBody}`);
+        }
 
         const detailData = await detailResponse.json();
         setSquad(detailData.squad);
+
       } else {
         setSquad(null); // User is not in any squad
       }
     } catch (err) {
-      console.error("Failed to fetch squad info:", err);
+      // This will now print the detailed error to the console
+      console.error("fetchUserSquad error:", err); 
       setError("Could not load squad information. Please try again later.");
       setSquad(null);
     } finally {
       setLoading(false);
     }
   }, [userTelegramId]);
-
+    
   useEffect(() => {
     fetchUserSquad();
   }, [fetchUserSquad]);
