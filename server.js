@@ -1026,6 +1026,38 @@ app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) =>
   }
 });
 
+// GET top squads leaderboard (UNCHANGED BEHAVIOR; REPLACED VERBATIM)
+app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
+  try {
+    const lb = await pool.query(`
+      SELECT 
+        s.id, 
+        s.name, 
+        s.icon, 
+        s.invite_code,
+        COUNT(DISTINCT sm.user_id) as member_count,
+        COALESCE(SUM(g.score), 0) as total_score
+      FROM squads s
+      LEFT JOIN squad_members sm ON s.id = sm.squad_id
+      LEFT JOIN games g ON g.user_id = sm.user_id
+      GROUP BY s.id, s.name, s.icon, s.invite_code
+      ORDER BY total_score DESC
+      LIMIT 100
+    `);
+    
+    res.json({
+      leaderboard: lb.rows.map(r => ({
+        ...r,
+        member_count: Number(r.member_count || 0),
+        total_score: Number(r.total_score || 0)
+      }))
+    });
+  } catch (error) {
+    console.error("CRASH in /api/squads/leaderboard:", error);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
 // GET squad details and members (UPDATED WITH CREATOR INFO & LIMITS)
 // REPLACED with corrected, explicit subquery to avoid alias issues
 app.get("/api/squads/:squadId", requireDB, async (req, res) => {
@@ -1073,38 +1105,6 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
   } catch (error) {
     console.error("Get squad details failed:", error);
     res.status(500).json({ error: "Failed to get squad details" });
-  }
-});
-
-// GET top squads leaderboard (UNCHANGED BEHAVIOR; REPLACED VERBATIM)
-app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
-  try {
-    const lb = await pool.query(`
-      SELECT 
-        s.id, 
-        s.name, 
-        s.icon, 
-        s.invite_code,
-        COUNT(DISTINCT sm.user_id) as member_count,
-        COALESCE(SUM(g.score), 0) as total_score
-      FROM squads s
-      LEFT JOIN squad_members sm ON s.id = sm.squad_id
-      LEFT JOIN games g ON g.user_id = sm.user_id
-      GROUP BY s.id, s.name, s.icon, s.invite_code
-      ORDER BY total_score DESC
-      LIMIT 100
-    `);
-    
-    res.json({
-      leaderboard: lb.rows.map(r => ({
-        ...r,
-        member_count: Number(r.member_count || 0),
-        total_score: Number(r.total_score || 0)
-      }))
-    });
-  } catch (error) {
-    console.error("CRASH in /api/squads/leaderboard:", error);
-    res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 });
 
