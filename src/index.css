@@ -1,40 +1,27 @@
-:root{
-  /* Default color palette - will be overridden by Telegram theme */
-  --bg: #fef9ea;
-  --card: #ffffff;
-  --muted: #7f8c8d;
-  --line: rgba(0, 0, 0, 0.08);
-  --text: #2c3e50;
-  --accent: #d4af37;
-  --accent2: #f4d03f;
-  --accent-light: rgba(212, 175, 55, 0.1);
-  --surface: #f8f9fa;
-  --border: rgba(0, 0, 0, 0.06);
-  --accent-text: #ffffff;
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Velvet Night Palette */
+  --bg: #1a182b;
+  --card: #23213a;
+  --surface: #2e2b4b;
+  --text: #f0f0f5;
+  --muted: #8b89a3;
+  --accent: #ff80bf;
+  --accent2: #ffb3d9;
+  --accent-text: #1a182b;
+  --border: rgba(139, 137, 163, 0.15);
 
   /* Splash controls */
   --bar-top: 60%;
   --bar-width: 230px;
 }
 
-/* Dark theme adjustments */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1a1a1a;
-    --card: #2a2a2a;
-    --muted: #8e8e8e;
-    --line: rgba(255, 255, 255, 0.08);
-    --text: #ffffff;
-    --surface: #333333;
-    --border: rgba(255, 255, 255, 0.06);
-  }
-}
-
 *{box-sizing:border-box}
 html,body,#root{height:100%}
 body{
   margin:0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-weight: 400;
