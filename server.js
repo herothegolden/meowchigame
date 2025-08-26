@@ -175,6 +175,8 @@ app.get("/api/setup/database", async (req, res) => {
     console.log("🔧 Setting up database tables.");
     
     // Drop tables in the correct order due to foreign keys
+    await pool.query("DROP TABLE IF EXISTS squad_members CASCADE"); // NEW
+    await pool.query("DROP TABLE IF EXISTS squads CASCADE");        // NEW
     await pool.query("DROP TABLE IF EXISTS user_powerups CASCADE");
     await pool.query("DROP TABLE IF EXISTS daily_tasks CASCADE");
     await pool.query("DROP TABLE IF EXISTS games CASCADE");
@@ -194,6 +196,28 @@ app.get("/api/setup/database", async (req, res) => {
         picture_changed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+
+    // NEW: Squads table
+    await pool.query(`
+      CREATE TABLE squads (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(50) UNIQUE NOT NULL,
+        icon VARCHAR(10),
+        invite_code VARCHAR(10) UNIQUE NOT NULL,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+
+    // NEW: Squad members table
+    await pool.query(`
+      CREATE TABLE squad_members (
+        id SERIAL PRIMARY KEY,
+        squad_id INTEGER REFERENCES squads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
 
@@ -692,11 +716,11 @@ app.post("/api/user/:telegram_id/task-claim", requireDB, validateUser, async (re
 
 // ==========================================================================
 
-// NEW: Define shop items on the server for security
+// UPDATED: Define shop items on the server for security
 const SHOP_ITEMS = {
-  'shuffle': { price: 40, name: 'Sugar Shuffle' },
-  'hammer': { price: 60, name: 'Candy Crusher' },
-  'bomb': { price: 80, name: 'Candy Bomb' }
+  'shuffle': { price: 50, name: 'The Paw-sitive Swap' },
+  'hammer': { price: 75, name: 'The Catnip Cookie' },
+  'bomb': { price: 100, name: 'The Marshmallow Bomb' }
 };
 
 // ========== 🛍️ SHOP & POWER-UP ENDPOINTS ==========
@@ -814,6 +838,231 @@ app.post("/api/powerup/use", requireDB, validateUser, async (req, res) => {
   } catch (error) {
     console.error("Failed to use power-up:", error);
     res.status(500).json({ error: "Failed to use power-up" });
+  }
+});
+
+
+// ========== 🐾 SQUADS ENDPOINTS ==========
+
+// GET user's current squad
+app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    const result = await pool.query(`
+      SELECT s.id, s.name, s.icon, s.invite_code,
+             (SELECT COUNT(*) FROM squad_members sm_count WHERE sm_count.squad_id = s.id) as member_count,
+             (SELECT SUM(g.score) FROM games g 
+                JOIN squad_members sm_sum ON g.user_id = sm_sum.user_id 
+              WHERE sm_sum.squad_id = s.id) as total_score
+      FROM squads s
+      JOIN squad_members sm ON s.id = sm.squad_id
+      JOIN users u ON sm.user_id = u.id
+      WHERE u.telegram_id = $1
+    `, [telegram_id]);
+
+    if (result.rows.length === 0) {
+      return res.json({ squad: null });
+    }
+    const row = result.rows[0];
+    res.json({ squad: { ...row, member_count: Number(row.member_count || 0), total_score: Number(row.total_score || 0) } });
+  } catch (error) {
+    console.error("Failed to get user squad:", error);
+    res.status(500).json({ error: "Failed to get user squad" });
+  }
+});
+
+// POST to create a new squad
+app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
+  try {
+    const { name, icon } = req.body || {};
+    if (!name || typeof name !== "string" || name.trim().length < 3 || name.trim().length > 50) {
+      return res.status(400).json({ error: "Squad name must be 3–50 characters" });
+    }
+
+    const telegram_id = req.user.telegram_id;
+    const userRow = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userRow.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = userRow.rows[0].id;
+
+    // Ensure user is not already in a squad
+    const existing = await pool.query("SELECT 1 FROM squad_members WHERE user_id = $1", [userId]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: "You are already in a squad" });
+    }
+
+    // Generate unique invite code
+    const gen = () => Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random()*32)]).join("");
+    let invite = gen();
+    for (let i = 0; i < 5; i++) {
+      const check = await pool.query("SELECT 1 FROM squads WHERE invite_code = $1", [invite]);
+      if (check.rows.length === 0) break;
+      invite = gen();
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const squad = await client.query(
+        `INSERT INTO squads (name, icon, invite_code, created_by)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, name, icon, invite_code, created_at`,
+        [name.trim(), icon || null, invite, userId]
+      );
+
+      await client.query(
+        `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
+        [squad.rows[0].id, userId]
+      );
+
+      await client.query("COMMIT");
+      res.json({ success: true, squad: { ...squad.rows[0], member_count: 1, total_score: 0 } });
+    } catch (e) {
+      await client.query("ROLLBACK");
+      if (String(e?.message || "").toLowerCase().includes("duplicate")) {
+        return res.status(400).json({ error: "Squad name already taken" });
+      }
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Create squad failed:", error);
+    res.status(500).json({ error: "Failed to create squad" });
+  }
+});
+
+// POST to join a squad
+app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
+  try {
+    const { invite_code } = req.body || {};
+    if (!invite_code || typeof invite_code !== "string") {
+      return res.status(400).json({ error: "invite_code is required" });
+    }
+
+    const telegram_id = req.user.telegram_id;
+    const userRow = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userRow.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = userRow.rows[0].id;
+
+    // Ensure user is not already in a squad
+    const existing = await pool.query("SELECT 1 FROM squad_members WHERE user_id = $1", [userId]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: "You are already in a squad" });
+    }
+
+    const squadRow = await pool.query(
+      "SELECT id, name, icon, invite_code FROM squads WHERE invite_code = $1",
+      [invite_code.trim()]
+    );
+    if (squadRow.rows.length === 0) {
+      return res.status(404).json({ error: "Invalid invite code" });
+    }
+    const squad = squadRow.rows[0];
+
+    try {
+      await pool.query(
+        "INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)",
+        [squad.id, userId]
+      );
+    } catch (e) {
+      if (String(e?.message || "").toLowerCase().includes("unique")) {
+        return res.status(400).json({ error: "You are already in a squad" });
+      }
+      throw e;
+    }
+
+    // Return updated squad summary
+    const summary = await pool.query(
+      `SELECT 
+         (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = $1) as member_count,
+         (SELECT COALESCE(SUM(g.score), 0) 
+          FROM games g JOIN squad_members sm2 ON g.user_id = sm2.user_id 
+          WHERE sm2.squad_id = $1) as total_score`,
+      [squad.id]
+    );
+
+    res.json({ success: true, squad: { ...squad, member_count: Number(summary.rows[0].member_count || 0), total_score: Number(summary.rows[0].total_score || 0) } });
+  } catch (error) {
+    console.error("Join squad failed:", error);
+    res.status(500).json({ error: "Failed to join squad" });
+  }
+});
+
+// GET squad details and members
+app.get("/api/squads/:squadId", requireDB, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const head = await pool.query(
+      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at,
+              (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
+              (SELECT COALESCE(SUM(g.score),0) 
+                 FROM games g JOIN squad_members sm2 ON g.user_id = sm2.user_id 
+                WHERE sm2.squad_id = s.id) as total_score
+       FROM squads s WHERE s.id = $1`,
+      [squadId]
+    );
+    if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
+
+    const members = await pool.query(
+      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id,
+              COALESCE(SUM(g.score),0) as total_score
+       FROM squad_members sm
+       JOIN users u ON u.id = sm.user_id
+       LEFT JOIN games g ON g.user_id = u.id
+       WHERE sm.squad_id = $1
+       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
+       ORDER BY total_score DESC, u.id ASC`,
+      [squadId]
+    );
+
+    const s = head.rows[0];
+    res.json({
+      squad: {
+        id: s.id,
+        name: s.name,
+        icon: s.icon,
+        invite_code: s.invite_code,
+        created_at: s.created_at,
+        member_count: Number(s.member_count || 0),
+        total_score: Number(s.total_score || 0),
+        members: members.rows.map(m => ({
+          ...m,
+          total_score: Number(m.total_score || 0)
+        }))
+      }
+    });
+  } catch (error) {
+    console.error("Get squad details failed:", error);
+    res.status(500).json({ error: "Failed to get squad details" });
+  }
+});
+
+// GET top squads leaderboard
+app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
+  try {
+    const lb = await pool.query(
+      `SELECT 
+         s.id, s.name, s.icon, s.invite_code,
+         COUNT(DISTINCT sm.user_id) as member_count,
+         COALESCE(SUM(g.score), 0) as total_score
+       FROM squads s
+       LEFT JOIN squad_members sm ON sm.squad_id = s.id
+       LEFT JOIN games g ON g.user_id = sm.user_id
+       GROUP BY s.id, s.name, s.icon, s.invite_code
+       ORDER BY total_score DESC
+       LIMIT 100`
+    );
+    res.json({
+      leaderboard: lb.rows.map(r => ({
+        ...r,
+        member_count: Number(r.member_count || 0),
+        total_score: Number(r.total_score || 0),
+      }))
+    });
+  } catch (error) {
+    console.error("Squad leaderboard failed:", error);
+    res.status(500).json({ error: "Failed to fetch squad leaderboard" });
   }
 });
 
