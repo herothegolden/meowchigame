@@ -124,6 +124,7 @@ useEffect(() => {
   const [userProfile, setUserProfile] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [userStats, setUserStats] = useState(null);
+  const [streak, setStreak] = useState(0); // NEW: State for streak
 
   // Initialize user system
   useEffect(() => {
@@ -352,6 +353,31 @@ const initializeUser = async () => {
       return () => clearTimeout(timer);
     }
   }, [coins]);
+
+  // NEW: useEffect to handle daily check-in for streaks
+  useEffect(() => {
+    if (userTelegramId) {
+      const checkIn = async () => {
+        try {
+          const response = await fetch('/api/user/check-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              telegram_id: userTelegramId,
+              initData: getTG()?.initData
+            })
+          });
+          const data = await response.json();
+          if (data.success) {
+            setStreak(data.streak);
+          }
+        } catch (error) {
+          console.error("Failed to check in for streak:", error);
+        }
+      };
+      checkIn();
+    }
+  }, [userTelegramId]); // Runs once when userTelegramId is available
 
   // Navigation helpers
   const navigateTo = async (s) => {
@@ -662,6 +688,7 @@ const initializeUser = async () => {
                 userProfile={userProfile}
                 onProfileUpdate={handleProfileUpdate}
                 onOpenProfileModal={() => setShowProfileModal(true)}
+                streak={streak} // Pass streak down
               />
             ) : (
               <HomeSkeleton />
