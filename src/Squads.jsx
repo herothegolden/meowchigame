@@ -14,21 +14,12 @@ export default function Squads({ userTelegramId }) {
       return;
     }
     
-   // In src/Squads.jsx, replace the fetchUserSquad function with this one:
-  const fetchUserSquad = useCallback(async () => {
-    if (!userTelegramId) {
-      setLoading(false);
-      return;
-    }
-    
     setLoading(true);
     setError(null);
     
     try {
-      // First, find out which squad the user is in
       const userSquadResponse = await fetch(`/api/user/${userTelegramId}/squad`);
       
-      // Better error checking
       if (!userSquadResponse.ok) {
         const errorBody = await userSquadResponse.text();
         throw new Error(`Failed to check squad status: ${userSquadResponse.status} ${errorBody}`);
@@ -37,7 +28,6 @@ export default function Squads({ userTelegramId }) {
       const userSquadData = await userSquadResponse.json();
       
       if (userSquadData.squad && userSquadData.squad.id) {
-        // If they are in a squad, fetch its full details (including members)
         const detailResponse = await fetch(`/api/squads/${userSquadData.squad.id}`);
 
         if (!detailResponse.ok) {
@@ -49,10 +39,9 @@ export default function Squads({ userTelegramId }) {
         setSquad(detailData.squad);
 
       } else {
-        setSquad(null); // User is not in any squad
+        setSquad(null);
       }
     } catch (err) {
-      // This will now print the detailed error to the console
       console.error("fetchUserSquad error:", err); 
       setError("Could not load squad information. Please try again later.");
       setSquad(null);
@@ -60,14 +49,13 @@ export default function Squads({ userTelegramId }) {
       setLoading(false);
     }
   }, [userTelegramId]);
-    
+
   useEffect(() => {
     fetchUserSquad();
   }, [fetchUserSquad]);
 
   const handleSquadUpdate = () => {
     setModalMode(null);
-    // This is the key part: we re-run the fetch logic after an update
     fetchUserSquad(); 
   };
   
@@ -115,7 +103,7 @@ export default function Squads({ userTelegramId }) {
       )}
     </>
   );
-}
+} // <--- THIS IS THE BRACE THAT WAS LIKELY MISSING
 
 const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
   const [showInviteCode, setShowInviteCode] = useState(false);
@@ -165,14 +153,13 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
       if (!response.ok) throw new Error(result.error);
       
       alert('Member kicked successfully!');
-      onSquadUpdate(); // Refresh squad data
+      onSquadUpdate();
     } catch (error) {
       alert(`Failed to kick member: ${error.message}`);
     } finally {
       setKickingMember(null);
     }
   };
-
 
   return (
     <div>
