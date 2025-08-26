@@ -1093,13 +1093,16 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
   try {
     const lb = await pool.query(`
       SELECT 
-        s.id, s.name, s.icon, s.invite_code,
+        s.id, 
+        s.name, 
+        s.icon, 
+        s.invite_code,
         COUNT(DISTINCT sm.user_id) as member_count,
         COALESCE(SUM(g.score), 0) as total_score
       FROM squads s
-      LEFT JOIN squad_members sm ON sm.squad_id = s.id
+      LEFT JOIN squad_members sm ON s.id = sm.squad_id
       LEFT JOIN games g ON g.user_id = sm.user_id
-      GROUP BY s.id, s.name, s.icon, s.invite_code
+      GROUP BY s.id
       ORDER BY total_score DESC
       LIMIT 100
     `);
@@ -1112,8 +1115,9 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
       }))
     });
   } catch (error) {
-    console.error("Squad leaderboard failed:", error);
-    res.status(500).json({ error: "Failed to fetch squad leaderboard" });
+    // This new logging is the crucial part
+    console.error("CRASH in /api/squads/leaderboard:", error);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 });
 
