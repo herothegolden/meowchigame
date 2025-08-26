@@ -47,7 +47,7 @@ function requireDB(req, res, next) {
 const validateUser = async (req, res, next) => {
   const initData = req.headers['x-telegram-init-data'] || req.body.initData || req.query.initData;
   const telegram_id = req.params.telegram_id || req.body.telegram_id;
-  
+
   if (initData && process.env.BOT_TOKEN) {
     try {
       const parsed = validate(initData, process.env.BOT_TOKEN);
@@ -65,7 +65,7 @@ const validateUser = async (req, res, next) => {
       console.warn(`⚠️ initData validation failed: ${error.message}`);
     }
   }
-  
+
   if (telegram_id) {
     console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
     req.user = { 
@@ -74,7 +74,7 @@ const validateUser = async (req, res, next) => {
     };
     return next();
   }
-  
+
   console.error("Authentication failed: No valid initData or telegram_id provided.");
   return res.status(401).json({ error: "Authentication required" });
 };
