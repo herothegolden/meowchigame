@@ -240,6 +240,16 @@ app.get("/api/setup/database", async (req, res) => {
       );
     `);
 
+    // NEW: Create the user_streaks table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_streaks (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        current_streak INTEGER DEFAULT 0,
+        last_check_in_date DATE
+      );
+    `);
+
     res.json({ success: true, message: "Database tables created successfully!" });
   } catch (error) {
     console.error("❌ Database setup failed:", error);
@@ -804,6 +814,68 @@ app.post("/api/powerup/use", requireDB, validateUser, async (req, res) => {
   } catch (error) {
     console.error("Failed to use power-up:", error);
     res.status(500).json({ error: "Failed to use power-up" });
+  }
+});
+
+
+// ========== 🔥 STREAKS ENDPOINT ==========
+
+app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = userResult.rows[0].id;
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get current streak info
+      const streakResult = await client.query(
+        `INSERT INTO user_streaks (user_id, current_streak, last_check_in_date)
+         VALUES ($1, 1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET
+           current_streak = CASE
+             WHEN user_streaks.last_check_in_date = $2 THEN user_streaks.current_streak -- Same day, no change
+             WHEN user_streaks.last_check_in_date = $2::date - 1 THEN user_streaks.current_streak + 1 -- Consecutive day
+             ELSE 1 -- Streak broken, reset to 1
+           END,
+           last_check_in_date = $2
+         WHERE user_streaks.last_check_in_date IS NULL OR user_streaks.last_check_in_date < $2
+         RETURNING current_streak, last_check_in_date`,
+        [userId, today]
+      );
+      
+      let streakData = streakResult.rows[0];
+      // If the user already checked in today, the above query returns nothing, so we fetch the current state
+      if (!streakData) {
+          const currentStreak = await client.query("SELECT current_streak, last_check_in_date FROM user_streaks WHERE user_id = $1", [userId]);
+          streakData = currentStreak.rows[0];
+      }
+
+      // Reset streak if it goes past 7
+      if (streakData.current_streak > 7) {
+        const resetStreak = await client.query(
+            "UPDATE user_streaks SET current_streak = 1 WHERE user_id = $1 RETURNING current_streak",
+            [userId]
+        );
+        streakData.current_streak = resetStreak.rows[0].current_streak;
+      }
+
+      await client.query('COMMIT');
+      res.json({ success: true, streak: streakData.current_streak });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Check-in failed:", error);
+    res.status(500).json({ error: "Check-in failed" });
   }
 });
 
