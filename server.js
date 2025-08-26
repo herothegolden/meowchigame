@@ -1100,7 +1100,7 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
         COUNT(DISTINCT sm.user_id) as member_count,
         COALESCE(SUM(g.score), 0) as total_score
       FROM squads s
-      LEFT JOIN squad_members sm ON s.id = sm.s_id
+      LEFT JOIN squad_members sm ON s.id = sm.squad_id
       LEFT JOIN games g ON g.user_id = sm.user_id
       GROUP BY s.id, s.name, s.icon, s.invite_code
       ORDER BY total_score DESC
