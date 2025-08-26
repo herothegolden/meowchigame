@@ -1,16 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Velvet Night Palette */
-  --bg: #1a182b;
-  --card: #23213a;
-  --surface: #2e2b4b;
-  --text: #f0f0f5;
-  --muted: #8b89a3;
-  --accent: #ff80bf;
-  --accent2: #ffb3d9;
-  --accent-text: #1a182b;
-  --border: rgba(139, 137, 163, 0.15);
+  /* Golden Patisserie Palette */
+  --bg: #fdf9f4;
+  --card: #ffffff;
+  --surface: #f8f4ed;
+  --text: #4c3f38;
+  --muted: #a18f85;
+  --accent: #d4af37;
+  --accent2: #f4d03f;
+  --accent-text: #ffffff;
+  --border: rgba(76, 63, 56, 0.1);
 
   /* Splash controls */
   --bar-top: 60%;
@@ -21,7 +21,7 @@
 html,body,#root{height:100%}
 body{
   margin:0;
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-weight: 400;
