@@ -13,37 +13,26 @@ export default function Squads({ userTelegramId }) {
       setLoading(false);
       return;
     }
-    
     setLoading(true);
     setError(null);
-    
     try {
-      const userSquadResponse = await fetch(`/api/user/${userTelegramId}/squad`);
-      
-      if (!userSquadResponse.ok) {
-        const errorBody = await userSquadResponse.text();
-        throw new Error(`Failed to check squad status: ${userSquadResponse.status} ${errorBody}`);
-      }
-      
-      const userSquadData = await userSquadResponse.json();
-      
-      if (userSquadData.squad && userSquadData.squad.id) {
-        const detailResponse = await fetch(`/api/squads/${userSquadData.squad.id}`);
-
-        if (!detailResponse.ok) {
-          const errorBody = await detailResponse.text();
-          throw new Error(`Failed to fetch squad details: ${detailResponse.status} ${errorBody}`);
+      const tg = window.Telegram?.WebApp;
+      const response = await fetch(`/api/squads/dashboard`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          // Pass authentication data in headers for GET requests
+          'X-Telegram-Init-Data': tg?.initData || ''
         }
-
-        const detailData = await detailResponse.json();
-        setSquad(detailData.squad);
-
-      } else {
-        setSquad(null);
+      });
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
+      const data = await response.json();
+      setSquad(data.squad);
     } catch (err) {
-      console.error("fetchUserSquad error:", err); 
-      setError("Could not load squad information. Please try again later.");
+      console.error("Failed to fetch squad dashboard:", err);
+      setError("Could not load squad information. Please try again.");
       setSquad(null);
     } finally {
       setLoading(false);
