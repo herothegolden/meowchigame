@@ -1,7 +1,109 @@
 // src/GameView.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as audio from "./audio"; // minimal sound hooks
 import ShareButtons from "./ShareButtons.jsx";
+
+// 1) OPTIMIZE: Memoized tile component
+const MemoizedTile = React.memo(({ 
+  r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping, 
+  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE 
+}) => {
+  return (
+    <div
+      key={`tile-${r}-${c}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+      style={{
+        left: c * cell,
+        top: r * cell,
+        width: cell,
+        height: cell,
+        transform: swapTransform || undefined,
+        zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
+        transition: isSwapping
+          ? "transform 0.16s ease"
+          : delaySeconds
+          ? `top 0.16s ease ${delaySeconds}s`
+          : "top 0.16s ease",
+      }}
+    >
+      <div
+        className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+        style={{ fontSize: Math.floor(cell * EMOJI_SIZE) }}
+      >
+        {value}
+      </div>
+      {/* simplified blast effect */}
+      {isBlasting && (
+        <div className="blast-simple">
+          💥
+        </div>
+      )}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.value === nextProps.value &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isHinted === nextProps.isHinted &&
+    prevProps.isBlasting === nextProps.isBlasting &&
+    prevProps.isSwapping === nextProps.isSwapping &&
+    prevProps.isNewTile === nextProps.isNewTile &&
+    prevProps.isGrab === nextProps.isGrab &&
+    prevProps.isShake === nextProps.isShake &&
+    prevProps.swapTransform === nextProps.swapTransform
+  );
+});
+
+// 2) OPTIMIZE: RAF helper
+const useAnimationFrame = () => {
+  const requestRef = useRef();
+  const previousTimeRef = useRef();
+  
+  const animate = useCallback((callback) => {
+    const animateFrame = (time) => {
+      if (previousTimeRef.current !== undefined) {
+        const deltaTime = time - previousTimeRef.current;
+        callback(deltaTime);
+      }
+      previousTimeRef.current = time;
+      requestRef.current = requestAnimationFrame(animateFrame);
+    };
+    requestRef.current = requestAnimationFrame(animateFrame);
+    
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, []);
+  
+  return animate;
+};
+
+// 3) OPTIMIZE: Batched state helper
+const useBatchedState = () => {
+  const [pendingUpdates, setPendingUpdates] = useState({});
+  const timeoutRef = useRef();
+  
+  const batchUpdate = useCallback((updates) => {
+    setPendingUpdates(prev => ({ ...prev, ...updates }));
+    
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    timeoutRef.current = setTimeout(() => {
+      Object.entries(pendingUpdates).forEach(([key, updater]) => {
+        if (typeof updater === 'function') {
+          updater();
+        }
+      });
+      setPendingUpdates({});
+    }, 16);
+  }, [pendingUpdates]);
+  
+  return batchUpdate;
+};
 
 const COLS = 6;  // keep as in your working file
 const ROWS = 6;
@@ -232,7 +334,6 @@ export default function GameView({
     
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery && milestones[achievement]) {
-      // Auto-suggest sharing (user can still cancel)
       setTimeout(() => {
         if (confirm("🎉 Amazing achievement! Share with friends?")) {
           tg.switchInlineQuery(milestones[achievement], ['users', 'groups']);
@@ -373,14 +474,14 @@ export default function GameView({
       setGrid(g);
       setSwapping(null);
       setMoves((m) => Math.max(0, m - 1));
-      resolveCascades(g, () => {
+      optimizedResolveCascades(g, () => {
         if (timeLeftRef.current <= 0) finish();
       });
     }, 200);
   }
 
-  // Cascade resolution with combo tracking + light sounds
-  function resolveCascades(start, done) {
+  // 4) OPTIMIZE: Cascade resolution
+  function optimizedResolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
     let comboCount = 0;
@@ -388,62 +489,59 @@ export default function GameView({
     const step = () => {
       const matches = findMatches(g);
       if (matches.length === 0) {
-        setGrid(g);
-        setNewTiles(new Set());
-        setFallDelay({});
+        React.startTransition(() => {
+          setGrid(g);
+          setNewTiles(new Set());
+          setFallDelay({});
+          
+          if (comboCount > 0) {
+            setMaxComboAchieved(prev => {
+              const newMax = Math.max(prev, comboCount);
+              maxComboAchievedRef.current = newMax;
+              return newMax;
+            });
+            setCombo(comboCount);
+            const n = Math.min(4, Math.max(1, comboCount + 1));
+            audio.play?.(`combo_x${n}`, { volume: 0.6 });
+            requestAnimationFrame(() => {
+              setTimeout(() => setCombo(0), 1500);
+            });
+          }
 
-        if (comboCount > 0) {
-          setMaxComboAchieved(prev => {
-            const newMax = Math.max(prev, comboCount);
-            maxComboAchievedRef.current = newMax;
-            return newMax;
-          });
-          setCombo(comboCount);
-          // play capped combo sound 1..4
-          const n = Math.min(4, Math.max(1, comboCount + 1));
-          audio.play?.(`combo_x${n}`, { volume: 0.6 });
-          setTimeout(() => setCombo(0), 1500);
-        }
-
-        setTimeout(() => setFx([]), 1200);
-        ensureSolvable();
-        setAnimating(false);
-        done && done();
+          setTimeout(() => setFx([]), 800);
+          ensureSolvable();
+          setAnimating(false);
+          done && done();
+        });
         return;
       }
 
-      // one earcon per cascade step
       audio.play?.("match_pop", { volume: 0.5 });
-      audio.play?.("cascade_tick", { volume: 0.3 });
 
-      // blast fx
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
-      const fxId = Date.now() + Math.random();
+      const fxId = Date.now();
       setFx((prev) => [
-        ...prev.slice(-10),
-        ...matches.map((m, i) => ({
-          id: fxId + i + Math.random(),
+        ...prev.slice(-5),
+        ...matches.slice(0, 10).map((m, i) => ({
+          id: fxId + i,
           x: m[1] * cell,
           y: m[0] * cell,
         })),
       ]);
 
-      // scoring
       const basePoints = 10 * matches.length;
       const comboMultiplier = Math.max(1, comboCount + 1);
       const pointsEarned = basePoints * comboMultiplier;
       setScore((s) => s + pointsEarned);
 
-      // clear
       matches.forEach(([r, c]) => {
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 100);
+      setTimeout(() => setBlast(new Set()), 80);
 
-      // gravity + refill
       setTimeout(() => {
         const delayMap = {};
         for (let c = 0; c < COLS; c++) {
@@ -458,7 +556,7 @@ export default function GameView({
               const dist = nullsBelow[r];
               const newR = r + dist;
               if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.05, dist * 0.01);
+                delayMap[`${newR}-${c}`] = Math.min(0.03, dist * 0.008);
               }
             }
           }
@@ -470,16 +568,18 @@ export default function GameView({
           for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
         refill(g);
 
-        setNewTiles(empties);
-        setFallDelay(delayMap);
-        setGrid(cloneGrid(g));
+        React.startTransition(() => {
+          setNewTiles(empties);
+          setFallDelay(delayMap);
+          setGrid(cloneGrid(g));
+        });
 
         setTimeout(() => {
           setNewTiles(new Set());
           comboCount++;
-          setTimeout(step, 60);
-        }, 120);
-      }, 100);
+          setTimeout(step, 40);
+        }, 80);
+      }, 60);
     };
     step();
   }
@@ -525,14 +625,13 @@ export default function GameView({
 
     onCoins?.(serverCoins);
 
-    // Show share buttons instead of auto-sharing
     const gameResultWithSharing = {
       score: finalScore,
       coins: serverCoins,
       moves_used: moveCount,
       max_combo: finalMaxCombo,
       gameSubmitted: !!result,
-      showSharing: true, // Flag to show sharing in game over screen
+      showSharing: true,
     };
     onExit(gameResultWithSharing);
   }
@@ -571,6 +670,73 @@ export default function GameView({
     if (timeLeft <= 30) return "#f39c12";
     return "#27ae60";
   };
+
+  // 5) OPTIMIZE: Memoized grid rendering
+  const optimizedGridRender = useMemo(() => {
+    return grid.map((row, r) =>
+      row.map((v, c) => {
+        const isSelected = sel && sel.r === r && sel.c === c;
+        const isHinted =
+          hint &&
+          ((hint[0][0] === r && hint[0][1] === c) ||
+            (hint[1][0] === r && hint[1][1] === c));
+        const isBlasting = blast.has(`${r}:${c}`);
+
+        let swapTransform = "";
+        if (swapping) {
+          if (swapping.from.r === r && swapping.from.c === c) {
+            const dx = (swapping.to.c - swapping.from.c) * cell;
+            const dy = (swapping.to.r - swapping.from.r) * cell;
+            swapTransform = `translate(${dx}px, ${dy}px)`;
+          } else if (swapping.to.r === r && swapping.to.c === c) {
+            const dx = (swapping.from.c - swapping.to.c) * cell;
+            const dy = (swapping.from.r - swapping.to.r) * cell;
+            swapTransform = `translate(${dx}px, ${dy}px)`;
+          }
+        }
+        
+        const isSwapping =
+          !!swapping &&
+          ((swapping.from.r === r && swapping.from.c === c) ||
+            (swapping.to.r === r && swapping.to.c === c));
+
+        const tileKey = `${r}-${c}`;
+        const isNewTile = newTiles.has(tileKey);
+        const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
+        const isShake = shake.has(tileKey);
+        const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
+
+        return (
+          <MemoizedTile
+            key={tileKey}
+            r={r}
+            c={c}
+            value={v}
+            cell={cell}
+            isSelected={isSelected}
+            isHinted={isHinted}
+            isBlasting={isBlasting}
+            isSwapping={isSwapping}
+            isNewTile={isNewTile}
+            isGrab={isGrab}
+            isShake={isShake}
+            swapTransform={swapTransform}
+            delaySeconds={delaySeconds}
+            EMOJI_SIZE={EMOJI_SIZE}
+          />
+        );
+      })
+    );
+  }, [grid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
+
+  // 6) OPTIMIZE: Memory cleanup for animations
+  useEffect(() => {
+    const cleanup = [];
+    return () => {
+      cleanup.forEach(clearTimeout);
+      cleanup.forEach(clearInterval);
+    };
+  }, []);
 
   return (
     <div className="section board-wrap" ref={containerRef}>
@@ -626,73 +792,7 @@ export default function GameView({
             backgroundSize: `${cell}px ${cell}px`,
           }}
         />
-        {grid.map((row, r) =>
-          row.map((v, c) => {
-            const isSelected = sel && sel.r === r && sel.c === c;
-            const isHinted =
-              hint &&
-              ((hint[0][0] === r && hint[0][1] === c) ||
-                (hint[1][0] === r && hint[1][1] === c));
-            const isBlasting = blast.has(`${r}:${c}`);
-
-            let swapTransform = "";
-            if (swapping) {
-              if (swapping.from.r === r && swapping.from.c === c) {
-                const dx = (swapping.to.c - swapping.from.c) * cell;
-                const dy = (swapping.to.r - swapping.from.r) * cell;
-                swapTransform = `translate(${dx}px, ${dy}px)`;
-              } else if (swapping.to.r === r && swapping.to.c === c) {
-                const dx = (swapping.from.c - swapping.to.c) * cell;
-                const dy = (swapping.from.r - swapping.to.r) * cell;
-                swapTransform = `translate(${dx}px, ${dy}px)`;
-              }
-            }
-            const isSwapping =
-              !!swapping &&
-              ((swapping.from.r === r && swapping.from.c === c) ||
-                (swapping.to.r === r && swapping.to.c === c));
-
-            const tileKey = `${r}-${c}`;
-            const isNewTile = newTiles.has(tileKey);
-            const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
-            const isShake = shake.has(tileKey);
-
-            const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
-
-            return (
-              <div
-                key={`tile-${r}-${c}`}
-                className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
-                style={{
-                  left: c * cell,
-                  top: r * cell,
-                  width: cell,
-                  height: cell,
-                  transform: swapTransform || undefined,
-                  zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
-                  transition: isSwapping
-                    ? "transform 0.16s ease"
-                    : delaySeconds
-                    ? `top 0.16s ease ${delaySeconds}s`
-                    : "top 0.16s ease",
-                }}
-              >
-                <div
-                  className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
-                  style={{ fontSize: Math.floor(cell * EMOJI_SIZE) }}
-                >
-                  {v}
-                </div>
-                {/* small blast sparkles */}
-                {isBlasting && (
-                  <div className="blast">
-                    ✨
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+        {optimizedGridRender}
       </div>
 
       {/* Controls */}
