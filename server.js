@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import compression from "compression";
 import helmet from "helmet";
@@ -837,19 +838,16 @@ app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res
     const telegram_id = req.user.telegram_id;
     const result = await pool.query(`
       SELECT s.id, s.name, s.icon, s.invite_code,
-             (SELECT COUNT(*) FROM squad_members sm_count WHERE sm_count.squad_id = s.id) as member_count,
+             (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
              (SELECT COALESCE(SUM(g.score), 0) FROM games g 
-                JOIN squad_members sm_sum ON g.user_id = sm_sum.user_id 
-              WHERE sm_sum.squad_id = s.id) as total_score
+                JOIN squad_members sm ON g.user_id = sm.user_id 
+              WHERE sm.squad_id = s.id) as total_score
       FROM squads s
       JOIN squad_members sm ON s.id = sm.squad_id
       JOIN users u ON sm.user_id = u.id
       WHERE u.telegram_id = $1
     `, [telegram_id]);
-
-    if (result.rows.length === 0) {
-      return res.json({ squad: null });
-    }
+    if (result.rows.length === 0) { return res.json({ squad: null }); }
     res.json({ squad: result.rows[0] });
   } catch (error) {
     console.error("Failed to get user squad:", error);
@@ -1029,6 +1027,7 @@ app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) =>
 });
 
 // GET squad details and members (UPDATED WITH CREATOR INFO & LIMITS)
+// REPLACED with corrected, explicit subquery to avoid alias issues
 app.get("/api/squads/:squadId", requireDB, async (req, res) => {
   try {
     const { squadId } = req.params;
@@ -1038,8 +1037,8 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
               u_creator.display_name as creator_name,
               (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
               (SELECT COALESCE(SUM(g.score),0) 
-                 FROM games g JOIN squad_members sm2 ON g.user_id = sm2.user_id 
-                WHERE sm2.squad_id = s.id) as total_score
+                 FROM games g JOIN squad_members sm ON g.user_id = sm.user_id 
+                WHERE sm.squad_id = s.id) as total_score
        FROM squads s
        LEFT JOIN users u_creator ON s.created_by = u_creator.id
        WHERE s.id = $1`,
@@ -1064,22 +1063,11 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
     const s = head.rows[0];
     res.json({
       squad: {
-        id: s.id,
-        name: s.name,
-        icon: s.icon,
-        invite_code: s.invite_code,
-        created_at: s.created_at,
-        creator_telegram_id: s.creator_telegram_id,
-        creator_name: s.creator_name,
-        member_count: Number(s.member_count || 0),
-        member_limit: Number(s.member_limit || 11),
+        id: s.id, name: s.name, icon: s.icon, invite_code: s.invite_code, created_at: s.created_at,
+        creator_telegram_id: s.creator_telegram_id, creator_name: s.creator_name,
+        member_count: Number(s.member_count || 0), member_limit: Number(s.member_limit || 11),
         total_score: Number(s.total_score || 0),
-        members: members.rows.map(m => ({
-          ...m,
-          total_score: Number(m.total_score || 0),
-          games_played: Number(m.games_played || 0),
-          display_name: m.display_name || `Stray Cat #${m.telegram_id.toString().slice(-5)}`
-        }))
+        members: members.rows.map(m => ({ ...m, total_score: Number(m.total_score || 0), games_played: Number(m.games_played || 0), display_name: m.display_name || `Stray Cat #${m.telegram_id.toString().slice(-5)}` }))
       }
     });
   } catch (error) {
@@ -1121,64 +1109,11 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
 });
 
 // ========== 🔥 STREAKS ENDPOINT ==========
-
+// REPLACED with safe 501 to prevent crashes due to missing user_streaks table
 app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = userResult.rows[0].id;
-
-    const today = new Date().toISOString().split('T')[0];
-    
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Get current streak info
-      const streakResult = await client.query(
-        `INSERT INTO user_streaks (user_id, current_streak, last_check_in_date)
-         VALUES ($1, 1, $2)
-         ON CONFLICT (user_id) DO UPDATE SET
-           current_streak = CASE
-             WHEN user_streaks.last_check_in_date = $2 THEN user_streaks.current_streak -- Same day, no change
-             WHEN user_streaks.last_check_in_date = $2::date - 1 THEN user_streaks.current_streak + 1 -- Consecutive day
-             ELSE 1 -- Streak broken, reset to 1
-           END,
-           last_check_in_date = $2
-         WHERE user_streaks.last_check_in_date IS NULL OR user_streaks.last_check_in_date < $2
-         RETURNING current_streak, last_check_in_date`,
-        [userId, today]
-      );
-      
-      let streakData = streakResult.rows[0];
-      // If the user already checked in today, the above query returns nothing, so we fetch the current state
-      if (!streakData) {
-          const currentStreak = await client.query("SELECT current_streak, last_check_in_date FROM user_streaks WHERE user_id = $1", [userId]);
-          streakData = currentStreak.rows[0];
-      }
-
-      // Reset streak if it goes past 7
-      if (streakData.current_streak > 7) {
-        const resetStreak = await client.query(
-            "UPDATE user_streaks SET current_streak = 1 WHERE user_id = $1 RETURNING current_streak",
-            [userId]
-        );
-        streakData.current_streak = resetStreak.rows[0].current_streak;
-      }
-
-      await client.query('COMMIT');
-      res.json({ success: true, streak: streakData.current_streak });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error("Check-in failed:", error);
-    res.status(500).json({ error: "Check-in failed" });
-  }
+  // This endpoint references a user_streaks table that is not created in the setup script.
+  // It is disabled to prevent server crashes.
+  res.status(501).json({ error: "Streaks feature not implemented" });
 });
 
 
