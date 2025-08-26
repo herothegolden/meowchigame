@@ -395,30 +395,22 @@ useEffect(() => {
 
     const button = tg.MainButton;
 
-    const homeClick = () => navigateTo('game');
-    const dailyClick = () => alert('Claim All Rewards clicked! (Implement logic)');
-
-    // Remove previous handlers
-    button.offClick(homeClick);
-    button.offClick(dailyClick);
-
-    if (screen === 'home') {
-      button.setText('🎮 Play Game');
-      button.onClick(homeClick);
-      button.show();
-    } else if (screen === 'daily') {
-      button.setText('✅ Claim All Rewards');
-      button.onClick(dailyClick);
-      button.show();
-    } else {
+    // Hide the button if the splash screen is showing or on specific screens
+    if (showSplash || screen === 'home' || screen === 'daily') {
       button.hide();
+      return;
+    }
+    
+    // Example of how you might use it on other screens in the future
+    // if (screen === 'shop') {
+    //   button.setText('🛒 Go to Checkout');
+    //   button.show();
+    // } 
+    else {
+      button.hide(); // Hide by default on all other screens
     }
 
-    return () => {
-      button.offClick(homeClick);
-      button.offClick(dailyClick);
-    }
-  }, [screen]);
+  }, [screen, showSplash]); // Add showSplash as a dependency
 
   // ------------ Minimal header with just branding and coins ------------
   function Header() {
