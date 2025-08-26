@@ -1,6 +1,42 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./home.css";
 
+// Step 5: Add the CountUp component for animated stats
+const CountUp = ({ end }) => {
+  const [count, setCount] = useState(0);
+  const endValue = parseInt(end || 0);
+  const ref = useRef(0);
+  const accumulator = useRef(0);
+
+  useEffect(() => {
+    const start = ref.current;
+    const duration = 1200; // Animation duration in ms
+    let startTime = null;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const current = Math.floor(progress * (endValue - start) + start);
+      setCount(current);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        ref.current = endValue;
+      }
+    };
+    
+    requestAnimationFrame(animate);
+    
+    return () => {
+      ref.current = endValue; // On unmount, jump to the end
+    };
+  }, [endValue]);
+
+  return <>{count.toLocaleString()}</>;
+};
+
+// The rest of your Home component starts here...
 export default function Home({ 
   coins = 0, 
   onNavigate, 
@@ -73,18 +109,19 @@ export default function Home({
 
           <div className="stats-grid">
             <div className="stat-item">
-              <div className="stat-value">{formatNumber(coins)}</div>
+              <div className="stat-value"><CountUp end={coins} /></div>
               <div className="stat-label">$Meow Coins</div>
             </div>
             <div className="stat-item">
-              <div className="stat-value">{formatNumber(userStats?.games_played)}</div>
+              <div className="stat-value"><CountUp end={userStats?.games_played} /></div>
               <div className="stat-label">Games Played</div>
             </div>
             <div className="stat-item">
-              <div className="stat-value">{formatNumber(userStats?.best_score)}</div>
+              <div className="stat-value"><CountUp end={userStats?.best_score} /></div>
               <div className="stat-label">Best Score</div>
             </div>
             <div className="stat-item">
+              {/* The combo is text ('x5'), so it doesn't need the CountUp animation */}
               <div className="stat-value">{formatCombo(userStats?.best_combo)}</div>
               <div className="stat-label">Best Combo</div>
             </div>
