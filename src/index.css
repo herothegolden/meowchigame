@@ -1594,6 +1594,7 @@ body{
   flex-direction: column;
   overflow: hidden;
   padding: 16px;
+  align-items: center; /* 👈 ADD THIS LINE TO CENTER EVERYTHING */
 }
 
 .game-view-container .board-wrap {
