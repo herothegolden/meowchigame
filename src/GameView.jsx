@@ -381,6 +381,37 @@ export default function GameView({
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
+
+      /* ==================================
+         PATCH: Catnip Cookie (hammer) logic
+         ================================== */
+      if (typeof activePowerup !== "undefined" && activePowerup) {
+        if (activePowerup === 'hammer') { // This is now the "Catnip Cookie"
+          const g = cloneGrid(gridRef.current);
+          const targetCookie = g[p.r][p.c];
+
+          // UPDATED: Logic to work on any of the main candy set items
+          if (CANDY_SET.includes(targetCookie)) {
+            for (let r = 0; r < ROWS; r++) {
+              for (let c = 0; c < COLS; c++) {
+                if (g[r][c] === targetCookie) {
+                  g[r][c] = null; // Clear all matching cookies
+                }
+              }
+            }
+            audio.play?.('powerup_spawn', { volume: 0.7 });
+            optimizedResolveCascades(g, () => {}); // use existing cascade resolver
+            if (typeof onUsePowerup === "function") onUsePowerup('hammer');
+            if (typeof setActivePowerup === "function") setActivePowerup(null);
+          } else {
+            haptic(8);
+            audio.play?.("swap_invalid", { volume: 0.5 });
+          }
+        }
+        // ... other powerups (unchanged)
+      }
+      /* ===== END PATCH ===== */
+
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
       setSel({ r: p.r, c: p.c });
       setGrabTile({ r: p.r, c: p.c });
