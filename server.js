@@ -705,7 +705,8 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
 
   try {
     const userResult = await pool.query(
-      "SELECT id, COALESCE(total_coins_earned, 0) as coins FROM users WHERE telegram_id = $1",
+      // CORRECTED: use bonus_coins
+      "SELECT id, COALESCE(bonus_coins, 0) as coins FROM users WHERE telegram_id = $1",
       [telegram_id]
     );
     if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
@@ -723,8 +724,9 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
       await client.query('BEGIN');
       
       // 1. Deduct coins
+      // CORRECTED: update bonus_coins and return bonus_coins
       const updatedUser = await client.query(
-        "UPDATE users SET total_coins_earned = total_coins_earned - $1 WHERE id = $2 RETURNING total_coins_earned",
+        "UPDATE users SET bonus_coins = bonus_coins - $1 WHERE id = $2 RETURNING bonus_coins",
         [item.price, user.id]
       );
 
@@ -742,7 +744,8 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
       res.json({
         success: true,
         message: `${item.name} purchased!`,
-        newCoinBalance: updatedUser.rows[0].total_coins_earned
+        // CORRECTED: read new balance from bonus_coins
+        newCoinBalance: updatedUser.rows[0].bonus_coins
       });
 
     } catch (e) {
@@ -1538,7 +1541,8 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
 
   try {
     const userResult = await pool.query(
-      "SELECT id, COALESCE(total_coins_earned, 0) as coins FROM users WHERE telegram_id = $1",
+      // CORRECTED: use bonus_coins
+      "SELECT id, COALESCE(bonus_coins, 0) as coins FROM users WHERE telegram_id = $1",
       [telegram_id]
     );
     if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
@@ -1556,8 +1560,9 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
       await client.query('BEGIN');
       
       // 1. Deduct coins
+      // CORRECTED: update bonus_coins and return bonus_coins
       const updatedUser = await client.query(
-        "UPDATE users SET total_coins_earned = total_coins_earned - $1 WHERE id = $2 RETURNING total_coins_earned",
+        "UPDATE users SET bonus_coins = bonus_coins - $1 WHERE id = $2 RETURNING bonus_coins",
         [item.price, user.id]
       );
 
@@ -1575,7 +1580,8 @@ app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
       res.json({
         success: true,
         message: `${item.name} purchased!`,
-        newCoinBalance: updatedUser.rows[0].total_coins_earned
+        // CORRECTED: read new balance from bonus_coins
+        newCoinBalance: updatedUser.rows[0].bonus_coins
       });
 
     } catch (e) {
