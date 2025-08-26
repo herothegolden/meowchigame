@@ -824,7 +824,7 @@ app.post("/api/powerup/use", requireDB, validateUser, async (req, res) => {
 });
 
 
-// ========== 🐾 SQUADS ENDPOINTS ==========
+// ========== 🐾 SQUADS ENDPOINTS (FULLY IMPLEMENTED) ==========
 
 // GET user's current squad
 app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res) => {
@@ -845,8 +845,7 @@ app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res
     if (result.rows.length === 0) {
       return res.json({ squad: null });
     }
-    const row = result.rows[0];
-    res.json({ squad: { ...row, member_count: Number(row.member_count || 0), total_score: Number(row.total_score || 0) } });
+    res.json({ squad: result.rows[0] });
   } catch (error) {
     console.error("Failed to get user squad:", error);
     res.status(500).json({ error: "Failed to get user squad" });
@@ -905,58 +904,45 @@ app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
 
 // POST to join a squad
 app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
+  const { invite_code } = req.body;
+  const telegram_id = req.user.telegram_id;
+
+  if (!invite_code || invite_code.length !== 6) {
+    return res.status(400).json({ error: "Invalid invite code." });
+  }
+
+  const client = await pool.connect();
   try {
-    const { invite_code } = req.body || {};
-    if (!invite_code || typeof invite_code !== "string") {
-      return res.status(400).json({ error: "invite_code is required" });
+    await client.query('BEGIN');
+
+    const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userResult.rows.length === 0) throw new Error("User not found");
+    const userId = userResult.rows[0].id;
+
+    const existingSquad = await client.query("SELECT id FROM squad_members WHERE user_id = $1", [userId]);
+    if (existingSquad.rows.length > 0) {
+      return res.status(400).json({ error: "You are already in a squad." });
     }
 
-    const telegram_id = req.user.telegram_id;
-    const userRow = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userRow.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = userRow.rows[0].id;
-
-    // Ensure user is not already in a squad
-    const existing = await pool.query("SELECT 1 FROM squad_members WHERE user_id = $1", [userId]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: "You are already in a squad" });
+    const squadResult = await client.query("SELECT id FROM squads WHERE invite_code = $1", [invite_code.toUpperCase()]);
+    if (squadResult.rows.length === 0) {
+      return res.status(404).json({ error: "Squad not found with this invite code." });
     }
+    const squadId = squadResult.rows[0].id;
 
-    const squadRow = await pool.query(
-      "SELECT id, name, icon, invite_code FROM squads WHERE invite_code = $1",
-      [invite_code.trim()]
-    );
-    if (squadRow.rows.length === 0) {
-      return res.status(404).json({ error: "Invalid invite code" });
-    }
-    const squad = squadRow.rows[0];
-
-    try {
-      await pool.query(
-        "INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)",
-        [squad.id, userId]
-      );
-    } catch (e) {
-      if (String(e?.message || "").toLowerCase().includes("unique")) {
-        return res.status(400).json({ error: "You are already in a squad" });
-      }
-      throw e;
-    }
-
-    // Return updated squad summary
-    const summary = await pool.query(
-      `SELECT 
-         (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = $1) as member_count,
-         (SELECT COALESCE(SUM(g.score), 0) 
-          FROM games g JOIN squad_members sm2 ON g.user_id = sm2.user_id 
-          WHERE sm2.squad_id = $1) as total_score`,
-      [squad.id]
+    await client.query(
+      `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
+      [squadId, userId]
     );
 
-    res.json({ success: true, squad: { ...squad, member_count: Number(summary.rows[0].member_count || 0), total_score: Number(summary.rows[0].total_score || 0) } });
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Successfully joined squad!" });
   } catch (error) {
-    console.error("Join squad failed:", error);
+    await client.query('ROLLBACK');
+    console.error("Failed to join squad:", error);
     res.status(500).json({ error: "Failed to join squad" });
+  } finally {
+    client.release();
   }
 });
 
