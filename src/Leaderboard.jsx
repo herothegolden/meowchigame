@@ -91,12 +91,20 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams({
-        country: showCountryOnly ? 'true' : 'false',
-        ...(userTelegramId && { telegram_id: userTelegramId })
-      });
+      let endpoint, params;
+      
+      if (leaderboardType === 'squads') {
+        endpoint = '/api/squads/leaderboard';
+        params = new URLSearchParams();
+      } else {
+        endpoint = `/api/leaderboard/${leaderboardType}`;
+        params = new URLSearchParams({
+          country: showCountryOnly ? 'true' : 'false',
+          ...(userTelegramId && { telegram_id: userTelegramId })
+        });
+      }
 
-      const response = await fetch(`/api/leaderboard/${leaderboardType}?${params}`);
+      const response = await fetch(`${endpoint}?${params}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -108,16 +116,22 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         throw new Error(data.error);
       }
 
-      // Validate response structure
-      if (!Array.isArray(data.leaderboard)) {
-        console.warn('Invalid leaderboard data structure:', data);
-        setLeaderboardData([]);
+      if (leaderboardType === 'squads') {
+        setLeaderboardData(data.leaderboard || []);
+        setUserRank(null);
+        setCurrentUserCountry(null);
       } else {
-        setLeaderboardData(data.leaderboard);
+        if (!Array.isArray(data.leaderboard)) {
+          console.warn('Invalid leaderboard data structure:', data);
+          setLeaderboardData([]);
+        } else {
+          setLeaderboardData(data.leaderboard);
+        }
+        
+        setUserRank(data.userRank || null);
+        setCurrentUserCountry(data.country || null);
       }
       
-      setUserRank(data.userRank || null);
-      setCurrentUserCountry(data.country || null);
       setLastUpdated(new Date());
 
     } catch (err) {
@@ -217,7 +231,8 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         {[
           { key: 'daily', label: 'Daily' },
           { key: 'weekly', label: 'Weekly' },
-          { key: 'alltime', label: 'All Time' }
+          { key: 'alltime', label: 'All Time' },
+          { key: 'squads', label: 'Squads' }
         ].map((tab) => (
           <div
             key={tab.key}
@@ -277,72 +292,100 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       {/* Leaderboard content */}
       {!loading && !error && (
         <>
-          {/* Top 100 players */}
-          {leaderboardData.length > 0 ? (
+          {leaderboardType === 'squads' ? (
             <div className="leaderboard-list">
-              {leaderboardData.map((player, index) => (
-                <div 
-                  key={`${player.telegram_id}-${index}`}
-                  className={`leaderboard-item ${player.telegram_id == userTelegramId ? 'current-user' : ''}`}
-                >
+              {leaderboardData.map((squad, index) => (
+                <div key={squad.id} className="leaderboard-item">
                   <div className="rank-display">
-                    {getRankDisplay(player.rank)}
+                    {getRankDisplay(index + 1)}
                   </div>
                   
                   <div className="player-info">
                     <div className="player-name">
-                      {player.country_flag && (
-                        <span className="country-flag">{player.country_flag}</span>
-                      )}
-                      <span className="name">{getDisplayName(player)}</span>
+                      <span className="squad-icon" style={{ fontSize: '18px', marginRight: '8px' }}>{squad.icon}</span>
+                      <span className="name">{squad.name}</span>
                     </div>
                     <div className="player-stats">
-                      {formatScore(player.games_played)} games • Best: {formatScore(player.best_score)}
+                      {squad.member_count} members • {formatScore(squad.total_score)} total points
                     </div>
                   </div>
                   
                   <div className="player-score">
-                    {formatScore(player.total_score)}
+                    {formatScore(squad.total_score)}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="empty-state">
-              <div className="empty-icon">😸</div>
-              <div className="empty-text">{getEmptyMessage()}</div>
-            </div>
-          )}
+            <>
+              {/* Top 100 players */}
+              {leaderboardData.length > 0 ? (
+                <div className="leaderboard-list">
+                  {leaderboardData.map((player, index) => (
+                    <div 
+                      key={`${player.telegram_id}-${index}`}
+                      className={`leaderboard-item ${player.telegram_id == userTelegramId ? 'current-user' : ''}`}
+                    >
+                      <div className="rank-display">
+                        {getRankDisplay(player.rank)}
+                      </div>
+                      
+                      <div className="player-info">
+                        <div className="player-name">
+                          {player.country_flag && (
+                            <span className="country-flag">{player.country_flag}</span>
+                          )}
+                          <span className="name">{getDisplayName(player)}</span>
+                        </div>
+                        <div className="player-stats">
+                          {formatScore(player.games_played)} games • Best: {formatScore(player.best_score)}
+                        </div>
+                      </div>
+                      
+                      <div className="player-score">
+                        {formatScore(player.total_score)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">😸</div>
+                  <div className="empty-text">{getEmptyMessage()}</div>
+                </div>
+              )}
 
-          {/* User's rank if not in top 100 */}
-          {userRank && !isUserInTop100() && (
-            <div className="user-rank-section">
-              <div className="section-divider">
-                <span className="divider-text">Your Rank</span>
-              </div>
-              
-              <div className="leaderboard-item current-user">
-                <div className="rank-display">
-                  #{userRank.rank}
-                </div>
-                
-                <div className="player-info">
-                  <div className="player-name">
-                    {userRank.country_flag && (
-                      <span className="country-flag">{userRank.country_flag}</span>
-                    )}
-                    <span className="name">{getDisplayName(userRank)}</span>
+              {/* User's rank if not in top 100 */}
+              {userRank && !isUserInTop100() && (
+                <div className="user-rank-section">
+                  <div className="section-divider">
+                    <span className="divider-text">Your Rank</span>
                   </div>
-                  <div className="player-stats">
-                    {formatScore(userRank.games_played)} games • Best: {formatScore(userRank.best_score)}
+                  
+                  <div className="leaderboard-item current-user">
+                    <div className="rank-display">
+                      #{userRank.rank}
+                    </div>
+                    
+                    <div className="player-info">
+                      <div className="player-name">
+                        {userRank.country_flag && (
+                          <span className="country-flag">{userRank.country_flag}</span>
+                        )}
+                        <span className="name">{getDisplayName(userRank)}</span>
+                      </div>
+                      <div className="player-stats">
+                        {formatScore(userRank.games_played)} games • Best: {formatScore(userRank.best_score)}
+                      </div>
+                    </div>
+                    
+                    <div className="player-score">
+                      {formatScore(userRank.total_score)}
+                    </div>
                   </div>
                 </div>
-                
-                <div className="player-score">
-                  {formatScore(userRank.total_score)}
-                </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
         </>
       )}
