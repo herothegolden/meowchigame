@@ -1564,3 +1564,61 @@ body{
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
+
+/* =================================== */
+/* ===== PHASE 1 IMPROVEMENTS ====== */
+/* =================================== */
+
+/* Step 4: Skeleton Loading Styles */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--card) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.8s infinite ease-in-out;
+  border-radius: 8px;
+}
+
+.skeleton-text {
+  background-color: var(--surface); /* Fallback for the gradient */
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Step 3: Non-Scrolling Game View Container */
+.game-view-container {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.game-view-container .board-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.game-view-container .board {
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.game-view-container .timer-display,
+.game-view-container .row,
+.game-view-container .controls,
+.game-view-container .progress {
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+/* Step 5: UI Juice for Buttons */
+.btn:active {
+  transform: translateY(-1px) scale(0.98);
+  filter: brightness(0.95);
+}
