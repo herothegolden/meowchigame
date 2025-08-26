@@ -55,7 +55,6 @@ body{
   padding: 16px 20px 12px;
   background: var(--card);
   border-bottom: 1px solid var(--line);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .header-content{
@@ -129,7 +128,6 @@ body{
   border-radius: 20px;
   font-weight: 700;
   font-size: 14px;
-  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
 }
 
 .coins-icon{
@@ -154,7 +152,6 @@ body{
   border-radius: 20px;
   padding: 24px;
   margin: 16px 20px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
 .title{
@@ -236,11 +233,9 @@ body{
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   border: none;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
 }
 
 .btn.primary:hover{
-  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.4);
 }
 
 .btn:disabled{
@@ -272,7 +267,6 @@ body{
   background: var(--accent);
   color: #ffffff;
   border-color: var(--accent);
-  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
 }
 
 /* ===== Bottom Navigation ===== */
@@ -285,7 +279,6 @@ body{
   max-width: 520px;
   background: var(--card);
   border-top: 1px solid var(--line);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
   z-index: 1000;
 }
 
@@ -377,7 +370,6 @@ body{
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.2);
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   /* removed backdrop-filter: blur(4px); */
 }
 
@@ -386,7 +378,6 @@ body{
   height: 100%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   animation: splashbar 2.4s ease forwards; /* NO INFINITE - runs once then stops */
-  box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
 }
 
 @keyframes splashbar{
@@ -418,7 +409,6 @@ body{
   border: 1px solid var(--line);
   overflow: hidden;
   overscroll-behavior: contain;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .gridlines{
@@ -448,7 +438,6 @@ body{
 
 .tile.sel{
   outline: 3px solid var(--accent);
-  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.3);
 }
 
 /* FIXED: hint pulse - 2 cycles then stop */
@@ -622,9 +611,6 @@ body{
   color: #fff;
   border: 2px solid #fff;
   border-radius: 16px;
-  box-shadow: 
-    0 12px 24px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   animation: combo-explosion 1.5s ease-in-out forwards;
   text-shadow: 
     0 0 8px rgba(255, 255, 255, 0.9),
@@ -946,7 +932,6 @@ body{
 
 .leaderboard-item:hover {
   background: var(--card);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transform: translateY(-1px);
 }
 
@@ -954,8 +939,6 @@ body{
 .leaderboard-item.current-user {
   background: linear-gradient(135deg, var(--accent-light), rgba(244, 208, 63, 0.05));
   border-color: var(--accent);
-  box-shadow: 
-    0 0 0 1px rgba(212, 175, 55, 0.3), 0 2px 8px rgba(212, 175, 55, 0.1);
 }
 
 .leaderboard-item.current-user .player-name {
@@ -1116,7 +1099,6 @@ body{
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--line);
 }
 
@@ -1231,7 +1213,6 @@ body{
 .form-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
 }
 
 .form-hint {
@@ -1303,7 +1284,6 @@ body{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   margin-top: 4px;
   overflow: hidden;
@@ -1403,9 +1383,6 @@ body{
 .avatar-option.selected {
   border-color: var(--accent);
   background: var(--accent-light);
-  box-shadow: 
-    0 0 0 2px rgba(212, 175, 55, 0.3),
-    0 2px 8px rgba(212, 175, 55, 0.2);
   transform: scale(1.08);
 }
 
@@ -1423,7 +1400,6 @@ body{
   place-items: center;
   font-size: 12px;
   font-weight: bold;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .avatar-option img {
@@ -1431,18 +1407,6 @@ body{
   height: 100%;
   object-fit: cover;
   border-radius: 8px;
-}
-
-.avatar-option:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.avatar-option:disabled:hover {
-  border-color: var(--border);
-  background: var(--surface);
-  transform: none;
 }
 
 /* reduced motion - Remove all animations for accessibility */
