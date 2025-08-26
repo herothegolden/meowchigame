@@ -378,7 +378,7 @@ body{
   background: rgba(255, 255, 255, 0.2);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(4px);
+  /* removed backdrop-filter: blur(4px); */
 }
 
 .splash-progress__bar{
@@ -453,7 +453,7 @@ body{
 
 /* FIXED: hint pulse - 2 cycles then stop */
 .tile.hint .tile-emoji{
-  animation: hint-pulse 1.2s ease-in-out; /* NO INFINITE - runs 2 cycles then stops */
+  animation: simple-hint-pulse 1.2s ease-in-out; /* replaced hint-pulse */
 }
 
 @keyframes hint-pulse{
@@ -466,8 +466,8 @@ body{
 
 /* press/grab feel */
 .tile.grab .tile-emoji{
-  transform: scale(0.96);
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.15));
+  transform: scale(0.96) translateZ(0); /* replaced drop-shadow with translateZ(0) */
+  /* removed filter: drop-shadow(...) */
 }
 
 /* invalid swap nudge */
@@ -493,71 +493,20 @@ body{
   to{ transform: translateY(0); opacity: 1; }
 }
 
-/* ========== FAST BLASTING ANIMATIONS ========== */
+/* ========== FAST BLASTING ANIMATIONS (simplified) ========== */
 
-/* FIXED: Blasting effect - short duration then stops */
 .tile.blasting {
-  animation: mega-pop 0.2s ease forwards;
-  box-shadow: 
-    0 0 0 4px var(--accent2) inset,
-    0 0 20px 6px rgba(244, 208, 63, 0.8),
-    0 0 40px 10px rgba(255, 255, 255, 0.3);
-  background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 50%, #ff6b6b 100%);
-  border-radius: 20%;
+  animation: simple-blast 0.2s ease forwards; /* replaced mega-pop */
+  background: var(--accent2);                 /* simplified background */
+  border-radius: 50%;
   z-index: 10 !important;
+  transform: translateZ(0);
 }
 
+/* simplified inner emoji during blast */
 .tile.blasting .tile-emoji {
-  filter: 
-    drop-shadow(0 0 8px rgba(255, 255, 255, 0.8))
-    drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
-  color: white;
-  text-shadow: 
-    0 0 8px rgba(255, 255, 255, 0.8),
-    0 0 15px rgba(255, 215, 0, 0.6);
-  transform: scale(1.1);
-  animation: emoji-glow 0.2s ease forwards;
-}
-
-@keyframes mega-pop {
-  0% { 
-    transform: scale(1) rotate(0deg); 
-    opacity: 1; 
-  }
-  30% { 
-    transform: scale(1.4) rotate(8deg); 
-    opacity: 1; 
-  }
-  70% { 
-    transform: scale(1.8) rotate(-12deg); 
-    opacity: 0.7; 
-  }
-  100% { 
-    transform: scale(2.0) rotate(15deg); 
-    opacity: 0; 
-  }
-}
-
-@keyframes emoji-glow {
-  0% { 
-    transform: scale(1) rotate(0deg);
-    filter: 
-      drop-shadow(0 0 4px rgba(255, 255, 255, 0.4))
-      drop-shadow(0 0 8px rgba(255, 215, 0, 0.3));
-  }
-  50% { 
-    transform: scale(1.3) rotate(10deg);
-    filter: 
-      drop-shadow(0 0 12px rgba(255, 255, 255, 0.9))
-      drop-shadow(0 0 20px rgba(255, 215, 0, 0.7));
-  }
-  100% { 
-    transform: scale(1.6) rotate(20deg);
-    filter: 
-      drop-shadow(0 0 15px rgba(255, 255, 255, 0))
-      drop-shadow(0 0 25px rgba(255, 215, 0, 0));
-    opacity: 0;
-  }
+  transform: scale(1.1) translateZ(0);
+  /* removed filter and text-shadow and emoji-glow animation */
 }
 
 /* Particle animations - short duration */
@@ -651,9 +600,11 @@ body{
     opacity 0.12s linear;
 }
 
+/* REPLACED: expensive emoji drop-shadow */
 .tile .tile-emoji{
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
   line-height: 1;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* FIXED: COMBO CELEBRATION OVER STATS ROW */
@@ -741,7 +692,7 @@ body{
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: saturate(120%) blur(8px);
+  /* removed backdrop-filter: saturate(120%) blur(8px); */
 }
 
 /* controls under board */
@@ -1003,7 +954,8 @@ body{
 .leaderboard-item.current-user {
   background: linear-gradient(135deg, var(--accent-light), rgba(244, 208, 63, 0.05));
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.3), 0 2px 8px rgba(212, 175, 55, 0.1);
+  box-shadow: 
+    0 0 0 1px rgba(212, 175, 55, 0.3), 0 2px 8px rgba(212, 175, 55, 0.1);
 }
 
 .leaderboard-item.current-user .player-name {
@@ -1150,7 +1102,7 @@ body{
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  /* removed backdrop-filter: blur(4px); */
   display: grid;
   place-items: center;
   z-index: 10000;
@@ -1295,7 +1247,7 @@ body{
 }
 
 .country-button {
-  width: 100%;
+  width: 100%.
   padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1622,4 +1574,42 @@ body{
     height: 18px;
     font-size: 11px;
   }
+}
+
+/* =========================
+   Simplified animations - GPU accelerated (Step 2)
+   ========================= */
+@keyframes simple-blast {
+  0% { 
+    transform: scale(1) translateZ(0); 
+    opacity: 1; 
+  }
+  50% { 
+    transform: scale(1.4) translateZ(0); 
+    opacity: 0.8; 
+  }
+  100% { 
+    transform: scale(2.0) translateZ(0); 
+    opacity: 0; 
+  }
+}
+
+@keyframes simple-hint-pulse {
+  0%, 100% { transform: scale(1) translateZ(0); }
+  50% { transform: scale(1.1) translateZ(0); }
+}
+
+.blast-simple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  pointer-events: none;
+  animation: simple-blast-icon 0.2s ease forwards;
+}
+
+@keyframes simple-blast-icon {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
