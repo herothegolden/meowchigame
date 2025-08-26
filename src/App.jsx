@@ -146,68 +146,61 @@ useEffect(() => {
     return request;
   };
 
-  // Auto-detect Telegram user and country
-  const initializeUser = async () => {
-    try {
-      const tg = getTG();
-      let telegramId = null;
-      let initData = null;
+  // The initializeUser function
+const initializeUser = async () => {
+  try {
+    const tg = getTG();
+    let telegramId = null;
+    let initData = null;
 
-      // Try to get Telegram data from WebApp
-      if (tg?.initDataUnsafe?.user?.id) {
-        telegramId = tg.initDataUnsafe.user.id;
-        initData = tg.initData; // This is the signed data
-      } else {
-        // Fallback for testing (use a demo ID)
-        telegramId = Math.floor(Math.random() * 1000000) + 100000;
-        console.log('Demo mode - using random Telegram ID:', telegramId);
-      }
-
-      setUserTelegramId(telegramId);
-
-      // Register or get existing user with both old and new auth
-      const requestBody = {
-        telegram_id: telegramId, // Legacy support
-        telegram_username: tg?.initDataUnsafe?.user?.username || null
-      };
-
-      // Add secure initData if available
-      if (initData) {
-        requestBody.initData = initData;
-      }
-
-      const response = await fetch('/api/user/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUserProfile(data.user);
-        
-        // NEW: Onboarding prompt for new users
-        if (data.user && !data.user.profile_completed) {
-          // Use a timeout to let the main UI load first
-          setTimeout(() => {
-            setShowProfileModal(true);
-          }, 2000);
-        }
-        
-        // Auto-detect country if not set
-        if (!data.user.country_flag) {
-          detectAndSetCountry(telegramId);
-        }
-        
-        // Fetch user stats
-        fetchUserStats(telegramId);
-      }
-    } catch (error) {
-      console.error('User initialization failed:', error);
+    // Try to get Telegram data from WebApp
+    if (tg?.initDataUnsafe?.user?.id) {
+      telegramId = tg.initDataUnsafe.user.id;
+      initData = tg.initData; // Signed data
+    } else {
+      // Fallback for testing/demo
+      telegramId = Math.floor(Math.random() * 1000000) + 100000;
+      console.log('Demo mode - using random Telegram ID:', telegramId);
     }
-  };
+
+    setUserTelegramId(telegramId);
+
+    // Legacy + secure auth payload
+    const requestBody = {
+      telegram_id: telegramId,
+      telegram_username: tg?.initDataUnsafe?.user?.username || null,
+    };
+    if (initData) {
+      requestBody.initData = initData;
+    }
+
+    const response = await fetch('/api/user/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setUserProfile(data.user);
+
+      // ✅ NEW LOGIC: use server-provided flag
+      if (data.shouldPromptProfile) {
+        setTimeout(() => {
+          setShowProfileModal(true);
+        }, 1500);
+      }
+
+      // Keep your existing behavior below unchanged
+      if (!data.user.country_flag) {
+        detectAndSetCountry(telegramId);
+      }
+      fetchUserStats(telegramId);
+    }
+  } catch (error) {
+    console.error('User initialization failed:', error);
+  }
+};
 
   // Detect and set country automatically
   const detectAndSetCountry = async (telegramId) => {
