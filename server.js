@@ -205,6 +205,7 @@ app.get("/api/setup/database", async (req, res) => {
         icon VARCHAR(10),
         invite_code VARCHAR(10) UNIQUE NOT NULL,
         created_by INTEGER REFERENCES users(id),
+        member_limit INTEGER DEFAULT 11,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
@@ -902,7 +903,7 @@ app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
   }
 });
 
-// POST to join a squad
+// POST to join a squad (UPDATED WITH MEMBER LIMIT)
 app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
   const { invite_code } = req.body;
   const telegram_id = req.user.telegram_id;
@@ -924,11 +925,22 @@ app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
       return res.status(400).json({ error: "You are already in a squad." });
     }
 
-    const squadResult = await client.query("SELECT id FROM squads WHERE invite_code = $1", [invite_code.toUpperCase()]);
+    const squadResult = await client.query("SELECT id, member_limit FROM squads WHERE invite_code = $1", [invite_code.toUpperCase()]);
     if (squadResult.rows.length === 0) {
       return res.status(404).json({ error: "Squad not found with this invite code." });
     }
     const squadId = squadResult.rows[0].id;
+    const memberLimit = squadResult.rows[0].member_limit || 11;
+
+    // Check member limit
+    const memberCount = await client.query(
+      "SELECT COUNT(*) as count FROM squad_members WHERE squad_id = $1", 
+      [squadId]
+    );
+    
+    if (parseInt(memberCount.rows[0].count) >= memberLimit) {
+      return res.status(400).json({ error: "Squad is full (maximum 11 members)." });
+    }
 
     await client.query(
       `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
@@ -946,30 +958,102 @@ app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
   }
 });
 
-// GET squad details and members
+// POST to kick a member from squad (creator only)
+app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) => {
+  const { member_telegram_id } = req.body;
+  const creator_telegram_id = req.user.telegram_id;
+
+  if (!member_telegram_id) {
+    return res.status(400).json({ error: "Member telegram_id required" });
+  }
+
+  if (member_telegram_id === creator_telegram_id) {
+    return res.status(400).json({ error: "Cannot kick yourself from the squad" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get creator user ID
+    const creatorResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [creator_telegram_id]);
+    if (creatorResult.rows.length === 0) throw new Error("Creator not found");
+    const creatorId = creatorResult.rows[0].id;
+
+    // Get member user ID
+    const memberResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [member_telegram_id]);
+    if (memberResult.rows.length === 0) {
+      return res.status(404).json({ error: "Member not found" });
+    }
+    const memberId = memberResult.rows[0].id;
+
+    // Verify creator owns a squad and member is in that squad
+    const squadCheck = await client.query(`
+      SELECT s.id as squad_id, s.name as squad_name
+      FROM squads s
+      JOIN squad_members sm ON s.id = sm.squad_id
+      WHERE s.created_by = $1 AND sm.user_id = $2
+    `, [creatorId, memberId]);
+
+    if (squadCheck.rows.length === 0) {
+      return res.status(403).json({ error: "Member not found in your squad or you're not the squad creator" });
+    }
+
+    // Remove member from squad
+    const kickResult = await client.query(
+      "DELETE FROM squad_members WHERE squad_id = $1 AND user_id = $2",
+      [squadCheck.rows[0].squad_id, memberId]
+    );
+
+    if (kickResult.rowCount === 0) {
+      return res.status(404).json({ error: "Member not found in squad" });
+    }
+
+    await client.query('COMMIT');
+    res.json({ 
+      success: true, 
+      message: `Member kicked from ${squadCheck.rows[0].squad_name}` 
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Failed to kick member:", error);
+    res.status(500).json({ error: "Failed to kick member" });
+  } finally {
+    client.release();
+  }
+});
+
+// GET squad details and members (UPDATED WITH CREATOR INFO & LIMITS)
 app.get("/api/squads/:squadId", requireDB, async (req, res) => {
   try {
     const { squadId } = req.params;
     const head = await pool.query(
-      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at,
+      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at, s.created_by, s.member_limit,
+              u_creator.telegram_id as creator_telegram_id,
+              u_creator.display_name as creator_name,
               (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
               (SELECT COALESCE(SUM(g.score),0) 
                  FROM games g JOIN squad_members sm2 ON g.user_id = sm2.user_id 
                 WHERE sm2.squad_id = s.id) as total_score
-       FROM squads s WHERE s.id = $1`,
+       FROM squads s
+       LEFT JOIN users u_creator ON s.created_by = u_creator.id
+       WHERE s.id = $1`,
       [squadId]
     );
     if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
 
     const members = await pool.query(
       `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id,
-              COALESCE(SUM(g.score),0) as total_score
+              sm.joined_at,
+              COALESCE(SUM(g.score),0) as total_score,
+              COUNT(g.id) as games_played
        FROM squad_members sm
        JOIN users u ON u.id = sm.user_id
        LEFT JOIN games g ON g.user_id = u.id
        WHERE sm.squad_id = $1
-       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id
-       ORDER BY total_score DESC, u.id ASC`,
+       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, sm.joined_at
+       ORDER BY total_score DESC, sm.joined_at ASC`,
       [squadId]
     );
 
@@ -981,11 +1065,16 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
         icon: s.icon,
         invite_code: s.invite_code,
         created_at: s.created_at,
+        creator_telegram_id: s.creator_telegram_id,
+        creator_name: s.creator_name,
         member_count: Number(s.member_count || 0),
+        member_limit: Number(s.member_limit || 11),
         total_score: Number(s.total_score || 0),
         members: members.rows.map(m => ({
           ...m,
-          total_score: Number(m.total_score || 0)
+          total_score: Number(m.total_score || 0),
+          games_played: Number(m.games_played || 0),
+          display_name: m.display_name || `Stray Cat #${m.telegram_id.toString().slice(-5)}`
         }))
       }
     });
@@ -995,26 +1084,27 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
   }
 });
 
-// GET top squads leaderboard
+// GET top squads leaderboard (UNCHANGED BEHAVIOR; REPLACED VERBATIM)
 app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
   try {
-    const lb = await pool.query(
-      `SELECT 
-         s.id, s.name, s.icon, s.invite_code,
-         COUNT(DISTINCT sm.user_id) as member_count,
-         COALESCE(SUM(g.score), 0) as total_score
-       FROM squads s
-       LEFT JOIN squad_members sm ON sm.squad_id = s.id
-       LEFT JOIN games g ON g.user_id = sm.user_id
-       GROUP BY s.id, s.name, s.icon, s.invite_code
-       ORDER BY total_score DESC
-       LIMIT 100`
-    );
+    const lb = await pool.query(`
+      SELECT 
+        s.id, s.name, s.icon, s.invite_code,
+        COUNT(DISTINCT sm.user_id) as member_count,
+        COALESCE(SUM(g.score), 0) as total_score
+      FROM squads s
+      LEFT JOIN squad_members sm ON sm.squad_id = s.id
+      LEFT JOIN games g ON g.user_id = sm.user_id
+      GROUP BY s.id, s.name, s.icon, s.invite_code
+      ORDER BY total_score DESC
+      LIMIT 100
+    `);
+    
     res.json({
       leaderboard: lb.rows.map(r => ({
         ...r,
         member_count: Number(r.member_count || 0),
-        total_score: Number(r.total_score || 0),
+        total_score: Number(r.total_score || 0)
       }))
     });
   } catch (error) {
