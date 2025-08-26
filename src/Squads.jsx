@@ -204,6 +204,17 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
             {(squad.members || []).map((member, index) => (
               <div key={member.telegram_id} className="member-item">
                 <div className="member-rank">#{index + 1}</div>
+
+                {/* START: Added profile picture */}
+                <div className="member-avatar">
+                  <img 
+                    src={member.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                    alt={member.display_name} 
+                    onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                  />
+                </div>
+                {/* END: Added profile picture */}
+
                 <div className="member-info">
                   <div className="member-name">
                     {member.country_flag && <span className="country-flag">{member.country_flag}</span>}
@@ -252,6 +263,20 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
         .leader-badge { font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: 700; }
         .member-stats { font-size: 12px; color: var(--muted); }
         .kick-btn { background: #e74c3c; color: white; border: none; padding: 6px 12px; font-size: 12px; border-radius: 6px; min-width: 50px; }
+        /* Add these new CSS rules inside the <style jsx> tag */
+        .member-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          overflow: hidden;
+          flex-shrink: 0;
+          background: var(--surface);
+        }
+        .member-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
       `}</style>
     </div>
   );
