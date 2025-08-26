@@ -37,6 +37,7 @@ useEffect(() => {
 
 // Telegram theme integration
 useEffect(() => {
+  /*
   const tg = getTG();
   if (!tg) return;
 
@@ -89,6 +90,7 @@ useEffect(() => {
   return () => {
     tg.offEvent?.('themeChanged', applyTheme);
   };
+  */
 }, []);
 
   // Splash: show for at least 2.4s AND until window 'load'
