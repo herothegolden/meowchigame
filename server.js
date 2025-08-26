@@ -42,13 +42,17 @@ function requireDB(req, res, next) {
   next();
 }
 
-// Authentication middleware - supports both old and new methods during migration
+// In server.js, replace the old validateUser function with this one.
 const validateUser = async (req, res, next) => {
-  const { initData, telegram_id } = req.body;
+  // Get auth data from body (for POST/PUT) or query (for GET)
+  const { initData } = req.body || req.query;
+  // Get telegram_id from params (for GET routes like /user/:id/...) or body (for POST)
+  const telegram_id = req.params.telegram_id || req.body.telegram_id;
   
-  // Try secure authentication first
+  // Try secure authentication first if initData is present
   if (initData && process.env.BOT_TOKEN) {
     try {
+      // Validate the initData
       const parsed = validate(initData, process.env.BOT_TOKEN);
       if (parsed && parsed.user) {
         req.user = { 
@@ -62,12 +66,12 @@ const validateUser = async (req, res, next) => {
       }
     } catch (error) {
       console.warn(`⚠️ initData validation failed: ${error.message}`);
-      // Fall through to legacy auth
+      // Fall through to legacy auth if validation fails
     }
   }
   
-  // Fallback to legacy authentication
-  if (telegram_id && process.env.LEGACY_AUTH !== 'false') {
+  // Fallback to legacy (insecure) authentication if telegram_id is present
+  if (telegram_id) {
     console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
     req.user = { 
       telegram_id, 
@@ -77,7 +81,7 @@ const validateUser = async (req, res, next) => {
   }
   
   // No valid authentication provided
-  console.error("No valid authentication provided");
+  console.error("Authentication failed: No valid initData or telegram_id provided.");
   return res.status(401).json({ error: "Authentication required" });
 };
 
