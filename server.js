@@ -305,6 +305,12 @@ app.put("/api/user/profile", requireDB, validateUser, profileRateLimit, async (r
       values.push(name_changed);
     }
 
+    // NEW: Mark profile as completed if name and country are set
+    if (display_name && country_flag) {
+      updates.push(`profile_completed = $${i++}`);
+      values.push(true);
+    }
+
     updates.push(`updated_at = NOW()`);
     const whereParam = `$${i}`;
     values.push(telegram_id);
