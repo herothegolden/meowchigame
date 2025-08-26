@@ -1048,7 +1048,7 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
     if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
 
     const members = await pool.query(
-      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id,
+      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture,
               sm.joined_at,
               COALESCE(SUM(g.score),0) as total_score,
               COUNT(g.id) as games_played
@@ -1056,7 +1056,7 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
        JOIN users u ON u.id = sm.user_id
        LEFT JOIN games g ON g.user_id = u.id
        WHERE sm.squad_id = $1
-       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, sm.joined_at
+       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture, sm.joined_at
        ORDER BY total_score DESC, sm.joined_at ASC`,
       [squadId]
     );
