@@ -534,303 +534,152 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
 });
 
 
-// ISSUE 1 FIX: Update /api/user/:telegram_id/stats to correctly handle new users
-app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const stats = await pool.query(`
-      SELECT 
-        u.display_name,
-        u.country_flag,
-        u.profile_completed,
-        COALESCE(u.bonus_coins, 0) as total_coins_earned,
-        COALESCE(gs.games_played, 0) as games_played,
-        COALESCE(gs.total_score, 0) as total_score,
-        COALESCE(gs.best_score, 0) as best_score,
-        COALESCE(gs.best_combo, 0) as best_combo
-      FROM users u
-      LEFT JOIN (
-        SELECT
-          user_id,
-          COUNT(id) as games_played,
-          SUM(score) as total_score,
-          MAX(score) as best_score,
-          MAX(max_combo) as best_combo
-        FROM games
-        GROUP BY user_id
-      ) gs ON u.id = gs.user_id
-      WHERE u.telegram_id = $1
-    `, [telegram_id]);
+// ========== 🐾 SQUADS ENDPOINTS (FULLY IMPLEMENTED) ==========
 
-    if (stats.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    res.json({ stats: stats.rows[0] });
+// GET top squads leaderboard (UNCHANGED BEHAVIOR; REPLACED VERBATIM)
+app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
+  try {
+    const lb = await pool.query(`
+      SELECT 
+        s.id, 
+        s.name, 
+        s.icon, 
+        s.invite_code,
+        COUNT(DISTINCT sm.user_id) as member_count,
+        COALESCE(SUM(g.score), 0) as total_score
+      FROM squads s
+      LEFT JOIN squad_members sm ON s.id = sm.squad_id
+      LEFT JOIN games g ON g.user_id = sm.user_id
+      GROUP BY s.id, s.name, s.icon, s.invite_code
+      ORDER BY total_score DESC
+      LIMIT 100
+    `);
+    
+    res.json({
+      leaderboard: lb.rows.map(r => ({
+        ...r,
+        member_count: Number(r.member_count || 0),
+        total_score: Number(r.total_score || 0)
+      }))
+    });
   } catch (error) {
-    console.error("User stats error:", error);
-    res.status(500).json({ error: "Failed to fetch user stats" });
+    console.error("CRASH in /api/squads/leaderboard:", error);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 });
 
+// ADD THIS NEW ENDPOINT to server.js
 
-// ========== 📋 DAILY TASKS ENDPOINTS (kept as-is) ==========
-
-// Get user's daily tasks
-app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (req, res) => {
+// GET a user's complete squad dashboard in one call
+app.get("/api/squads/dashboard", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id;
-    const today = new Date().toISOString().split('T')[0];
 
-    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = user.rows[0].id;
+    // A single, powerful query to get everything at once
+    const result = await pool.query(`
+      WITH user_squad AS (
+        SELECT sm.squad_id
+        FROM squad_members sm
+        JOIN users u ON sm.user_id = u.id
+        WHERE u.telegram_id = $1
+      )
+      SELECT 
+        s.id, s.name, s.icon, s.invite_code, s.created_at, s.member_limit,
+        u_creator.telegram_id as creator_telegram_id,
+        (SELECT COUNT(*) FROM squad_members sm_count WHERE sm_count.squad_id = s.id) as member_count,
+        (SELECT COALESCE(SUM(g.score), 0) FROM games g JOIN squad_members sm_score ON g.user_id = sm_score.user_id WHERE sm_score.squad_id = s.id) as total_score,
+        (
+          SELECT json_agg(json_build_object(
+            'user_id', u_mem.id,
+            'display_name', COALESCE(u_mem.display_name, 'Stray Cat #' || substr(u_mem.telegram_id::text, -5)),
+            'country_flag', u_mem.country_flag,
+            'telegram_id', u_mem.telegram_id,
+            'profile_picture', u_mem.profile_picture,
+            'total_score', COALESCE(mem_games.total_score, 0)
+          ) ORDER BY COALESCE(mem_games.total_score, 0) DESC)
+          FROM squad_members sm_mem
+          JOIN users u_mem ON sm_mem.user_id = u_mem.id
+          LEFT JOIN (
+            SELECT user_id, SUM(score) as total_score 
+            FROM games GROUP BY user_id
+          ) mem_games ON mem_games.user_id = u_mem.id
+          WHERE sm_mem.squad_id = s.id
+        ) as members
+      FROM squads s
+      LEFT JOIN users u_creator ON s.created_by = u_creator.id
+      WHERE s.id = (SELECT squad_id FROM user_squad)
+    `, [telegram_id]);
 
-    const userTasks = await pool.query(`
-      SELECT task_id, progress, completed, completed_at, claimed
-      FROM daily_tasks 
-      WHERE user_id = $1 AND task_date = $2
-    `, [userId, today]);
+    if (result.rows.length === 0) {
+      return res.json({ squad: null });
+    }
 
-    const tasksWithProgress = DAILY_TASKS.map(task => {
-      const userTask = userTasks.rows.find(ut => ut.task_id === task.id);
-      return {
-        ...task,
-        progress: userTask?.progress || 0,
-        completed: userTask?.completed || false,
-        claimed: userTask?.claimed || false,
-        completed_at: userTask?.completed_at || null
-      };
-    });
+    // Process the result to ensure numbers are correctly formatted
+    const squadData = result.rows[0];
+    squadData.member_count = Number(squadData.member_count || 0);
+    squadData.total_score = Number(squadData.total_score || 0);
+    if (squadData.members) {
+      squadData.members.forEach(m => m.total_score = Number(m.total_score || 0));
+    } else {
+      squadData.members = [];
+    }
 
-    const totalRewards = tasksWithProgress.reduce((sum, t) => sum + (t.claimed ? t.reward : 0), 0);
-    const availableRewards = tasksWithProgress.reduce((sum, t) => sum + (!t.claimed && t.completed ? t.reward : 0), 0);
+    res.json({ squad: squadData });
+  } catch (error) {
+    console.error("CRASH in /api/squads/dashboard:", error);
+    res.status(500).json({ error: "Failed to fetch squad dashboard" });
+  }
+});
 
+// GET squad details and members (UPDATED WITH CREATOR INFO & LIMITS)
+// REPLACED with corrected, explicit subquery to avoid alias issues
+app.get("/api/squads/:squadId", requireDB, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const head = await pool.query(
+      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at, s.created_by, s.member_limit,
+              u_creator.telegram_id as creator_telegram_id,
+              u_creator.display_name as creator_name,
+              (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
+              (SELECT COALESCE(SUM(g.score),0) 
+                 FROM games g JOIN squad_members sm ON g.user_id = sm.user_id 
+                WHERE sm.squad_id = s.id) as total_score
+       FROM squads s
+       LEFT JOIN users u_creator ON s.created_by = u_creator.id
+       WHERE s.id = $1`,
+      [squadId]
+    );
+  if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
+
+    const members = await pool.query(
+      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture,
+              sm.joined_at,
+              COALESCE(SUM(g.score),0) as total_score,
+              COUNT(g.id) as games_played
+       FROM squad_members sm
+       JOIN users u ON u.id = sm.user_id
+       LEFT JOIN games g ON g.user_id = u.id
+       WHERE sm.squad_id = $1
+       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture, sm.joined_at
+       ORDER BY total_score DESC, sm.joined_at ASC`,
+      [squadId]
+    );
+
+    const s = head.rows[0];
     res.json({
-      tasks: tasksWithProgress,
-      summary: {
-        total_tasks: DAILY_TASKS.length,
-        completed_tasks: tasksWithProgress.filter(t => t.completed).length,
-        total_rewards_earned: totalRewards,
-        available_rewards: availableRewards
+      squad: {
+        id: s.id, name: s.name, icon: s.icon, invite_code: s.invite_code, created_at: s.created_at,
+        creator_telegram_id: s.creator_telegram_id, creator_name: s.creator_name,
+        member_count: Number(s.member_count || 0), member_limit: Number(s.member_limit || 11),
+        total_score: Number(s.total_score || 0),
+        members: members.rows.map(m => ({ ...m, total_score: Number(m.total_score || 0), games_played: Number(m.games_played || 0), display_name: m.display_name || `Stray Cat #${m.telegram_id.toString().slice(-5)}` }))
       }
     });
   } catch (error) {
-    console.error("Daily tasks error:", error);
-    res.status(500).json({ error: "Failed to fetch daily tasks" });
+    console.error("Get squad details failed:", error);
+    res.status(500).json({ error: "Failed to get squad details" });
   }
 });
-
-// Update task progress
-app.post("/api/user/:telegram_id/task-progress", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { task_id, progress_value } = req.body;
-
-    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = user.rows[0].id;
-
-    const today = new Date().toISOString().split('T')[0];
-    const task = DAILY_TASKS.find(t => t.id === task_id);
-    if (!task) return res.status(400).json({ error: "Invalid task" });
-
-    const isCompleted = progress_value >= task.target;
-
-    await pool.query(`
-      INSERT INTO daily_tasks (user_id, task_id, progress, completed, completed_at, task_date)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (user_id, task_id, task_date)
-      DO UPDATE SET 
-        progress = GREATEST(daily_tasks.progress, $3),
-        completed = $4,
-        completed_at = CASE WHEN $4 AND NOT daily_tasks.completed THEN $5 ELSE daily_tasks.completed_at END
-    `, [userId, task_id, progress_value, isCompleted, isCompleted ? new Date() : null, today]);
-
-    res.json({ 
-      success: true, 
-      task_completed: isCompleted,
-      message: `Progress updated for ${task_id}`
-    });
-  } catch (error) {
-    console.error("Task progress error:", error);
-    res.status(500).json({ error: "Failed to update task progress" });
-  }
-});
-
-// Claim task reward
-app.post("/api/user/:telegram_id/task-claim", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { task_id } = req.body;
-
-    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = user.rows[0].id;
-
-    const today = new Date().toISOString().split('T')[0];
-    const task = DAILY_TASKS.find(t => t.id === task_id);
-    if (!task) return res.status(400).json({ error: "Invalid task" });
-
-    const taskStatus = await pool.query(
-      `SELECT completed, claimed FROM daily_tasks WHERE user_id = $1 AND task_id = $2 AND task_date = $3`,
-      [userId, task_id, today]
-    );
-
-    if (taskStatus.rows.length === 0 || !taskStatus.rows[0].completed) {
-      return res.status(400).json({ error: "Task not completed" });
-    }
-    if (taskStatus.rows[0].claimed) {
-      return res.status(400).json({ error: "Reward already claimed" });
-    }
-
-    await pool.query(
-      "UPDATE users SET bonus_coins = COALESCE(bonus_coins, 0) + $1 WHERE id = $2",
-      [task.reward, userId]
-    );
-    await pool.query(
-      "UPDATE daily_tasks SET claimed = TRUE WHERE user_id = $1 AND task_id = $2 AND task_date = $3",
-      [userId, task_id, today]
-    );
-
-    res.json({
-      success: true,
-      reward_earned: task.reward,
-      message: `🎉 Reward claimed! +${task.reward} coins!`
-    });
-
-  } catch (error) {
-    console.error("Task claim error:", error);
-    res.status(500).json({ error: "Failed to claim reward" });
-  }
-});
-
-// ==========================================================================
-
-// UPDATED: Define shop items on the server for security
-const SHOP_ITEMS = {
-  'shuffle': { price: 50, name: 'The Paw-sitive Swap' },
-  'hammer': { price: 75, name: 'The Catnip Cookie' },
-  'bomb': { price: 100, name: 'The Marshmallow Bomb' }
-};
-
-// ========== 🛍️ SHOP & POWER-UP ENDPOINTS ==========
-
-// GET user's power-up inventory
-app.get("/api/user/:telegram_id/powerups", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = user.rows[0].id;
-
-    const result = await pool.query(
-      "SELECT powerup_id, quantity FROM user_powerups WHERE user_id = $1",
-      [userId]
-    );
-
-    // Convert array to an object like { shuffle: 5, hammer: 2 }
-    const inventory = result.rows.reduce((acc, row) => {
-      acc[row.powerup_id] = row.quantity;
-      return acc;
-    }, {});
-
-    res.json({ success: true, powerups: inventory });
-  } catch (error) {
-    console.error("Failed to fetch power-ups:", error);
-    res.status(500).json({ error: "Failed to fetch power-ups" });
-  }
-});
-
-// POST to buy an item from the shop
-app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
-  const { item_id } = req.body;
-  const telegram_id = req.user.telegram_id;
-
-  const item = SHOP_ITEMS[item_id];
-  if (!item) {
-      return res.status(400).json({ error: "Invalid item" });
-  }
-
-  try {
-    const userResult = await pool.query(
-      "SELECT id, COALESCE(bonus_coins, 0) as coins FROM users WHERE telegram_id = $1",
-      [telegram_id]
-    );
-    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
-
-    const user = userResult.rows[0];
-    const userCoins = parseInt(user.coins);
-
-    if (userCoins < item.price) {
-      return res.status(400).json({ error: "Not enough coins" });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const updatedUser = await client.query(
-        "UPDATE users SET bonus_coins = bonus_coins - $1 WHERE id = $2 RETURNING bonus_coins",
-        [item.price, user.id]
-      );
-
-      await client.query(
-        `INSERT INTO user_powerups (user_id, powerup_id, quantity)
-         VALUES ($1, $2, 1)
-         ON CONFLICT (user_id, powerup_id)
-         DO UPDATE SET quantity = user_powerups.quantity + 1`,
-        [user.id, item_id]
-      );
-
-      await client.query('COMMIT');
-
-      res.json({
-        success: true,
-        message: `${item.name} purchased!`,
-        newCoinBalance: updatedUser.rows[0].bonus_coins
-      });
-
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error("Purchase failed:", error);
-    res.status(500).json({ error: "Purchase failed" });
-  }
-});
-
-// POST to use a power-up
-app.post("/api/powerup/use", requireDB, validateUser, async (req, res) => {
-  const { powerup_id } = req.body;
-  const telegram_id = req.user.telegram_id;
-
-  try {
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    const userId = userResult.rows[0].id;
-
-    const result = await pool.query(
-      `UPDATE user_powerups
-       SET quantity = quantity - 1
-       WHERE user_id = $1 AND powerup_id = $2 AND quantity > 0
-       RETURNING quantity`,
-      [userId, powerup_id]
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(400).json({ error: "No power-ups left" });
-    }
-
-    res.json({ success: true, newQuantity: result.rows[0].quantity });
-  } catch (error) {
-    console.error("Failed to use power-up:", error);
-    res.status(500).json({ error: "Failed to use power-up" });
-  }
-});
-
-
-// ========== 🐾 SQUADS ENDPOINTS (FULLY IMPLEMENTED) ==========
 
 // GET user's current squad
 app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res) => {
@@ -1023,88 +872,6 @@ app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) =>
     res.status(500).json({ error: "Failed to kick member" });
   } finally {
     client.release();
-  }
-});
-
-// GET top squads leaderboard (UNCHANGED BEHAVIOR; REPLACED VERBATIM)
-app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
-  try {
-    const lb = await pool.query(`
-      SELECT 
-        s.id, 
-        s.name, 
-        s.icon, 
-        s.invite_code,
-        COUNT(DISTINCT sm.user_id) as member_count,
-        COALESCE(SUM(g.score), 0) as total_score
-      FROM squads s
-      LEFT JOIN squad_members sm ON s.id = sm.squad_id
-      LEFT JOIN games g ON g.user_id = sm.user_id
-      GROUP BY s.id, s.name, s.icon, s.invite_code
-      ORDER BY total_score DESC
-      LIMIT 100
-    `);
-    
-    res.json({
-      leaderboard: lb.rows.map(r => ({
-        ...r,
-        member_count: Number(r.member_count || 0),
-        total_score: Number(r.total_score || 0)
-      }))
-    });
-  } catch (error) {
-    console.error("CRASH in /api/squads/leaderboard:", error);
-    res.status(500).json({ error: "Internal Server Error", details: error.message });
-  }
-});
-
-// GET squad details and members (UPDATED WITH CREATOR INFO & LIMITS)
-// REPLACED with corrected, explicit subquery to avoid alias issues
-app.get("/api/squads/:squadId", requireDB, async (req, res) => {
-  try {
-    const { squadId } = req.params;
-    const head = await pool.query(
-      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at, s.created_by, s.member_limit,
-              u_creator.telegram_id as creator_telegram_id,
-              u_creator.display_name as creator_name,
-              (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
-              (SELECT COALESCE(SUM(g.score),0) 
-                 FROM games g JOIN squad_members sm ON g.user_id = sm.user_id 
-                WHERE sm.squad_id = s.id) as total_score
-       FROM squads s
-       LEFT JOIN users u_creator ON s.created_by = u_creator.id
-       WHERE s.id = $1`,
-      [squadId]
-    );
-    if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
-
-    const members = await pool.query(
-      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture,
-              sm.joined_at,
-              COALESCE(SUM(g.score),0) as total_score,
-              COUNT(g.id) as games_played
-       FROM squad_members sm
-       JOIN users u ON u.id = sm.user_id
-       LEFT JOIN games g ON g.user_id = u.id
-       WHERE sm.squad_id = $1
-       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture, sm.joined_at
-       ORDER BY total_score DESC, sm.joined_at ASC`,
-      [squadId]
-    );
-
-    const s = head.rows[0];
-    res.json({
-      squad: {
-        id: s.id, name: s.name, icon: s.icon, invite_code: s.invite_code, created_at: s.created_at,
-        creator_telegram_id: s.creator_telegram_id, creator_name: s.creator_name,
-        member_count: Number(s.member_count || 0), member_limit: Number(s.member_limit || 11),
-        total_score: Number(s.total_score || 0),
-        members: members.rows.map(m => ({ ...m, total_score: Number(m.total_score || 0), games_played: Number(m.games_played || 0), display_name: m.display_name || `Stray Cat #${m.telegram_id.toString().slice(-5)}` }))
-      }
-    });
-  } catch (error) {
-    console.error("Get squad details failed:", error);
-    res.status(500).json({ error: "Failed to get squad details" });
   }
 });
 
