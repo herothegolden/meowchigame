@@ -45,8 +45,9 @@ function requireDB(req, res, next) {
 
 // In server.js, replace the old validateUser function with this one.
 const validateUser = async (req, res, next) => {
-  const initData = req.headers['x-telegram-init-data'] || req.body.initData || req.query.initData;
-  const telegram_id = req.params.telegram_id || req.body.telegram_id;
+  // Safely check headers, body, and query for auth data
+  const initData = req.headers['x-telegram-init-data'] || (req.body && req.body.initData) || (req.query && req.query.initData);
+  const telegram_id = req.params.telegram_id || (req.body && req.body.telegram_id);
 
   if (initData && process.env.BOT_TOKEN) {
     try {
@@ -58,7 +59,7 @@ const validateUser = async (req, res, next) => {
           first_name: parsed.user.first_name,
           validated: true 
         };
-        console.log(`✅ Secure auth successful for user ${parsed.user.id}`);
+        // console.log(`✅ Secure auth successful for user ${parsed.user.id}`);
         return next();
       }
     } catch (error) {
@@ -67,7 +68,7 @@ const validateUser = async (req, res, next) => {
   }
 
   if (telegram_id) {
-    console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
+    // console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
     req.user = { 
       telegram_id, 
       validated: false 
