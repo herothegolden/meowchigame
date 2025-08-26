@@ -15,7 +15,6 @@ export default function Squads({ userTelegramId }) {
     }
     
    // In src/Squads.jsx, replace the fetchUserSquad function with this one:
-
   const fetchUserSquad = useCallback(async () => {
     if (!userTelegramId) {
       setLoading(false);
