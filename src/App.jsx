@@ -1,5 +1,10 @@
+/* ================================== */
+/* PATCH FOR src/App.jsx         */
+/* ================================== */
+
 import React, { useEffect, useState, useMemo } from "react";
 import Home from "./Home.jsx";
+import Squads from "./Squads.jsx"; // Import the new Squads component
 import HomeSkeleton from "./HomeSkeleton.jsx"; // Import the skeleton
 import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
@@ -470,10 +475,10 @@ const initializeUser = async () => {
   function BottomNav() {
     const navItems = [
       { key: "home", label: "Home", icon: "🏠", screen: "home" },
+      { key: "squad", label: "Squad", icon: "🐾", screen: "squad" }, // ADD SQUAD TAB
       { key: "shop", label: "Shop", icon: "🛒", screen: "shop" },
       { key: "leaderboard", label: "Rankings", icon: "🏆", screen: "leaderboard" },
-      { key: "wallet", label: "Wallet", icon: "💎", screen: "daily" },
-      { key: "settings", label: "Settings", icon: "⚙️", screen: "settings" },
+      { key: "daily", label: "Tasks", icon: "💎", screen: "daily" }, // Renamed for clarity
     ];
 
     return (
@@ -702,6 +707,9 @@ const initializeUser = async () => {
               userNeedsProfile={false}
             />
           )}
+
+          {screen === "squad" && <Squads userTelegramId={userTelegramId} />}
+
           {screen === "daily" && <Daily />}
           {screen === "invite" && <Invite />}
           {screen === "settings" && <Settings />}
