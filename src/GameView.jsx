@@ -759,16 +759,22 @@ export default function GameView({
         ⏰ {formatTime(timeLeft)}
       </div>
 
+      {/* 🔁 REPLACED BLOCK: stats row with combo meter */}
       <div className="row">
         <div>
           <span className="muted">Score</span> <b>{score}</b>
         </div>
-        <div>
-          <span className="muted">Moves</span> <b>{moves}</b>
+        <div className="combo-meter-container">
+          <div className="combo-meter-bar">
+            <div 
+              className="combo-meter-fill" 
+              style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
+            ></div>
+          </div>
+          <b>{combo > 0 ? `🔥 COMBO x${combo + 1}` : "Combo"}</b>
         </div>
         <div>
-          <span className="muted">Combo</span>{" "}
-          <b>{combo > 0 ? `x${combo + 1}` : "-"}</b>
+          <span className="muted">Moves</span> <b>{moves}</b>
         </div>
       </div>
 
