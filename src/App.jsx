@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import Home from "./Home.jsx";
+import HomeSkeleton from "./HomeSkeleton.jsx"; // Import the skeleton
 import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
 import Leaderboard from "./Leaderboard.jsx";
@@ -610,14 +611,18 @@ useEffect(() => {
         <Header />
         <main className="content">
           {screen === "home" && (
-            <Home 
-              coins={coins} 
-              onNavigate={navigateTo} 
-              userStats={userStats}
-              userProfile={userProfile}
-              onProfileUpdate={handleProfileUpdate}
-              onOpenProfileModal={() => setShowProfileModal(true)}
-            />
+            userStats ? (
+              <Home 
+                coins={coins} 
+                onNavigate={navigateTo} 
+                userStats={userStats}
+                userProfile={userProfile}
+                onProfileUpdate={handleProfileUpdate}
+                onOpenProfileModal={() => setShowProfileModal(true)}
+              />
+            ) : (
+              <HomeSkeleton />
+            )
           )}
 
           {screen === "shop" && <Shop />}
@@ -632,12 +637,14 @@ useEffect(() => {
           {screen === "settings" && <Settings />}
 
           {screen === "game" && (
-            <GameView
-              onExit={handleGameExit}
-              onCoins={(d) => setCoins((c) => c + d)}
-              settings={settings}
-              userTelegramId={userTelegramId}
-            />
+            <div className="game-view-container">
+              <GameView
+                onExit={handleGameExit}
+                onCoins={(d) => setCoins((c) => c + d)}
+                settings={settings}
+                userTelegramId={userTelegramId}
+              />
+            </div>
           )}
 
           {screen === "gameover" && lastRun && (
