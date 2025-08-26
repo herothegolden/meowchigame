@@ -647,6 +647,136 @@ app.post("/api/user/:telegram_id/task-claim", requireDB, validateUser, async (re
 
 // ==========================================================================
 
+// NEW: Define shop items on the server for security
+const SHOP_ITEMS = {
+  'shuffle': { price: 40, name: 'Sugar Shuffle' },
+  'hammer': { price: 60, name: 'Candy Crusher' },
+  'bomb': { price: 80, name: 'Candy Bomb' }
+};
+
+// ========== 🛍️ SHOP & POWER-UP ENDPOINTS ==========
+
+// GET user's power-up inventory
+app.get("/api/user/:telegram_id/powerups", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    const user = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (user.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const userId = user.rows[0].id;
+
+    const result = await pool.query(
+      "SELECT powerup_id, quantity FROM user_powerups WHERE user_id = $1",
+      [userId]
+    );
+
+    // Convert array to an object like { shuffle: 5, hammer: 2 }
+    const inventory = result.rows.reduce((acc, row) => {
+      acc[row.powerup_id] = row.quantity;
+      return acc;
+    }, {});
+
+    res.json({ success: true, powerups: inventory });
+  } catch (error) {
+    console.error("Failed to fetch power-ups:", error);
+    res.status(500).json({ error: "Failed to fetch power-ups" });
+  }
+});
+
+// POST to buy an item from the shop
+app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
+  const { item_id } = req.body;
+  const telegram_id = req.user.telegram_id;
+
+  const item = SHOP_ITEMS[item_id];
+  if (!item) {
+    return res.status(400).json({ error: "Invalid item" });
+  }
+
+  try {
+    const userResult = await pool.query(
+      "SELECT id, COALESCE(total_coins_earned, 0) as coins FROM users WHERE telegram_id = $1",
+      [telegram_id]
+    );
+    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
+
+    const user = userResult.rows[0];
+    const userCoins = parseInt(user.coins);
+
+    if (userCoins < item.price) {
+      return res.status(400).json({ error: "Not enough coins" });
+    }
+
+    // Use a transaction to ensure both operations succeed or fail together
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // 1. Deduct coins
+      const updatedUser = await client.query(
+        "UPDATE users SET total_coins_earned = total_coins_earned - $1 WHERE id = $2 RETURNING total_coins_earned",
+        [item.price, user.id]
+      );
+
+      // 2. Add power-up to inventory
+      await client.query(
+        `INSERT INTO user_powerups (user_id, powerup_id, quantity)
+         VALUES ($1, $2, 1)
+         ON CONFLICT (user_id, powerup_id)
+         DO UPDATE SET quantity = user_powerups.quantity + 1`,
+        [user.id, item_id]
+      );
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: `${item.name} purchased!`,
+        newCoinBalance: updatedUser.rows[0].total_coins_earned
+      });
+
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Purchase failed:", error);
+    res.status(500).json({ error: "Purchase failed" });
+  }
+});
+
+// POST to use a power-up
+app.post("/api/powerup/use", requireDB, validateUser, async (req, res) => {
+    const { powerup_id } = req.body;
+    const telegram_id = req.user.telegram_id;
+
+    try {
+        const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+        if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
+        const userId = userResult.rows[0].id;
+
+        const result = await pool.query(
+            `UPDATE user_powerups
+             SET quantity = quantity - 1
+             WHERE user_id = $1 AND powerup_id = $2 AND quantity > 0
+             RETURNING quantity`,
+            [userId, powerup_id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(400).json({ error: "No power-ups left" });
+        }
+
+        res.json({ success: true, newQuantity: result.rows[0].quantity });
+    } catch (error) {
+        console.error("Failed to use power-up:", error);
+        res.status(500).json({ error: "Failed to use power-up" });
+    }
+});
+
+// ... (keep the rest of the file, including health checks and SPA fallback)
+
 // ---------- Health ----------
 app.get("/api/db/health", async (_req, res) => {
   if (!pool || !dbConnected) {
