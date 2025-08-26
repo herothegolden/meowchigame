@@ -259,12 +259,15 @@ app.post("/api/user/register", requireDB, validateUser, async (req, res) => {
       VALUES ($1, $2)
       ON CONFLICT (telegram_id)
       DO UPDATE SET updated_at = NOW()
-      RETURNING *;
+      RETURNING *, (created_at = updated_at) as is_new_user;
       `,
       [user.telegram_id, user.username || user.first_name || null]
     );
 
-    res.json({ user: result.rows[0], auth_method: user.validated ? 'secure' : 'legacy' });
+    const dbUser = result.rows[0];
+    const shouldPromptProfile = dbUser.is_new_user && !dbUser.profile_completed;
+
+    res.json({ user: dbUser, shouldPromptProfile, auth_method: user.validated ? 'secure' : 'legacy' });
   } catch (err) {
     console.error("Register error:", err);
     res.status(500).json({ error: "Failed to register user" });
@@ -503,7 +506,7 @@ app.get("/api/leaderboard/:type", requireDB, async (req, res) => {
 });
 
 
-// CHANGE 3: Update /api/user/:telegram_id/stats to use the central coin balance
+// ISSUE 1 FIX: Update /api/user/:telegram_id/stats to correctly handle new users
 app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id;
@@ -512,15 +515,23 @@ app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, re
         u.display_name,
         u.country_flag,
         u.profile_completed,
-        u.bonus_coins as total_coins_earned, -- <<< CHANGED THIS LINE
-        COUNT(g.id) as games_played,
-        COALESCE(SUM(g.score), 0) as total_score,
-        COALESCE(MAX(g.score), 0) as best_score,
-        COALESCE(MAX(g.max_combo), 0) as best_combo
+        COALESCE(u.bonus_coins, 0) as total_coins_earned,
+        COALESCE(gs.games_played, 0) as games_played,
+        COALESCE(gs.total_score, 0) as total_score,
+        COALESCE(gs.best_score, 0) as best_score,
+        COALESCE(gs.best_combo, 0) as best_combo
       FROM users u
-      LEFT JOIN games g ON u.id = g.user_id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COUNT(id) as games_played,
+          SUM(score) as total_score,
+          MAX(score) as best_score,
+          MAX(max_combo) as best_combo
+        FROM games
+        GROUP BY user_id
+      ) gs ON u.id = gs.user_id
       WHERE u.telegram_id = $1
-      GROUP BY u.id, u.display_name, u.country_flag, u.profile_completed
     `, [telegram_id]);
 
     if (stats.rows.length === 0) return res.status(404).json({ error: "User not found" });
