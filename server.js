@@ -1117,7 +1117,6 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
   }
 });
 
-
 // ========== 🔥 STREAKS ENDPOINT ==========
 
 app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
