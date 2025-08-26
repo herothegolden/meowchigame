@@ -59,7 +59,6 @@ const validateUser = async (req, res, next) => {
           first_name: parsed.user.first_name,
           validated: true 
         };
-        // console.log(`✅ Secure auth successful for user ${parsed.user.id}`);
         return next();
       }
     } catch (error) {
@@ -68,7 +67,6 @@ const validateUser = async (req, res, next) => {
   }
 
   if (telegram_id) {
-    // console.warn(`⚠️ Using legacy auth for user ${telegram_id}`);
     req.user = { 
       telegram_id, 
       validated: false 
