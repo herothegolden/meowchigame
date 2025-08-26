@@ -1674,3 +1674,70 @@ body{
   transition: width 0.2s ease-out;
   box-shadow: 0 0 8px rgba(253, 160, 133, 0.5);
 }
+
+/* =================================== */
+/* ===== PHASE 2: STREAK STYLES ====== */
+/* =================================== */
+
+.streak-tracker {
+  margin-top: 24px;
+  margin-bottom: 32px;
+  padding: 20px;
+  background-color: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.streak-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px 0;
+  text-align: center;
+}
+
+.streak-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  opacity: 0.6;
+  transition: all 0.3s ease;
+}
+
+.streak-day.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background-color: var(--accent-light);
+  transform: scale(1.05);
+}
+
+.day-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.streak-day.active .day-label {
+  color: var(--accent);
+}
+
+.day-reward {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.streak-day:last-child .day-reward {
+  font-size: 18px;
+}
