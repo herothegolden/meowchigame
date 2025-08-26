@@ -48,7 +48,7 @@ export default function Squads({ userTelegramId }) {
       <section className="section">
         <div className="title">🐾 Meowchi Squads</div>
         {squad ? (
-          <SquadDashboard squad={squad} userTelegramId={userTelegramId} />
+          <SquadDashboard squad={squad} userTelegramId={userTelegramId} fetchUserSquad={fetchUserSquad} />
         ) : (
           <NoSquadView onCreate={() => setModalMode('create')} onJoin={() => setModalMode('join')} />
         )}
@@ -66,7 +66,7 @@ export default function Squads({ userTelegramId }) {
   );
 }
 
-const SquadDashboard = ({ squad, userTelegramId }) => {
+const SquadDashboard = ({ squad, userTelegramId, fetchUserSquad }) => {
   const [showInviteCode, setShowInviteCode] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -172,7 +172,7 @@ const SquadDashboard = ({ squad, userTelegramId }) => {
           </div>
         )}
 
-        {showMembers && (
+        {showMembers && squad.members && squad.members.length > 0 && (
           <div className="members-section">
             <h4 className="members-title">Squad Contributions</h4>
             <div className="members-list">
@@ -201,6 +201,13 @@ const SquadDashboard = ({ squad, userTelegramId }) => {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {showMembers && (!squad.members || squad.members.length === 0) && (
+          <div className="members-section">
+            <h4 className="members-title">Squad Contributions</h4>
+            <p className="muted">No members found. Try refreshing the page.</p>
           </div>
         )}
       </div>
@@ -296,7 +303,7 @@ const SquadDashboard = ({ squad, userTelegramId }) => {
           font-size: 12px;
           color: var(--muted);
           margin: 0;
-          text-align: center.
+          text-align: center;
         }
         
         .members-section {
@@ -361,7 +368,7 @@ const SquadDashboard = ({ squad, userTelegramId }) => {
           padding: 2px 6px;
           border-radius: 4px;
           text-transform: uppercase;
-          font-weight: 700.
+          font-weight: 700;
         }
         
         .member-stats {
