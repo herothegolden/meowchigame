@@ -50,13 +50,49 @@ const DAILY_TASKS = [
   }
 ];
 
+// NEW: Countdown Timer Component
+const CountdownTimer = () => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const tashkentTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tashkent' }));
+      
+      const endOfDay = new Date(tashkentTime);
+      endOfDay.setHours(24, 0, 0, 0);
+
+      const diff = endOfDay - tashkentTime;
+
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / 1000 / 60) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="task-countdown">
+      <span className="countdown-icon">⏳</span>
+      Tasks reset in: <strong>{timeLeft}</strong>
+    </div>
+  );
+};
+
+
 export default function DailyTasks({ userTelegramId, onTaskComplete }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [claimingId, setClaimingId] = useState(null); // NEW
+  const [claimingId, setClaimingId] = useState(null);
 
-  // Fetch daily tasks from server (unchanged)
   const fetchDailyTasks = async () => {
     if (!userTelegramId) return;
 
@@ -75,7 +111,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     } catch (err) {
       console.error('Failed to fetch daily tasks:', err);
       setError(err.message);
-      // Fallback to showing tasks with no progress
       setTasks(DAILY_TASKS.map(task => ({ ...task, progress: 0, completed: false })));
     } finally {
       setLoading(false);
@@ -84,12 +119,10 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
 
   useEffect(() => {
     fetchDailyTasks();
-    // Keep the auto-refresh behavior from the original file
     const interval = setInterval(fetchDailyTasks, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [userTelegramId]);
 
-  // NEW: Claim button handler
   const handleClaim = async (taskId) => {
     if (claimingId || !userTelegramId) return;
 
@@ -103,17 +136,14 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
       const result = await response.json();
 
       if (response.ok) {
-        // Haptic feedback for success
         try {
           window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
         } catch {}
 
-        // Mark as claimed locally
         setTasks(prevTasks =>
           prevTasks.map(task => (task.id === taskId ? { ...task, claimed: true } : task))
         );
 
-        // Inform parent to increase coin balance
         if (typeof onTaskComplete === 'function') {
           onTaskComplete(result.message, result.reward_earned);
         }
@@ -122,13 +152,11 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
       }
     } catch (err) {
       console.error('Claim failed:', err);
-      // Optionally show UI error here
     } finally {
       setClaimingId(null);
     }
   };
 
-  // ---------- Loading state (unchanged) ----------
   if (loading) {
     return (
       <section className="section">
@@ -141,7 +169,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     );
   }
 
-  // ---------- Error state (unchanged) ----------
   if (error && tasks.length === 0) {
     return (
       <section className="section">
@@ -157,7 +184,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     );
   }
 
-  // ---------- Summary (UPDATED for 'claimed') ----------
   const completedTasks = tasks.filter(t => t.completed).length;
   const totalRewards = tasks.reduce((sum, t) => sum + (t.claimed ? t.reward : 0), 0);
   const availableRewards = tasks.reduce((sum, t) => sum + (!t.claimed && t.completed ? t.reward : 0), 0);
@@ -165,11 +191,11 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
   return (
     <section className="section">
       <div className="title">📋 Daily Tasks</div>
+      <CountdownTimer />
       <div className="muted" style={{ marginBottom: '20px' }}>
         Complete tasks to earn bonus coins! Tasks reset daily.
       </div>
 
-      {/* Summary Stats (unchanged layout) */}
       <div className="task-summary">
         <div className="summary-stat">
           <span className="summary-value">{completedTasks}/{tasks.length}</span>
@@ -185,7 +211,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         </div>
       </div>
 
-      {/* Tasks List */}
       <div className="tasks-list">
         {tasks.map((task) => (
           <div 
@@ -198,7 +223,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
               <div className="task-title">{task.title}</div>
               <div className="task-description">{task.description}</div>
               
-              {/* Inline progress (kept consistent with original visuals) */}
               <div className="task-progress-container">
                 <div className="task-progress-bar">
                   <div 
@@ -212,7 +236,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
               </div>
             </div>
             
-            {/* NEW: Claim/Claimed/Reward area */}
             <div className="task-reward-action">
               {task.claimed ? (
                 <div className="claimed-badge">✅ Claimed</div>
@@ -235,7 +258,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         ))}
       </div>
 
-      {/* Empty state (unchanged) */}
       {tasks.length === 0 && !loading && (
         <div className="empty-state">
           <div className="empty-icon">📋</div>
@@ -244,7 +266,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
         </div>
       )}
 
-      {/* Styles (original retained; new rules appended) */}
       <style jsx>{`
         .task-summary {
           display: grid;
@@ -274,6 +295,22 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
           color: var(--muted);
           font-weight: 600;
           text-transform: uppercase;
+        }
+        
+        .task-countdown {
+          background: var(--surface);
+          border-radius: 12px;
+          padding: 10px 16px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--muted);
+          margin-bottom: 16px;
+          border: 1px solid var(--border);
+        }
+
+        .countdown-icon {
+          margin-right: 8px;
         }
 
         .tasks-list {
@@ -393,7 +430,6 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
           }
         }
 
-        /* ===== NEW rules for claim mechanic ===== */
         .task-item.claimed {
           opacity: 0.7;
           background: var(--surface);
