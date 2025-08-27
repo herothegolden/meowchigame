@@ -5,9 +5,9 @@ import ShareButtons from "./ShareButtons.jsx";
 import { game } from "./utils.js";
 
 // 1) OPTIMIZE: Memoized tile component
-const MemoizedTile = React.memo(({ 
-  r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping, 
-  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE 
+const MemoizedTile = React.memo(({
+  r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
+  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
   return (
     <div
@@ -59,7 +59,7 @@ const MemoizedTile = React.memo(({
 const useAnimationFrame = () => {
   const requestRef = useRef();
   const previousTimeRef = useRef();
-  
+
   const animate = useCallback((callback) => {
     const animateFrame = (time) => {
       if (previousTimeRef.current !== undefined) {
@@ -70,14 +70,14 @@ const useAnimationFrame = () => {
       requestRef.current = requestAnimationFrame(animateFrame);
     };
     requestRef.current = requestAnimationFrame(animateFrame);
-    
+
     return () => {
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
       }
     };
   }, []);
-  
+
   return animate;
 };
 
@@ -85,14 +85,14 @@ const useAnimationFrame = () => {
 const useBatchedState = () => {
   const [pendingUpdates, setPendingUpdates] = useState({});
   const timeoutRef = useRef();
-  
+
   const batchUpdate = useCallback((updates) => {
     setPendingUpdates(prev => ({ ...prev, ...updates }));
-    
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    
+
     timeoutRef.current = setTimeout(() => {
       Object.entries(pendingUpdates).forEach(([key, updater]) => {
         if (typeof updater === 'function') {
@@ -102,7 +102,7 @@ const useBatchedState = () => {
       setPendingUpdates({});
     }, 16);
   }, [pendingUpdates]);
-  
+
   return batchUpdate;
 };
 
@@ -119,7 +119,6 @@ const randEmoji = () =>
 
 export default function GameView({
   onExit,
-  onCoins,
   settings,
   userTelegramId,
 }) {
@@ -174,7 +173,7 @@ export default function GameView({
       tg.enableClosingConfirmation();
       console.log('✅ Closing confirmation enabled');
     }
-    
+
     return () => {
       if (tg?.disableClosingConfirmation) {
         tg.disableClosingConfirmation();
@@ -182,7 +181,7 @@ export default function GameView({
       }
     };
   }, []);
-  
+
   // Keep refs for async
   const movesRef = useRef(moves);
   movesRef.current = moves;
@@ -301,7 +300,7 @@ export default function GameView({
         console.error("Score submission failed:", result.error);
         return { user_needs_profile: false, coins_earned: coinsEarned };
       }
-      
+
       // Return the calculated coins regardless of server response
       return { ...result, coins_earned: coinsEarned };
     } catch (error) {
@@ -331,7 +330,7 @@ export default function GameView({
   const challengeFriend = (score) => {
     const tg = window.Telegram?.WebApp;
     const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
-    
+
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
     }
@@ -345,7 +344,7 @@ export default function GameView({
       daily_streak_7: "🗓️ 7 days straight playing Meowchi! Who's joining me?",
       coins_1000: "💰 Earned 1,000 $Meow coins! This cat game pays!"
     };
-    
+
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery && milestones[achievement]) {
       setTimeout(() => {
@@ -365,12 +364,12 @@ export default function GameView({
       top100: `📈 Climbing the Meowchi ranks! Currently #${rank}!`,
       improved: `⬆️ Just improved my Meowchi ranking to #${rank}!`
     };
-    
+
     let message = messages.improved;
     if (rank === 1) message = messages.top1;
     else if (rank <= 10) message = messages.top10;
     else if (rank <= 100) message = messages.top100;
-    
+
     if (tg?.switchInlineQuery) {
       tg.switchInlineQuery(message, ['users', 'groups']);
     }
@@ -545,7 +544,7 @@ export default function GameView({
           setGrid(g);
           setNewTiles(new Set());
           setFallDelay({});
-          
+
           if (comboCount > 0) {
             setMaxComboAchieved(prev => {
               const newMax = Math.max(prev, comboCount);
@@ -675,8 +674,6 @@ export default function GameView({
       else audio.play?.("finish_lose", { volume: 0.7 });
     }
 
-    onCoins?.(serverCoins);
-
     const gameResultWithSharing = {
       score: finalScore,
       coins: serverCoins, // Now uses calculated coins
@@ -746,7 +743,7 @@ export default function GameView({
             swapTransform = `translate(${dx}px, ${dy}px)`;
           }
         }
-        
+
         const isSwapping =
           !!swapping &&
           ((swapping.from.r === r && swapping.from.c === c) ||
@@ -818,8 +815,8 @@ export default function GameView({
         </div>
         <div className="combo-meter-container">
           <div className="combo-meter-bar">
-            <div 
-              className="combo-meter-fill" 
+            <div
+              className="combo-meter-fill"
               style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
             ></div>
           </div>
