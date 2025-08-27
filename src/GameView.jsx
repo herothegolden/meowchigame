@@ -255,7 +255,7 @@ export default function GameView({
     } catch {}
   }
 
-  // REPLACED: submitGameScore
+  // Replace the submitGameScore function with the provided implementation
   async function submitGameScore(finalScore) {
     if (!userTelegramId) {
       console.log("No Telegram ID, skipping score submission");
@@ -653,7 +653,7 @@ export default function GameView({
       setGrid(shuffleToSolvable(gridRef.current));
   }
 
-  // REPLACED: finish
+  // Replace the finish function with the provided implementation
   async function finish() {
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
@@ -733,17 +733,22 @@ export default function GameView({
             const dx = (swapping.to.c - swapping.from.c) * cell;
             const dy = (swapping.to.r - swapping.from.r) * cell;
             swapTransform = `translate(${dx}px, ${dy}px)`;
-          } else if (swapping.to.r === r && swapping.to.c === c) {
-            const dx = (swapping.from.c - swapping.to.c) * cell;
-            const dy = (swapping.from.r - swapping.to.r) * cell;
+          } else if (swapping.to.r === r && sw
+            apping.to.c === c) {
+            const dx = (swapping.from.c - sw
+              apping.to.c) * cell;
+            const dy = (swapping.from.r - sw
+              apping.to.r) * cell;
             swapTransform = `translate(${dx}px, ${dy}px)`;
           }
         }
         
         const isSwapping =
           !!swapping &&
-          ((swapping.from.r === r && swapping.from.c === c) ||
-            (swapping.to.r === r && swapping.to.c === c));
+          ((swapping.from.r === r && sw
+            apping.from.c === c) ||
+            (swapping.to.r === r && sw
+              apping.to.c === c));
 
         const tileKey = `${r}-${c}`;
         const isNewTile = newTiles.has(tileKey);
