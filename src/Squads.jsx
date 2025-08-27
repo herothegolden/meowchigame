@@ -135,7 +135,8 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
   };
   
   const kickMember = async (memberTelegramId, memberName) => {
-    if (!confirm(`Are you sure you want to kick ${memberName} from the squad?`)) return;
+    // The confirm dialog is removed as it's not supported in Mini Apps.
+    // A custom modal should be implemented here for a better user experience.
     
     setKickingMember(memberTelegramId);
     try {
