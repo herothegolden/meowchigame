@@ -639,6 +639,67 @@ app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
   }
 });
 
+// ---------- SQUADS: kick member (NEW) ----------
+app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) => {
+  const creator_telegram_id = req.user.telegram_id;
+  const { member_telegram_id } = req.body;
+
+  if (!member_telegram_id) {
+    return res.status(400).json({ error: "Member Telegram ID is required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get creator's user ID
+    const creatorUserResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [creator_telegram_id]);
+    if (creatorUserResult.rows.length === 0) {
+      return res.status(404).json({ error: "Creator user not found." });
+    }
+    const creatorUserId = creatorUserResult.rows[0].id;
+
+    // Find the squad owned by the creator
+    const squadResult = await client.query("SELECT id FROM squads WHERE owner_user_id = $1", [creatorUserId]);
+    if (squadResult.rows.length === 0) {
+      return res.status(403).json({ error: "You do not own a squad." });
+    }
+    const squadId = squadResult.rows[0].id;
+
+    // Get the member's user ID
+    const memberUserResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [member_telegram_id]);
+    if (memberUserResult.rows.length === 0) {
+      return res.status(404).json({ error: "Member to kick not found." });
+    }
+    const memberUserId = memberUserResult.rows[0].id;
+    
+    // Creator cannot kick themselves
+    if (creatorUserId === memberUserId) {
+        return res.status(400).json({ error: "You cannot kick yourself from the squad." });
+    }
+
+    // Delete the member from the squad
+    const deleteResult = await client.query(
+      "DELETE FROM squad_members WHERE squad_id = $1 AND user_id = $2",
+      [squadId, memberUserId]
+    );
+
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: "Member is not in your squad." });
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Member kicked successfully." });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Failed to kick member:", error);
+    res.status(500).json({ error: "Failed to kick member." });
+  } finally {
+    client.release();
+  }
+});
+
+
 // ---------- DAILY TASKS ----------
 const DAILY_TASKS = [
   {
@@ -646,7 +707,7 @@ const DAILY_TASKS = [
     title: 'Play 3 Games',
     description: 'Complete 3 matches today',
     reward: 200,
-    icon: '🎮',
+    icon: '�',
     target: 3,
     type: 'games_played'
   },
@@ -958,3 +1019,4 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+�
