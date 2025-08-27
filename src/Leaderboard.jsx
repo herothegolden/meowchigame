@@ -6,7 +6,7 @@ import ShareButtons from './ShareButtons.jsx'; // Import the sharing component
 const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
-  { flag: '🇩�', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
+  { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
   { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
@@ -16,7 +16,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇦🇪', name: 'UAE' }, { flag: '🇳🇱', name: 'Netherlands' },
   { flag: '🇸🇪', name: 'Sweden' }, { flag: '🇳🇴', name: 'Norway' },
   { flag: '🇩🇰', name: 'Denmark' }, { flag: '🇵🇱', name: 'Poland' },
-  { flag: '🇨🇿', name: 'Czech Republic' }, { flag: '🇭🇺', name: 'Hungary' },
+  { flag: '�🇿', name: 'Czech Republic' }, { flag: '🇭🇺', name: 'Hungary' },
   { flag: '🇦🇹', name: 'Austria' }, { flag: '🇨🇭', name: 'Switzerland' },
   { flag: '🇧🇪', name: 'Belgium' }, { flag: '🇵🇹', name: 'Portugal' },
   { flag: '🇬🇷', name: 'Greece' }, { flag: '🇮🇱', name: 'Israel' },
