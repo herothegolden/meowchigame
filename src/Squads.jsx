@@ -103,7 +103,7 @@ export default function Squads({ userTelegramId }) {
       )}
     </>
   );
-} // <--- THIS IS THE BRACE THAT WAS LIKELY MISSING
+}
 
 const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
   const [showInviteCode, setShowInviteCode] = useState(false);
