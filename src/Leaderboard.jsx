@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import ShareButtons from './ShareButtons.jsx'; // Import the sharing component
 
 // COUNTRY_FLAGS constant remains the same, so it's omitted here for brevity.
 // Just make sure it's still at the top of your file.
 const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
-  { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
+  { flag: '�🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
   { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
@@ -33,9 +34,8 @@ const COUNTRY_FLAGS = [
 
 
 export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
-  // NEW: State to toggle between Players and Squads
-  const [rankingType, setRankingType] = useState('players'); // 'players' or 'squads'
-  const [timeFilter, setTimeFilter] = useState('daily'); // 'daily', 'weekly', 'alltime'
+  const [rankingType, setRankingType] = useState('players');
+  const [timeFilter, setTimeFilter] = useState('daily');
   
   const [showCountryOnly, setShowCountryOnly] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState([]);
@@ -46,12 +46,11 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
   const [universeTime, setUniverseTime] = useState('');
   const [currentUserCountry, setCurrentUserCountry] = useState(null);
 
-  // Universe time clock
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       const time = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Tashkent', // Keep the timezone, just change the label
+        timeZone: 'Asia/Tashkent',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
@@ -64,7 +63,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     return () => clearInterval(interval);
   }, []);
 
-  // NEW: Updated fetchLeaderboard function
   const fetchLeaderboard = async () => {
     setLoading(true);
     setError(null);
@@ -73,8 +71,8 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       
       if (rankingType === 'squads') {
         endpoint = '/api/squads/leaderboard';
-        params = new URLSearchParams(); // Squads don't have time/country filters for now
-      } else { // players
+        params = new URLSearchParams();
+      } else {
         endpoint = `/api/leaderboard/${timeFilter}`;
         params = new URLSearchParams({
           country: showCountryOnly ? 'true' : 'false',
@@ -101,13 +99,11 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     }
   };
 
-  // Trigger fetch when dependencies change
   useEffect(() => {
     fetchLeaderboard();
   }, [rankingType, timeFilter, showCountryOnly, userTelegramId]);
 
 
-  // Get medal or rank display
   const getRankDisplay = (rank) => {
     switch (rank) {
       case 1: return '🥇'; case 2: return '🥈'; case 3: return '🥉';
@@ -130,7 +126,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       <div className="leaderboard-header">
         <div className="title-row">
           <div className="title">🏆 Rankings</div>
-          {/* UPDATED: Clock text */}
           <div className="tashkent-time">
             <span className="time-icon">🕐</span>
             <span className="time-text">{universeTime} Meowchi Universe Time</span>
@@ -138,7 +133,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         </div>
       </div>
 
-      {/* NEW: Ranking Type Switch */}
       <div className="ranking-type-switch">
         <button 
           className={`switch-btn ${rankingType === 'players' ? 'active' : ''}`}
@@ -154,7 +148,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         </button>
       </div>
 
-      {/* Time filters (now only show for player rankings) */}
       {rankingType === 'players' && (
         <div className="tabs">
           {[ { key: 'daily', label: 'Daily' }, { key: 'weekly', label: 'Weekly' }, { key: 'alltime', label: 'All Time' } ]
@@ -170,7 +163,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         </div>
       )}
 
-      {/* Country filter and last updated */}
       <div className="filters">
         {rankingType === 'players' && (
           <label className="country-filter">
@@ -182,7 +174,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         {lastUpdated && <div className="last-updated">Updated: {lastUpdated.toLocaleTimeString()}</div>}
       </div>
 
-      {/* Loading/Error/Content states */}
       {loading && <div className="loading-state"><div className="loading-icon">😺</div><div className="loading-text">{getLoadingMessage()}</div></div>}
       {error && !loading && <div className="error-state"><div className="error-icon">😿</div><div className="error-text">{error}</div><button className="btn" onClick={fetchLeaderboard}>Try Again</button></div>}
       {!loading && !error && (
@@ -203,7 +194,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                     <div className="player-score">{formatScore(player.total_score)}</div>
                   </div>
                 ))
-              ) : ( // Squads
+              ) : (
                 leaderboardData.map((squad, index) => (
                   <div key={squad.id} className="leaderboard-item">
                     <div className="rank-display">{getRankDisplay(index + 1)}</div>
@@ -223,7 +214,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
             <div className="empty-state"><div className="empty-icon">😸</div><div className="empty-text">{getEmptyMessage()}</div></div>
           )}
 
-          {/* User's rank if not in top 100 */}
           {rankingType === 'players' && userRank && !isUserInTop100() && (
             <div className="user-rank-section">
               <div className="section-divider"><span className="divider-text">Your Rank</span></div>
@@ -238,12 +228,17 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                 </div>
                 <div className="player-score">{formatScore(userRank.total_score)}</div>
               </div>
+              <ShareButtons
+                variant="leaderboard"
+                rank={userRank.rank}
+                score={userRank.total_score}
+                userTelegramId={userTelegramId}
+              />
             </div>
           )}
         </>
       )}
 
-      {/* NEW: Add CSS for the switch */}
       <style jsx>{`
         .ranking-type-switch {
           display: flex;
@@ -277,3 +272,4 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     </section>
   );
 }
+�
