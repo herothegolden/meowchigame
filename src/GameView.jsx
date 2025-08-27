@@ -494,8 +494,15 @@ export default function GameView({
       audio.play?.("swap_invalid", { volume: 0.5 });
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
+
+      // ✨ Added: Telegram haptic for invalid swap
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+
       return;
     }
+
+    // ✨ Added: Telegram haptic for valid swap
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
 
     // valid swap
     audio.play?.("swap", { volume: 0.6 });
