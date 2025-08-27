@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as audio from "./audio"; // minimal sound hooks
 import ShareButtons from "./ShareButtons.jsx";
+import { game } from "./utils.js";
 
 // 1) OPTIMIZE: Memoized tile component
 const MemoizedTile = React.memo(({ 
@@ -254,21 +255,25 @@ export default function GameView({
     } catch {}
   }
 
+  // REPLACED: submitGameScore
   async function submitGameScore(finalScore) {
     if (!userTelegramId) {
       console.log("No Telegram ID, skipping score submission");
-      return { user_needs_profile: false };
+      return { user_needs_profile: false, coins_earned: 0 };
     }
 
     const gameScore = Math.max(finalScore, 0);
     const currentMaxCombo = maxComboAchievedRef.current;
+
+    // Calculate coins using the utils.js formula
+    const coinsEarned = game.calculateCoins(gameScore, currentMaxCombo);
 
     try {
       const tg = window.Telegram?.WebApp;
       const gameData = {
         telegram_id: userTelegramId,
         score: gameScore,
-        moves_used: Math.max(1, moveCount),
+        coins_earned: coinsEarned, // Now properly calculated
         max_combo: currentMaxCombo,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
@@ -287,12 +292,14 @@ export default function GameView({
       const result = await response.json();
       if (!response.ok) {
         console.error("Score submission failed:", result.error);
-        return { user_needs_profile: false };
+        return { user_needs_profile: false, coins_earned: coinsEarned };
       }
-      return result;
+      
+      // Return the calculated coins regardless of server response
+      return { ...result, coins_earned: coinsEarned };
     } catch (error) {
       console.error("Error submitting score:", error);
-      return { user_needs_profile: false };
+      return { user_needs_profile: false, coins_earned: coinsEarned };
     }
   }
 
@@ -646,13 +653,13 @@ export default function GameView({
       setGrid(shuffleToSolvable(gridRef.current));
   }
 
-  // Finish
+  // REPLACED: finish
   async function finish() {
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
     const result = await submitGameScore(finalScore);
 
-    const serverCoins = Math.max(0, Number(result?.game?.coins_earned ?? 0));
+    const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
     if (serverCoins > 0 && settings?.sound) {
       audio.play?.("coin", { volume: 0.7 });
     }
@@ -665,7 +672,7 @@ export default function GameView({
 
     const gameResultWithSharing = {
       score: finalScore,
-      coins: serverCoins,
+      coins: serverCoins, // Now uses calculated coins
       moves_used: moveCount,
       max_combo: finalMaxCombo,
       gameSubmitted: !!result,
