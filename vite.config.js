@@ -9,6 +9,26 @@ export default defineConfig({
   },
   build: { 
     outDir: 'dist',
-    sourcemap: false
+    sourcemap: false,
+    // Code splitting for faster initial loads
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate game engine from main bundle
+          'game': ['./src/GameView.jsx'],
+          // Separate UI components  
+          'components': ['./src/Home.jsx', './src/Leaderboard.jsx', './src/EnhancedProfileModal.jsx'],
+          // Separate audio system
+          'audio': ['./src/audio.js']
+        }
+      }
+    },
+    // Enable compression
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.logs in production
+        drop_debugger: true
+      }
+    }
   }
 })
