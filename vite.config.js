@@ -10,27 +10,6 @@ export default defineConfig({
   build: { 
     outDir: 'dist',
     sourcemap: false,
-    // Code splitting for faster initial loads
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // Separate game engine from main bundle
-          'game': ['./src/GameView.jsx'],
-          // Separate UI components  
-          'components': ['./src/Home.jsx', './src/Leaderboard.jsx', './src/DailyTasks.jsx'],
-          // Separate modals and heavy components
-          'modals': ['./src/EnhancedProfileModal.jsx', './src/SquadModal.jsx'],
-          // Separate utility files
-          'utils': ['./src/utils.js', './src/store.js'],
-          // Separate audio system
-          'audio': ['./src/audio.js'],
-          // Separate React vendor code
-          'react-vendor': ['react', 'react-dom'],
-          // Separate other vendor libraries
-          'vendor': ['zustand']
-        }
-      }
-    },
     // Enable compression and optimization (using esbuild - faster than terser)
     minify: 'esbuild',
     esbuild: {
