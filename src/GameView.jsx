@@ -172,8 +172,10 @@ export default function GameView({
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
 
+  // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
     try {
+      // Optimistically update the UI
       setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
       
       const response = await fetch('/api/powerups/use', {
@@ -187,15 +189,18 @@ export default function GameView({
       });
       
       if (!response.ok) {
+        // Revert UI on failure
         setPowerups(powerups);
         console.error("Failed to consume power-up on server");
       }
     } catch (error) {
+      // Revert UI on failure
       setPowerups(powerups);
       console.error("Error consuming powerup:", error);
     }
   };
 
+  // Enable closing confirmation during gameplay
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg?.enableClosingConfirmation) {
@@ -211,6 +216,7 @@ export default function GameView({
     };
   }, []);
 
+  // Keep refs for async
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
@@ -220,6 +226,7 @@ export default function GameView({
   const maxComboAchievedRef = useRef(maxComboAchieved);
   maxComboAchievedRef.current = maxComboAchieved;
 
+  // Responsive sizing
   useEffect(() => {
     const compute = () => {
       const el = containerRef.current;
@@ -247,6 +254,7 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
+  // Timer
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => {
@@ -264,6 +272,7 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused]);
 
+  // Timer tick sounds (very light)
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
@@ -390,6 +399,7 @@ export default function GameView({
     }
   };
 
+  // Pointer interactions
   useEffect(() => {
     const el = boardRef.current;
     if (!el || paused) return;
@@ -1074,6 +1084,4 @@ function findFirstMove(g) {
     }
   }
   return null;
-}
-
 }
