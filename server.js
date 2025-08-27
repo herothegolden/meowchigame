@@ -803,8 +803,7 @@ app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, re
   }
 });
 
-// ---------- CHECK-IN (ENABLED) ----------
-// REPLACE the old /api/user/check-in endpoint with this
+// ---------- CHECK-IN (ENABLED & CORRECTED) ----------
 app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
   const telegram_id = req.user.telegram_id;
   const client = await pool.connect();
@@ -814,8 +813,6 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
 
     const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
     if (userResult.rows.length === 0) {
-      // User might not be in the DB yet, so we can't create a streak. Silently fail or handle as needed.
-      await client.query('ROLLBACK');
       return res.status(404).json({ error: "User not found" });
     }
     const userId = userResult.rows[0].id;
@@ -830,7 +827,8 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
 
     if (streakResult.rows.length > 0) {
       const streakData = streakResult.rows[0];
-      // Handle null last_check_in_date
+      
+      // THIS IS THE CORRECTED LINE:
       const lastCheckIn = streakData.last_check_in_date ? new Date(streakData.last_check_in_date).toISOString().split('T')[0] : null;
       
       const yesterday = new Date();
