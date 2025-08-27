@@ -43,7 +43,9 @@ export default function Home({
   userStats, 
   userProfile, 
   onProfileUpdate,
-  onOpenProfileModal 
+  onOpenProfileModal,
+  // NEW: streak prop
+  streak = 0 
 }) {
   // Format numbers with commas
   const formatNumber = (num) => {
@@ -120,6 +122,13 @@ export default function Home({
               <div className="stat-value"><CountUp end={userStats?.best_score} /></div>
               <div className="stat-label">Best Score</div>
             </div>
+
+            {/* ADD THIS NEW STAT ITEM */}
+            <div className="stat-item">
+              <div className="stat-value">🔥 {streak}</div>
+              <div className="stat-label">Day Streak</div>
+            </div>
+
             <div className="stat-item">
               {/* The combo is text ('x5'), so it doesn't need the CountUp animation */}
               <div className="stat-value">{formatCombo(userStats?.best_combo)}</div>
