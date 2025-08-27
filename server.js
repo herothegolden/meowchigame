@@ -309,58 +309,6 @@ app.put("/api/user/profile", requireDB, validateUser, profileRateLimit, async (r
   }
 });
 
-// ---------- STATS (POST) ----------
-app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const stats = await pool.query(`
-      SELECT 
-        u.display_name,
-        u.country_flag,
-        u.profile_completed,
-        COALESCE(u.bonus_coins, 0) as total_coins_earned,
-        COALESCE(gs.games_played, 0) as games_played,
-        COALESCE(gs.total_score, 0) as total_score,
-        COALESCE(gs.best_score, 0) as best_score,
-        COALESCE(gs.best_combo, 0) as best_combo
-      FROM users u
-      LEFT JOIN (
-        SELECT 
-          user_id,
-          COUNT(*) as games_played,
-          SUM(score) as total_score,
-          MAX(score) as best_score,
-          MAX(max_combo) as best_combo
-        FROM games
-        GROUP BY user_id
-      ) gs ON gs.user_id = (SELECT id FROM users WHERE telegram_id = $1)
-      WHERE u.telegram_id = $1
-    `, [telegram_id]);
-
-    if (stats.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const row = stats.rows[0];
-    res.json({
-      user: {
-        telegram_id,
-        display_name: row.display_name || `Stray Cat #${telegram_id.toString().slice(-5)}`,
-        country_flag: row.country_flag || "🏳️",
-        profile_completed: row.profile_completed || false
-      },
-      total_score: parseInt(row.total_score || 0),
-      games_played: parseInt(row.games_played || 0),
-      best_score: parseInt(row.best_score || 0),
-      best_combo: parseInt(row.best_combo || 0),
-      total_coins_earned: parseInt(row.total_coins_earned || 0)
-    });
-  } catch (err) {
-    console.error("Stats error:", err);
-    res.status(500).json({ error: "Failed to fetch stats" });
-  }
-});
-
 // ---------- GAME SUBMIT ----------
 app.post("/api/game/submit", requireDB, validateUser, gameRateLimit, async (req, res) => {
   try {
@@ -752,7 +700,7 @@ app.post("/api/user/:telegram_id/daily-tasks/claim", requireDB, validateUser, as
   }
 });
 
-// ---------- STATS (POST variant 2, keep as-is) ----------
+// ---------- STATS (POST - SINGLE IMPLEMENTATION) ----------
 app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id;
