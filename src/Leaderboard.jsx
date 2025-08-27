@@ -6,7 +6,7 @@ import ShareButtons from './ShareButtons.jsx'; // Import the sharing component
 const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
-  { flag: '�🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
+  { flag: '🇩�', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
   { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
