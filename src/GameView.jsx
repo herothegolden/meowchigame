@@ -12,7 +12,7 @@ const MemoizedTile = React.memo(({
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isSwapping ? "swapping" : ""} ${isBlasting ? "blasting" : ""} ${isNewTile ? "drop-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "...op-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
@@ -733,22 +733,17 @@ export default function GameView({
             const dx = (swapping.to.c - swapping.from.c) * cell;
             const dy = (swapping.to.r - swapping.from.r) * cell;
             swapTransform = `translate(${dx}px, ${dy}px)`;
-          } else if (swapping.to.r === r && sw
-            apping.to.c === c) {
-            const dx = (swapping.from.c - sw
-              apping.to.c) * cell;
-            const dy = (swapping.from.r - sw
-              apping.to.r) * cell;
+          } else if (swapping.to.r === r && swapping.to.c === c) {
+            const dx = (swapping.from.c - swapping.to.c) * cell;
+            const dy = (swapping.from.r - swapping.to.r) * cell;
             swapTransform = `translate(${dx}px, ${dy}px)`;
           }
         }
         
         const isSwapping =
           !!swapping &&
-          ((swapping.from.r === r && sw
-            apping.from.c === c) ||
-            (swapping.to.r === r && sw
-              apping.to.c === c));
+          ((swapping.from.r === r && swapping.from.c === c) ||
+            (swapping.to.r === r && swapping.to.c === c));
 
         const tileKey = `${r}-${c}`;
         const isNewTile = newTiles.has(tileKey);
