@@ -31,17 +31,11 @@ export default defineConfig({
         }
       }
     },
-    // Enable compression and optimization
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Remove console.logs in production
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn']
-      },
-      mangle: {
-        safari10: true
-      }
+    // Enable compression and optimization (using esbuild - faster than terser)
+    minify: 'esbuild',
+    esbuild: {
+      drop: ['console', 'debugger'], // Remove console.logs in production
+      legalComments: 'none'
     },
     // Optimize chunk sizes
     chunkSizeWarningLimit: 1000,
