@@ -1,1086 +1,1842 @@
-// server.js
-import express from "express";
-import compression from "compression";
-import helmet from "helmet";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { Pool } from "pg";
-import { validate } from "@telegram-apps/init-data-node";
-import rateLimit from "express-rate-limit";
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+:root {
+  /* Golden Patisserie Palette */
+  --bg: #fdf9f4;
+  --card: #ffffff;
+  --surface: #f8f4ed;
+  --text: #4c3f38;
+  --muted: #a18f85;
+  --accent: #d4af37;
+  --accent2: #f4d03f;
+  --accent-text: #ffffff;
+  --border: rgba(76, 63, 56, 0.1);
 
-const app = express();
-
-// Security headers & compression
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
-app.use(compression());
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// Database
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-});
-let dbConnected = false;
-pool.connect()
-  .then((client) => {
-    client.release();
-    dbConnected = true;
-    console.log("✅ Database connected");
-  })
-  .catch((err) => { dbConnected = false; console.error("❌ DB connection error:", err); });
-
-// Middleware to require DB
-const requireDB = (req, res, next) => {
-  if (!dbConnected) {
-    return res.status(503).json({ error: "Database not connected" });
-  }
-  next();
-};
-
-// -------- AUTH MIDDLEWARE (FIXED FOR PRODUCTION) --------
-const validateUser = async (req, res, next) => {
-  // Get auth data from body (for POST/PUT) or query (for GET)
-  const { initData } = req.body || req.query;
-  // Get telegram_id from params (for GET routes like /user/:id/...) or body (for POST)
-  const telegram_id = req.params.telegram_id || req.body.telegram_id;
-  
-  // Try secure authentication first if initData is present
-  if (initData && process.env.BOT_TOKEN) {
-    try {
-      // CORRECTED: The new version of the library returns a promise.
-      const parsed = await validate(initData, process.env.BOT_TOKEN);
-      if (parsed && parsed.user) {
-        req.user = { 
-          telegram_id: parsed.user.id, 
-          username: parsed.user.username,
-          first_name: parsed.user.first_name,
-          validated: true 
-        };
-        console.log(`✅ Secure auth successful for user ${parsed.user.id}`);
-        return next();
-      }
-    } catch (error) {
-      console.warn(`⚠️ initData validation failed: ${error.message}`);
-      // Fall through to check if we're in development or have telegram_id
-    }
-  }
-  
-  // DEVELOPMENT FALLBACK: If no BOT_TOKEN or in development, allow with telegram_id
-  if (!process.env.BOT_TOKEN || process.env.NODE_ENV === 'development') {
-    if (telegram_id) {
-      req.user = { 
-        telegram_id: parseInt(telegram_id), 
-        username: null,
-        first_name: null,
-        validated: false  // Mark as unvalidated for logging
-      };
-      console.log(`🔓 Dev mode auth for user ${telegram_id}`);
-      return next();
-    }
-  }
-  
-  // PRODUCTION FALLBACK: Try to extract telegram_id from initData even if validation failed
-  if (initData && telegram_id) {
-    req.user = { 
-      telegram_id: parseInt(telegram_id), 
-      username: null,
-      first_name: null,
-      validated: false 
-    };
-    console.log(`⚠️ Fallback auth for user ${telegram_id} (initData present but validation failed)`);
-    return next();
-  }
-  
-  // No valid authentication provided
-  console.error("❌ Authentication failed: No valid initData or telegram_id provided.");
-  return res.status(401).json({ error: "Authentication required" });
-};
-
-// Rate limiting for game endpoints
-const gameRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // limit each user to 10 games per minute
-  keyGenerator: (req) => req.user?.telegram_id || req.ip,
-  message: { error: "Too many game submissions. Please wait." }
-});
-
-// Rate limiting for profile updates
-const profileRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // limit each user to 5 profile updates per minute
-  keyGenerator: (req) => req.user?.telegram_id || req.ip,
-  message: { error: "Too many profile updates. Please wait." }
-});
-
-// ---------- Static build checks ----------
-const dist = path.join(__dirname, "dist");
-
-// Fail fast if build missing (helps Railway/Nixpacks)
-if (!fs.existsSync(dist)) {
-  console.error("❌ dist folder not found! Make sure the build completed successfully.");
-  process.exit(1);
-}
-const indexPath = path.join(dist, "index.html");
-if (!fs.existsSync(indexPath)) {
-  console.error("❌ index.html missing! Static build is incomplete.");
-  process.exit(1);
+  --line: rgba(76, 63, 56, 0.1); /* For borders and dividers */
+  --accent-light: rgba(212, 175, 55, 0.1); /* For hover effects */
+  /* Splash controls */
+  --bar-top: 60%;
+  --bar-width: 230px;
 }
 
-// Serve static
-app.use(express.static(dist, {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith(".html")) {
-      res.setHeader("Cache-Control", "no-store");
-    } else {
-      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    }
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 400;
+}
+
+/* app shell */
+.shell{
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: calc(var(--vh,1vh)*100);
+  display:flex;
+  flex-direction:column;
+  background: var(--bg);
+}
+
+/* header - elegant and minimal */
+.header{
+  padding: 16px 20px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.header-content{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo{
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #fef9ea, #f8f3e0);
+}
+
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-text{
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.back-btn{
+  appearance: none;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border);
+}
+
+.back-btn:hover{
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.back-icon{
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.coins-display{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.coins-icon{
+  font-size: 16px;
+}
+
+.coins-amount{
+  letter-spacing: -0.1px;
+}
+
+/* content area */
+.content{
+  flex: 1;
+  padding: 0 0 80px 0; /* Bottom padding for nav */
+  overflow-y: auto;
+}
+
+/* sections & lists */
+.section{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 24px;
+  margin: 16px 20px;
+}
+
+.title{
+  font-weight: 800;
+  margin-bottom: 16px;
+  font-size: 20px;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+
+.row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child{
+  border-bottom: none;
+}
+
+.list{
+  display: grid;
+}
+
+.grid-gap{
+  gap: 12px;
+}
+
+.grid-gap-6{
+  gap: 8px;
+}
+
+.muted{
+  color: var(--muted);
+}
+
+.small{
+  font-size: 13px;
+}
+
+.pill{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ellipsis{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* buttons & tabs */
+.btn{
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.btn:hover{
+  background: var(--surface);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.btn.primary{
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none;
+  color: #ffffff;
+}
+
+.btn.primary:hover{
+}
+
+.btn:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tabs{
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab{
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.tab.active{
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+/* ===== Bottom Navigation ===== */
+.bottom-nav{
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  z-index: 1000;
+}
+
+.nav-container{
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 12px 8px 20px;
+}
+
+.nav-item{
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  min-width: 60px;
+}
+
+.nav-item:hover{
+  background: var(--accent-light);
+}
+
+.nav-item.active{
+  background: var(--accent-light);
+}
+
+.nav-item.active .nav-icon{
+  transform: scale(1.1);
+}
+
+.nav-item.active .nav-label{
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.nav-icon{
+  font-size: 20px;
+  transition: transform 0.2s ease;
+}
+
+.nav-label{
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+/* ===== Splash (elegant theme) ===== */
+.splash{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  height: calc(var(--vh, 1vh) * 100);
+  background: url("/splash.jpg") center center / cover no-repeat;
+  background-color: var(--bg);
+  display: block;
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+.splash.hide{
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash.show{
+  opacity: 1;
+}
+
+.splash-bar-anchored{
+  position: absolute;
+  left: 50%;
+  top: var(--bar-top);
+  transform: translate(-50%, -50%);
+  width: var(--bar-width);
+  text-align: center;
+}
+
+.splash-progress{
+  width: 100%;
+  height: 8px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  /* removed backdrop-filter: blur(4px); */
+}
+
+.splash-progress__bar{
+  width: 0;
+  height: 100%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  animation: splashbar 2.4s ease forwards; /* NO INFINITE - runs once then stops */
+}
+
+@keyframes splashbar{
+  to { width: 100%; } /* Fills once then stops */
+}
+
+.splash-caption{
+  margin-top: 12px;
+  width: 100%;
+  color: var(--text);
+  font-weight: 800;
+  font-size: clamp(14px, 4.2vw, 18px);
+  letter-spacing: 0.3px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+}
+
+/* ===== Board / GameView (FAST ANIMATIONS) ===== */
+.section.board-wrap{
+  position: relative;
+  margin: 12px 16px;
+}
+
+.board{
+  position: relative;
+  margin: 16px auto 12px;
+  background: var(--card);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.gridlines{
+  position: absolute;
+  inset: 0;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.tile{
+  position: absolute;
+  display: grid;
+  place-items: center;
+  user-select: none;
+  touch-action: none;
+  border-radius: 12px;
+  overflow: hidden;
+  transition:
+    left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.12s linear;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  will-change: left, top, transform, opacity;
+}
+
+.tile.sel{
+  outline: 3px solid var(--accent);
+}
+
+/* FIXED: hint pulse - 2 cycles then stop */
+.tile.hint .tile-emoji{
+  animation: simple-hint-pulse 1.2s ease-in-out; /* replaced hint-pulse */
+}
+
+@keyframes hint-pulse{
+  0%{ transform: scale(1); }
+  25%{ transform: scale(1.08); }  /* First pulse */
+  50%{ transform: scale(1); }
+  75%{ transform: scale(1.08); }  /* Second pulse */
+  100%{ transform: scale(1); }    /* Then stops completely */
+}
+
+/* press/grab feel */
+.tile.grab .tile-emoji{
+  transform: scale(0.96) translateZ(0); /* replaced drop-shadow with translateZ(0) */
+  /* removed filter: drop-shadow(...) */
+}
+
+/* invalid swap nudge */
+.tile.shake{
+  animation: shakeH 0.12s ease both;
+}
+
+@keyframes shakeH{
+  0%{ transform: translateX(0); }
+  25%{ transform: translateX(-4px); }
+  50%{ transform: translateX(4px); }
+  75%{ transform: translateX(-2px); }
+  100%{ transform: translateX(0); }
+}
+
+/* new spawn drop-in */
+.tile.drop-in{
+  animation: drop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes drop{
+  from{ transform: translateY(-14px); opacity: 0; }
+  to{ transform: translateY(0); opacity: 1; }
+}
+
+/* ========== FAST BLASTING ANIMATIONS (simplified) ========== */
+
+.tile.blasting {
+  animation: simple-blast 0.2s ease forwards; /* replaced mega-pop */
+  background: var(--accent2);                 /* simplified background */
+  border-radius: 50%;
+  z-index: 10 !important;
+  transform: translateZ(0);
+}
+
+/* simplified inner emoji during blast */
+.tile.blasting .tile-emoji {
+  transform: scale(1.1) translateZ(0);
+  /* removed filter and text-shadow and emoji-glow animation */
+}
+
+/* Particle animations - short duration */
+@keyframes fly {
+  0% { 
+    transform: translate(0, 0) scale(1) rotate(0deg); 
+    opacity: 1; 
   }
-}));
-
-// Health endpoint (used by Railway) - CORRECTED
-app.get("/health", (_req, res) => {
-  // This endpoint now only confirms that the server process is running.
-  // It is decoupled from the database connection status.
-  res.status(200).json({ status: "ok", dbConnected });
-});
-
-// ---------- Setup endpoint (UPDATED) ----------
-app.get("/api/setup/database", async (req, res) => {
-  if (!pool || !dbConnected) {
-    return res.status(503).json({ success: false, error: "Database not connected" });
+  100% { 
+    transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
+    opacity: 0; 
   }
-  try {
-    console.log("🔧 Setting up database tables.");
-    
-    // Drop tables in correct order
-    await pool.query("DROP TABLE IF EXISTS user_streaks CASCADE");
-    await pool.query("DROP TABLE IF EXISTS squad_members CASCADE");
-    await pool.query("DROP TABLE IF EXISTS squads CASCADE");
-    await pool.query("DROP TABLE IF EXISTS user_powerups CASCADE");
-    await pool.query("DROP TABLE IF EXISTS daily_tasks CASCADE");
-    await pool.query("DROP TABLE IF EXISTS games CASCADE");
-    await pool.query("DROP TABLE IF EXISTS users CASCADE");
+}
 
-    // Create users table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        telegram_id BIGINT UNIQUE NOT NULL,
-        display_name TEXT,
-        country_flag TEXT,
-        profile_picture TEXT,
-        profile_completed BOOLEAN DEFAULT FALSE,
-        bonus_coins INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create games table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS games (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        score INTEGER NOT NULL,
-        coins_earned INTEGER DEFAULT 0,
-        max_combo INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create daily tasks table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS daily_tasks (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        task_id TEXT NOT NULL,
-        progress INTEGER DEFAULT 0,
-        target INTEGER DEFAULT 0,
-        completed BOOLEAN DEFAULT FALSE,
-        claimed BOOLEAN DEFAULT FALSE,
-        date DATE DEFAULT CURRENT_DATE,
-        UNIQUE (user_id, task_id, date)
-      )
-    `);
-
-    // Create powerups table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_powerups (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        type TEXT NOT NULL,
-        quantity INTEGER DEFAULT 0,
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE (user_id, type)
-      )
-    `);
-
-    // Create user_streaks table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_streaks (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        current_streak INTEGER DEFAULT 0,
-        last_check_in_date DATE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    
-    // Create squads table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS squads (
-        id SERIAL PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        icon TEXT,
-        invite_code TEXT UNIQUE NOT NULL,
-        owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        member_limit INTEGER DEFAULT 11,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create squad_members table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS squad_members (
-        id SERIAL PRIMARY KEY,
-        squad_id INTEGER REFERENCES squads(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        role TEXT DEFAULT 'member',
-        joined_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE (squad_id, user_id)
-      )
-    `);
-
-    console.log("✅ Database tables created.");
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Setup error:", err);
-    res.status(500).json({ success: false, error: err.message });
+@keyframes fly-bounce {
+  0% { 
+    transform: translate(0, 0) scale(1); 
+    opacity: 1; 
   }
-});
-
-// ---------- USER: upsert ----------
-app.post("/api/user/upsert", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { display_name, country_flag, profile_picture } = req.body;
-
-    const result = await pool.query(
-      `
-      INSERT INTO users (telegram_id, display_name, country_flag, profile_picture)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (telegram_id) DO UPDATE SET
-        display_name = EXCLUDED.display_name,
-        country_flag = EXCLUDED.country_flag,
-        profile_picture = EXCLUDED.profile_picture
-      RETURNING id, telegram_id, display_name, country_flag, profile_picture, bonus_coins, profile_completed
-    `,
-      [telegram_id, display_name || null, country_flag || null, profile_picture || null]
-    );
-
-    res.json({ user: result.rows[0] });
-  } catch (err) {
-    console.error("Upsert user error:", err);
-    res.status(500).json({ error: "Failed to upsert user" });
+  40% { 
+    transform: translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.2)) scale(1.1); 
+    opacity: 1; 
   }
-});
-
-// ---------- API: update profile ----------
-app.put("/api/user/profile", requireDB, validateUser, profileRateLimit, async (req, res) => {
-  try {
-    const { telegram_id, display_name, country_flag, profile_picture, name_changed } = req.body;
-    if (!telegram_id) return res.status(400).json({ error: "telegram_id required" });
-
-    const updates = [];
-    const values = [];
-    let i = 1;
-
-    if (display_name !== undefined) {
-      updates.push(`display_name = $${i++}`);
-      values.push(display_name);
-    }
-    if (country_flag !== undefined) {
-      updates.push(`country_flag = $${i++}`);
-      values.push(country_flag);
-    }
-    if (profile_picture !== undefined) {
-      updates.push(`profile_picture = $${i++}`);
-      values.push(profile_picture);
-    }
-    if (name_changed !== undefined) {
-      updates.push(`profile_completed = $${i++}`);
-      values.push(name_changed === true);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: "No fields to update" });
-    }
-
-    values.push(telegram_id);
-
-    const sql = `UPDATE users SET ${updates.join(", ")} WHERE telegram_id = $${i} RETURNING id, telegram_id, display_name, country_flag, profile_picture, profile_completed`;
-    const result = await pool.query(sql, values);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    res.json({ user: result.rows[0] });
-  } catch (err) {
-    console.error("Update profile error:", err);
-    res.status(500).json({ error: "Failed to update profile" });
+  100% { 
+    transform: translate(var(--tx), var(--ty)) scale(0.1); 
+    opacity: 0; 
   }
-});
+}
 
-// ---------- GAME SUBMIT ----------
-app.post("/api/game/complete", requireDB, validateUser, gameRateLimit, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { score, coins_earned, max_combo } = req.body;
-
-    if (typeof score !== "number" || score < 0) {
-      return res.status(400).json({ error: "Invalid score" });
-    }
-    const coinsEarned = Math.max(0, Math.floor(coins_earned || 0));
-    const maxCombo = Math.max(0, Math.floor(max_combo || 0));
-
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
-
-    await pool.query(
-      "INSERT INTO games (user_id, score, coins_earned, max_combo) VALUES ($1, $2, $3, $4)",
-      [userId, score, coinsEarned, maxCombo]
-    );
-
-    await pool.query(
-      "UPDATE users SET bonus_coins = COALESCE(bonus_coins,0) + $1 WHERE id = $2",
-      [coinsEarned, userId]
-    );
-
-    res.json({ success: true, coins_earned: coinsEarned });
-  } catch (err) {
-    console.error("Game submit error:", err);
-    res.status(500).json({ error: "Failed to submit game" });
+@keyframes fly-spiral {
+  0% { 
+    transform: translate(0, 0) scale(1) rotate(0deg); 
+    opacity: 1; 
   }
-});
-
-// ---------- LEADERBOARD ----------
-app.get("/api/leaderboard/:period", requireDB, async (req, res) => {
-  try {
-    const period = req.params.period;
-    const { country, telegram_id } = req.query;
-    
-    let dateFilter = "";
-    if (period === "daily") {
-      dateFilter = "AND DATE(g.created_at) = CURRENT_DATE";
-    } else if (period === "weekly") {
-      dateFilter = "AND g.created_at >= CURRENT_DATE - INTERVAL '7 days'";
-    }
-
-    let countryFilter = "";
-    if (country === "true") {
-      countryFilter = "AND u.country_flag IS NOT NULL";
-    }
-
-    const result = await pool.query(`
-      SELECT 
-        u.telegram_id, u.display_name, u.country_flag,
-        COALESCE(SUM(g.score), 0) AS total_score,
-        COUNT(g.id) AS games_played,
-        MAX(g.score) AS best_score,
-        ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) AS rank
-      FROM users u
-      LEFT JOIN games g ON u.id = g.user_id ${dateFilter}
-      WHERE 1=1 ${countryFilter}
-      GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag
-      HAVING COUNT(g.id) > 0 OR SUM(g.score) > 0
-      ORDER BY total_score DESC
-      LIMIT 100
-    `);
-
-    // Get user's rank if not in top 100
-    let userRank = null;
-    if (telegram_id && !result.rows.find(r => r.telegram_id == telegram_id)) {
-      const userRankResult = await pool.query(`
-        WITH ranked_users AS (
-          SELECT 
-            u.telegram_id, u.display_name, u.country_flag,
-            COALESCE(SUM(g.score), 0) AS total_score,
-            COUNT(g.id) AS games_played,
-            MAX(g.score) AS best_score,
-            ROW_NUMBER() OVER (ORDER BY SUM(g.score) DESC) AS rank
-          FROM users u
-          LEFT JOIN games g ON u.id = g.user_id ${dateFilter}
-          WHERE 1=1 ${countryFilter}
-          GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag
-          HAVING COUNT(g.id) > 0 OR SUM(g.score) > 0
-        )
-        SELECT * FROM ranked_users WHERE telegram_id = $1
-      `, [telegram_id]);
-      
-      if (userRankResult.rows.length > 0) {
-        userRank = userRankResult.rows[0];
-      }
-    }
-
-    res.json({ 
-      leaderboard: result.rows,
-      userRank: userRank
-    });
-  } catch (err) {
-    console.error("Leaderboard error:", err);
-    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  50% { 
+    transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.3)) scale(0.8) rotate(180deg); 
+    opacity: 0.8; 
   }
-});
-
-app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        s.id, s.name, s.icon,
-        COUNT(sm.user_id) AS member_count,
-        COALESCE(SUM(user_scores.total_score), 0) AS total_score
-      FROM squads s
-      LEFT JOIN squad_members sm ON sm.squad_id = s.id
-      LEFT JOIN (
-        SELECT user_id, SUM(score) as total_score
-        FROM games
-        GROUP BY user_id
-      ) user_scores ON user_scores.user_id = sm.user_id
-      GROUP BY s.id
-      ORDER BY total_score DESC
-      LIMIT 100
-    `);
-    res.json({ leaderboard: result.rows });
-  } catch (err) {
-    console.error("Squad leaderboard error:", err);
-    res.status(500).json({ error: "Failed to fetch squad leaderboard" });
+  100% { 
+    transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(360deg); 
+    opacity: 0; 
   }
-});
+}
 
-// The DETAILS endpoint (intentionally placed after leaderboard)
-app.get("/api/squads/:squadId", requireDB, async (req, res) => {
-  try {
-    const squadId = parseInt(req.params.squadId, 10);
-    if (isNaN(squadId)) return res.status(400).json({ error: "Invalid squad ID" });
-
-    const result = await pool.query(`
-      SELECT 
-        s.id, s.name, s.icon, s.invite_code, s.member_limit, s.created_at,
-        u.telegram_id AS creator_telegram_id,
-        u.display_name AS creator_name
-      FROM squads s
-      LEFT JOIN users u ON u.id = s.owner_user_id
-      WHERE s.id = $1
-    `, [squadId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Squad not found" });
-    }
-
-    const members = await pool.query(`
-      SELECT 
-        u.telegram_id, u.display_name, u.country_flag, u.profile_picture,
-        sm.role, sm.joined_at,
-        COALESCE(user_scores.total_score, 0) AS total_score
-      FROM squad_members sm
-      JOIN users u ON u.id = sm.user_id
-      LEFT JOIN (
-        SELECT user_id, SUM(score) as total_score
-        FROM games
-        GROUP BY user_id
-      ) user_scores ON user_scores.user_id = u.id
-      WHERE sm.squad_id = $1
-      ORDER BY total_score DESC, sm.joined_at ASC
-    `, [squadId]);
-
-    const squad = result.rows[0];
-    squad.member_count = members.rows.length;
-    squad.members = members.rows;
-
-    res.json({ squad });
-  } catch (err) {
-    console.error("Squad details error:", err);
-    res.status(500).json({ error: "Failed to fetch squad details" });
+/* Explosion effects - short duration */
+@keyframes explosion-flash {
+  0% { 
+    transform: scale(0); 
+    opacity: 0.8; 
   }
-});
-
-// Get user's squad info
-app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-
-    const result = await pool.query(`
-      SELECT s.id, s.name, s.icon
-      FROM squads s
-      JOIN squad_members sm ON sm.squad_id = s.id
-      JOIN users u ON u.id = sm.user_id
-      WHERE u.telegram_id = $1
-    `, [telegram_id]);
-
-    if (result.rows.length === 0) {
-      return res.json({ squad: null });
-    }
-
-    res.json({ squad: result.rows[0] });
-  } catch (err) {
-    console.error("User squad error:", err);
-    res.status(500).json({ error: "Failed to fetch user squad" });
+  50% { 
+    transform: scale(1); 
+    opacity: 0.4; 
   }
-});
-
-// ---------- SQUADS: create ----------
-app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
-  const { name, icon } = req.body;
-  const telegram_id = req.user.telegram_id;
-
-  if (!name || name.length < 3 || name.length > 50) {
-    return res.status(400).json({ error: "Squad name must be between 3 and 50 characters." });
+  100% { 
+    transform: scale(1.5); 
+    opacity: 0; 
   }
+}
 
-  const invite_code = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) throw new Error("User not found");
-    const userId = userResult.rows[0].id;
-
-    const existingSquad = await client.query("SELECT id FROM squad_members WHERE user_id = $1", [userId]);
-    if (existingSquad.rows.length > 0) {
-      return res.status(400).json({ error: "You are already in a squad." });
-    }
-
-    const squadInsert = await client.query(
-      `INSERT INTO squads (name, icon, invite_code, owner_user_id) 
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [name, icon || null, invite_code, userId]
-    );
-    const squadId = squadInsert.rows[0].id;
-
-    await client.query(
-      `INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)`,
-      [squadId, userId]
-    );
-
-    await client.query('COMMIT');
-    res.status(201).json({ success: true, message: "Squad created!" });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    if (error.code === '23505') {
-      return res.status(400).json({ error: "A squad with this name already exists." });
-    }
-    console.error("Failed to create squad:", error);
-    res.status(500).json({ error: "Failed to create squad" });
-  } finally {
-    client.release();
+@keyframes shockwave {
+  0% { 
+    width: 0; 
+    height: 0; 
+    margin-left: 0; 
+    margin-top: 0; 
+    opacity: 0.8; 
+    border-width: 2px;
   }
-});
-
-// POST to join a squad (UPDATED WITH MEMBER LIMIT)
-app.post("/api/squads/join", requireDB, validateUser, async (req, res) => {
-  const { invite_code } = req.body;
-  const telegram_id = req.user.telegram_id;
-
-  if (!invite_code || invite_code.length !== 6) {
-    return res.status(400).json({ error: "Invalid invite code." });
+  100% { 
+    width: 120px; 
+    height: 120px; 
+    margin-left: -60px; 
+    margin-top: -60px; 
+    opacity: 0; 
+    border-width: 1px;
   }
+}
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+.enhanced-spark {
+  will-change: transform, opacity;
+  pointer-events: none;
+}
 
-    const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) throw new Error("User not found");
-    const userId = userResult.rows[0].id;
+/* faster easing while swapping */
+.tile.swapping{
+  transition:
+    left 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
+    top 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
+    transform 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
+    opacity 0.12s linear;
+}
 
-    const existingSquad = await client.query("SELECT id FROM squad_members WHERE user_id = $1", [userId]);
-    if (existingSquad.rows.length > 0) {
-      return res.status(400).json({ error: "You are already in a squad." });
-    }
+/* REPLACED: expensive emoji drop-shadow */
+.tile .tile-emoji{
+  line-height: 1;
+  transform: translateZ(0);
+  will-change: transform;
+}
 
-    const squadResult = await client.query("SELECT id, member_limit FROM squads WHERE invite_code = $1", [invite_code.toUpperCase()]);
-    if (squadResult.rows.length === 0) {
-      return res.status(404).json({ error: "Squad not found with this invite code." });
-    }
-    const squadId = squadResult.rows[0].id;
-    const memberLimit = squadResult.rows[0].member_limit || 11;
+/* FIXED: COMBO CELEBRATION OVER STATS ROW */
+.combo-celebration {
+  position: absolute;
+  top: 40px; /* Over the Score/Moves/Combo row */
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0.5em 0.9em;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 16px;
+  animation: combo-explosion 1.5s ease-in-out forwards;
+  text-shadow: 
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0,0,0,0.6);
+  z-index: 1000;
+  pointer-events: none;
+  white-space: nowrap; /* stay on one line */
+  transform-origin: center center;
+  width: auto;
+  max-width: min(92vw, 680px); /* keep within viewport */
+  box-sizing: border-box;
+  font-weight: 700;
+  font-size: clamp(14px, 2.8vw, 22px); /* auto-resize across screens */
+}
 
-    // Check member limit
-    const memberCount = await client.query(
-      "SELECT COUNT(*) as count FROM squad_members WHERE squad_id = $1",
-      [squadId]
-    );
-    const count = parseInt(memberCount.rows[0].count, 10) || 0;
-    if (count >= memberLimit) {
-      return res.status(400).json({ error: "This squad is full." });
-    }
+/* Explosion effect above combo text */
+.combo-celebration::before {
+  content: '💥✨🎉💥';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 32px;
+  animation: explosion-burst 1.5s ease-out forwards;
+  z-index: 1001;
+}
 
-    await client.query(
-      "INSERT INTO squad_members (squad_id, user_id) VALUES ($1, $2)",
-      [squadId, userId]
-    );
+@keyframes combo-explosion {
+  0% { transform: translateX(-50%) scale(0.6) rotate(-5deg); opacity: 0; filter: blur(4px); }
+  15% { transform: translateX(-50%) scale(1.3) rotate(3deg); opacity: 1; filter: blur(0px); }
+  30% { transform: translateX(-50%) scale(1.1) rotate(-1deg); }
+  85% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; filter: blur(0px); }
+  100% { transform: translateX(-50%) scale(0.9) rotate(0deg); opacity: 0; filter: blur(2px); }
+}
 
-    await client.query('COMMIT');
-    res.json({ success: true, message: "Joined squad!" });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error("Join squad error:", err);
-    res.status(500).json({ error: "Failed to join squad" });
-  } finally {
-    client.release();
+@keyframes explosion-burst {
+  0% {
+    transform: translateX(-50%) scale(0.5) rotate(0deg);
+    opacity: 0;
   }
-});
-
-// ---------- SQUADS: kick member (NEW) ----------
-app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) => {
-  const creator_telegram_id = req.user.telegram_id;
-  const { member_telegram_id } = req.body;
-
-  if (!member_telegram_id) {
-    return res.status(400).json({ error: "Member Telegram ID is required." });
+  20% {
+    transform: translateX(-50%) scale(1.5) rotate(180deg);
+    opacity: 1;
   }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Get creator's user ID
-    const creatorUserResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [creator_telegram_id]);
-    if (creatorUserResult.rows.length === 0) {
-      return res.status(404).json({ error: "Creator user not found." });
-    }
-    const creatorUserId = creatorUserResult.rows[0].id;
-
-    // Find the squad owned by the creator
-    const squadResult = await client.query("SELECT id FROM squads WHERE owner_user_id = $1", [creatorUserId]);
-    if (squadResult.rows.length === 0) {
-      return res.status(403).json({ error: "You do not own a squad." });
-    }
-    const squadId = squadResult.rows[0].id;
-
-    // Get the member's user ID
-    const memberUserResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [member_telegram_id]);
-    if (memberUserResult.rows.length === 0) {
-      return res.status(404).json({ error: "Member to kick not found." });
-    }
-    const memberUserId = memberUserResult.rows[0].id;
-    
-    // Creator cannot kick themselves
-    if (creatorUserId === memberUserId) {
-        return res.status(400).json({ error: "You cannot kick yourself from the squad." });
-    }
-
-    // Delete the member from the squad
-    const deleteResult = await client.query(
-      "DELETE FROM squad_members WHERE squad_id = $1 AND user_id = $2",
-      [squadId, memberUserId]
-    );
-
-    if (deleteResult.rowCount === 0) {
-      return res.status(404).json({ error: "Member is not in your squad." });
-    }
-
-    await client.query('COMMIT');
-    res.json({ success: true, message: "Member kicked successfully." });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error("Failed to kick member:", error);
-    res.status(500).json({ error: "Failed to kick member." });
-  } finally {
-    client.release();
+  70% {
+    transform: translateX(-50%) scale(1.2) rotate(360deg);
+    opacity: 0.8;
   }
-});
-
-
-// ---------- DAILY TASKS ----------
-const DAILY_TASKS = [
-  {
-    id: 'play_3_games',
-    title: 'Play 3 Games',
-    description: 'Complete 3 matches today',
-    reward: 200,
-    icon: '🎮',
-    target: 3,
-    type: 'games_played'
-  },
-  {
-    id: 'score_5000',
-    title: 'Score 5,000 Points',
-    description: 'Get 5,000+ points in a single game',
-    reward: 300,
-    icon: '🎯',
-    target: 5000,
-    type: 'single_score'
-  },
-  {
-    id: 'combo_5x',
-    title: '5x Combo Master',
-    description: 'Achieve a 5x combo in any game',
-    reward: 400,
-    icon: '🔥',
-    target: 5,
-    type: 'max_combo'
-  },
-  {
-    id: 'invite_friend',
-    title: 'Invite a Friend',
-    description: 'Bring one friend to play Meowchi',
-    reward: 500,
-    icon: '👫',
-    target: 1,
-    type: 'invites'
+  100% {
+    transform: translateX(-50%) scale(2.0) rotate(540deg);
+    opacity: 0;
   }
-];
+}
 
-// Fetch daily tasks (GET)
-app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
+/* OLD combo style - REMOVED (was positioned in board center) */
+.combo {
+  /* This class is no longer used - replaced by combo-celebration */
+  display: none;
+}
 
-    // Ensure user exists
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
+/* pause overlay */
+.pause-overlay{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  /* removed backdrop-filter: saturate(120%) blur(8px); */
+}
 
-    // Ensure tasks for today exist (insert if missing)
-    for (const t of DAILY_TASKS) {
-      await pool.query(
-        `
-        INSERT INTO daily_tasks (user_id, task_id, target, date)
-        VALUES ($1, $2, $3, CURRENT_DATE)
-        ON CONFLICT (user_id, task_id, date) DO NOTHING
-        `,
-        [userId, t.id, t.target]
-      );
-    }
+/* controls under board */
+.controls{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
 
-    // Fetch today's tasks
-    const tasksRes = await pool.query(
-      `
-      SELECT task_id, progress, target, completed, claimed
-      FROM daily_tasks
-      WHERE user_id = $1 AND date = CURRENT_DATE
-      ORDER BY task_id ASC
-      `,
-      [userId]
-    );
+.controls .btn{
+  padding: 10px 14px;
+  font-size: 13px;
+}
 
-    const tasks = tasksRes.rows.map(row => {
-      const def = DAILY_TASKS.find(d => d.id === row.task_id);
-      return {
-        id: row.task_id,
-        title: def?.title || row.task_id,
-        description: def?.description || "",
-        reward: def?.reward || 0,
-        icon: def?.icon || "⭐",
-        progress: parseInt(row.progress || 0, 10),
-        target: parseInt(row.target || 0, 10),
-        completed: row.completed,
-        claimed: row.claimed
-      };
-    });
+.controls-size{
+  opacity: 0.7;
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: auto;
+}
 
-    res.json({ tasks });
-  } catch (err) {
-    console.error("Fetch daily tasks error:", err);
-    res.status(500).json({ error: "Failed to fetch daily tasks" });
+/* poof particles - short duration */
+.spark{
+  position: absolute;
+  transform-origin: var(--cx) var(--cy);
+  animation: fly var(--dur, 0.4s) ease-out forwards;
+}
+
+/* ===== Leaderboard Styles ===== */
+.leaderboard-header {
+  margin-bottom: 20px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tashkent-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.time-icon {
+  font-size: 14px;
+}
+
+.profile-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.notice-icon {
+  font-size: 16px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.country-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.country-filter:hover .checkbox-custom {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.country-filter input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.country-filter input:checked + .checkbox-custom {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.country-filter input:checked + .checkbox-custom::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.country-filter input:disabled + .checkbox-custom {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.filter-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.filter-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.filter-description {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: right;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.retry-info {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.error-details {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.empty-hint {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.empty-hint .small {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.debug-info {
+  margin-top: 24px;
+  opacity: 0.7;
+}
+
+.debug-info details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.debug-info summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px;
+}
+
+.debug-info summary:hover {
+  color: var(--accent);
+}
+
+/* Loading and Error States */
+.loading-state, .error-state {
+  text-align: center;
+  padding: 40px 20px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-icon, .error-icon, .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.8;
+}
+
+.loading-text, .error-text, .empty-text {
+  font-size: 16px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.error-state .btn {
+  margin-top: 16px;
+}
+
+/* Leaderboard List */
+.leaderboard-list {
+  display: grid;
+  gap: 8px;
+}
+
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.leaderboard-item:hover {
+  background: var(--card);
+  transform: translateY(-1px);
+}
+
+/* Enhanced current user highlighting */
+.leaderboard-item.current-user {
+  background: linear-gradient(135deg, var(--accent-light), rgba(244, 208, 63, 0.05));
+  border-color: var(--accent);
+}
+
+.leaderboard-item.current-user .player-name {
+  font-weight: 700;
+}
+
+.leaderboard-item.current-user .player-score {
+  font-weight: 900;
+  color: var(--accent);
+}
+
+/* Rank display improvements */
+.rank-display {
+  font-size: 20px;
+  font-weight: 800;
+  min-width: 55px;
+  text-align: center;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+/* Medal styling */
+.leaderboard-item:nth-child(1) .rank-display,
+.leaderboard-item:nth-child(2) .rank-display,
+.leaderboard-item:nth-child(3) .rank-display {
+  font-size: 28px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.leaderboard-item:nth-child(1) .rank-display {
+  color: #FFD700;
+}
+
+.leaderboard-item:nth-child(2) .rank-display {
+  color: #C0C0C0;
+}
+
+.leaderboard-item:nth-child(3) .rank-display {
+  color: #CD7F32;
+}
+
+.player-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+/* Improve country flag display */
+.country-flag {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-stats {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.player-score {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+  text-align: right;
+  letter-spacing: -0.3px;
+}
+
+/* Better empty state */
+.empty-state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* User Rank Section */
+.user-rank-section {
+  margin-top: 32px;
+}
+
+/* Section divider improvements */
+.section-divider {
+  text-align: center;
+  margin: 32px 0 20px 0;
+  position: relative;
+}
+
+.section-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+  z-index: 1;
+}
+
+.divider-text {
+  background: var(--bg);
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 2;
+}
+
+/* ===== Profile Modal Styles ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  /* removed backdrop-filter: blur(4px); */
+  display: grid;
+  place-items: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: var(--card);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+}
+
+.profile-modal {
+  animation: modal-enter 0.3s ease-out;
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
   }
-});
-
-// Claim a task (POST)
-app.post("/api/user/:telegram_id/task-claim", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { task_id } = req.body;
-
-    if (!task_id) return res.status(400).json({ error: "task_id is required" });
-
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
-
-    const taskRes = await pool.query(
-      `
-      SELECT id, completed, claimed FROM daily_tasks
-      WHERE user_id = $1 AND task_id = $2 AND date = CURRENT_DATE
-      `,
-      [userId, task_id]
-    );
-    if (taskRes.rows.length === 0) {
-      return res.status(404).json({ error: "Task not found for today" });
-    }
-    const task = taskRes.rows[0];
-    if (!task.completed) {
-      return res.status(400).json({ error: "Task not completed yet" });
-    }
-    if (task.claimed) {
-      return res.status(400).json({ error: "Task already claimed" });
-    }
-
-    await pool.query(
-      "UPDATE daily_tasks SET claimed = TRUE WHERE id = $1",
-      [task.id]
-    );
-
-    const reward = DAILY_TASKS.find(t => t.id === task_id)?.reward || 0;
-    await pool.query(
-      "UPDATE users SET bonus_coins = COALESCE(bonus_coins,0) + $1 WHERE id = $2",
-      [reward, userId]
-    );
-
-    res.json({ success: true, reward_earned: reward, message: "Task claimed successfully!" });
-  } catch (err) {
-    console.error("Claim task error:", err);
-    res.status(500).json({ error: "Failed to claim task" });
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
-});
+}
 
-// ---------- STATS (POST - SINGLE IMPLEMENTATION) ----------
-app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    
-    const userResult = await pool.query(`
-      SELECT 
-        u.id, u.telegram_id, u.display_name, u.country_flag, u.profile_picture, u.bonus_coins,
-        u.profile_completed, u.created_at,
-        COALESCE(g.total_score, 0) as total_score,
-        COALESCE(g.games_played, 0) as games_played,
-        COALESCE(g.best_score, 0) as best_score,
-        COALESCE(g.best_combo, 0) as best_combo
-      FROM users u
-      LEFT JOIN (
-        SELECT 
-          user_id,
-          SUM(score) as total_score,
-          COUNT(*) as games_played,
-          MAX(score) as best_score,
-          MAX(max_combo) as best_combo
-        FROM games 
-        GROUP BY user_id
-      ) g ON g.user_id = u.id
-      WHERE u.telegram_id = $1
-    `, [telegram_id]);
+.modal-header {
+  padding: 32px 32px 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
 
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
+.modal-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 8px 0;
+  letter-spacing: -0.2px;
+}
 
-    const user = userResult.rows[0];
-    user.display_name = user.display_name || `Stray Cat #${user.telegram_id.toString().slice(-5)}`;
+.modal-subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  font-weight: 500;
+}
 
-    res.json({ 
-      user: {
-        ...user,
-        total_score: parseInt(user.total_score || 0),
-        games_played: parseInt(user.games_played || 0),
-        best_score: parseInt(user.best_score || 0),
-        best_combo: parseInt(user.best_combo || 0),
-        bonus_coins: parseInt(user.bonus_coins || 0),
-        total_coins_earned: parseInt(user.bonus_coins || 0),
-      }
-    });
-  } catch (err) {
-    console.error("User stats error:", err);
-    res.status(500).json({ error: "Failed to get user stats" });
+.modal-body {
+  padding: 24px 32px;
+}
+
+.modal-footer {
+  padding: 20px 32px 32px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  border: 1px solid rgba(231, 76, 60, 0.2);
+}
+
+.error-icon {
+  font-size: 16px;
+}
+
+.detection-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+.detection-icon {
+  font-size: 16px;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.form-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* Country Selector */
+.country-selector {
+  position: relative;
+}
+
+.country-button {
+  width: 100%;   /* <-- Correct: semicolon */
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.country-button:hover {
+  border-color: var(--accent);
+}
+
+.country-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.selected-country {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.country-flag-large {
+  font-size: 24px;
+}
+
+.country-name {
+  font-weight: 600;
+}
+
+.placeholder {
+  color: var(--muted);
+}
+
+.dropdown-arrow {
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.country-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  z-index: 1000;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.country-search {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.country-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.country-option {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.2s ease;
+}
+
+.country-option:hover {
+  background: var(--surface);
+}
+
+.country-flag-small {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.loading-spinner {
+  display: inline-block;
+}
+
+/* Game Over Profile Prompt */
+.profile-prompt {
+  text-align: center;
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--accent-light);
+  border-radius: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+/* ===== Avatar Selection Grid Styles ===== */
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.avatar-option {
+  appearance: none;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar-option:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  transform: scale(1.05);
+}
+
+.avatar-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  transform: scale(1.08);
+}
+
+.avatar-option.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.avatar-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* reduced motion - Remove all animations for accessibility */
+@media (prefers-reduced-motion: reduce){
+  .tile, .tile.swapping, .tile.drop-in, .tile.blasting,
+  .splash-progress__bar, .combo-celebration, .tile.hint .tile-emoji{
+    transition: none !important;
+    animation: none !important;
   }
-});
+  .spark{
+    animation: none !important;
+    opacity: 0;
+  }
+}
 
-// ---------- CHECK-IN (ENABLED & CORRECTED) ----------
-app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
-  const telegram_id = req.user.telegram_id;
-  const client = await pool.connect();
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .header{
+    padding: 12px 16px 8px;
+  }
   
-  try {
-    await client.query('BEGIN');
-
-    const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
-
-    const streakResult = await client.query(
-      "SELECT current_streak, last_check_in_date FROM user_streaks WHERE user_id = $1",
-      [userId]
-    );
-
-    const today = new Date().toISOString().split('T')[0];
-    let newStreak = 1;
-
-    if (streakResult.rows.length > 0) {
-      const streakData = streakResult.rows[0];
-      
-      const lastCheckIn = streakData.last_check_in_date ? new Date(streakData.last_check_in_date).toISOString().split('T')[0] : null;
-      
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-      if (lastCheckIn === today) {
-        newStreak = streakData.current_streak;
-      } else if (lastCheckIn === yesterdayStr) {
-        newStreak = streakData.current_streak + 1;
-      }
-    }
-
-    const updatedStreak = await client.query(`
-      INSERT INTO user_streaks (user_id, current_streak, last_check_in_date, updated_at)
-      VALUES ($1, $2, CURRENT_DATE, NOW())
-      ON CONFLICT (user_id) DO UPDATE SET
-        current_streak = EXCLUDED.current_streak,
-        last_check_in_date = EXCLUDED.last_check_in_date,
-        updated_at = NOW()
-      RETURNING current_streak
-    `, [userId, newStreak]);
-
-    await client.query('COMMIT');
-    res.json({ success: true, streak: updatedStreak.rows[0].current_streak });
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error("Check-in error:", err);
-    res.status(500).json({ error: "Failed to process check-in" });
-  } finally {
-    client.release();
+  .section{
+    margin: 12px 16px;
+    padding: 20px;
   }
-});
-
-// ---------- SHOP ----------
-app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { item_id } = req.body;
-
-    const userResult = await pool.query("SELECT id, bonus_coins FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    
-    const user = userResult.rows[0];
-    const userId = user.id;
-    const currentCoins = parseInt(user.bonus_coins || 0);
-
-    // Define shop items with prices
-    const items = {
-      "shuffle": { name: "The Paw-sitive Swap", price: 50 },
-      "hammer": { name: "The Catnip Cookie", price: 75 },
-      "bomb": { name: "The Marshmallow Bomb", price: 100 },
-    };
-
-    const item = items[item_id];
-    if (!item) {
-      return res.status(400).json({ error: "Invalid item" });
-    }
-
-    if (currentCoins < item.price) {
-      return res.status(400).json({ error: "Not enough coins" });
-    }
-
-    // Deduct coins and add powerup
-    const newCoins = currentCoins - item.price;
-    await pool.query("UPDATE users SET bonus_coins = $1 WHERE id = $2", [newCoins, userId]);
-    
-    await pool.query(`
-      INSERT INTO user_powerups (user_id, type, quantity)
-      VALUES ($1, $2, 1)
-      ON CONFLICT (user_id, type) DO UPDATE SET
-        quantity = user_powerups.quantity + 1,
-        updated_at = NOW()
-    `, [userId, item_id]);
-
-    res.json({ success: true, newCoinBalance: newCoins, message: `Purchased ${item.name}!` });
-  } catch (err) {
-    console.error("Shop purchase error:", err);
-    res.status(500).json({ error: "Failed to process purchase" });
+  
+  .nav-container{
+    padding: 10px 4px 16px;
   }
-});
-
-// ---------- POWERUPS: get & use (NEW) ----------
-app.get("/api/user/:telegram_id/powerups", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
-
-    const powerupsResult = await pool.query(
-      "SELECT type, quantity FROM user_powerups WHERE user_id = $1 AND quantity > 0",
-      [userId]
-    );
-    
-    const inventory = powerupsResult.rows.reduce((acc, row) => {
-      acc[row.type] = parseInt(row.quantity, 10);
-      return acc;
-    }, {});
-
-    res.json({ powerups: inventory });
-  } catch (err) {
-    console.error("Get powerups error:", err);
-    res.status(500).json({ error: "Failed to fetch powerups" });
+  
+  .nav-item{
+    min-width: 50px;
+    padding: 6px 8px;
   }
-});
-
-app.post("/api/powerups/use", requireDB, validateUser, async (req, res) => {
-  try {
-    const telegram_id = req.user.telegram_id;
-    const { item_id } = req.body;
-
-    if (!item_id) {
-      return res.status(400).json({ error: "item_id is required" });
-    }
-
-    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userResult.rows[0].id;
-
-    const result = await pool.query(
-      `UPDATE user_powerups 
-       SET quantity = quantity - 1, updated_at = NOW()
-       WHERE user_id = $1 AND type = $2 AND quantity > 0
-       RETURNING quantity`,
-      [userId, item_id]
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(400).json({ error: "Powerup not available or insufficient quantity" });
-    }
-
-    res.json({ success: true, newQuantity: result.rows[0].quantity });
-  } catch (err) {
-    console.error("Use powerup error:", err);
-    res.status(500).json({ error: "Failed to use powerup" });
+  
+  .nav-icon{
+    font-size: 18px;
   }
-});
+  
+  .nav-label{
+    font-size: 10px;
+  }
 
-// ---------- FALLBACK: serve SPA ----------
-// IMPORTANT: This must be LAST, after all API routes
-app.get("*", (_req, res) => {
-  res.sendFile(indexPath);
-});
+  .modal-content {
+    margin: 20px;
+    max-width: calc(100vw - 40px);
+  }
+  
+  .modal-header, .modal-body, .modal-footer {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
+  
+  .modal-footer .btn {
+    width: 100%;
+  }
+  
+  .title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .filter-info {
+    align-items: flex-start;
+  }
+  
+  .filter-description {
+    text-align: left;
+    font-size: 11px;
+  }
+  
+  .last-updated {
+    font-size: 11px;
+  }
+  
+  .leaderboard-item {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  .leaderboard-item .player-stats {
+    font-size: 11px;
+  }
+  
+  .rank-display {
+    font-size: 18px;
+    min-width: 45px;
+  }
+  
+  .player-score {
+    font-size: 14px;
+  }
+  
+  /* Mobile combo celebration adjustments */
+  .combo-celebration {
+    font-size: 20px; /* Smaller on mobile */
+    padding: 12px;
+    border-radius: 16px;
+  }
+  
+  .combo-celebration::before {
+    font-size: 24px; /* Smaller explosion on mobile */
+    top: -15px;
+  }
 
-// ---------- Start server ----------
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+  /* Avatar grid mobile adjustments */
+  .avatar-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  
+  .avatar-option {
+    padding: 6px;
+  }
+  
+  .avatar-option.selected::after {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+}
+
+/* =========================
+   Simplified animations - GPU accelerated (Step 2)
+   ========================= */
+@keyframes simple-blast {
+  0% { 
+    transform: scale(1) translateZ(0); 
+    opacity: 1; 
+  }
+  50% { 
+    transform: scale(1.4) translateZ(0); 
+    opacity: 0.8; 
+  }
+  100% { 
+    transform: scale(2.0) translateZ(0); 
+    opacity: 0; 
+  }
+}
+
+@keyframes simple-hint-pulse {
+  0%, 100% { transform: scale(1) translateZ(0); }
+  50% { transform: scale(1.1) translateZ(0); }
+}
+
+.blast-simple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  pointer-events: none;
+  animation: simple-blast-icon 0.2s ease forwards;
+}
+
+@keyframes simple-blast-icon {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}
+
+/* =================================== */
+/* ===== PHASE 1 IMPROVEMENTS ====== */
+/* =================================== */
+
+/* Step 4: Skeleton Loading Styles */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--card) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.8s infinite ease-in-out;
+  border-radius: 8px;
+}
+
+.skeleton-text {
+  background-color: var(--surface); /* Fallback for the gradient */
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Step 3: Non-Scrolling Game View Container */
+.game-view-container {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+  align-items: center; /* 👈 ADD THIS LINE TO CENTER EVERYTHING */
+}
+
+.game-view-container .board-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.game-view-container .board {
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.game-view-container .timer-display,
+.game-view-container .row,
+.game-view-container .controls,
+.game-view-container .progress {
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+/* Step 5: UI Juice for Buttons */
+.btn:active {
+  transform: translateY(-1px) scale(0.98);
+  filter: brightness(0.95);
+}
+
+/* =================================== */
+/* ===== UI/UX FINISHING TOUCHES ===== */
+/* =================================== */
+
+/* Seamless Screen Transitions */
+.content {
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Coin Counter "Pop" Animation */
+.coins-display.pop {
+  animation: pop-animation 0.5s ease;
+}
+
+@keyframes pop-animation {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* In-Game Visual Combo Meter */
+.combo-meter-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.combo-meter-bar {
+  width: 80px;
+  height: 8px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.combo-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f6d365 0%, #fda085 100%);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 8px rgba(253, 160, 133, 0.5);
+}
+
+/* Centralized styles moved from Squads.jsx */
+.squad-info-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+
+.squad-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.squad-icon { font-size: 32px; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background: var(--card); border-radius: 12px; }
+.squad-name { font-size: 20px; font-weight: 700; margin: 0 0 4px 0; color: var(--text); }
+.squad-stats { font-size: 14px; color: var(--muted); margin: 0; }
+.creator-badge { font-size: 12px; color: var(--accent); font-weight: 600; margin: 4px 0 0; }
+.squad-actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.invite-code-section { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid var(--border); }
+.invite-code-display { display: flex; align-items: center; gap: 12px; }
+.invite-code { font-family: monospace; font-size: 18px; font-weight: 700; color: var(--accent); background: var(--surface); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); flex: 1; text-align: center; }
+.copy-btn { padding: 8px 16px; font-size: 12px; }
+.members-section { margin-top: 20px; }
+.members-title { font-size: 16px; font-weight: 700; margin: 0 0 12px 0; color: var(--text); }
+.members-list { display: flex; flex-direction: column; gap: 8px; }
+.member-item { display: flex; align-items: center; gap: 12px; padding: 8px; background: var(--card); border-radius: 8px; border: 1px solid var(--border); }
+.member-rank { font-weight: 800; color: var(--accent); width: 30px; text-align: center; font-size: 14px; }
+.member-info { flex: 1; }
+.member-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.country-flag { font-size: 16px; }
+.leader-badge { font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: 700; }
+.member-stats { font-size: 12px; color: var(--muted); }
+.kick-btn { background: #e74c3c; color: white; border: none; padding: 6px 12px; font-size: 12px; border-radius: 6px; min-width: 50px; }
+.member-avatar { width: 40px; height: 40px; border-radius: 12px; overflow: hidden; flex-shrink: 0; background: var(--surface); }
+.member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* =================================== */
+/* ===== PHASE 2: STREAK STYLES ====== */
+/* =================================== */
+
+.streak-tracker {
+  margin-top: 24px;
+  margin-bottom: 32px;
+  padding: 20px;
+  background-color: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.streak-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px 0;
+  text-align: center;
+}
+
+.streak-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  opacity: 0.6;
+  transition: all 0.3s ease;
+}
+
+.streak-day.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background-color: var(--accent-light);
+  transform: scale(1.05);
+}
+
+.day-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.streak-day.active .day-label {
+  color: var(--accent);
+}
+
+.day-reward {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.streak-day:last-child .day-reward {
+  font-size: 18px;
+}
+
+/* =================================== */
+/* ===== POWERUP TRAY STYLES (NEW) ===== */
+/* =================================== */
+
+.powerup-tray {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.powerup-btn {
+  appearance: none;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.powerup-btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.powerup-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 12px var(--accent-light);
+}
+
+.powerup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.powerup-icon {
+  font-size: 28px;
+}
+
+.powerup-quantity {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--card);
+}
