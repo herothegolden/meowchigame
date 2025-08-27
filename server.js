@@ -203,6 +203,7 @@ app.get("/api/setup/database", async (req, res) => {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    
     // Create squads table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS squads (
