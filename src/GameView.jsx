@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import * as audio from "./audio"; // minimal sound hooks
 import ShareButtons from "./ShareButtons.jsx";
 import { game } from "./utils.js";
+import { useStore } from "./store.js"; // NEW: Import Zustand store
 
 // 1) OPTIMIZE: Memoized tile component
 const MemoizedTile = React.memo(({
@@ -117,6 +118,13 @@ const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
 const randEmoji = () =>
   CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
+// NEW: Power-up definitions
+const POWERUP_DEFINITIONS = {
+  shuffle: { name: "Paw-sitive Swap", icon: "🐾" },
+  hammer: { name: "Catnip Cookie", icon: "🍪" },
+  bomb: { name: "Marshmallow Bomb", icon: "💣" },
+};
+
 export default function GameView({
   onExit,
   settings,
@@ -159,12 +167,14 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
-  // 👇 ADD THESE LINES HERE
+  // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
+  const powerups = useStore(s => s.powerups);
+  const setPowerups = useStore(s => s.setPowerups);
+
   const onUsePowerup = (powerupName) => {
       console.log(`Used power-up: ${powerupName}`);
   };
-  // 👆 END OF ADDED LINES
 
   // Enable closing confirmation during gameplay
   useEffect(() => {
@@ -332,7 +342,7 @@ export default function GameView({
     const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
 
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`� I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
     }
   };
 
@@ -395,35 +405,29 @@ export default function GameView({
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
 
-      /* ==================================
-         PATCH: Catnip Cookie (hammer) logic
-         ================================== */
-      if (typeof activePowerup !== "undefined" && activePowerup) {
-        if (activePowerup === 'hammer') { // This is now the "Catnip Cookie"
+      if (activePowerup) {
+        if (activePowerup === 'hammer') {
           const g = cloneGrid(gridRef.current);
           const targetCookie = g[p.r][p.c];
-
-          // UPDATED: Logic to work on any of the main candy set items
           if (CANDY_SET.includes(targetCookie)) {
             for (let r = 0; r < ROWS; r++) {
               for (let c = 0; c < COLS; c++) {
                 if (g[r][c] === targetCookie) {
-                  g[r][c] = null; // Clear all matching cookies
+                  g[r][c] = null;
                 }
               }
             }
             audio.play?.('powerup_spawn', { volume: 0.7 });
-            optimizedResolveCascades(g, () => {}); // use existing cascade resolver
-            if (typeof onUsePowerup === "function") onUsePowerup('hammer');
-            if (typeof setActivePowerup === "function") setActivePowerup(null);
+            optimizedResolveCascades(g, () => {});
+            onUsePowerup('hammer');
+            setActivePowerup(null);
           } else {
             haptic(8);
             audio.play?.("swap_invalid", { volume: 0.5 });
           }
         }
-        // ... other powerups (unchanged)
+        return;
       }
-      /* ===== END PATCH ===== */
 
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
       setSel({ r: p.r, c: p.c });
@@ -480,7 +484,7 @@ export default function GameView({
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
     };
-  }, [cell, paused, settings?.haptics]);
+  }, [cell, paused, settings?.haptics, activePowerup]);
 
   function trySwap(r1, c1, r2, c2) {
     if (timeLeft <= 0) return;
@@ -508,16 +512,13 @@ export default function GameView({
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
 
-      // ✨ Added: Telegram haptic for invalid swap
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
 
       return;
     }
 
-    // ✨ Added: Telegram haptic for valid swap
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
 
-    // valid swap
     audio.play?.("swap", { volume: 0.6 });
     setMoveCount((prev) => prev + 1);
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
@@ -531,7 +532,6 @@ export default function GameView({
     }, 200);
   }
 
-  // 4) OPTIMIZE: Cascade resolution
   function optimizedResolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
@@ -659,7 +659,6 @@ export default function GameView({
       setGrid(shuffleToSolvable(gridRef.current));
   }
 
-  // Replace the finish function with the provided implementation
   async function finish() {
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
@@ -676,7 +675,7 @@ export default function GameView({
 
     const gameResultWithSharing = {
       score: finalScore,
-      coins: serverCoins, // Now uses calculated coins
+      coins: serverCoins,
       moves_used: moveCount,
       max_combo: finalMaxCombo,
       gameSubmitted: !!result,
@@ -705,6 +704,14 @@ export default function GameView({
     scoreRef.current = 0;
   }
 
+  // NEW: Handle selecting a power-up
+  const handlePowerupSelect = (key) => {
+    if (powerups[key] > 0) {
+      setActivePowerup(activePowerup === key ? null : key);
+      haptic(10);
+    }
+  };
+
   const boardW = cell * COLS;
   const boardH = cell * ROWS;
 
@@ -720,7 +727,6 @@ export default function GameView({
     return "#27ae60";
   };
 
-  // 5) OPTIMIZE: Memoized grid rendering
   const optimizedGridRender = useMemo(() => {
     return grid.map((row, r) =>
       row.map((v, c) => {
@@ -778,7 +784,6 @@ export default function GameView({
     );
   }, [grid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
 
-  // 6) OPTIMIZE: Memory cleanup for animations
   useEffect(() => {
     const cleanup = [];
     return () => {
@@ -808,7 +813,6 @@ export default function GameView({
         ⏰ {formatTime(timeLeft)}
       </div>
 
-      {/* 🔁 REPLACED BLOCK: stats row with combo meter */}
       <div className="row">
         <div>
           <span className="muted">Score</span> <b>{score}</b>
@@ -827,7 +831,6 @@ export default function GameView({
         </div>
       </div>
 
-      {/* Combo banner */}
       {combo > 0 && (
         <div className="combo-celebration">
           💥 🍬 Sweet Combo x{combo + 1}! 🍬 💥
@@ -850,7 +853,22 @@ export default function GameView({
         {optimizedGridRender}
       </div>
 
-      {/* Controls */}
+      {/* NEW: Power-up Tray */}
+      <div className="powerup-tray">
+        {Object.entries(POWERUP_DEFINITIONS).map(([key, def]) => (
+          <button
+            key={key}
+            className={`powerup-btn ${activePowerup === key ? 'active' : ''}`}
+            onClick={() => handlePowerupSelect(key)}
+            disabled={!powerups[key] || powerups[key] <= 0}
+            title={`${def.name} (Owned: ${powerups[key] || 0})`}
+          >
+            <div className="powerup-icon">{def.icon}</div>
+            <div className="powerup-quantity">{powerups[key] || 0}</div>
+          </button>
+        ))}
+      </div>
+
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
           💡 Hint
@@ -869,10 +887,6 @@ export default function GameView({
         </button>
       </div>
 
-      {/* Share buttons appear after finish via parent */}
-      {/* GameView only emits results; sharing UI is in parent Game Over screen */}
-
-      {/* Overlay timer bar */}
       <div
         className="progress"
         style={{
@@ -1053,3 +1067,4 @@ function findFirstMove(g) {
   }
   return null;
 }
+�
