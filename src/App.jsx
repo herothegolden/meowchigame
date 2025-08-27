@@ -1,5 +1,6 @@
 import React, { useEffect, useState, Suspense, lazy } from "react";
 import { useStore } from "./store.js"; // <-- Uses Zustand store
+import ErrorBoundary from "./ErrorBoundary.jsx";
 
 import Home from "./Home.jsx";
 import Squads from "./Squads.jsx";
@@ -175,65 +176,84 @@ export default function App() {
 
   // --- Render ---
   return (
-    <>
+    <ErrorBoundary>
       <Splash show={showSplash} />
       <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
         <Header coins={coins} />
         <main className="content">
-          {screen === "home" && (
-            userStats ? (
-              <Home
-                onNavigate={navigateTo}
-                userStats={userStats}
-                userProfile={userProfile}
-                onOpenProfileModal={() => setShowProfileModal(true)}
-                // 🔥 4. Pass the streak down to the Home component
-                streak={streak}
+          <ErrorBoundary>
+            {screen === "home" && (
+              userStats ? (
+                <Home
+                  onNavigate={navigateTo}
+                  userStats={userStats}
+                  userProfile={userProfile}
+                  onOpenProfileModal={() => setShowProfileModal(true)}
+                  // 🔥 4. Pass the streak down to the Home component
+                  streak={streak}
+                />
+              ) : <HomeSkeleton />
+            )}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
+            {screen === "leaderboard" && <Leaderboard userTelegramId={userTelegramId} />}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
+            {screen === "squad" && <Squads userTelegramId={userTelegramId} />}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
+            {screen === "daily" && <DailyTasks userTelegramId={userTelegramId} />}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
+            {screen === "game" && (
+              <GameView
+                onExit={handleGameExit}
+                settings={settings}
+                userTelegramId={userTelegramId}
               />
-            ) : <HomeSkeleton />
-          )}
-          {screen === "leaderboard" && <Leaderboard userTelegramId={userTelegramId} />}
-          {screen === "squad" && <Squads userTelegramId={userTelegramId} />}
-          {screen === "daily" && <DailyTasks userTelegramId={userTelegramId} />}
-          {screen === "game" && (
-            <GameView
-              onExit={handleGameExit}
-              settings={settings}
-              userTelegramId={userTelegramId}
-            />
-          )}
-          {screen === "gameover" && lastRun && (
-             <section className="section">
-               <div className="title">🎯 Level Complete!</div>
-               <div className="row"><div className="muted">Score</div><b>{lastRun.score.toLocaleString()}</b></div>
-               <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
-               <ShareButtons 
-                 variant="game-over"
-                 score={lastRun.score}
-                 combo={lastRun.max_combo}
-                 coins={lastRun.coins}
-                 userTelegramId={userTelegramId}
-               />
-               <button className="btn primary" style={{width: '100%', marginTop: '16px'}} onClick={() => navigateTo("game")}>
-                 🎮 Play Again
-               </button>
-             </section>
-          )}
+            )}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
+            {screen === "gameover" && lastRun && (
+               <section className="section">
+                 <div className="title">🎯 Level Complete!</div>
+                 <div className="row"><div className="muted">Score</div><b>{lastRun.score.toLocaleString()}</b></div>
+                 <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
+                 <ShareButtons 
+                   variant="game-over"
+                   score={lastRun.score}
+                   combo={lastRun.max_combo}
+                   coins={lastRun.coins}
+                   userTelegramId={userTelegramId}
+                 />
+                 <button className="btn primary" style={{width: '100%', marginTop: '16px'}} onClick={() => navigateTo("game")}>
+                   🎮 Play Again
+                 </button>
+               </section>
+            )}
+          </ErrorBoundary>
         </main>
         <BottomNav screen={screen} onNavigate={navigateTo} />
       </div>
-      <Suspense fallback={<div />}>
-        {showProfileModal && (
-          <EnhancedProfileModal
-            show={showProfileModal}
-            onClose={() => setShowProfileModal(false)}
-            onSave={handleProfileSaved}
-            userTelegramId={userTelegramId}
-            currentProfile={userProfile}
-          />
-        )}
-      </Suspense>
-    </>
+      <ErrorBoundary>
+        <Suspense fallback={<div />}>
+          {showProfileModal && (
+            <EnhancedProfileModal
+              show={showProfileModal}
+              onClose={() => setShowProfileModal(false)}
+              onSave={handleProfileSaved}
+              userTelegramId={userTelegramId}
+              currentProfile={userProfile}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
+    </ErrorBoundary>
   );
 }
 
