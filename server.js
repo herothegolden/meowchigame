@@ -43,16 +43,24 @@ function requireDB(req, res, next) {
   next();
 }
 
-// In server.js, replace the old validateUser function with this one.
+// Replace your validateUser function in server.js with this improved version:
 const validateUser = async (req, res, next) => {
+  console.log('🔐 validateUser called');
+  console.log('📋 Headers:', Object.keys(req.headers));
+  console.log('🎯 X-Telegram-Init-Data header present:', !!req.headers['x-telegram-init-data']);
+  
   // Safely check headers, body, and query for auth data
   const initData = req.headers['x-telegram-init-data'] || (req.body && req.body.initData) || (req.query && req.query.initData);
   const telegram_id = req.params.telegram_id || (req.body && req.body.telegram_id);
+
+  console.log('📱 initData present:', !!initData);
+  console.log('🆔 telegram_id present:', !!telegram_id);
 
   if (initData && process.env.BOT_TOKEN) {
     try {
       const parsed = validate(initData, process.env.BOT_TOKEN);
       if (parsed && parsed.user) {
+        console.log('✅ Telegram validation successful');
         req.user = { 
           telegram_id: parsed.user.id, 
           username: parsed.user.username,
@@ -67,6 +75,7 @@ const validateUser = async (req, res, next) => {
   }
 
   if (telegram_id) {
+    console.log('🔓 Using fallback telegram_id authentication');
     req.user = { 
       telegram_id, 
       validated: false 
@@ -74,7 +83,17 @@ const validateUser = async (req, res, next) => {
     return next();
   }
 
-  console.error("Authentication failed: No valid initData or telegram_id provided.");
+  // TEMPORARY: Allow development/testing without authentication
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🚧 Development mode: allowing request without auth');
+    req.user = {
+      telegram_id: '12345', // Replace with your test user ID
+      validated: false
+    };
+    return next();
+  }
+
+  console.error("❌ Authentication failed: No valid initData or telegram_id provided.");
   return res.status(401).json({ error: "Authentication required" });
 };
 
