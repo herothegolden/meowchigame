@@ -164,7 +164,6 @@ export default function GameView({
   const [activePowerup, setActivePowerup] = useState(null);
   const onUsePowerup = (powerupName) => {
       console.log(`Used power-up: ${powerupName}`);
-      // In the future, you might want this to affect the Redux state
   };
   // 👆 END OF ADDED LINES
 
