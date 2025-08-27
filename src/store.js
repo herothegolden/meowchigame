@@ -25,4 +25,8 @@ export const useStore = create((set, get) => ({
   // Streak
   streak: 0,
   setStreak: (streak) => set({ streak }),
+
+  // Powerups
+  powerups: {}, // e.g., { hammer: 2, shuffle: 1 }
+  setPowerups: (powerups) => set({ powerups }),
 }));
