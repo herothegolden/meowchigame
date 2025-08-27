@@ -8,40 +8,51 @@ export default function Squads({ userTelegramId }) {
   const [error, setError] = useState(null);
   const [modalMode, setModalMode] = useState(null); // 'create', 'join', or null
 
-  const fetchUserSquad = useCallback(async () => {
-    if (!userTelegramId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const tg = window.Telegram?.WebApp;
-      const response = await fetch(`/api/squads/dashboard`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          // Pass authentication data in headers for GET requests
-          'X-Telegram-Init-Data': tg?.initData || ''
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
+const fetchUserSquad = useCallback(async () => {
+  console.log('🔍 fetchUserSquad called with userTelegramId:', userTelegramId);
+  
+  if (!userTelegramId) {
+    console.log('❌ No userTelegramId provided');
+    setLoading(false);
+    return;
+  }
+  
+  setLoading(true);
+  setError(null);
+  
+  try {
+    const tg = window.Telegram?.WebApp;
+    console.log('🤖 Telegram WebApp available:', !!tg);
+    console.log('📱 initData available:', !!tg?.initData);
+    console.log('📱 initData length:', tg?.initData?.length || 0);
+    
+    const response = await fetch(`/api/squads/dashboard`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': tg?.initData || ''
       }
-      const data = await response.json();
-      setSquad(data.squad);
-    } catch (err) {
-      console.error("Failed to fetch squad dashboard:", err);
-      setError("Could not load squad information. Please try again.");
-      setSquad(null);
-    } finally {
-      setLoading(false);
+    });
+    
+    console.log('📡 API Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('❌ API Error response:', errorText);
+      throw new Error(`Server responded with ${response.status}: ${errorText}`);
     }
-  }, [userTelegramId]);
-
-  useEffect(() => {
-    fetchUserSquad();
-  }, [fetchUserSquad]);
+    
+    const data = await response.json();
+    console.log('✅ API Success data:', data);
+    setSquad(data.squad);
+  } catch (err) {
+    console.error("❌ Failed to fetch squad dashboard:", err);
+    setError("Could not load squad information. Please try again.");
+    setSquad(null);
+  } finally {
+    setLoading(false);
+  }
+}, [userTelegramId]);
 
   const handleSquadUpdate = () => {
     setModalMode(null);
