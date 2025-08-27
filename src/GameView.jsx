@@ -172,8 +172,32 @@ export default function GameView({
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
 
-  const onUsePowerup = (powerupName) => {
-      console.log(`Used power-up: ${powerupName}`);
+  // NEW: Function to consume a power-up
+  const consumePowerup = async (powerupKey) => {
+    try {
+      // Optimistically update the UI
+      setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
+      
+      const response = await fetch('/api/powerups/use', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: userTelegramId,
+          item_id: powerupKey,
+          initData: window.Telegram?.WebApp?.initData,
+        }),
+      });
+      
+      if (!response.ok) {
+        // Revert UI on failure
+        setPowerups(powerups);
+        console.error("Failed to consume power-up on server");
+      }
+    } catch (error) {
+      // Revert UI on failure
+      setPowerups(powerups);
+      console.error("Error consuming powerup:", error);
+    }
   };
 
   // Enable closing confirmation during gameplay
@@ -271,7 +295,6 @@ export default function GameView({
     } catch {}
   }
 
-  // Replace the submitGameScore function with the provided implementation
   async function submitGameScore(finalScore) {
     if (!userTelegramId) {
       console.log("No Telegram ID, skipping score submission");
@@ -281,7 +304,6 @@ export default function GameView({
     const gameScore = Math.max(finalScore, 0);
     const currentMaxCombo = maxComboAchievedRef.current;
 
-    // Calculate coins using the utils.js formula
     const coinsEarned = game.calculateCoins(gameScore, currentMaxCombo);
 
     try {
@@ -289,12 +311,11 @@ export default function GameView({
       const gameData = {
         telegram_id: userTelegramId,
         score: gameScore,
-        coins_earned: coinsEarned, // Now properly calculated
+        coins_earned: coinsEarned,
         max_combo: currentMaxCombo,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
 
-      // Add secure initData if available
       if (tg?.initData) {
         gameData.initData = tg.initData;
       }
@@ -311,7 +332,6 @@ export default function GameView({
         return { user_needs_profile: false, coins_earned: coinsEarned };
       }
 
-      // Return the calculated coins regardless of server response
       return { ...result, coins_earned: coinsEarned };
     } catch (error) {
       console.error("Error submitting score:", error);
@@ -319,9 +339,6 @@ export default function GameView({
     }
   }
 
-  // ========= 🔥 VIRAL SHARING HELPERS (added exactly as requested) =========
-
-  // 1. SHARE TO CHATS (Like Hamster Kombat)
   const shareGameResult = (score, combo, coins) => {
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery) {
@@ -336,17 +353,15 @@ export default function GameView({
     }
   };
 
-  // 2. CHALLENGE FRIENDS (Like Notcoin)
   const challengeFriend = (score) => {
     const tg = window.Telegram?.WebApp;
     const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
 
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`� I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
     }
   };
 
-  // 3. AUTO-SHARE ON BIG ACHIEVEMENTS (Like all popular apps)
   const autoShareMilestone = (achievement) => {
     const milestones = {
       first_1000: "🎉 Just hit 1,000 points in Meowchi for the first time!",
@@ -365,7 +380,6 @@ export default function GameView({
     }
   };
 
-  // 4. LEADERBOARD SHARING (What Hamster Kombat does)
   const shareLeaderboardPosition = (rank, score) => {
     const tg = window.Telegram?.WebApp;
     const messages = {
@@ -419,7 +433,7 @@ export default function GameView({
             }
             audio.play?.('powerup_spawn', { volume: 0.7 });
             optimizedResolveCascades(g, () => {});
-            onUsePowerup('hammer');
+            consumePowerup('hammer'); // Consume the powerup
             setActivePowerup(null);
           } else {
             haptic(8);
@@ -704,7 +718,6 @@ export default function GameView({
     scoreRef.current = 0;
   }
 
-  // NEW: Handle selecting a power-up
   const handlePowerupSelect = (key) => {
     if (powerups[key] > 0) {
       setActivePowerup(activePowerup === key ? null : key);
@@ -853,7 +866,6 @@ export default function GameView({
         {optimizedGridRender}
       </div>
 
-      {/* NEW: Power-up Tray */}
       <div className="powerup-tray">
         {Object.entries(POWERUP_DEFINITIONS).map(([key, def]) => (
           <button
@@ -907,7 +919,6 @@ function initSolvableGrid() {
   const g = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => randEmoji())
   );
-  // Ensure no initial 3-in-a-row
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (c >= 2 && g[r][c] === g[r][c - 1] && g[r][c] === g[r][c - 2]) {
@@ -918,7 +929,6 @@ function initSolvableGrid() {
       }
     }
   }
-  // Shuffle until at least one move exists
   if (!hasAnyMove(g)) return shuffleToSolvable(g);
   return g;
 }
@@ -939,7 +949,6 @@ function inBounds(r, c) {
 function findMatches(g) {
   const matches = [];
 
-  // rows
   for (let r = 0; r < ROWS; r++) {
     let streak = 1;
     for (let c = 1; c < COLS; c++) {
@@ -954,7 +963,6 @@ function findMatches(g) {
     if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([r, COLS - 1 - k]);
   }
 
-  // cols
   for (let c = 0; c < COLS; c++) {
     let streak = 1;
     for (let r = 1; r < ROWS; r++) {
@@ -976,7 +984,6 @@ function applyGravity(g) {
   for (let c = 0; c < COLS; c++) {
     for (let r = ROWS - 1; r >= 0; r--) {
       if (g[r][c] === null) {
-        // find above
         for (let rr = r - 1; rr >= 0; rr--) {
           if (g[rr][c] != null) {
             g[r][c] = g[rr][c];
@@ -998,7 +1005,6 @@ function refill(g) {
 }
 
 function hasAnyMove(g) {
-  // try swap neighbors
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const dirs = [
@@ -1031,7 +1037,6 @@ function shuffleToSolvable(g) {
     for (let r = 0; r < ROWS; r++) {
       ng.push(flat.slice(r * COLS, r * COLS + COLS));
     }
-    // remove immediate matches
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         if (c >= 2 && ng[r][c] === ng[r][c - 1] && ng[r][c] === ng[r][c - 2]) {
@@ -1044,7 +1049,7 @@ function shuffleToSolvable(g) {
     }
     if (hasAnyMove(ng)) return ng;
   }
-  return g; // fallback
+  return g;
 }
 
 function findFirstMove(g) {
@@ -1067,4 +1072,3 @@ function findFirstMove(g) {
   }
   return null;
 }
-�
