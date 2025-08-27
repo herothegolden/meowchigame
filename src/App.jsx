@@ -80,10 +80,13 @@ export default function App() {
   const initializeUser = async () => {
     try {
       const tg = getTG();
-      const telegramId = tg?.initDataUnsafe?.user?.id || null;
+      let telegramId = tg?.initDataUnsafe?.user?.id || null;
+      
+      // 🔧 DEV MODE: Use fake telegram ID if not in Telegram
       if (!telegramId) {
         console.warn("Telegram ID not found. Running in dev mode.");
-        return;
+        telegramId = 12345678; // Fake ID for testing
+        console.log("🔧 Using dev mode telegram ID:", telegramId);
       }
       
       setUserTelegramId(telegramId);
@@ -94,13 +97,18 @@ export default function App() {
       const response = await fetch('/api/user/upsert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData }),
+        body: JSON.stringify({ 
+          initData: tg?.initData || 'dev_mode',
+          telegram_id: telegramId 
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
         setUserProfile(data.user);
         fetchUserStats(telegramId); // Fetch stats after ensuring user exists
+      } else {
+        console.error('Failed to upsert user:', response.status, await response.text());
       }
     } catch (error) {
       console.error('User initialization failed:', error);
@@ -115,7 +123,10 @@ export default function App() {
       const response = await fetch('/api/user/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData })
+        body: JSON.stringify({ 
+          initData: tg?.initData || 'dev_mode',
+          telegram_id: telegramId 
+        })
       });
       const data = await response.json();
       if (data.success) {
@@ -133,12 +144,18 @@ export default function App() {
       const response = await fetch(`/api/user/${telegramId}/stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData })
+        body: JSON.stringify({ 
+          initData: tg?.initData || 'dev_mode',
+          telegram_id: telegramId 
+        })
       });
       if (response.ok) {
         const data = await response.json();
         setUserStats(data.user); // The user object from this endpoint contains stats
         setCoins(parseInt(data.user.bonus_coins || 0));
+        console.log('✅ User stats loaded:', data.user);
+      } else {
+        console.error('Failed to fetch user stats:', response.status, await response.text());
       }
     } catch (error) {
       console.error('Failed to fetch user stats:', error);
