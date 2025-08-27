@@ -163,7 +163,8 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
 
   return (
     <div>
-      <div className="squad-info">
+      {/* CHANGED: use the centralized container class */}
+      <div className="squad-info-card">
         <div className="squad-header">
           <span className="squad-icon">{squad.icon}</span>
           <div>
@@ -239,45 +240,6 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .squad-info { background: var(--surface); border-radius: 16px; padding: 20px; border: 1px solid var(--border); }
-        .squad-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
-        .squad-icon { font-size: 32px; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background: var(--card); border-radius: 12px; }
-        .squad-name { font-size: 20px; font-weight: 700; margin: 0 0 4px 0; color: var(--text); }
-        .squad-stats { font-size: 14px; color: var(--muted); margin: 0; }
-        .creator-badge { font-size: 12px; color: var(--accent); font-weight: 600; margin: 4px 0 0; }
-        .squad-actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-        .invite-code-section { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid var(--border); }
-        .invite-code-display { display: flex; align-items: center; gap: 12px; }
-        .invite-code { font-family: monospace; font-size: 18px; font-weight: 700; color: var(--accent); background: var(--surface); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); flex: 1; text-align: center; }
-        .copy-btn { padding: 8px 16px; font-size: 12px; }
-        .members-section { margin-top: 20px; }
-        .members-title { font-size: 16px; font-weight: 700; margin: 0 0 12px 0; color: var(--text); }
-        .members-list { display: flex; flex-direction: column; gap: 8px; }
-        .member-item { display: flex; align-items: center; gap: 12px; padding: 8px; background: var(--card); border-radius: 8px; border: 1px solid var(--border); }
-        .member-rank { font-weight: 800; color: var(--accent); width: 30px; text-align: center; font-size: 14px; }
-        .member-info { flex: 1; }
-        .member-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-        .country-flag { font-size: 16px; }
-        .leader-badge { font-size: 10px; background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: 700; }
-        .member-stats { font-size: 12px; color: var(--muted); }
-        .kick-btn { background: #e74c3c; color: white; border: none; padding: 6px 12px; font-size: 12px; border-radius: 6px; min-width: 50px; }
-        /* Add these new CSS rules inside the <style jsx> tag */
-        .member-avatar {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
-          overflow: hidden;
-          flex-shrink: 0;
-          background: var(--surface);
-        }
-        .member-avatar img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-      `}</style>
     </div>
   );
 };
