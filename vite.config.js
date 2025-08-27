@@ -17,17 +17,51 @@ export default defineConfig({
           // Separate game engine from main bundle
           'game': ['./src/GameView.jsx'],
           // Separate UI components  
-          'components': ['./src/Home.jsx', './src/Leaderboard.jsx', './src/EnhancedProfileModal.jsx'],
+          'components': ['./src/Home.jsx', './src/Leaderboard.jsx', './src/DailyTasks.jsx'],
+          // Separate modals and heavy components
+          'modals': ['./src/EnhancedProfileModal.jsx', './src/SquadModal.jsx'],
+          // Separate utility files
+          'utils': ['./src/utils.js', './src/store.js'],
           // Separate audio system
-          'audio': ['./src/audio.js']
+          'audio': ['./src/audio.js'],
+          // Separate React vendor code
+          'react-vendor': ['react', 'react-dom'],
+          // Separate other vendor libraries
+          'vendor': ['zustand']
         }
       }
     },
-    // Enable compression
+    // Enable compression and optimization
+    minify: 'terser',
     terserOptions: {
       compress: {
         drop_console: true, // Remove console.logs in production
-        drop_debugger: true
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn']
+      },
+      mangle: {
+        safari10: true
+      }
+    },
+    // Optimize chunk sizes
+    chunkSizeWarningLimit: 1000,
+    // Enable CSS code splitting
+    cssCodeSplit: true,
+    // Optimize asset handling
+    assetsInlineLimit: 4096, // Inline assets smaller than 4kb
+    // Enable preload for important chunks
+    modulePreload: true
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'zustand'],
+    exclude: ['@telegram-apps/init-data-node']
+  },
+  // Enable CSS optimization
+  css: {
+    preprocessorOptions: {
+      css: {
+        charset: false
       }
     }
   }
