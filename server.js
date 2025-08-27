@@ -145,8 +145,12 @@ app.use(express.static(dist, {
   }
 }));
 
-// Health endpoint (used by Railway)
-app.get("/health", (_req, res) => res.json({ ok: true, dbConnected }));
+// Health endpoint (used by Railway) - CORRECTED
+app.get("/health", (_req, res) => {
+  // This endpoint now only confirms that the server process is running.
+  // It is decoupled from the database connection status.
+  res.status(200).json({ status: "ok", dbConnected });
+});
 
 // ---------- Setup endpoint (UPDATED) ----------
 app.get("/api/setup/database", async (req, res) => {
@@ -707,7 +711,7 @@ const DAILY_TASKS = [
     title: 'Play 3 Games',
     description: 'Complete 3 matches today',
     reward: 200,
-    icon: '�',
+    icon: '🎮',
     target: 3,
     type: 'games_played'
   },
@@ -1019,4 +1023,3 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-�
