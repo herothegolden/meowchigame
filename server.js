@@ -887,6 +887,8 @@ app.post("/api/squads/kick-member", requireDB, validateUser, async (req, res) =>
   }
 });
 
+// Replace both user stats endpoints in your server.js with these fixed versions:
+
 // ---------- API: Get user stats ----------
 app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
   try {
@@ -929,7 +931,9 @@ app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res
         games_played: parseInt(user.games_played || 0),
         best_score: parseInt(user.best_score || 0),
         best_combo: parseInt(user.best_combo || 0),
-        bonus_coins: parseInt(user.bonus_coins || 0)
+        bonus_coins: parseInt(user.bonus_coins || 0),
+        // ADD THE FIELD YOUR FRONTEND EXPECTS:
+        total_coins_earned: parseInt(user.bonus_coins || 0)
       }
     });
   } catch (error) {
@@ -940,7 +944,6 @@ app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res
 
 // ---------- API: POST version for compatibility ----------
 app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
-  // Redirect to GET logic
   try {
     const telegram_id = req.user.telegram_id;
     
@@ -980,7 +983,9 @@ app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, re
         games_played: parseInt(user.games_played || 0),
         best_score: parseInt(user.best_score || 0),
         best_combo: parseInt(user.best_combo || 0),
-        bonus_coins: parseInt(user.bonus_coins || 0)
+        bonus_coins: parseInt(user.bonus_coins || 0),
+        // ADD THE FIELD YOUR FRONTEND EXPECTS:
+        total_coins_earned: parseInt(user.bonus_coins || 0)
       }
     });
   } catch (error) {
