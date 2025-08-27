@@ -562,59 +562,60 @@ app.get("/api/squads/leaderboard", requireDB, async (_req, res) => {
 
 // ADD THIS NEW ENDPOINT to server.js
 
-// GET a user's complete squad dashboard in one call
+// REPLACE the entire dashboard endpoint in server.js with this corrected version
 app.get("/api/squads/dashboard", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id;
 
-    // A single, powerful query to get everything at once
-    const result = await pool.query(`
-      WITH user_squad AS (
-        SELECT sm.squad_id
-        FROM squad_members sm
-        JOIN users u ON sm.user_id = u.id
-        WHERE u.telegram_id = $1
-      )
-      SELECT 
-        s.id, s.name, s.icon, s.invite_code, s.created_at, s.member_limit,
-        u_creator.telegram_id as creator_telegram_id,
-        (SELECT COUNT(*) FROM squad_members sm_count WHERE sm_count.squad_id = s.id) as member_count,
-        (SELECT COALESCE(SUM(g.score), 0) FROM games g JOIN squad_members sm_score ON g.user_id = sm_score.user_id WHERE sm_score.squad_id = s.id) as total_score,
-        (
-          SELECT json_agg(json_build_object(
-            'user_id', u_mem.id,
-            'display_name', COALESCE(u_mem.display_name, 'Stray Cat #' || substr(u_mem.telegram_id::text, -5)),
-            'country_flag', u_mem.country_flag,
-            'telegram_id', u_mem.telegram_id,
-            'profile_picture', u_mem.profile_picture,
-            'total_score', COALESCE(mem_games.total_score, 0)
-          ) ORDER BY COALESCE(mem_games.total_score, 0) DESC)
-          FROM squad_members sm_mem
-          JOIN users u_mem ON sm_mem.user_id = u_mem.id
-          LEFT JOIN (
-            SELECT user_id, SUM(score) as total_score 
-            FROM games GROUP BY user_id
-          ) mem_games ON mem_games.user_id = u_mem.id
-          WHERE sm_mem.squad_id = s.id
-        ) as members
-      FROM squads s
-      LEFT JOIN users u_creator ON s.created_by = u_creator.id
-      WHERE s.id = (SELECT squad_id FROM user_squad)
+    // First, get the user's squad ID
+    const squadIdResult = await pool.query(`
+      SELECT sm.squad_id 
+      FROM squad_members sm
+      JOIN users u ON sm.user_id = u.id
+      WHERE u.telegram_id = $1
     `, [telegram_id]);
 
-    if (result.rows.length === 0) {
-      return res.json({ squad: null });
+    if (squadIdResult.rows.length === 0) {
+      return res.json({ squad: null }); // User is not in a squad
     }
 
-    // Process the result to ensure numbers are correctly formatted
-    const squadData = result.rows[0];
-    squadData.member_count = Number(squadData.member_count || 0);
-    squadData.total_score = Number(squadData.total_score || 0);
-    if (squadData.members) {
-      squadData.members.forEach(m => m.total_score = Number(m.total_score || 0));
-    } else {
-      squadData.members = [];
-    }
+    const squadId = squadIdResult.rows[0].squad_id;
+
+    // Now, fetch the full details for that squad ID (similar to the :squadId endpoint)
+    const head = await pool.query(
+      `SELECT s.id, s.name, s.icon, s.invite_code, s.created_at, s.created_by, s.member_limit,
+              u_creator.telegram_id as creator_telegram_id,
+              (SELECT COUNT(*) FROM squad_members sm WHERE sm.squad_id = s.id) as member_count,
+              (SELECT COALESCE(SUM(g.score),0) 
+                 FROM games g JOIN squad_members sm ON g.user_id = sm.user_id 
+                WHERE sm.squad_id = s.id) as total_score
+       FROM squads s
+       LEFT JOIN users u_creator ON s.created_by = u_creator.id
+       WHERE s.id = $1`,
+      [squadId]
+    );
+
+    if (head.rows.length === 0) return res.status(404).json({ error: "Squad not found" });
+
+    const members = await pool.query(
+      `SELECT u.id as user_id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture,
+              COALESCE(SUM(g.score),0) as total_score
+       FROM squad_members sm
+       JOIN users u ON u.id = sm.user_id
+       LEFT JOIN games g ON g.user_id = u.id
+       WHERE sm.squad_id = $1
+       GROUP BY u.id, u.display_name, u.country_flag, u.telegram_id, u.profile_picture
+       ORDER BY total_score DESC`,
+      [squadId]
+    );
+
+    const s = head.rows[0];
+    const squadData = {
+      ...s,
+      member_count: Number(s.member_count || 0),
+      total_score: Number(s.total_score || 0),
+      members: members.rows.map(m => ({ ...m, total_score: Number(m.total_score || 0) }))
+    };
 
     res.json({ squad: squadData });
   } catch (error) {
