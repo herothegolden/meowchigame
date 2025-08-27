@@ -173,7 +173,22 @@ export default function App() {
     if (audioReady || !settings?.sound) return;
     try {
       await audio.unlock?.();
-      await audio.preload?.({ /* ... sound files ... */ });
+      await audio.preload?.({
+        cascade_tick: '/sfx/cascade_tick.wav',
+        coin: '/sfx/coin.wav',
+        combo_x1: '/sfx/combo_x1.wav',
+        combo_x2: '/sfx/combo_x2.wav',
+        combo_x3: '/sfx/combo_x3.wav',
+        combo_x4: '/sfx/combo_x4.wav',
+        finish_lose: '/sfx/finish_lose.wav',
+        finish_win: '/sfx/finish_win.wav',
+        match_pop: '/sfx/match_pop.wav',
+        powerup_spawn: '/sfx/powerup_spawn.wav',
+        swap: '/sfx/swap.wav',
+        swap_invalid: '/sfx/swap_invalid.wav',
+        timer_hurry: '/sfx/timer_hurry.wav',
+        timer_tick: '/sfx/timer_tick.wav'
+      });
       setAudioReady(true);
     } catch (e) { console.warn("audio preload failed", e); }
   }
