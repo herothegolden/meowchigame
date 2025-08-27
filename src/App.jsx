@@ -61,10 +61,9 @@ export default function App() {
   const setUserProfile = useStore(s => s.setUserProfile);
   const userStats = useStore(s => s.userStats);
   const setUserStats = useStore(s => s.setUserStats);
-
-  // 🔥 1. Get streak and its setter from the store
   const streak = useStore(s => s.streak);
   const setStreak = useStore(s => s.setStreak);
+  const setPowerups = useStore(s => s.setPowerups); // NEW: Get powerup setter
 
   // --- Local component state ---
   const [screen, setScreen] = useState("home");
@@ -82,16 +81,14 @@ export default function App() {
       const tg = getTG();
       let telegramId = tg?.initDataUnsafe?.user?.id || null;
       
-      // 🔧 DEV MODE: Use fake telegram ID if not in Telegram
       if (!telegramId) {
         console.warn("Telegram ID not found. Running in dev mode.");
-        telegramId = 12345678; // Fake ID for testing
+        telegramId = 12345678;
         console.log("🔧 Using dev mode telegram ID:", telegramId);
       }
       
       setUserTelegramId(telegramId);
       
-      // 🔥 2. Call the check-in function on startup
       performDailyCheckIn(telegramId);
 
       const response = await fetch('/api/user/upsert', {
@@ -106,7 +103,8 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         setUserProfile(data.user);
-        fetchUserStats(telegramId); // Fetch stats after ensuring user exists
+        fetchUserStats(telegramId);
+        fetchUserPowerups(telegramId); // NEW: Fetch powerups after user is initialized
       } else {
         console.error('Failed to upsert user:', response.status, await response.text());
       }
@@ -115,7 +113,6 @@ export default function App() {
     }
   };
 
-  // 🔥 3. Define the check-in function
   const performDailyCheckIn = async (telegramId) => {
     if (!telegramId) return;
     try {
@@ -151,7 +148,7 @@ export default function App() {
       });
       if (response.ok) {
         const data = await response.json();
-        setUserStats(data.user); // The user object from this endpoint contains stats
+        setUserStats(data.user);
         setCoins(parseInt(data.user.bonus_coins || 0));
         console.log('✅ User stats loaded:', data.user);
       } else {
@@ -159,6 +156,22 @@ export default function App() {
       }
     } catch (error) {
       console.error('Failed to fetch user stats:', error);
+    }
+  };
+
+  // NEW: Function to fetch user's powerups
+  const fetchUserPowerups = async (telegramId) => {
+    try {
+      const response = await fetch(`/api/user/${telegramId}/powerups`);
+      if (response.ok) {
+        const data = await response.json();
+        setPowerups(data.powerups || {});
+        console.log('✅ User powerups loaded:', data.powerups);
+      } else {
+        console.error('Failed to fetch user powerups:', response.status, await response.text());
+      }
+    } catch (error) {
+      console.error('Failed to fetch user powerups:', error);
     }
   };
 
@@ -202,7 +215,10 @@ export default function App() {
   const handleGameExit = (gameResult) => {
     setLastRun(gameResult);
     if (userTelegramId) {
-      setTimeout(() => fetchUserStats(userTelegramId), 800);
+      setTimeout(() => {
+        fetchUserStats(userTelegramId);
+        fetchUserPowerups(userTelegramId); // Refresh powerups after game
+      }, 800);
     }
     setScreen("gameover");
   };
@@ -222,7 +238,6 @@ export default function App() {
                   userStats={userStats}
                   userProfile={userProfile}
                   onOpenProfileModal={() => setShowProfileModal(true)}
-                  // 🔥 4. Pass the streak down to the Home component
                   streak={streak}
                 />
               ) : <HomeSkeleton />
@@ -242,7 +257,10 @@ export default function App() {
           </ErrorBoundary>
           
           <ErrorBoundary>
-            {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => setCoins(newBalance)} />}
+            {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => {
+              setCoins(newBalance);
+              fetchUserPowerups(userTelegramId); // Refresh powerups after purchase
+            }} />}
           </ErrorBoundary>
           
           <ErrorBoundary>
