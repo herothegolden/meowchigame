@@ -1116,6 +1116,147 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
   res.status(501).json({ error: "Streaks feature not implemented" });
 });
 
+// ADD THESE ENDPOINTS to your working server.js (right before the "Health" section)
+
+// ---------- API: Get user stats ----------
+app.get("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    
+    const userResult = await pool.query(`
+      SELECT 
+        u.id, u.telegram_id, u.display_name, u.country_flag, u.profile_picture, u.bonus_coins,
+        u.profile_completed, u.created_at,
+        COALESCE(g.total_score, 0) as total_score,
+        COALESCE(g.games_played, 0) as games_played,
+        COALESCE(g.best_score, 0) as best_score,
+        COALESCE(g.best_combo, 0) as best_combo
+      FROM users u
+      LEFT JOIN (
+        SELECT 
+          user_id,
+          SUM(score) as total_score,
+          COUNT(*) as games_played,
+          MAX(score) as best_score,
+          MAX(max_combo) as best_combo
+        FROM games 
+        GROUP BY user_id
+      ) g ON u.id = g.user_id
+      WHERE u.telegram_id = $1
+    `, [telegram_id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userResult.rows[0];
+    user.display_name = user.display_name || `Stray Cat #${user.telegram_id.toString().slice(-5)}`;
+
+    res.json({ 
+      user: {
+        ...user,
+        total_score: parseInt(user.total_score || 0),
+        games_played: parseInt(user.games_played || 0),
+        best_score: parseInt(user.best_score || 0),
+        best_combo: parseInt(user.best_combo || 0),
+        bonus_coins: parseInt(user.bonus_coins || 0),
+        total_coins_earned: parseInt(user.bonus_coins || 0) // Frontend expects this field
+      }
+    });
+  } catch (error) {
+    console.error("Get user stats error:", error);
+    res.status(500).json({ error: "Failed to get user stats" });
+  }
+});
+
+// ---------- API: POST version for compatibility ----------
+app.post("/api/user/:telegram_id/stats", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    
+    const userResult = await pool.query(`
+      SELECT 
+        u.id, u.telegram_id, u.display_name, u.country_flag, u.profile_picture, u.bonus_coins,
+        u.profile_completed, u.created_at,
+        COALESCE(g.total_score, 0) as total_score,
+        COALESCE(g.games_played, 0) as games_played,
+        COALESCE(g.best_score, 0) as best_score,
+        COALESCE(g.best_combo, 0) as best_combo
+      FROM users u
+      LEFT JOIN (
+        SELECT 
+          user_id,
+          SUM(score) as total_score,
+          COUNT(*) as games_played,
+          MAX(score) as best_score,
+          MAX(max_combo) as best_combo
+        FROM games 
+        GROUP BY user_id
+      ) g ON u.id = g.user_id
+      WHERE u.telegram_id = $1
+    `, [telegram_id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userResult.rows[0];
+    user.display_name = user.display_name || `Stray Cat #${user.telegram_id.toString().slice(-5)}`;
+
+    res.json({ 
+      user: {
+        ...user,
+        total_score: parseInt(user.total_score || 0),
+        games_played: parseInt(user.games_played || 0),
+        best_score: parseInt(user.best_score || 0),
+        best_combo: parseInt(user.best_combo || 0),
+        bonus_coins: parseInt(user.bonus_coins || 0),
+        total_coins_earned: parseInt(user.bonus_coins || 0) // Frontend expects this field
+      }
+    });
+  } catch (error) {
+    console.error("Get user stats error:", error);
+    res.status(500).json({ error: "Failed to get user stats" });
+  }
+});
+
+// ---------- API: Get daily tasks ----------
+app.get("/api/user/:telegram_id/daily-tasks", requireDB, validateUser, async (req, res) => {
+  try {
+    const telegram_id = req.user.telegram_id;
+    
+    const userResult = await pool.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const userId = userResult.rows[0].id;
+
+    const today = new Date().toISOString().split('T')[0];
+    const tasksResult = await pool.query(`
+      SELECT task_id, progress, completed, claimed 
+      FROM daily_tasks 
+      WHERE user_id = $1 AND task_date = $2
+    `, [userId, today]);
+
+    const progressMap = {};
+    tasksResult.rows.forEach(task => {
+      progressMap[task.task_id] = task;
+    });
+
+    const tasks = DAILY_TASKS.map(task => ({
+      ...task,
+      progress: progressMap[task.id]?.progress || 0,
+      completed: progressMap[task.id]?.completed || false,
+      claimed: progressMap[task.id]?.claimed || false
+    }));
+
+    res.json({ tasks });
+  } catch (error) {
+    console.error("Get daily tasks error:", error);
+    res.status(500).json({ error: "Failed to get daily tasks" });
+  }
+});
+
 
 // ---------- Health ----------
 app.get("/api/db/health", async (_req, res) => {
