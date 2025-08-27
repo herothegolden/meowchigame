@@ -3,41 +3,11 @@
 
 // 1. CREATE public/sw.js (Service Worker)
 const CACHE_NAME = 'meowchi-v1.0';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/splash.jpg',
-  '/sfx/swap.wav',
-  '/sfx/match_pop.wav', 
-  '/sfx/coin.wav',
-  '/sfx/combo_x1.wav',
-  '/sfx/combo_x2.wav',
-  '/sfx/combo_x3.wav',
-  '/sfx/combo_x4.wav',
-  // Avatar images
-  'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png',
-  'https://i.postimg.cc/3rDn1Ztt/Zizi.png',
-  'https://i.postimg.cc/N0MxH8y7/Chacha.png',
-  'https://i.postimg.cc/fLSjHwfV/Tofu.png',
-  'https://i.postimg.cc/yYHXPCgN/Boba.png',
-  'https://i.postimg.cc/YCX6M4X4/Oreo.png',
-  'https://i.postimg.cc/XNw9X1H6/Ginger.png'
-];
 
 // Install event - cache all assets
 self.addEventListener('install', (event) => {
   console.log('🔧 Service Worker installing...');
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('📦 Caching app assets');
-        return cache.addAll(ASSETS_TO_CACHE);
-      })
-      .then(() => {
-        console.log('✅ All assets cached');
-        return self.skipWaiting(); // Activate immediately
-      })
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 // Activate event - clean up old caches
@@ -62,48 +32,35 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - serve from cache first (like all popular apps)
+// Fetch event - network-first with cache fallback
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  
+
   // Skip API calls - let them go to network
   if (event.request.url.includes('/api/')) return;
-  
+
   event.respondWith(
-    caches.match(event.request)
+    fetch(event.request)
       .then((response) => {
-        // Return cached version if available
-        if (response) {
-          console.log('📦 Serving from cache:', event.request.url);
-          return response;
-        }
-        
-        // Otherwise fetch from network and cache it
-        return fetch(event.request)
-          .then((response) => {
-            // Don't cache if not successful
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-            
-            // Clone the response (can only be consumed once)
-            const responseToCache = response.clone();
-            
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                console.log('📦 Caching new asset:', event.request.url);
-                cache.put(event.request, responseToCache);
-              });
-            
-            return response;
-          })
-          .catch(() => {
-            // Offline fallback
-            if (event.request.destination === 'document') {
-              return caches.match('/index.html');
-            }
+        // Cache successful responses
+        if (response && response.status === 200) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
           });
+        }
+        return response;
+      })
+      .catch(async () => {
+        // Offline or network failed → try cache
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+
+        // Fallback shell for navigations
+        if (event.request.destination === 'document') {
+          return caches.match('/index.html');
+        }
       })
   );
 });
