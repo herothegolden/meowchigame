@@ -55,8 +55,8 @@ const validateUser = async (req, res, next) => {
   // Try secure authentication first if initData is present
   if (initData && process.env.BOT_TOKEN) {
     try {
-      // Validate the initData
-      const parsed = validate(initData, process.env.BOT_TOKEN);
+      // CORRECTED: The new version of the library returns a promise.
+      const parsed = await validate(initData, process.env.BOT_TOKEN);
       if (parsed && parsed.user) {
         req.user = { 
           telegram_id: parsed.user.id, 
