@@ -9,6 +9,7 @@ import GameView from "./GameView.jsx";
 import Splash from "./Splash.jsx";
 import Leaderboard from "./Leaderboard.jsx";
 import DailyTasks from "./DailyTasks.jsx";
+import Shop from "./Shop.jsx";
 import ShareButtons from "./ShareButtons.jsx";
 import * as audio from "./audio.js";
 
@@ -209,6 +210,10 @@ export default function App() {
           </ErrorBoundary>
           
           <ErrorBoundary>
+            {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => setCoins(newBalance)} />}
+          </ErrorBoundary>
+          
+          <ErrorBoundary>
             {screen === "game" && (
               <GameView
                 onExit={handleGameExit}
@@ -287,6 +292,7 @@ function Header({ coins }) {
 function BottomNav({ screen, onNavigate }) {
   const navItems = [
     { key: "home", label: "Home", icon: "🏠" },
+    { key: "shop", label: "Shop", icon: "🛒" },
     { key: "squad", label: "Squad", icon: "🐾" },
     { key: "leaderboard", label: "Rankings", icon: "🏆" },
     { key: "daily", label: "Tasks", icon: "💎" },
