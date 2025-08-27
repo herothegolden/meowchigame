@@ -160,6 +160,14 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
 
+  // 👇 ADD THESE LINES HERE
+  const [activePowerup, setActivePowerup] = useState(null);
+  const onUsePowerup = (powerupName) => {
+      console.log(`Used power-up: ${powerupName}`);
+      // In the future, you might want this to affect the Redux state
+  };
+  // 👆 END OF ADDED LINES
+
   // Enable closing confirmation during gameplay
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
