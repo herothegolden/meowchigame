@@ -62,7 +62,7 @@ const DAILY_TASKS = [
     title: 'Combo Master',
     description: 'Get a 5x combo',
     reward: 400,
-    icon: '�',
+    icon: '',
     target: 5,
     type: 'max_combo'
   },
@@ -472,15 +472,35 @@ app.get("/api/squads/:squadId", requireDB, async (req, res) => {
   }
 });
 
-app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res) => {
+app.get("/api/user/:telegram_id/squad-details", requireDB, validateUser, async (req, res) => {
   try {
     const telegram_id = req.user.telegram_id;
 
     const result = await pool.query(`
-      SELECT s.id, s.name, s.icon
-      FROM squads s
-      JOIN squad_members sm ON sm.squad_id = s.id
-      JOIN users u ON u.id = sm.user_id
+      SELECT 
+        s.id, s.name, s.icon, s.invite_code, s.member_limit, s.created_at,
+        s_owner.telegram_id as creator_telegram_id,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'telegram_id', m_user.telegram_id,
+              'display_name', m_user.display_name,
+              'profile_picture', m_user.profile_picture,
+              'country_flag', m_user.country_flag,
+              'total_score', COALESCE(games.total_score, 0)
+            ) ORDER BY COALESCE(games.total_score, 0) DESC
+          )
+          FROM squad_members m
+          JOIN users m_user ON m.user_id = m_user.id
+          LEFT JOIN (
+            SELECT user_id, SUM(score) as total_score FROM games GROUP BY user_id
+          ) AS games ON games.user_id = m.user_id
+          WHERE m.squad_id = s.id
+        ) as members
+      FROM users u
+      JOIN squad_members sm ON u.id = sm.user_id
+      JOIN squads s ON sm.squad_id = s.id
+      JOIN users s_owner ON s.owner_user_id = s_owner.id
       WHERE u.telegram_id = $1
     `, [telegram_id]);
 
@@ -488,12 +508,17 @@ app.get("/api/user/:telegram_id/squad", requireDB, validateUser, async (req, res
       return res.json({ squad: null });
     }
 
-    res.json({ squad: result.rows[0] });
+    const squad = result.rows[0];
+    squad.total_score = (squad.members || []).reduce((sum, member) => sum + parseInt(member.total_score, 10), 0);
+    squad.member_count = (squad.members || []).length;
+
+    res.json({ squad });
   } catch (err) {
-    console.error("User squad error:", err);
-    res.status(500).json({ error: "Failed to fetch user squad" });
+    console.error("User squad details error:", err);
+    res.status(500).json({ error: "Failed to fetch user squad details" });
   }
 });
+
 
 app.post("/api/squads/create", requireDB, validateUser, async (req, res) => {
   const { name, icon } = req.body;
