@@ -1,5 +1,6 @@
 // src/DailyTasks.jsx - Daily Tasks Component for Meowchi
 import React, { useState, useEffect } from 'react';
+import DailyTasksSkeleton from './DailyTaskSkeleton.jsx';
 
 // ... (DAILY_TASKS constant remains the same)
 const DAILY_TASKS = [
@@ -171,15 +172,7 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
   };
 
   if (loading) {
-    return (
-      <section className="section">
-        <div className="title">📋 Daily Tasks</div>
-        <div className="loading-state">
-          <div className="loading-icon">😺</div>
-          <div className="loading-text">Loading your daily tasks...</div>
-        </div>
-      </section>
-    );
+    return <DailyTasksSkeleton />;
   }
 
   if (error && tasks.length === 0) {
