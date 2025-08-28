@@ -216,9 +216,9 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                     <div className="rank-display">{getRankDisplay(player.rank)}</div>
                     <div className="member-avatar">
                       <img 
-                        src={player.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                        src={player.profile_picture || 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'} 
                         alt={getDisplayName(player)}
-                        onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                        onError={(e) => { e.currentTarget.src = 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'; }}
                       />
                     </div>
                     <div className="player-info">
@@ -258,9 +258,9 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                 <div className="rank-display">#{userRank.rank}</div>
                 <div className="member-avatar">
                   <img 
-                    src={userRank.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                    src={userRank.profile_picture || 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'} 
                     alt={getDisplayName(userRank)}
-                    onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                    onError={(e) => { e.currentTarget.src = 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'; }}
                   />
                 </div>
                 <div className="player-info">
