@@ -69,10 +69,10 @@ const DAILY_TASKS = [
   {
     id: 'invite_friend',
     title: 'Social Cat',
-    description: 'Invite a friend to play',
+    description: 'Invite 10 friends to play',
     reward: 500,
     icon: '👥',
-    target: 1,
+    target: 10,
     type: 'referrals'
   },
   {
