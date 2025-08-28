@@ -89,6 +89,28 @@ export default function App() {
     setAlertConfig({ show: true, title, message, buttons });
   };
 
+  // NEW: Manage Telegram Back Button
+  useEffect(() => {
+    const tg = getTG();
+    if (!tg?.BackButton) return;
+
+    const showBackButton = screen !== "home" && screen !== "game";
+    
+    if (showBackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(() => {
+        navigateTo("home");
+      });
+    } else {
+      tg.BackButton.hide();
+    }
+
+    return () => {
+      if (tg.BackButton.isVisible) {
+        tg.BackButton.hide();
+      }
+    };
+  }, [screen]);
 
   // --- Initialization ---
   useEffect(() => {
@@ -312,7 +334,9 @@ export default function App() {
                 <GameOver 
                   gameResult={lastRun}
                   userStats={userStats}
+                  userProfile={userProfile}
                   onNavigate={navigateTo}
+                  onOpenProfileModal={() => setShowProfileModal(true)}
                 />
               )}
             </ErrorBoundary>
