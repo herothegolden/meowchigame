@@ -4,38 +4,38 @@ import React, { useState, useEffect } from 'react';
 const AVATAR_OPTIONS = [
   {
     id: 'default',
-    url: 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png',
-    name: 'Default Meowchi'
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490',
+    name: 'Meowchi'
   },
   {
-    id: 'zizi',
-    url: 'https://i.postimg.cc/3rDn1Ztt/Zizi.png',
-    name: 'Zizi'
-  },
-  {
-    id: 'chacha',
-    url: 'https://i.postimg.cc/N0MxH8y7/Chacha.png',
-    name: 'Chacha'
-  },
-  {
-    id: 'tofu',
-    url: 'https://i.postimg.cc/fLSjHwfV/Tofu.png',
-    name: 'Tofu'
+    id: 'panthera',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Panthera.webp?updatedAt=1756284887810',
+    name: 'Panthera'
   },
   {
     id: 'boba',
-    url: 'https://i.postimg.cc/yYHXPCgN/Boba.png',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Boba.webp?updatedAt=1756284887939',
     name: 'Boba'
   },
   {
+    id: 'cheese',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Cheese.webp?updatedAt=1756284888031',
+    name: 'Cheese'
+  },
+  {
+    id: 'patches',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Patches.webp?updatedAt=1756284888179',
+    name: 'Patches'
+  },
+  {
     id: 'oreo',
-    url: 'https://i.postimg.cc/YCX6M4X4/Oreo.png',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Oreo%20.webp?updatedAt=1756284888252',
     name: 'Oreo'
   },
   {
-    id: 'ginger',
-    url: 'https://i.postimg.cc/XNw9X1H6/Ginger.png',
-    name: 'Ginger'
+    id: 'buttercup',
+    url: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Buttercup.webp?updatedAt=1756284888482',
+    name: 'Buttercup'
   }
 ];
 
@@ -46,8 +46,8 @@ const COUNTRY_FLAGS = [
   { flag: '🇨🇦', name: 'Canada' },
   { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' },
-  { flag: '�🇷', name: 'France' },
-  { flag: '🇮🇹', name: 'Italy' },
+  { flag: '🇫🇷', name: 'France' },
+  { flag: '�🇹', name: 'Italy' },
   { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' },
   { flag: '🇰🇷', name: 'South Korea' },
