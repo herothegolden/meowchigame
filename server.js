@@ -354,7 +354,7 @@ app.get("/api/leaderboard/:period", requireDB, async (req, res) => {
 
     const result = await pool.query(`
       SELECT 
-        u.telegram_id, u.display_name, u.country_flag,
+        u.telegram_id, u.display_name, u.country_flag, u.profile_picture,
         COALESCE(SUM(g.score), 0) AS total_score,
         COUNT(g.id) AS games_played,
         MAX(g.score) AS best_score,
@@ -362,7 +362,7 @@ app.get("/api/leaderboard/:period", requireDB, async (req, res) => {
       FROM users u
       LEFT JOIN games g ON u.id = g.user_id ${dateFilter}
       WHERE 1=1 ${countryFilter}
-      GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag
+      GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag, u.profile_picture
       HAVING COUNT(g.id) > 0 OR SUM(g.score) > 0
       ORDER BY total_score DESC
       LIMIT 100
@@ -373,7 +373,7 @@ app.get("/api/leaderboard/:period", requireDB, async (req, res) => {
       const userRankResult = await pool.query(`
         WITH ranked_users AS (
           SELECT 
-            u.telegram_id, u.display_name, u.country_flag,
+            u.telegram_id, u.display_name, u.country_flag, u.profile_picture,
             COALESCE(SUM(g.score), 0) AS total_score,
             COUNT(g.id) AS games_played,
             MAX(g.score) AS best_score,
@@ -381,7 +381,7 @@ app.get("/api/leaderboard/:period", requireDB, async (req, res) => {
           FROM users u
           LEFT JOIN games g ON u.id = g.user_id ${dateFilter}
           WHERE 1=1 ${countryFilter}
-          GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag
+          GROUP BY u.id, u.telegram_id, u.display_name, u.country_flag, u.profile_picture
           HAVING COUNT(g.id) > 0 OR SUM(g.score) > 0
         )
         SELECT * FROM ranked_users WHERE telegram_id = $1
