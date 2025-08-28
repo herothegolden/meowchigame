@@ -1,6 +1,7 @@
 // src/Squads.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import SquadModal from './SquadModal.jsx'; // Import the modal
+import SquadsSkeleton from './SquadsSkeleton.jsx';
 
 export default function Squads({ userTelegramId }) {
   const [squad, setSquad] = useState(null);
@@ -64,20 +65,15 @@ export default function Squads({ userTelegramId }) {
     setModalMode(mode);
   };
   
+  if (loading) {
+    return <SquadsSkeleton />;
+  }
+  
   const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="loading-state">
-          <div className="loading-icon">🐾</div>
-          <div className="loading-text">Checking your squad status...</div>
-        </div>
-      );
-    }
-
     if (error) {
        return (
         <div className="error-state">
-          <div className="error-icon">😿</div>
+          <div className="error-icon">仭</div>
           <div className="error-text">{error}</div>
           <button className="btn" onClick={fetchUserSquad}>Try Again</button>
         </div>
@@ -94,7 +90,7 @@ export default function Squads({ userTelegramId }) {
   return (
     <>
       <section className="section">
-        <div className="title">🐾 Meowchi Squads</div>
+        <div className="title">誓 Meowchi Squads</div>
         {renderContent()}
       </section>
 
@@ -181,7 +177,7 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
           <div>
             <h3 className="squad-name">{squad.name}</h3>
             <p className="squad-stats">
-              {squad.member_count}/{squad.member_limit || 11} members • {parseInt(squad.total_score || 0).toLocaleString()} total score
+              {squad.member_count}/{squad.member_limit || 11} members 窶｢ {parseInt(squad.total_score || 0).toLocaleString()} total score
             </p>
             {isCreator && <p className="creator-badge">You are the Squad Leader</p>}
           </div>
