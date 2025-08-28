@@ -1998,3 +1998,71 @@ body{
   color: var(--muted);
   margin: 4px 0 0;
 }
+
+/* =================================== */
+/* ===== DAILY REWARD MODAL (NEW) ====== */
+/* =================================== */
+
+.daily-reward-modal .modal-body {
+  padding-top: 16px;
+}
+
+.streak-days-visual {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.reward-day-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 8px;
+  text-align: center;
+  opacity: 0.6;
+  position: relative;
+}
+
+.reward-day-item.claimed {
+  opacity: 1;
+  background: var(--accent-light);
+}
+
+.reward-day-item.claimed::after {
+  content: '✔';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.reward-day-item.current {
+  opacity: 1;
+  border-color: var(--accent);
+  transform: scale(1.05);
+  box-shadow: 0 0 12px var(--accent-light);
+}
+
+.reward-day-item:nth-child(7) {
+  grid-column: 2 / span 2;
+  background: linear-gradient(135deg, var(--accent-light), var(--surface));
+}
+
+.reward-day-item .day-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.reward-day-item .reward-icon {
+  font-size: 32px;
+  margin: 12px 0;
+}
+
+.reward-day-item .reward-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
