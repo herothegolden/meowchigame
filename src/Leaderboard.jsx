@@ -7,7 +7,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
-  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
+  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪�', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
   { flag: '🇧🇷', name: 'Brazil' }, { flag: '🇲🇽', name: 'Mexico' },
@@ -20,7 +20,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇦🇹', name: 'Austria' }, { flag: '🇨🇭', name: 'Switzerland' },
   { flag: '🇧🇪', name: 'Belgium' }, { flag: '🇵🇹', name: 'Portugal' },
   { flag: '🇬🇷', name: 'Greece' }, { flag: '🇮🇱', name: 'Israel' },
-  { flag: '🇪�', name: 'Egypt' }, { flag: '🇿🇦', name: 'South Africa' },
+  { flag: '🇪🇬', name: 'Egypt' }, { flag: '🇿🇦', name: 'South Africa' },
   { flag: '🇳🇬', name: 'Nigeria' }, { flag: '🇰🇪', name: 'Kenya' },
   { flag: '🇲🇦', name: 'Morocco' }, { flag: '🇦🇷', name: 'Argentina' },
   { flag: '🇨🇱', name: 'Chile' }, { flag: '🇨🇴', name: 'Colombia' },
@@ -133,6 +133,11 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     }
   };
 
+  const handleTabClick = (setter, value) => {
+    try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+    setter(value);
+  };
+
   const formatScore = (score) => (parseInt(score) || 0).toLocaleString();
   const getDisplayName = (player) => player.display_name || `Stray Cat #${player.telegram_id?.toString().slice(-5) || '00000'}`;
   const getLoadingMessage = () => "Purr-cessing rankings...";
@@ -158,13 +163,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
       <div className="ranking-type-switch">
         <button 
           className={`switch-btn ${rankingType === 'players' ? 'active' : ''}`}
-          onClick={() => setRankingType('players')}
+          onClick={() => handleTabClick(setRankingType, 'players')}
         >
           Players
         </button>
         <button 
           className={`switch-btn ${rankingType === 'squads' ? 'active' : ''}`}
-          onClick={() => setRankingType('squads')}
+          onClick={() => handleTabClick(setRankingType, 'squads')}
         >
           Squads
         </button>
@@ -177,7 +182,7 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
             <div
               key={tab.key}
               className={`tab ${timeFilter === tab.key ? 'active' : ''}`}
-              onClick={() => setTimeFilter(tab.key)}
+              onClick={() => handleTabClick(setTimeFilter, tab.key)}
             >
               {tab.label}
             </div>
