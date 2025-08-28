@@ -33,10 +33,10 @@ const DAILY_TASKS = [
   {
     id: 'invite_friend',
     title: 'Social Cat',
-    description: 'Invite a friend to play',
+    description: 'Invite 10 friends to play',
     reward: 500,
     icon: '👥',
-    target: 1,
+    target: 10,
     type: 'referrals'
   },
   {
@@ -157,6 +157,16 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
     }
   };
 
+  const handleInvite = () => {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.switchInlineQuery) {
+      const botUsername = 'meowchi_game_bot'; // Replace with your bot's username
+      const referralLink = `https://t.me/${botUsername}?start=ref_${userTelegramId}`;
+      const message = `🐱 Join me in Meowchi! We both get bonus coins! ${referralLink}`;
+      tg.switchInlineQuery(message, ['users', 'groups']);
+    }
+  };
+
   if (loading) {
     return (
       <section className="section">
@@ -247,6 +257,8 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
                 >
                   {claimingId === task.id ? '...' : 'Claim'}
                 </button>
+              ) : task.id === 'invite_friend' ? (
+                <button className="btn invite-btn" onClick={handleInvite}>Invite</button>
               ) : (
                 <>
                   <div className="reward-amount">+{task.reward}</div>
@@ -453,6 +465,11 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
           font-size: 14px;
           font-weight: 700;
           color: var(--accent);
+        }
+        .invite-btn {
+          width: 100%;
+          padding: 8px 12px;
+          font-size: 14px;
         }
       `}</style>
     </section>
