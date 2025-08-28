@@ -96,7 +96,10 @@ export default function Home({
                   {getDisplayName()}
                   <button 
                     className="edit-name-btn"
-                    onClick={onOpenProfileModal}
+                    onClick={() => {
+                      try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+                      onOpenProfileModal();
+                    }}
                     title="Edit profile"
                   >
                     ✏️
