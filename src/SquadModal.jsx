@@ -74,7 +74,10 @@ export default function SquadModal({ mode, onClose, onSuccess, userTelegramId })
                         key={icon}
                         type="button"
                         className={`avatar-option ${selectedIcon === icon ? 'selected' : ''}`}
-                        onClick={() => setSelectedIcon(icon)}
+                        onClick={() => {
+                          setSelectedIcon(icon);
+                          try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+                        }}
                       >
                         {icon}
                       </button>
