@@ -235,6 +235,13 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
               </div>
             ))}
           </div>
+          {(!squad.members || squad.members.length <= 1) && (
+            <div className="empty-state" style={{ marginTop: '12px', padding: '20px' }}>
+              <div className="empty-icon">👥</div>
+              <div className="empty-text">Recruit Your Squad!</div>
+              <p className="muted small" style={{ margin: 0 }}>Share the invite code with your friends to build your team.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
