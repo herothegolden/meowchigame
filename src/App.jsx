@@ -15,6 +15,7 @@ import GameOver from "./GameOver.jsx";
 import * as audio from "./audio.js";
 
 const EnhancedProfileModal = lazy(() => import('./EnhancedProfileModal.jsx'));
+const DailyRewardModal = lazy(() => import('./DailyRewardModal.jsx'));
 
 const getTG = () => (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
@@ -71,6 +72,8 @@ export default function App() {
   const [lastRun, setLastRun] = useState(null);
   const [userTelegramId, setUserTelegramId] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [streakData, setStreakData] = useState(null);
+  const [showRewardModal, setShowRewardModal] = useState(false);
 
   // --- Initialization ---
   useEffect(() => {
@@ -129,11 +132,24 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setStreak(data.streak);
+        setStreakData(data);
+        if (!data.claimed_today) {
+          setShowRewardModal(true);
+        }
         console.log(`🔥 Daily streak updated to: ${data.streak}`);
       }
     } catch (error) {
       console.error("Failed to check in for streak:", error);
     }
+  };
+
+  const handleRewardClaimed = (result) => {
+    getTG()?.HapticFeedback?.notificationOccurred('success');
+    setShowRewardModal(false);
+    // Refresh user stats and powerups to reflect the reward
+    fetchUserStats(userTelegramId);
+    fetchUserPowerups(userTelegramId);
+    setStreakData(prev => ({...prev, claimed_today: true}));
   };
 
   const fetchUserStats = async (telegramId) => {
@@ -296,6 +312,15 @@ export default function App() {
               onSave={handleProfileSaved}
               userTelegramId={userTelegramId}
               currentProfile={userProfile}
+            />
+          )}
+          {showRewardModal && streakData && (
+            <DailyRewardModal
+              show={showRewardModal}
+              onClose={() => setShowRewardModal(false)}
+              onClaim={handleRewardClaimed}
+              streakData={streakData}
+              userTelegramId={userTelegramId}
             />
           )}
         </Suspense>
