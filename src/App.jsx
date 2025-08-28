@@ -11,6 +11,7 @@ import Leaderboard from "./Leaderboard.jsx";
 import DailyTasks from "./DailyTasks.jsx";
 import Shop from "./Shop.jsx";
 import ShareButtons from "./ShareButtons.jsx";
+import GameOver from "./GameOver.jsx";
 import * as audio from "./audio.js";
 
 const EnhancedProfileModal = lazy(() => import('./EnhancedProfileModal.jsx'));
@@ -276,21 +277,11 @@ export default function App() {
           
           <ErrorBoundary>
             {screen === "gameover" && lastRun && (
-               <section className="section">
-                 <div className="title">🎯 Level Complete!</div>
-                 <div className="row"><div className="muted">Score</div><b>{lastRun.score.toLocaleString()}</b></div>
-                 <div className="row"><div className="muted">$Meow earned</div><b>{lastRun.coins}</b></div>
-                 <ShareButtons 
-                   variant="game-over"
-                   score={lastRun.score}
-                   combo={lastRun.max_combo}
-                   coins={lastRun.coins}
-                   userTelegramId={userTelegramId}
-                 />
-                 <button className="btn primary" style={{width: '100%', marginTop: '16px'}} onClick={() => navigateTo("game")}>
-                   🎮 Play Again
-                 </button>
-               </section>
+              <GameOver 
+                gameResult={lastRun}
+                userStats={userStats}
+                onNavigate={navigateTo}
+              />
             )}
           </ErrorBoundary>
         </main>
