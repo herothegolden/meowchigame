@@ -168,6 +168,8 @@ export default function GameView({
   const [shake, setShake] = useState(new Set());
   
   const [gameOverState, setGameOverState] = useState(null); // 'calculating' or 'results'
+  const [draggedPowerup, setDraggedPowerup] = useState(null);
+  const [draggedIconStyle, setDraggedIconStyle] = useState({});
 
   // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
@@ -743,6 +745,85 @@ export default function GameView({
       haptic(10);
     }
   };
+  
+  const handlePowerupDragStart = (e, key, icon) => {
+    if (powerups[key] > 0 && key !== 'shuffle') {
+      setDraggedPowerup({ key, icon });
+      const empty = new Image();
+      e.dataTransfer.setDragImage(empty, 0, 0);
+      haptic(8);
+    } else {
+      e.preventDefault();
+    }
+  };
+
+  const handlePowerupDragEnd = () => {
+    setDraggedPowerup(null);
+    setDraggedIconStyle({});
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (draggedPowerup) {
+      setDraggedIconStyle({
+        position: 'fixed',
+        left: e.clientX,
+        top: e.clientY,
+        transform: 'translate(-50%, -50%)',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      });
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (!draggedPowerup || !boardRef.current) return;
+
+    const rect = boardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const r = Math.floor(y / cell);
+    const c = Math.floor(x / cell);
+
+    if (inBounds(r, c)) {
+      applyPowerup(draggedPowerup.key, r, c);
+    }
+    handlePowerupDragEnd();
+  };
+
+  const applyPowerup = (key, r, c) => {
+    const g = cloneGrid(gridRef.current);
+    let applied = false;
+
+    if (key === 'hammer') {
+      const targetCookie = g[r][c];
+      if (CANDY_SET.includes(targetCookie)) {
+        for (let row = 0; row < ROWS; row++) {
+          for (let col = 0; col < COLS; col++) {
+            if (g[row][col] === targetCookie) g[row][col] = null;
+          }
+        }
+        applied = true;
+      }
+    } else if (key === 'bomb') {
+      for (let row = r - 1; row <= r + 1; row++) {
+        for (let col = c - 1; col <= c + 1; col++) {
+          if (inBounds(row, col)) g[row][col] = null;
+        }
+      }
+      applied = true;
+    }
+
+    if (applied) {
+      audio.play?.('powerup_spawn', { volume: 0.8 });
+      optimizedResolveCascades(g, () => {});
+      consumePowerup(key);
+    } else {
+      haptic(8);
+      audio.play?.("swap_invalid", { volume: 0.5 });
+    }
+  };
 
   const boardW = cell * COLS;
   const boardH = cell * ROWS;
@@ -825,7 +906,12 @@ export default function GameView({
   }, []);
 
   return (
-    <div className="section board-wrap" ref={containerRef}>
+    <div className="section board-wrap" ref={containerRef} onDragOver={handleDragOver}>
+      {draggedPowerup && (
+        <div className="powerup-drag-icon" style={draggedIconStyle}>
+          {draggedPowerup.icon}
+        </div>
+      )}
       {gameOverState === 'calculating' && (
         <div className="calculating-overlay">
           <div className="calculating-content">
@@ -881,6 +967,8 @@ export default function GameView({
         ref={boardRef}
         className="board"
         style={{ width: boardW, height: boardH }}
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
       >
         <div
           className="gridlines"
@@ -899,6 +987,9 @@ export default function GameView({
             key={key}
             className={`powerup-btn ${activePowerup === key ? 'active' : ''}`}
             onClick={() => handlePowerupSelect(key)}
+            draggable={powerups[key] > 0 && key !== 'shuffle'}
+            onDragStart={(e) => handlePowerupDragStart(e, key, def.icon)}
+            onDragEnd={handlePowerupDragEnd}
             disabled={!powerups[key] || powerups[key] <= 0}
             title={`${def.name} (Owned: ${powerups[key] || 0})`}
           >
