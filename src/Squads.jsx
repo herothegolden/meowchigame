@@ -19,29 +19,16 @@ export default function Squads({ userTelegramId }) {
     setError(null);
     
     try {
-      const userSquadResponse = await fetch(`/api/user/${userTelegramId}/squad`);
+      const response = await fetch(`/api/user/${userTelegramId}/squad-details`);
       
-      if (!userSquadResponse.ok) {
-        const errorBody = await userSquadResponse.text();
-        throw new Error(`Failed to check squad status: ${userSquadResponse.status} ${errorBody}`);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Failed to fetch squad details: ${response.status} ${errorBody}`);
       }
       
-      const userSquadData = await userSquadResponse.json();
-      
-      if (userSquadData.squad && userSquadData.squad.id) {
-        const detailResponse = await fetch(`/api/squads/${userSquadData.squad.id}`);
+      const data = await response.json();
+      setSquad(data.squad); // This will be the full squad object or null
 
-        if (!detailResponse.ok) {
-          const errorBody = await detailResponse.text();
-          throw new Error(`Failed to fetch squad details: ${detailResponse.status} ${errorBody}`);
-        }
-
-        const detailData = await detailResponse.json();
-        setSquad(detailData.squad);
-
-      } else {
-        setSquad(null);
-      }
     } catch (err) {
       console.error("fetchUserSquad error:", err); 
       setError("Could not load squad information. Please try again later.");
