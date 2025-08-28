@@ -154,9 +154,9 @@ export default function Home({
             </button>
           </div>
 
-          <div>
-            <h3 className="info-title">✨ About Meowchi</h3>
-            <p className="info-description">
+          <div style={{ marginTop: '32px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text)', margin: '0 0 12px 0', letterSpacing: '-0.2px' }}>✨ About Meowchi</h3>
+            <p style={{ color: 'var(--muted)', lineHeight: '1.6', fontSize: '14px', margin: '0', fontWeight: '500' }}>
               Match 3 or more treats to help feed the hungry cats! 
               Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
               and marshmallows 🍡 to create sweet combos and earn $Meow coins.
