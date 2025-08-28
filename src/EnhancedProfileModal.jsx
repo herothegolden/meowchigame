@@ -47,7 +47,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' },
   { flag: '🇫🇷', name: 'France' },
-  { flag: '�🇹', name: 'Italy' },
+  { flag: '🇮🇹', name: 'Italy' },
   { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' },
   { flag: '🇰🇷', name: 'South Korea' },
@@ -267,7 +267,10 @@ export default function EnhancedProfileModal({ show, onClose, onSave, userTelegr
                   key={avatar.id}
                   type="button"
                   className={`avatar-option ${selectedAvatar === avatar.url ? 'selected' : ''}`}
-                  onClick={() => setSelectedAvatar(avatar.url)}
+                  onClick={() => {
+                    setSelectedAvatar(avatar.url);
+                    try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+                  }}
                   disabled={saving}
                   title={avatar.name}
                 >
