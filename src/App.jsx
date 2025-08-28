@@ -256,7 +256,7 @@ export default function App() {
                   userStats={userStats}
                   userProfile={userProfile}
                   onOpenProfileModal={() => setShowProfileModal(true)}
-                  streak={streak}
+                  streakData={streakData}
                 />
               ) : <HomeSkeleton />
             )}
