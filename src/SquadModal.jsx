@@ -35,6 +35,7 @@ export default function SquadModal({ mode, onClose, onSuccess, userTelegramId })
       }
     } catch (err) {
       setError(err.message);
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
     } finally {
       setLoading(false);
     }
