@@ -15,7 +15,7 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
 
   const handleBuy = async (item) => {
     if (coins < item.price || purchasing) {
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
       return;
     }
     setPurchasing(item.key);
@@ -32,12 +32,14 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
       });
       const result = await response.json();
       if (response.ok) {
+        try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch (e) {}
         onPurchase(item.key, result.newCoinBalance);
       } else {
         throw new Error(result.error);
       }
     } catch (error) {
       console.error("Purchase failed:", error);
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
       // You could show an error message to the user here
     } finally {
       setPurchasing(null);
