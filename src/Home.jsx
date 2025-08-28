@@ -77,10 +77,10 @@ export default function Home({
             <div className="profile-avatar-container">
               <div className="profile-avatar">
                 <img
-                  src={userProfile?.profile_picture || "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png"}
+                  src={userProfile?.profile_picture || "https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490"}
                   alt="Profile"
                   onError={(e) => {
-                    e.currentTarget.src = "https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png";
+                    e.currentTarget.src = "https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490";
                   }}
                 />
                 {userProfile?.country_flag && (
