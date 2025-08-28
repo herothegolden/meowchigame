@@ -123,12 +123,14 @@ export default function Home({
               <div className="stat-label">Best Score</div>
             </div>
 
+            {/* ADD THIS NEW STAT ITEM */}
             <div className="stat-item">
               <div className="stat-value">🔥 {streak}</div>
               <div className="stat-label">Day Streak</div>
             </div>
 
             <div className="stat-item">
+              {/* The combo is text ('x5'), so it doesn't need the CountUp animation */}
               <div className="stat-value">{formatCombo(userStats?.best_combo)}</div>
               <div className="stat-label">Best Combo</div>
             </div>
@@ -152,7 +154,7 @@ export default function Home({
             </button>
           </div>
 
-          <div style={{ marginTop: '32px' }}>
+          <div>
             <h3 className="info-title">✨ About Meowchi</h3>
             <p className="info-description">
               Match 3 or more treats to help feed the hungry cats! 
@@ -160,6 +162,7 @@ export default function Home({
               and marshmallows 🍡 to create sweet combos and earn $Meow coins.
             </p>
             
+            {/* DEBUGGING: Show raw stats values */}
             {userStats && process.env.NODE_ENV === 'development' && (
               <details style={{ marginTop: '16px', fontSize: '12px', opacity: 0.7 }}>
                 <summary>🔍 Debug Info</summary>
