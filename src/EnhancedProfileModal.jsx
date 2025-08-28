@@ -46,7 +46,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇨🇦', name: 'Canada' },
   { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' },
-  { flag: '🇫🇷', name: 'France' },
+  { flag: '�🇷', name: 'France' },
   { flag: '🇮🇹', name: 'Italy' },
   { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' },
@@ -169,18 +169,25 @@ export default function EnhancedProfileModal({ show, onClose, onSave, userTelegr
 
   // Handle form submission
   const handleSave = async () => {
+    const triggerErrorHaptic = () => {
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
+    };
+
     if (!displayName.trim()) {
       setError('Please enter your display name');
+      triggerErrorHaptic();
       return;
     }
 
     if (!selectedAvatar) {
       setError('Please select an avatar');
+      triggerErrorHaptic();
       return;
     }
 
     if (!countryFlag) {
       setError('Please select your country');
+      triggerErrorHaptic();
       return;
     }
 
@@ -220,6 +227,7 @@ export default function EnhancedProfileModal({ show, onClose, onSave, userTelegr
       onClose();
     } catch (err) {
       setError(err.message);
+      triggerErrorHaptic();
     } finally {
       setSaving(false);
     }
