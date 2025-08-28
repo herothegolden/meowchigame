@@ -2,12 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SquadModal from './SquadModal.jsx'; // Import the modal
 import SquadsSkeleton from './SquadsSkeleton.jsx';
+import { useAlert } from './App.jsx';
 
 export default function Squads({ userTelegramId }) {
   const [squad, setSquad] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalMode, setModalMode] = useState(null); // 'create', 'join', or null
+  const showAlert = useAlert();
 
   const fetchUserSquad = useCallback(async () => {
     if (!userTelegramId) {
@@ -60,7 +62,7 @@ export default function Squads({ userTelegramId }) {
     if (error) {
        return (
         <div className="error-state">
-          <div className="error-icon">仭</div>
+          <div className="error-icon">😿</div>
           <div className="error-text">{error}</div>
           <button className="btn" onClick={fetchUserSquad}>Try Again</button>
         </div>
@@ -68,7 +70,7 @@ export default function Squads({ userTelegramId }) {
     }
     
     if (squad) {
-      return <SquadDashboard squad={squad} userTelegramId={userTelegramId} onSquadUpdate={fetchUserSquad} />;
+      return <SquadDashboard squad={squad} userTelegramId={userTelegramId} onSquadUpdate={fetchUserSquad} showAlert={showAlert} />;
     }
     
     return <NoSquadView onCreate={() => handleModalOpen('create')} onJoin={() => handleModalOpen('join')} />;
@@ -77,7 +79,7 @@ export default function Squads({ userTelegramId }) {
   return (
     <>
       <section className="section">
-        <div className="title">誓 Meowchi Squads</div>
+        <div className="title">🐾 Meowchi Squads</div>
         {renderContent()}
       </section>
 
@@ -93,7 +95,7 @@ export default function Squads({ userTelegramId }) {
   );
 }
 
-const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
+const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate, showAlert }) => {
   const [showInviteCode, setShowInviteCode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [kickingMember, setKickingMember] = useState(null);
@@ -120,15 +122,23 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
       if (tg?.switchInlineQuery) {
         tg.switchInlineQuery(message, ['users', 'groups']);
       } else {
-        alert(message);
+        showAlert('Share Squad', message);
       }
     } catch (e) {}
   };
   
-  const kickMember = async (memberTelegramId, memberName) => {
-    // The confirm dialog is removed as it's not supported in Mini Apps.
-    // A custom modal should be implemented here for a better user experience.
-    
+  const confirmKickMember = (memberTelegramId, memberName) => {
+    showAlert(
+      'Kick Member',
+      `Are you sure you want to kick ${memberName} from the squad?`,
+      [
+        { text: 'Cancel' },
+        { text: 'Kick', style: 'primary', onClick: () => kickMember(memberTelegramId) }
+      ]
+    );
+  };
+
+  const kickMember = async (memberTelegramId) => {
     setKickingMember(memberTelegramId);
     try {
       const tg = window.Telegram?.WebApp;
@@ -145,11 +155,11 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
       if (!response.ok) throw new Error(result.error);
       
       try { tg?.HapticFeedback?.notificationOccurred('success'); } catch (e) {}
-      alert('Member kicked successfully!');
+      showAlert('Success', 'Member kicked successfully!');
       onSquadUpdate();
     } catch (error) {
       try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
-      alert(`Failed to kick member: ${error.message}`);
+      showAlert('Error', `Failed to kick member: ${error.message}`);
     } finally {
       setKickingMember(null);
     }
@@ -164,7 +174,7 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
           <div>
             <h3 className="squad-name">{squad.name}</h3>
             <p className="squad-stats">
-              {squad.member_count}/{squad.member_limit || 11} members 窶｢ {parseInt(squad.total_score || 0).toLocaleString()} total score
+              {squad.member_count}/{squad.member_limit || 11} members • {parseInt(squad.total_score || 0).toLocaleString()} total score
             </p>
             {isCreator && <p className="creator-badge">You are the Squad Leader</p>}
           </div>
@@ -226,7 +236,7 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
                 {isCreator && member.telegram_id != squad.creator_telegram_id && (
                   <button 
                     className="btn kick-btn"
-                    onClick={() => kickMember(member.telegram_id, member.display_name)}
+                    onClick={() => confirmKickMember(member.telegram_id, member.display_name)}
                     disabled={kickingMember === member.telegram_id}
                   >
                     {kickingMember === member.telegram_id ? '...' : 'Kick'}
