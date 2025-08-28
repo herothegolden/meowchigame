@@ -206,9 +206,9 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
                 {/* START: Added profile picture */}
                 <div className="member-avatar">
                   <img 
-                    src={member.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                    src={member.profile_picture || 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'} 
                     alt={member.display_name} 
-                    onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                    onError={(e) => { e.currentTarget.src = 'https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490'; }}
                   />
                 </div>
                 {/* END: Added profile picture */}
