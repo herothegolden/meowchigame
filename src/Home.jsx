@@ -154,7 +154,8 @@ export default function Home({
             </button>
           </div>
 
-          <div className="game-info">
+          {/* REMOVED BOX STYLING - NO MORE .game-info CLASS */}
+          <div>
             <h3 className="info-title">✨ About Meowchi</h3>
             <p className="info-description">
               Match 3 or more treats to help feed the hungry cats! 
