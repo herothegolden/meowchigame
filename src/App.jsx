@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useState, Suspense, lazy, createContext, useContext } from "react";
 import { useStore } from "./store.js"; // <-- Uses Zustand store
 import ErrorBoundary from "./ErrorBoundary.jsx";
 
@@ -13,11 +13,15 @@ import Shop from "./Shop.jsx";
 import ShareButtons from "./ShareButtons.jsx";
 import GameOver from "./GameOver.jsx";
 import * as audio from "./audio.js";
+import AlertModal from "./AlertModal.jsx";
 
 const EnhancedProfileModal = lazy(() => import('./EnhancedProfileModal.jsx'));
 const DailyRewardModal = lazy(() => import('./DailyRewardModal.jsx'));
 
 const getTG = () => (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
+
+const AlertContext = createContext();
+export const useAlert = () => useContext(AlertContext);
 
 export default function App() {
   // Stable viewport setup (no changes needed here)
@@ -74,6 +78,17 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [streakData, setStreakData] = useState(null);
   const [showRewardModal, setShowRewardModal] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    show: false,
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const showAlert = (title, message, buttons = [{ text: 'OK' }]) => {
+    setAlertConfig({ show: true, title, message, buttons });
+  };
+
 
   // --- Initialization ---
   useEffect(() => {
@@ -243,88 +258,91 @@ export default function App() {
   // --- Render ---
   return (
     <ErrorBoundary>
-      <Splash show={showSplash} />
-      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        <Header coins={coins} />
-        <main className="content">
-          <ErrorBoundary>
-            {screen === "home" && (
-              userStats ? (
-                <Home
-                  coins={coins}
-                  onNavigate={navigateTo}
-                  userStats={userStats}
-                  userProfile={userProfile}
-                  onOpenProfileModal={() => setShowProfileModal(true)}
-                  streakData={streakData}
+      <AlertContext.Provider value={showAlert}>
+        <Splash show={showSplash} />
+        <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
+          <Header coins={coins} />
+          <main className="content">
+            <ErrorBoundary>
+              {screen === "home" && (
+                userStats ? (
+                  <Home
+                    coins={coins}
+                    onNavigate={navigateTo}
+                    userStats={userStats}
+                    userProfile={userProfile}
+                    onOpenProfileModal={() => setShowProfileModal(true)}
+                    streakData={streakData}
+                  />
+                ) : <HomeSkeleton />
+              )}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "leaderboard" && <Leaderboard userTelegramId={userTelegramId} />}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "squad" && <Squads userTelegramId={userTelegramId} />}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "daily" && <DailyTasks userTelegramId={userTelegramId} />}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => {
+                setCoins(newBalance);
+                fetchUserPowerups(userTelegramId); // Refresh powerups after purchase
+              }} />}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "game" && (
+                <GameView
+                  onExit={handleGameExit}
+                  settings={settings}
+                  userTelegramId={userTelegramId}
                 />
-              ) : <HomeSkeleton />
+              )}
+            </ErrorBoundary>
+            
+            <ErrorBoundary>
+              {screen === "gameover" && lastRun && (
+                <GameOver 
+                  gameResult={lastRun}
+                  userStats={userStats}
+                  onNavigate={navigateTo}
+                />
+              )}
+            </ErrorBoundary>
+          </main>
+          <BottomNav screen={screen} onNavigate={navigateTo} />
+        </div>
+        <ErrorBoundary>
+          <Suspense fallback={<div />}>
+            {showProfileModal && (
+              <EnhancedProfileModal
+                show={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                onSave={handleProfileSaved}
+                userTelegramId={userTelegramId}
+                currentProfile={userProfile}
+              />
             )}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "leaderboard" && <Leaderboard userTelegramId={userTelegramId} />}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "squad" && <Squads userTelegramId={userTelegramId} />}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "daily" && <DailyTasks userTelegramId={userTelegramId} />}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => {
-              setCoins(newBalance);
-              fetchUserPowerups(userTelegramId); // Refresh powerups after purchase
-            }} />}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "game" && (
-              <GameView
-                onExit={handleGameExit}
-                settings={settings}
+            {showRewardModal && streakData && (
+              <DailyRewardModal
+                show={showRewardModal}
+                onClose={() => setShowRewardModal(false)}
+                onClaim={handleRewardClaimed}
+                streakData={streakData}
                 userTelegramId={userTelegramId}
               />
             )}
-          </ErrorBoundary>
-          
-          <ErrorBoundary>
-            {screen === "gameover" && lastRun && (
-              <GameOver 
-                gameResult={lastRun}
-                userStats={userStats}
-                onNavigate={navigateTo}
-              />
-            )}
-          </ErrorBoundary>
-        </main>
-        <BottomNav screen={screen} onNavigate={navigateTo} />
-      </div>
-      <ErrorBoundary>
-        <Suspense fallback={<div />}>
-          {showProfileModal && (
-            <EnhancedProfileModal
-              show={showProfileModal}
-              onClose={() => setShowProfileModal(false)}
-              onSave={handleProfileSaved}
-              userTelegramId={userTelegramId}
-              currentProfile={userProfile}
-            />
-          )}
-          {showRewardModal && streakData && (
-            <DailyRewardModal
-              show={showRewardModal}
-              onClose={() => setShowRewardModal(false)}
-              onClaim={handleRewardClaimed}
-              streakData={streakData}
-              userTelegramId={userTelegramId}
-            />
-          )}
-        </Suspense>
-      </ErrorBoundary>
+          </Suspense>
+        </ErrorBoundary>
+        <AlertModal {...alertConfig} onClose={() => setAlertConfig({ ...alertConfig, show: false })} />
+      </AlertContext.Provider>
     </ErrorBoundary>
   );
 }
