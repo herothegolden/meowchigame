@@ -420,6 +420,14 @@ body{
   overscroll-behavior: contain;
 }
 
+.effects-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .gridlines{
   position: absolute;
   inset: 0;
@@ -449,23 +457,18 @@ body{
   outline: 3px solid var(--accent);
 }
 
-/* FIXED: hint pulse - 2 cycles then stop */
-.tile.hint .tile-emoji{
-  animation: simple-hint-pulse 1.2s ease-in-out; /* replaced hint-pulse */
+.tile.hint {
+  animation: hint-pulse 1.2s ease-in-out 2;
 }
 
 @keyframes hint-pulse{
-  0%{ transform: scale(1); }
-  25%{ transform: scale(1.08); }  /* First pulse */
-  50%{ transform: scale(1); }
-  75%{ transform: scale(1.08); }  /* Second pulse */
-  100%{ transform: scale(1); }    /* Then stops completely */
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 /* press/grab feel */
-.tile.grab .tile-emoji{
-  transform: scale(0.96) translateZ(0); /* replaced drop-shadow with translateZ(0) */
-  /* removed filter: drop-shadow(...) */
+.tile.grab .emoji{
+  transform: scale(0.96);
 }
 
 /* invalid swap nudge */
@@ -481,114 +484,6 @@ body{
   100%{ transform: translateX(0); }
 }
 
-/* new spawn drop-in */
-.tile.drop-in{
-  animation: drop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes drop{
-  from{ transform: translateY(-14px); opacity: 0; }
-  to{ transform: translateY(0); opacity: 1; }
-}
-
-/* ========== FAST BLASTING ANIMATIONS (simplified) ========== */
-
-.tile.blasting {
-  animation: simple-blast 0.2s ease forwards; /* replaced mega-pop */
-  background: var(--accent2);                 /* simplified background */
-  border-radius: 50%;
-  z-index: 10 !important;
-  transform: translateZ(0);
-}
-
-/* simplified inner emoji during blast */
-.tile.blasting .tile-emoji {
-  transform: scale(1.1) translateZ(0);
-  /* removed filter and text-shadow and emoji-glow animation */
-}
-
-/* Particle animations - short duration */
-@keyframes fly {
-  0% { 
-    transform: translate(0, 0) scale(1) rotate(0deg); 
-    opacity: 1; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
-    opacity: 0; 
-  }
-}
-
-@keyframes fly-bounce {
-  0% { 
-    transform: translate(0, 0) scale(1); 
-    opacity: 1; 
-  }
-  40% { 
-    transform: translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.2)) scale(1.1); 
-    opacity: 1; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.1); 
-    opacity: 0; 
-  }
-}
-
-@keyframes fly-spiral {
-  0% { 
-    transform: translate(0, 0) scale(1) rotate(0deg); 
-    opacity: 1; 
-  }
-  50% { 
-    transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.3)) scale(0.8) rotate(180deg); 
-    opacity: 0.8; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(360deg); 
-    opacity: 0; 
-  }
-}
-
-/* Explosion effects - short duration */
-@keyframes explosion-flash {
-  0% { 
-    transform: scale(0); 
-    opacity: 0.8; 
-  }
-  50% { 
-    transform: scale(1); 
-    opacity: 0.4; 
-  }
-  100% { 
-    transform: scale(1.5); 
-    opacity: 0; 
-  }
-}
-
-@keyframes shockwave {
-  0% { 
-    width: 0; 
-    height: 0; 
-    margin-left: 0; 
-    margin-top: 0; 
-    opacity: 0.8; 
-    border-width: 2px;
-  }
-  100% { 
-    width: 120px; 
-    height: 120px; 
-    margin-left: -60px; 
-    margin-top: -60px; 
-    opacity: 0; 
-    border-width: 1px;
-  }
-}
-
-.enhanced-spark {
-  will-change: transform, opacity;
-  pointer-events: none;
-}
-
 /* faster easing while swapping */
 .tile.swapping{
   transition:
@@ -598,11 +493,9 @@ body{
     opacity 0.12s linear;
 }
 
-/* REPLACED: expensive emoji drop-shadow */
-.tile .tile-emoji{
+.tile .emoji{
   line-height: 1;
-  transform: translateZ(0);
-  will-change: transform;
+  transition: transform 0.1s ease;
 }
 
 /* FIXED: COMBO CELEBRATION OVER STATS ROW */
@@ -674,12 +567,6 @@ body{
   }
 }
 
-/* OLD combo style - REMOVED (was positioned in board center) */
-.combo {
-  /* This class is no longer used - replaced by combo-celebration */
-  display: none;
-}
-
 /* pause overlay */
 .pause-overlay{
   position: absolute;
@@ -687,7 +574,6 @@ body{
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.95);
-  /* removed backdrop-filter: saturate(120%) blur(8px); */
 }
 
 /* controls under board */
@@ -709,13 +595,6 @@ body{
   font-size: 12px;
   color: var(--muted);
   margin-left: auto;
-}
-
-/* poof particles - short duration */
-.spark{
-  position: absolute;
-  transform-origin: var(--cx) var(--cy);
-  animation: fly var(--dur, 0.4s) ease-out forwards;
 }
 
 /* ===== Leaderboard Styles ===== */
@@ -1549,44 +1428,6 @@ body{
     height: 18px;
     font-size: 11px;
   }
-}
-
-/* =========================
-   Simplified animations - GPU accelerated (Step 2)
-   ========================= */
-@keyframes simple-blast {
-  0% { 
-    transform: scale(1) translateZ(0); 
-    opacity: 1; 
-  }
-  50% { 
-    transform: scale(1.4) translateZ(0); 
-    opacity: 0.8; 
-  }
-  100% { 
-    transform: scale(2.0) translateZ(0); 
-    opacity: 0; 
-  }
-}
-
-@keyframes simple-hint-pulse {
-  0%, 100% { transform: scale(1) translateZ(0); }
-  50% { transform: scale(1.1) translateZ(0); }
-}
-
-.blast-simple {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 20px;
-  pointer-events: none;
-  animation: simple-blast-icon 0.2s ease forwards;
-}
-
-@keyframes simple-blast-icon {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
 
 /* =================================== */
