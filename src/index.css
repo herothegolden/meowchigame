@@ -404,7 +404,7 @@ body{
   white-space: nowrap;
 }
 
-/* ===== Board / GameView (FAST ANIMATIONS) ===== */
+/* ===== Board / GameView (OPTIMIZED FOR CANVAS) ===== */
 .section.board-wrap{
   position: relative;
   margin: 12px 16px;
@@ -489,22 +489,6 @@ body{
 @keyframes drop{
   from{ transform: translateY(-14px); opacity: 0; }
   to{ transform: translateY(0); opacity: 1; }
-}
-
-/* ========== FAST BLASTING ANIMATIONS (simplified) ========== */
-
-.tile.blasting {
-  animation: simple-blast 0.2s ease forwards; /* replaced mega-pop */
-  background: var(--accent2);                 /* simplified background */
-  border-radius: 50%;
-  z-index: 10 !important;
-  transform: translateZ(0);
-}
-
-/* simplified inner emoji during blast */
-.tile.blasting .tile-emoji {
-  transform: scale(1.1) translateZ(0);
-  /* removed filter and text-shadow and emoji-glow animation */
 }
 
 /* Particle animations - short duration */
@@ -1422,7 +1406,7 @@ body{
 
 /* reduced motion - Remove all animations for accessibility */
 @media (prefers-reduced-motion: reduce){
-  .tile, .tile.swapping, .tile.drop-in, .tile.blasting,
+  .tile, .tile.swapping, .tile.drop-in,
   .splash-progress__bar, .combo-celebration, .tile.hint .tile-emoji{
     transition: none !important;
     animation: none !important;
@@ -1554,39 +1538,9 @@ body{
 /* =========================
    Simplified animations - GPU accelerated (Step 2)
    ========================= */
-@keyframes simple-blast {
-  0% { 
-    transform: scale(1) translateZ(0); 
-    opacity: 1; 
-  }
-  50% { 
-    transform: scale(1.4) translateZ(0); 
-    opacity: 0.8; 
-  }
-  100% { 
-    transform: scale(2.0) translateZ(0); 
-    opacity: 0; 
-  }
-}
-
 @keyframes simple-hint-pulse {
   0%, 100% { transform: scale(1) translateZ(0); }
   50% { transform: scale(1.1) translateZ(0); }
-}
-
-.blast-simple {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 20px;
-  pointer-events: none;
-  animation: simple-blast-icon 0.2s ease forwards;
-}
-
-@keyframes simple-blast-icon {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
 }
 
 /* =================================== */
@@ -2031,7 +1985,7 @@ body{
 }
 
 .reward-day-item.claimed::after {
-  content: '✔';
+  content: '✓';
   position: absolute;
   top: 8px;
   right: 8px;
