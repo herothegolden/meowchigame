@@ -166,6 +166,8 @@ export default function GameView({
 
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
+  
+  const [gameOverState, setGameOverState] = useState(null); // 'calculating' or 'results'
 
   // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
@@ -256,21 +258,19 @@ export default function GameView({
 
   // Timer
   useEffect(() => {
-    if (paused) return;
+    if (paused || gameOverState) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          setTimeout(() => {
-            finish();
-          }, 100);
+          finish();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [paused]);
+  }, [paused, gameOverState]);
 
   // Timer tick sounds (very light)
   const lastTickRef = useRef(null);
@@ -682,8 +682,10 @@ export default function GameView({
   }
 
   async function finish() {
+    setGameOverState('calculating');
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
+    
     const result = await submitGameScore(finalScore);
 
     const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
@@ -703,7 +705,11 @@ export default function GameView({
       gameSubmitted: !!result,
       showSharing: true,
     };
-    onExit(gameResultWithSharing);
+    
+    // Wait a bit for the "calculating" animation before exiting
+    setTimeout(() => {
+      onExit(gameResultWithSharing);
+    }, 500);
   }
 
   function resetGame() {
@@ -820,6 +826,14 @@ export default function GameView({
 
   return (
     <div className="section board-wrap" ref={containerRef}>
+      {gameOverState === 'calculating' && (
+        <div className="calculating-overlay">
+          <div className="calculating-content">
+            <div className="calculating-icon">...</div>
+            <div className="calculating-text">Time's Up!</div>
+          </div>
+        </div>
+      )}
       <div
         className="timer-display"
         style={{
