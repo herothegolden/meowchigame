@@ -1,13 +1,42 @@
 // public/sw.js - Service Worker for instant loading
-const CACHE_NAME = 'meowchi-v1.1';
+const CACHE_NAME = 'meowchi-v1.2'; // Incremented version
 
-// Install event - skip waiting for immediate activation
+// Assets to pre-cache for an instant, offline-first experience
+const CORE_ASSETS = [
+  '/',
+  '/index.html',
+  '/splash.jpg',
+  // NOTE: Vite generates hashed assets. These are placeholders.
+  // In a real build pipeline, you'd inject the actual filenames here.
+  '/assets/index.js', 
+  '/assets/index.css',
+  '/sfx/coin.wav',
+  '/sfx/match_pop.wav',
+  '/sfx/finish_win.wav',
+  '/sfx/swap.wav'
+];
+
+// Install event: pre-cache core assets
 self.addEventListener('install', (event) => {
   console.log('🔧 Service Worker installing...');
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('📦 Caching core assets');
+        // Use addAll for atomic caching. If one fails, none are cached.
+        // We use individual add calls with catch to prevent one bad asset from failing the whole cache.
+        const cachePromises = CORE_ASSETS.map(asset => {
+          return cache.add(asset).catch(err => {
+            console.warn(`Failed to cache ${asset}:`, err);
+          });
+        });
+        return Promise.all(cachePromises);
+      })
+      .then(() => self.skipWaiting())
+  );
 });
 
-// Activate event - clean up old caches and take control
+// Activate event: clean up old caches
 self.addEventListener('activate', (event) => {
   console.log('⚡ Service Worker activating...');
   event.waitUntil(
@@ -22,54 +51,42 @@ self.addEventListener('activate', (event) => {
           })
         );
       })
-      .then(() => {
-        console.log('✅ Service Worker activated');
-        return self.clients.claim(); // Take control immediately
-      })
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch event - network-first with cache fallback for optimal performance
+// Fetch event: cache-first for core assets, network-first for others
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
-
-  // Skip API calls - let them go to network
-  if (event.request.url.includes('/api/')) return;
-
-  // Skip external requests (fonts, etc.)
-  if (!event.request.url.startsWith(self.location.origin)) return;
+  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+    return;
+  }
 
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache successful responses
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(async () => {
-        // Offline or network failed → try cache
-        const cached = await caches.match(event.request);
-        if (cached) {
-          console.log('📦 Served from cache:', event.request.url);
-          return cached;
+    caches.match(event.request)
+      .then((cachedResponse) => {
+        // Cache hit: return cached response immediately
+        if (cachedResponse) {
+          return cachedResponse;
         }
 
-        // Fallback shell for navigations
+        // Not in cache: go to network
+        return fetch(event.request).then((networkResponse) => {
+          // If we got a valid response, clone it and cache it
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        });
+      })
+      .catch(() => {
+        // Offline fallback for documents
         if (event.request.destination === 'document') {
           return caches.match('/index.html');
         }
-
-        // Return a generic offline response for other requests
-        return new Response('Offline', { 
-          status: 503, 
-          statusText: 'Service Unavailable' 
-        });
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
       })
   );
 });
