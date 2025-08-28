@@ -39,11 +39,18 @@ body{
   background: var(--bg);
 }
 
-/* header - elegant and minimal */
+/* header - elegant and minimal - FIXED HEADER */
 .header{
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 520px;
   padding: 16px 20px 12px;
-  background: var(--card);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
+  z-index: 1000;
 }
 
 .header-content{
@@ -130,7 +137,7 @@ body{
 /* content area */
 .content{
   flex: 1;
-  padding: 0 0 80px 0; /* Bottom padding for nav */
+  padding: 80px 0 80px 0; /* TOP PADDING FOR FIXED HEADER + Bottom padding for nav */
   overflow-y: auto;
 }
 
@@ -276,6 +283,7 @@ body{
   align-items: center;
   justify-content: space-around;
   padding: 12px 8px 20px;
+  position: relative;
 }
 
 .nav-item{
@@ -291,6 +299,18 @@ body{
   border-radius: 12px;
   transition: all 0.2s ease;
   min-width: 60px;
+  position: relative;
+}
+
+/* NAV DIVIDERS */
+.nav-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: var(--line);
 }
 
 .nav-item:hover{
@@ -1217,7 +1237,7 @@ body{
 }
 
 .country-button {
-  width: 100%;   /* <-- Correct: semicolon */
+  width: 100%;
   padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
