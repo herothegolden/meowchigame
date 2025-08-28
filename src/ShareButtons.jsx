@@ -1,5 +1,6 @@
 // src/ShareButtons.jsx - Viral Sharing Component for Meowchi
 import React, { useState } from 'react';
+import { useAlert } from './App.jsx';
 
 export default function ShareButtons({ 
   score = 0, 
@@ -12,6 +13,7 @@ export default function ShareButtons({
 }) {
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const showAlert = useAlert();
 
   const getTelegramWebApp = () => {
     return window.Telegram?.WebApp;
@@ -51,7 +53,7 @@ export default function ShareButtons({
   const shareToChats = () => {
     const tg = getTelegramWebApp();
     if (!tg || !tg.switchInlineQuery) {
-      console.warn('Telegram WebApp not available');
+      showAlert('Sharing Error', 'Sharing is not available. Please try again inside Telegram.');
       return;
     }
 
@@ -71,7 +73,7 @@ export default function ShareButtons({
       
     } catch (error) {
       console.error('Share failed:', error);
-      alert('Sharing not available. Please try again.');
+      showAlert('Sharing Error', 'Sharing not available. Please try again.');
     } finally {
       setTimeout(() => setSharing(false), 1000);
     }
@@ -138,7 +140,7 @@ export default function ShareButtons({
       
     } catch (error) {
       console.error('Copy failed:', error);
-      alert('Could not copy link. Please try again.');
+      showAlert('Copy Error', 'Could not copy link. Please try again.');
     }
   };
 
