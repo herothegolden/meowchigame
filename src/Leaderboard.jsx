@@ -294,4 +294,3 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     </section>
   );
 }
-�
