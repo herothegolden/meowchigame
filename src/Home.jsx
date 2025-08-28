@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./home.css";
+import StreakTracker from "./StreakTracker.jsx";
 
 // Step 5: Add the CountUp component for animated stats
 const CountUp = ({ end }) => {
@@ -44,8 +45,7 @@ export default function Home({
   userProfile, 
   onProfileUpdate,
   onOpenProfileModal,
-  // NEW: streak prop
-  streak = 0 
+  streakData
 }) {
   // Format numbers with commas
   const formatNumber = (num) => {
@@ -128,7 +128,7 @@ export default function Home({
 
             {/* ADD THIS NEW STAT ITEM */}
             <div className="stat-item">
-              <div className="stat-value">🔥 {streak}</div>
+              <div className="stat-value">🔥 {streakData?.streak || 0}</div>
               <div className="stat-label">Day Streak</div>
             </div>
 
@@ -138,6 +138,8 @@ export default function Home({
               <div className="stat-label">Best Combo</div>
             </div>
           </div>
+          
+          <StreakTracker streakData={streakData} />
 
           <div className="quick-actions">
             <button className="action-btn primary" onClick={() => onNavigate?.("game")}>
