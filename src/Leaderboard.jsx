@@ -7,7 +7,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
-  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
+  { flag: '🇮�', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
   { flag: '🇧🇷', name: 'Brazil' }, { flag: '🇲🇽', name: 'Mexico' },
@@ -16,7 +16,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇦🇪', name: 'UAE' }, { flag: '🇳🇱', name: 'Netherlands' },
   { flag: '🇸🇪', name: 'Sweden' }, { flag: '🇳🇴', name: 'Norway' },
   { flag: '🇩🇰', name: 'Denmark' }, { flag: '🇵🇱', name: 'Poland' },
-  { flag: '�🇿', name: 'Czech Republic' }, { flag: '🇭🇺', name: 'Hungary' },
+  { flag: '🇨🇿', name: 'Czech Republic' }, { flag: '🇭🇺', name: 'Hungary' },
   { flag: '🇦🇹', name: 'Austria' }, { flag: '🇨🇭', name: 'Switzerland' },
   { flag: '🇧🇪', name: 'Belgium' }, { flag: '🇵🇹', name: 'Portugal' },
   { flag: '🇬🇷', name: 'Greece' }, { flag: '🇮🇱', name: 'Israel' },
@@ -45,6 +45,28 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [universeTime, setUniverseTime] = useState('');
   const [currentUserCountry, setCurrentUserCountry] = useState(null);
+
+  // NEW: Track leaderboard visit for daily task
+  useEffect(() => {
+    const trackVisit = async () => {
+      if (userTelegramId) {
+        try {
+          await fetch('/api/tasks/track-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              telegram_id: userTelegramId,
+              task_id: 'check_leaderboard',
+              initData: window.Telegram?.WebApp?.initData
+            }),
+          });
+        } catch (err) {
+          console.error("Failed to track leaderboard visit:", err);
+        }
+      }
+    };
+    trackVisit();
+  }, [userTelegramId]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -272,3 +294,4 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
     </section>
   );
 }
+�
