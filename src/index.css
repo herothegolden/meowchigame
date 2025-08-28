@@ -1827,6 +1827,14 @@ body{
   transform: translateY(-2px);
 }
 
+.powerup-btn[draggable="true"] {
+  cursor: grab;
+}
+
+.powerup-btn[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .powerup-btn.active {
   border-color: var(--accent);
   background: var(--accent-light);
@@ -1843,6 +1851,17 @@ body{
 
 .powerup-icon {
   font-size: 28px;
+}
+
+.powerup-drag-icon {
+  font-size: 40px;
+  background: var(--accent-light);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .powerup-quantity {
