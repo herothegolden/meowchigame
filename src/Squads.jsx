@@ -58,6 +58,11 @@ export default function Squads({ userTelegramId }) {
     setModalMode(null);
     fetchUserSquad(); 
   };
+
+  const handleModalOpen = (mode) => {
+    try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+    setModalMode(mode);
+  };
   
   const renderContent = () => {
     if (loading) {
@@ -83,7 +88,7 @@ export default function Squads({ userTelegramId }) {
       return <SquadDashboard squad={squad} userTelegramId={userTelegramId} onSquadUpdate={fetchUserSquad} />;
     }
     
-    return <NoSquadView onCreate={() => setModalMode('create')} onJoin={() => setModalMode('join')} />;
+    return <NoSquadView onCreate={() => handleModalOpen('create')} onJoin={() => handleModalOpen('join')} />;
   };
 
   return (
@@ -127,11 +132,14 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
   const shareSquad = () => {
     const message = `Join my squad "${squad.name}" in Meowchi! Use invite code: ${squad.invite_code}`;
     const tg = window.Telegram?.WebApp;
-    if (tg?.switchInlineQuery) {
-      tg.switchInlineQuery(message, ['users', 'groups']);
-    } else {
-      alert(message);
-    }
+    try {
+      tg?.HapticFeedback?.selectionChanged();
+      if (tg?.switchInlineQuery) {
+        tg.switchInlineQuery(message, ['users', 'groups']);
+      } else {
+        alert(message);
+      }
+    } catch (e) {}
   };
   
   const kickMember = async (memberTelegramId, memberName) => {
@@ -153,9 +161,11 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       
+      try { tg?.HapticFeedback?.notificationOccurred('success'); } catch (e) {}
       alert('Member kicked successfully!');
       onSquadUpdate();
     } catch (error) {
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
       alert(`Failed to kick member: ${error.message}`);
     } finally {
       setKickingMember(null);
@@ -182,7 +192,10 @@ const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
           {isCreator && (
             <button 
               className="btn" 
-              onClick={() => setShowInviteCode(p => !p)}
+              onClick={() => {
+                try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+                setShowInviteCode(p => !p);
+              }}
             >
               {showInviteCode ? 'Hide Code' : 'Invite Code'}
             </button>
