@@ -7,7 +7,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
-  { flag: '🇮�', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
+  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪🇸', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
   { flag: '🇧🇷', name: 'Brazil' }, { flag: '🇲🇽', name: 'Mexico' },
@@ -206,6 +206,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
                 leaderboardData.map((player) => (
                   <div key={player.telegram_id} className={`leaderboard-item ${player.telegram_id == userTelegramId ? 'current-user' : ''}`}>
                     <div className="rank-display">{getRankDisplay(player.rank)}</div>
+                    <div className="member-avatar">
+                      <img 
+                        src={player.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                        alt={getDisplayName(player)}
+                        onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                      />
+                    </div>
                     <div className="player-info">
                       <div className="player-name">
                         {player.country_flag && <span className="country-flag">{player.country_flag}</span>}
@@ -241,6 +248,13 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
               <div className="section-divider"><span className="divider-text">Your Rank</span></div>
               <div className="leaderboard-item current-user">
                 <div className="rank-display">#{userRank.rank}</div>
+                <div className="member-avatar">
+                  <img 
+                    src={userRank.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                    alt={getDisplayName(userRank)}
+                    onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
+                  />
+                </div>
                 <div className="player-info">
                   <div className="player-name">
                     {userRank.country_flag && <span className="country-flag">{userRank.country_flag}</span>}
