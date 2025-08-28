@@ -10,7 +10,7 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
   const items = [
     { key: "shuffle", name: "The Paw-sitive Swap", desc: "Swap any two adjacent cookies", price: 50, icon: "🐾" },
     { key: "hammer", name: "The Catnip Cookie", desc: "Clear all cookies of one cat type", price: 75, icon: "🍪" },
-    { key: "bomb", name: "The Marshmallow Bomb", desc: "Explode a 3x3 area of cookies", price: "💣" },
+    { key: "bomb", name: "The Marshmallow Bomb", desc: "Explode a 3x3 area of cookies", price: 100, icon: "💣" },
   ];
 
   const handleBuy = async (item) => {
