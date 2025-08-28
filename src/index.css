@@ -1860,3 +1860,122 @@ body{
   place-items: center;
   border: 2px solid var(--card);
 }
+
+/* =================================== */
+/* ===== GAME OVER FLOW (NEW) ====== */
+/* =================================== */
+
+.calculating-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(253, 249, 244, 0.9);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.calculating-content {
+  text-align: center;
+}
+
+.calculating-icon {
+  font-size: 48px;
+  animation: pulse 1.5s infinite;
+}
+
+.calculating-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 12px;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+.game-over-screen {
+  text-align: center;
+}
+
+.game-over-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 24px;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.result-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.result-stat.new-best {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  animation: new-best-glow 2s infinite;
+}
+
+@keyframes new-best-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(212, 175, 55, 0); }
+  50% { box-shadow: 0 0 16px rgba(212, 175, 55, 0.4); }
+}
+
+.new-best-badge {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+.game-over-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.shop-cta {
+  margin-top: 32px;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+
+.cta-text p {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
