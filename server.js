@@ -62,7 +62,7 @@ const DAILY_TASKS = [
     title: 'Combo Master',
     description: 'Get a 5x combo',
     reward: 400,
-    icon: '',
+    icon: '🔥',
     target: 5,
     type: 'max_combo'
   },
@@ -842,17 +842,18 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
     const userId = userResult.rows[0].id;
 
     const streakResult = await client.query(
-      "SELECT current_streak, last_check_in_date FROM user_streaks WHERE user_id = $1",
+      "SELECT current_streak, last_check_in_date, last_reward_claimed_date FROM user_streaks WHERE user_id = $1",
       [userId]
     );
 
     const today = new Date().toISOString().split('T')[0];
     let newStreak = 1;
+    let claimed_today = false;
 
     if (streakResult.rows.length > 0) {
       const streakData = streakResult.rows[0];
-      
       const lastCheckIn = streakData.last_check_in_date ? new Date(streakData.last_check_in_date).toISOString().split('T')[0] : null;
+      const lastClaimed = streakData.last_reward_claimed_date ? new Date(streakData.last_reward_claimed_date).toISOString().split('T')[0] : null;
       
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
@@ -861,22 +862,30 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
       if (lastCheckIn === today) {
         newStreak = streakData.current_streak;
       } else if (lastCheckIn === yesterdayStr) {
-        newStreak = streakData.current_streak + 1;
+        newStreak = (streakData.current_streak % 7) + 1;
       }
+
+      if (lastClaimed === today) {
+        claimed_today = true;
+      }
+
+      await client.query(`
+        INSERT INTO user_streaks (user_id, current_streak, last_check_in_date, updated_at)
+        VALUES ($1, $2, CURRENT_DATE, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          current_streak = EXCLUDED.current_streak,
+          last_check_in_date = EXCLUDED.last_check_in_date,
+          updated_at = NOW()
+      `, [userId, newStreak]);
+    } else {
+        await client.query(`
+        INSERT INTO user_streaks (user_id, current_streak, last_check_in_date)
+        VALUES ($1, 1, CURRENT_DATE)
+      `, [userId]);
     }
 
-    const updatedStreak = await client.query(`
-      INSERT INTO user_streaks (user_id, current_streak, last_check_in_date, updated_at)
-      VALUES ($1, $2, CURRENT_DATE, NOW())
-      ON CONFLICT (user_id) DO UPDATE SET
-        current_streak = EXCLUDED.current_streak,
-        last_check_in_date = EXCLUDED.last_check_in_date,
-        updated_at = NOW()
-      RETURNING current_streak
-    `, [userId, newStreak]);
-
     await client.query('COMMIT');
-    res.json({ success: true, streak: updatedStreak.rows[0].current_streak });
+    res.json({ success: true, streak: newStreak, claimed_today });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -886,6 +895,67 @@ app.post("/api/user/check-in", requireDB, validateUser, async (req, res) => {
     client.release();
   }
 });
+
+app.post("/api/user/claim-reward", requireDB, validateUser, async (req, res) => {
+    const telegram_id = req.user.telegram_id;
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        const userResult = await client.query("SELECT id FROM users WHERE telegram_id = $1", [telegram_id]);
+        if (userResult.rows.length === 0) throw new Error("User not found");
+        const userId = userResult.rows[0].id;
+
+        const streakResult = await client.query(
+            "SELECT current_streak, last_reward_claimed_date FROM user_streaks WHERE user_id = $1",
+            [userId]
+        );
+        if (streakResult.rows.length === 0) throw new Error("No streak found for user.");
+
+        const streakData = streakResult.rows[0];
+        const today = new Date().toISOString().split('T')[0];
+        const lastClaimed = streakData.last_reward_claimed_date ? new Date(streakData.last_reward_claimed_date).toISOString().split('T')[0] : null;
+
+        if (lastClaimed === today) {
+            return res.status(400).json({ error: "Reward already claimed for today." });
+        }
+
+        const REWARD_TRACK = [
+            { day: 1, type: 'coins', amount: 100 }, { day: 2, type: 'coins', amount: 200 },
+            { day: 3, type: 'coins', amount: 300 }, { day: 4, type: 'powerup', item_id: 'shuffle', amount: 1 },
+            { day: 5, type: 'coins', amount: 500 }, { day: 6, type: 'powerup', item_id: 'hammer', amount: 1 },
+            { day: 7, type: 'powerup', item_id: 'bomb', amount: 1 },
+        ];
+        
+        const reward = REWARD_TRACK[streakData.current_streak - 1];
+        if (!reward) throw new Error("Invalid streak day for reward.");
+
+        if (reward.type === 'coins') {
+            await client.query("UPDATE users SET bonus_coins = bonus_coins + $1 WHERE id = $2", [reward.amount, userId]);
+        } else if (reward.type === 'powerup') {
+            await client.query(`
+                INSERT INTO user_powerups (user_id, type, quantity) VALUES ($1, $2, $3)
+                ON CONFLICT (user_id, type) DO UPDATE SET quantity = user_powerups.quantity + $3
+            `, [userId, reward.item_id, reward.amount]);
+        }
+
+        await client.query(
+            "UPDATE user_streaks SET last_reward_claimed_date = CURRENT_DATE WHERE user_id = $1",
+            [userId]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, reward });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Claim reward error:", error);
+        res.status(500).json({ error: "Failed to claim reward." });
+    } finally {
+        client.release();
+    }
+});
+
 
 app.post("/api/shop/buy", requireDB, validateUser, async (req, res) => {
   try {
