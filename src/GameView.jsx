@@ -7,7 +7,7 @@ import { useStore } from "./store.js"; // NEW: Import Zustand store
 
 // 1) OPTIMIZE: Memoized tile component
 const MemoizedTile = React.memo(({
-  r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
+  r, c, value, cell, isSelected, isHinted, isSwapping,
   isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
   return (
@@ -20,7 +20,7 @@ const MemoizedTile = React.memo(({
         width: cell,
         height: cell,
         transform: swapTransform || undefined,
-        zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
+        zIndex: isGrab ? 5 : 1,
         transition: isSwapping
           ? "transform 0.16s ease"
           : delaySeconds
@@ -34,12 +34,6 @@ const MemoizedTile = React.memo(({
       >
         {value}
       </div>
-      {/* simplified blast effect */}
-      {isBlasting && (
-        <div className="blast-simple">
-          💥
-        </div>
-      )}
     </div>
   );
 }, (prevProps, nextProps) => {
@@ -47,7 +41,6 @@ const MemoizedTile = React.memo(({
     prevProps.value === nextProps.value &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isHinted === nextProps.isHinted &&
-    prevProps.isBlasting === nextProps.isBlasting &&
     prevProps.isSwapping === nextProps.isSwapping &&
     prevProps.isNewTile === nextProps.isNewTile &&
     prevProps.isGrab === nextProps.isGrab &&
@@ -125,6 +118,104 @@ const POWERUP_DEFINITIONS = {
   bomb: { name: "Marshmallow Bomb", icon: "💣" },
 };
 
+// Canvas-based particle system
+class ParticleSystem {
+  constructor(canvas, ctx) {
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.particles = [];
+  }
+
+  addBlastEffect(x, y, cell) {
+    // Create explosion particles
+    const particleCount = 8;
+    const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount;
+      const velocity = 50 + Math.random() * 100;
+      
+      this.particles.push({
+        x: x + cell / 2,
+        y: y + cell / 2,
+        vx: Math.cos(angle) * velocity,
+        vy: Math.sin(angle) * velocity,
+        size: 4 + Math.random() * 6,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        life: 1.0,
+        decay: 0.02 + Math.random() * 0.02
+      });
+    }
+
+    // Add center flash effect
+    this.particles.push({
+      x: x + cell / 2,
+      y: y + cell / 2,
+      vx: 0,
+      vy: 0,
+      size: cell * 0.8,
+      color: '#FFFFFF',
+      life: 1.0,
+      decay: 0.1,
+      isFlash: true
+    });
+  }
+
+  update(deltaTime) {
+    const dt = deltaTime / 1000; // Convert to seconds
+
+    this.particles = this.particles.filter(particle => {
+      // Update position
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      
+      // Apply gravity to non-flash particles
+      if (!particle.isFlash) {
+        particle.vy += 200 * dt; // Gravity
+        particle.vx *= 0.98; // Air resistance
+      }
+      
+      // Update life
+      particle.life -= particle.decay;
+      
+      return particle.life > 0;
+    });
+  }
+
+  render() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    this.particles.forEach(particle => {
+      this.ctx.save();
+      
+      if (particle.isFlash) {
+        // Render flash effect
+        const alpha = particle.life * 0.5;
+        this.ctx.globalAlpha = alpha;
+        this.ctx.fillStyle = particle.color;
+        this.ctx.beginPath();
+        this.ctx.arc(particle.x, particle.y, particle.size * particle.life, 0, Math.PI * 2);
+        this.ctx.fill();
+      } else {
+        // Render particle
+        const alpha = particle.life;
+        this.ctx.globalAlpha = alpha;
+        this.ctx.fillStyle = particle.color;
+        this.ctx.beginPath();
+        this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+      
+      this.ctx.restore();
+    });
+  }
+
+  clear() {
+    this.particles = [];
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+}
+
 export default function GameView({
   onExit,
   settings,
@@ -132,6 +223,9 @@ export default function GameView({
 }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
+  const canvasRef = useRef(null); // NEW: Canvas for particle effects
+  const particleSystemRef = useRef(null);
+  const animationFrameRef = useRef(null);
   const [cell, setCell] = useState(48);
 
   // Grid state
@@ -148,8 +242,6 @@ export default function GameView({
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(20);
   const [combo, setCombo] = useState(0);
-  const [fx, setFx] = useState([]);
-  const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
   const [gameStartTime, setGameStartTime] = useState(Date.now());
@@ -175,6 +267,46 @@ export default function GameView({
   const [activePowerup, setActivePowerup] = useState(null);
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
+
+  // NEW: Initialize canvas particle system
+  useEffect(() => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      particleSystemRef.current = new ParticleSystem(canvas, ctx);
+
+      // Animation loop for particles
+      const animate = (currentTime) => {
+        if (particleSystemRef.current) {
+          const deltaTime = currentTime - (animationFrameRef.current || currentTime);
+          particleSystemRef.current.update(deltaTime);
+          particleSystemRef.current.render();
+        }
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
+      
+      animationFrameRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
+    }
+  }, []);
+
+  // Update canvas size when cell size changes
+  useEffect(() => {
+    if (canvasRef.current && cell > 0) {
+      const canvas = canvasRef.current;
+      const boardW = cell * COLS;
+      const boardH = cell * ROWS;
+      canvas.width = boardW;
+      canvas.height = boardH;
+      canvas.style.width = `${boardW}px`;
+      canvas.style.height = `${boardH}px`;
+    }
+  }, [cell]);
 
   // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
@@ -583,7 +715,6 @@ export default function GameView({
             });
           }
 
-          setTimeout(() => setFx([]), 800);
           ensureSolvable();
           setAnimating(false);
           done && done();
@@ -593,18 +724,14 @@ export default function GameView({
 
       audio.play?.("match_pop", { volume: 0.5 });
 
-      const keys = matches.map(([r, c]) => `${r}:${c}`);
-      setBlast(new Set(keys));
-
-      const fxId = Date.now();
-      setFx((prev) => [
-        ...prev.slice(-5),
-        ...matches.slice(0, 10).map((m, i) => ({
-          id: fxId + i,
-          x: m[1] * cell,
-          y: m[0] * cell,
-        })),
-      ]);
+      // NEW: Render blast effects on canvas instead of DOM
+      matches.forEach(([r, c]) => {
+        if (particleSystemRef.current) {
+          const x = c * cell;
+          const y = r * cell;
+          particleSystemRef.current.addBlastEffect(x, y, cell);
+        }
+      });
 
       const basePoints = 10 * matches.length;
       const comboMultiplier = Math.max(1, comboCount + 1);
@@ -615,7 +742,6 @@ export default function GameView({
         g[r][c] = null;
       });
       setGrid(cloneGrid(g));
-      setTimeout(() => setBlast(new Set()), 80);
 
       setTimeout(() => {
         const delayMap = {};
@@ -688,6 +814,11 @@ export default function GameView({
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
     
+    // Clear particle effects
+    if (particleSystemRef.current) {
+      particleSystemRef.current.clear();
+    }
+    
     const result = await submitGameScore(finalScore);
 
     const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
@@ -729,9 +860,13 @@ export default function GameView({
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
-    setFx([]);
     maxComboAchievedRef.current = 0;
     scoreRef.current = 0;
+    
+    // Clear particle effects
+    if (particleSystemRef.current) {
+      particleSystemRef.current.clear();
+    }
   }
 
   const handlePowerupSelect = (key) => {
@@ -808,7 +943,7 @@ export default function GameView({
       }
     } else if (key === 'bomb') {
       for (let row = r - 1; row <= r + 1; row++) {
-        for (let col = c - 1; col <= c + 1; col++) {
+        for (let col = c - 1; c <= c + 1; col++) {
           if (inBounds(row, col)) g[row][col] = null;
         }
       }
@@ -848,7 +983,6 @@ export default function GameView({
           hint &&
           ((hint[0][0] === r && hint[0][1] === c) ||
             (hint[1][0] === r && hint[1][1] === c));
-        const isBlasting = blast.has(`${r}:${c}`);
 
         let swapTransform = "";
         if (swapping) {
@@ -883,7 +1017,6 @@ export default function GameView({
             cell={cell}
             isSelected={isSelected}
             isHinted={isHinted}
-            isBlasting={isBlasting}
             isSwapping={isSwapping}
             isNewTile={isNewTile}
             isGrab={isGrab}
@@ -895,7 +1028,7 @@ export default function GameView({
         );
       })
     );
-  }, [grid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
+  }, [grid, sel, hint, swapping, newTiles, grabTile, shake, fallDelay, cell]);
 
   useEffect(() => {
     const cleanup = [];
@@ -915,7 +1048,7 @@ export default function GameView({
       {gameOverState === 'calculating' && (
         <div className="calculating-overlay">
           <div className="calculating-content">
-            <div className="calculating-icon">...</div>
+            <div className="calculating-icon">⏳</div>
             <div className="calculating-text">Time's Up!</div>
           </div>
         </div>
@@ -966,7 +1099,7 @@ export default function GameView({
       <div
         ref={boardRef}
         className="board"
-        style={{ width: boardW, height: boardH }}
+        style={{ width: boardW, height: boardH, position: 'relative' }}
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
       >
@@ -979,6 +1112,17 @@ export default function GameView({
           }}
         />
         {optimizedGridRender}
+        {/* NEW: Canvas layer for particle effects */}
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            pointerEvents: 'none',
+            zIndex: 100
+          }}
+        />
       </div>
 
       <div className="powerup-tray">
