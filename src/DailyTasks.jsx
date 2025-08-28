@@ -152,6 +152,9 @@ export default function DailyTasks({ userTelegramId, onTaskComplete }) {
       }
     } catch (err) {
       console.error('Claim failed:', err);
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+      } catch {}
     } finally {
       setClaimingId(null);
     }
