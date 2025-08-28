@@ -154,7 +154,6 @@ export default function Home({
             </button>
           </div>
 
-          {/* REMOVED BOX STYLING - NO MORE .game-info CLASS */}
           <div>
             <h3 className="info-title">✨ About Meowchi</h3>
             <p className="info-description">
@@ -162,6 +161,20 @@ export default function Home({
               Combine cats 😺, pretzels 🥨, strawberries 🍓, cookies 🍪, 
               and marshmallows 🍡 to create sweet combos and earn $Meow coins.
             </p>
+            
+            {/* DEBUGGING: Show raw stats values */}
+            {userStats && process.env.NODE_ENV === 'development' && (
+              <details style={{ marginTop: '16px', fontSize: '12px', opacity: 0.7 }}>
+                <summary>🔍 Debug Info</summary>
+                <div style={{ marginTop: '8px', fontFamily: 'monospace' }}>
+                  <div>Raw best_combo: {userStats.best_combo}</div>
+                  <div>Formatted combo: {formatCombo(userStats.best_combo)}</div>
+                  <div>Raw best_score: {userStats.best_score}</div>
+                  <div>Raw games_played: {userStats.games_played}</div>
+                </div>
+              </details>
+            )}
+          </div>
             
             {/* DEBUGGING: Show raw stats values */}
             {userStats && process.env.NODE_ENV === 'development' && (
