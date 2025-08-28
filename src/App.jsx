@@ -234,6 +234,7 @@ export default function App() {
             {screen === "home" && (
               userStats ? (
                 <Home
+                  coins={coins}
                   onNavigate={navigateTo}
                   userStats={userStats}
                   userProfile={userProfile}
