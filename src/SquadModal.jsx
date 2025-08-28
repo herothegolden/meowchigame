@@ -1,110 +1,271 @@
-// src/SquadModal.jsx
-import React, { useState } from 'react';
+// src/Squads.jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import SquadModal from './SquadModal.jsx'; // Import the modal
 
-const SQUAD_ICONS = ['🍪', '🥨', '🍓', '🍡', '😺', '🏆', '🔥', '✨'];
-
-export default function SquadModal({ mode, onClose, onSuccess, userTelegramId }) {
-  const [squadName, setSquadName] = useState('');
-  const [selectedIcon, setSelectedIcon] = useState(SQUAD_ICONS[0]);
-  const [inviteCode, setInviteCode] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function Squads({ userTelegramId }) {
+  const [squad, setSquad] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalMode, setModalMode] = useState(null); // 'create', 'join', or null
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const fetchUserSquad = useCallback(async () => {
+    if (!userTelegramId) {
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
-
-    const endpoint = mode === 'create' ? '/api/squads/create' : '/api/squads/join';
-    const body = mode === 'create' 
-      ? { name: squadName, icon: selectedIcon }
-      : { invite_code: inviteCode };
-
+    
     try {
-      const tg = window.Telegram?.WebApp;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, telegram_id: userTelegramId, initData: tg?.initData })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        onSuccess();
+      const userSquadResponse = await fetch(`/api/user/${userTelegramId}/squad`);
+      
+      if (!userSquadResponse.ok) {
+        const errorBody = await userSquadResponse.text();
+        throw new Error(`Failed to check squad status: ${userSquadResponse.status} ${errorBody}`);
+      }
+      
+      const userSquadData = await userSquadResponse.json();
+      
+      if (userSquadData.squad && userSquadData.squad.id) {
+        const detailResponse = await fetch(`/api/squads/${userSquadData.squad.id}`);
+
+        if (!detailResponse.ok) {
+          const errorBody = await detailResponse.text();
+          throw new Error(`Failed to fetch squad details: ${detailResponse.status} ${errorBody}`);
+        }
+
+        const detailData = await detailResponse.json();
+        setSquad(detailData.squad);
+
       } else {
-        throw new Error(result.error);
+        setSquad(null);
       }
     } catch (err) {
-      setError(err.message);
-      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
+      console.error("fetchUserSquad error:", err); 
+      setError("Could not load squad information. Please try again later.");
+      setSquad(null);
     } finally {
       setLoading(false);
+    }
+  }, [userTelegramId]);
+
+  useEffect(() => {
+    fetchUserSquad();
+  }, [fetchUserSquad]);
+
+  const handleSquadUpdate = () => {
+    setModalMode(null);
+    fetchUserSquad(); 
+  };
+
+  const handleModalOpen = (mode) => {
+    try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+    setModalMode(mode);
+  };
+  
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="loading-state">
+          <div className="loading-icon">🐾</div>
+          <div className="loading-text">Checking your squad status...</div>
+        </div>
+      );
+    }
+
+    if (error) {
+       return (
+        <div className="error-state">
+          <div className="error-icon">😿</div>
+          <div className="error-text">{error}</div>
+          <button className="btn" onClick={fetchUserSquad}>Try Again</button>
+        </div>
+      );
+    }
+    
+    if (squad) {
+      return <SquadDashboard squad={squad} userTelegramId={userTelegramId} onSquadUpdate={fetchUserSquad} />;
+    }
+    
+    return <NoSquadView onCreate={() => handleModalOpen('create')} onJoin={() => handleModalOpen('join')} />;
+  };
+
+  return (
+    <>
+      <section className="section">
+        <div className="title">🐾 Meowchi Squads</div>
+        {renderContent()}
+      </section>
+
+      {modalMode && (
+        <SquadModal
+          mode={modalMode}
+          onClose={() => setModalMode(null)}
+          onSuccess={handleSquadUpdate}
+          userTelegramId={userTelegramId}
+        />
+      )}
+    </>
+  );
+}
+
+const SquadDashboard = ({ squad, userTelegramId, onSquadUpdate }) => {
+  const [showInviteCode, setShowInviteCode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [kickingMember, setKickingMember] = useState(null);
+
+  const isCreator = squad.creator_telegram_id == userTelegramId;
+
+  const copyInviteCode = async () => {
+    if (!squad.invite_code) return;
+    try {
+      await navigator.clipboard.writeText(squad.invite_code);
+      setCopied(true);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy invite code:', error);
+    }
+  };
+
+  const shareSquad = () => {
+    const message = `Join my squad "${squad.name}" in Meowchi! Use invite code: ${squad.invite_code}`;
+    const tg = window.Telegram?.WebApp;
+    try {
+      tg?.HapticFeedback?.selectionChanged();
+      if (tg?.switchInlineQuery) {
+        tg.switchInlineQuery(message, ['users', 'groups']);
+      } else {
+        alert(message);
+      }
+    } catch (e) {}
+  };
+  
+  const kickMember = async (memberTelegramId, memberName) => {
+    // The confirm dialog is removed as it's not supported in Mini Apps.
+    // A custom modal should be implemented here for a better user experience.
+    
+    setKickingMember(memberTelegramId);
+    try {
+      const tg = window.Telegram?.WebApp;
+      const response = await fetch('/api/squads/kick-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          member_telegram_id: memberTelegramId,
+          initData: tg?.initData
+        })
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      
+      try { tg?.HapticFeedback?.notificationOccurred('success'); } catch (e) {}
+      alert('Member kicked successfully!');
+      onSquadUpdate();
+    } catch (error) {
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
+      alert(`Failed to kick member: ${error.message}`);
+    } finally {
+      setKickingMember(null);
     }
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content profile-modal">
-        <form onSubmit={handleSubmit}>
-          <div className="modal-header">
-            <h2 className="modal-title">{mode === 'create' ? 'Create a Squad' : 'Join a Squad'}</h2>
+    <div>
+      {/* CHANGED: use the centralized container class */}
+      <div className="squad-info-card">
+        <div className="squad-header">
+          <span className="squad-icon">{squad.icon}</span>
+          <div>
+            <h3 className="squad-name">{squad.name}</h3>
+            <p className="squad-stats">
+              {squad.member_count}/{squad.member_limit || 11} members • {parseInt(squad.total_score || 0).toLocaleString()} total score
+            </p>
+            {isCreator && <p className="creator-badge">You are the Squad Leader</p>}
           </div>
-          <div className="modal-body">
-            {error && <div className="error-message">{error}</div>}
-            
-            {mode === 'create' ? (
-              <>
-                <div className="form-group">
-                  <label className="form-label">Squad Name</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g., The Cool Cats"
-                    value={squadName}
-                    onChange={(e) => setSquadName(e.target.value)}
-                    required
-                    minLength={3}
-                    maxLength={50}
+        </div>
+        
+        <div className="squad-actions">
+          <button className="btn primary" onClick={shareSquad}>Share Squad</button>
+          {isCreator && (
+            <button 
+              className="btn" 
+              onClick={() => {
+                try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch (e) {}
+                setShowInviteCode(p => !p);
+              }}
+            >
+              {showInviteCode ? 'Hide Code' : 'Invite Code'}
+            </button>
+          )}
+        </div>
+
+        {showInviteCode && isCreator && (
+          <div className="invite-code-section">
+            <div className="invite-code-display">
+              <span className="invite-code">{squad.invite_code}</span>
+              <button className="btn copy-btn" onClick={copyInviteCode}>
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="members-section">
+          <h4 className="members-title">Squad Members</h4>
+          <div className="members-list">
+            {(squad.members || []).map((member, index) => (
+              <div key={member.telegram_id} className="member-item">
+                <div className="member-rank">#{index + 1}</div>
+
+                {/* START: Added profile picture */}
+                <div className="member-avatar">
+                  <img 
+                    src={member.profile_picture || 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'} 
+                    alt={member.display_name} 
+                    onError={(e) => { e.currentTarget.src = 'https://i.postimg.cc/wjQ5W8Zw/Meowchi-The-Cat-NBG.png'; }}
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Choose an Icon</label>
-                  <div className="avatar-grid" style={{ gridTemplateColumns: 'repeat(8, 1fr)'}}>
-                    {SQUAD_ICONS.map(icon => (
-                      <button
-                        key={icon}
-                        type="button"
-                        className={`avatar-option ${selectedIcon === icon ? 'selected' : ''}`}
-                        onClick={() => setSelectedIcon(icon)}
-                      >
-                        {icon}
-                      </button>
-                    ))}
+                {/* END: Added profile picture */}
+
+                <div className="member-info">
+                  <div className="member-name">
+                    {member.country_flag && <span className="country-flag">{member.country_flag}</span>}
+                    <span>{member.display_name}</span>
+                    {member.telegram_id == squad.creator_telegram_id && <span className="leader-badge">Leader</span>}
+                  </div>
+                  <div className="member-stats">
+                    {parseInt(member.total_score).toLocaleString()} points
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="form-group">
-                <label className="form-label">Invite Code</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Enter 6-digit code"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  required
-                  maxLength={6}
-                />
+                {isCreator && member.telegram_id != squad.creator_telegram_id && (
+                  <button 
+                    className="btn kick-btn"
+                    onClick={() => kickMember(member.telegram_id, member.display_name)}
+                    disabled={kickingMember === member.telegram_id}
+                  >
+                    {kickingMember === member.telegram_id ? '...' : 'Kick'}
+                  </button>
+                )}
               </div>
-            )}
+            ))}
           </div>
-          <div className="modal-footer">
-            <button type="button" className="btn" onClick={onClose} disabled={loading}>Cancel</button>
-            <button type="submit" className="btn primary" disabled={loading}>
-              {loading ? '...' : (mode === 'create' ? 'Create' : 'Join')}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+const NoSquadView = ({ onCreate, onJoin }) => {
+  return (
+    <div>
+      <p className="muted">You are not in a squad yet. Join a friend's squad or create your own!</p>
+      <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+        <button className="btn primary" onClick={onCreate}>Create Squad</button>
+        <button className="btn" onClick={onJoin}>Join Squad</button>
+      </div>
+    </div>
+  );
+};
