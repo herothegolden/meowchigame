@@ -28,12 +28,10 @@
   border: 1px solid var(--border);
 }
 
-/* Dark theme shadow adjustment */
+/* Dark theme shadow adjustment - REMOVED */
 @media (prefers-color-scheme: dark) {
   .profile-card {
-    box-shadow: 
-      0 8px 32px rgba(0, 0, 0, 0.3),
-      0 2px 8px rgba(0, 0, 0, 0.2);
+    /* box-shadow properties removed for UI consistency */
   }
 }
 
