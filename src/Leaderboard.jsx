@@ -20,7 +20,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇦🇹', name: 'Austria' }, { flag: '🇨🇭', name: 'Switzerland' },
   { flag: '🇧🇪', name: 'Belgium' }, { flag: '🇵🇹', name: 'Portugal' },
   { flag: '🇬🇷', name: 'Greece' }, { flag: '🇮🇱', name: 'Israel' },
-  { flag: '🇪🇬', name: 'Egypt' }, { flag: '🇿🇦', name: 'South Africa' },
+  { flag: '🇪�', name: 'Egypt' }, { flag: '🇿🇦', name: 'South Africa' },
   { flag: '🇳🇬', name: 'Nigeria' }, { flag: '🇰🇪', name: 'Kenya' },
   { flag: '🇲🇦', name: 'Morocco' }, { flag: '🇦🇷', name: 'Argentina' },
   { flag: '🇨🇱', name: 'Chile' }, { flag: '🇨🇴', name: 'Colombia' },
