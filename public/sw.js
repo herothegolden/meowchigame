@@ -1,42 +1,49 @@
 // public/sw.js - Service Worker for instant loading
-const CACHE_NAME = 'meowchi-v1.2'; // Incremented version
+const CACHE_NAME = 'meowchi-v1.2';
 
-// Assets to pre-cache for an instant, offline-first experience
+// Critical assets to pre-cache for instant loading
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/splash.jpg',
-  // NOTE: Vite generates hashed assets. These are placeholders.
-  // In a real build pipeline, you'd inject the actual filenames here.
-  '/assets/index.js', 
-  '/assets/index.css',
+  // Sound effects for game
+  '/sfx/cascade_tick.wav',
   '/sfx/coin.wav',
-  '/sfx/match_pop.wav',
+  '/sfx/combo_x1.wav',
+  '/sfx/combo_x2.wav',
+  '/sfx/combo_x3.wav',
+  '/sfx/combo_x4.wav',
+  '/sfx/finish_lose.wav',
   '/sfx/finish_win.wav',
-  '/sfx/swap.wav'
+  '/sfx/match_pop.wav',
+  '/sfx/powerup_spawn.wav',
+  '/sfx/swap.wav',
+  '/sfx/swap_invalid.wav',
+  '/sfx/timer_hurry.wav',
+  '/sfx/timer_tick.wav'
 ];
 
-// Install event: pre-cache core assets
+// Install event - pre-cache critical assets
 self.addEventListener('install', (event) => {
   console.log('🔧 Service Worker installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('📦 Caching core assets');
-        // Use addAll for atomic caching. If one fails, none are cached.
-        // We use individual add calls with catch to prevent one bad asset from failing the whole cache.
-        const cachePromises = CORE_ASSETS.map(asset => {
-          return cache.add(asset).catch(err => {
-            console.warn(`Failed to cache ${asset}:`, err);
-          });
-        });
-        return Promise.all(cachePromises);
+        console.log('📦 Pre-caching core assets...');
+        return cache.addAll(CORE_ASSETS);
       })
-      .then(() => self.skipWaiting())
+      .then(() => {
+        console.log('✅ Core assets pre-cached');
+        return self.skipWaiting();
+      })
+      .catch((error) => {
+        console.warn('⚠️ Pre-caching failed for some assets:', error);
+        return self.skipWaiting(); // Continue even if some assets fail
+      })
   );
 });
 
-// Activate event: clean up old caches
+// Activate event - clean up old caches and take control
 self.addEventListener('activate', (event) => {
   console.log('⚡ Service Worker activating...');
   event.waitUntil(
@@ -51,42 +58,56 @@ self.addEventListener('activate', (event) => {
           })
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => {
+        console.log('✅ Service Worker activated');
+        return self.clients.claim(); // Take control immediately
+      })
   );
 });
 
-// Fetch event: cache-first for core assets, network-first for others
+// Fetch event - cache-first for static assets, network-first for dynamic content
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
-    return;
-  }
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+
+  // Skip API calls - let them go to network (always fresh data)
+  if (event.request.url.includes('/api/')) return;
+
+  // Skip external requests (fonts, CDN, etc.)
+  if (!event.request.url.startsWith(self.location.origin)) return;
 
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
-        // Cache hit: return cached response immediately
+        // Cache-first strategy for static assets
         if (cachedResponse) {
+          console.log('⚡ Served from cache:', event.request.url);
           return cachedResponse;
         }
 
-        // Not in cache: go to network
-        return fetch(event.request).then((networkResponse) => {
-          // If we got a valid response, clone it and cache it
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
+        // Not in cache - fetch from network
+        return fetch(event.request)
+          .then((response) => {
+            // Cache successful responses for future use
+            if (response && response.status === 200 && response.type === 'basic') {
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+            }
+            return response;
+          })
+          .catch(() => {
+            // Network failed and not in cache
+            if (event.request.destination === 'document') {
+              return caches.match('/index.html');
+            }
+
+            return new Response('Offline', { 
+              status: 503, 
+              statusText: 'Service Unavailable' 
             });
-          }
-          return networkResponse;
-        });
-      })
-      .catch(() => {
-        // Offline fallback for documents
-        if (event.request.destination === 'document') {
-          return caches.match('/index.html');
-        }
-        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+          });
       })
   );
 });
