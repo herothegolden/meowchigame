@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ShareButtons from './ShareButtons.jsx'; // Import the sharing component
+import LeaderboardSkeleton from './LeaderboardSkeleton.jsx';
 
 // COUNTRY_FLAGS constant remains the same, so it's omitted here for brevity.
 // Just make sure it's still at the top of your file.
@@ -7,7 +8,7 @@ const COUNTRY_FLAGS = [
   { flag: '🇺🇸', name: 'United States' }, { flag: '🇬🇧', name: 'United Kingdom' },
   { flag: '🇨🇦', name: 'Canada' }, { flag: '🇦🇺', name: 'Australia' },
   { flag: '🇩🇪', name: 'Germany' }, { flag: '🇫🇷', name: 'France' },
-  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪�', name: 'Spain' },
+  { flag: '🇮🇹', name: 'Italy' }, { flag: '🇪', name: 'Spain' },
   { flag: '🇯🇵', name: 'Japan' }, { flag: '🇰🇷', name: 'South Korea' },
   { flag: '🇨🇳', name: 'China' }, { flag: '🇮🇳', name: 'India' },
   { flag: '🇧🇷', name: 'Brazil' }, { flag: '🇲🇽', name: 'Mexico' },
@@ -140,7 +141,6 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
 
   const formatScore = (score) => (parseInt(score) || 0).toLocaleString();
   const getDisplayName = (player) => player.display_name || `Stray Cat #${player.telegram_id?.toString().slice(-5) || '00000'}`;
-  const getLoadingMessage = () => "Purr-cessing rankings...";
   const getEmptyMessage = () => {
       if(rankingType === 'squads') return "No squads have ranked yet. Create one!";
       return "No cats have played today... be the first! 😺";
@@ -148,6 +148,10 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
 
   const isUserInTop100 = () => leaderboardData.some(p => p.telegram_id == userTelegramId);
 
+  if (loading) {
+    return <LeaderboardSkeleton />;
+  }
+  
   return (
     <section className="section">
       <div className="leaderboard-header">
@@ -201,9 +205,8 @@ export default function Leaderboard({ userTelegramId, userNeedsProfile }) {
         {lastUpdated && <div className="last-updated">Updated: {lastUpdated.toLocaleTimeString()}</div>}
       </div>
 
-      {loading && <div className="loading-state"><div className="loading-icon">😺</div><div className="loading-text">{getLoadingMessage()}</div></div>}
-      {error && !loading && <div className="error-state"><div className="error-icon">😿</div><div className="error-text">{error}</div><button className="btn" onClick={fetchLeaderboard}>Try Again</button></div>}
-      {!loading && !error && (
+      {error && <div className="error-state"><div className="error-icon">😿</div><div className="error-text">{error}</div><button className="btn" onClick={fetchLeaderboard}>Try Again</button></div>}
+      {!error && (
         <>
           {leaderboardData.length > 0 ? (
             <div className="leaderboard-list">
