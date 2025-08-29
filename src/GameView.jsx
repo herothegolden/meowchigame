@@ -107,15 +107,15 @@ const CELL_MAX = 88;
 const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.8;
 
-const CANDY_SET = ["\u{1F63A}", "\u{1F968}", "\u{1F353}", "\u{1F36A}", "\u{1F361}"];
+const CANDY_SET = ["\uD83D\uDE3A", "\uD83E\uDD68", "\uD83C\uDF53", "\uD83C\uDF6A", "\uD83C\uDF61"];
 const randEmoji = () =>
   CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
 // NEW: Power-up definitions
 const POWERUP_DEFINITIONS = {
-  shuffle: { name: "Paw-sitive Swap", icon: "\u{1F43E}" },
-  hammer: { name: "Catnip Cookie", icon: "\u{1F36A}" },
-  bomb: { name: "Marshmallow Bomb", icon: "\u{1F4A3}" },
+  shuffle: { name: "Paw-sitive Swap", icon: "\uD83D\uDC3E" },
+  hammer: { name: "Catnip Cookie", icon: "\uD83C\uDF6A" },
+  bomb: { name: "Marshmallow Bomb", icon: "\uD83D\uDCA3" },
 };
 
 // Canvas-based particle system
@@ -501,10 +501,10 @@ export default function GameView({
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery) {
       const messages = [
-        `🐱 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
-        `😺 Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
-        `🎮 Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
-        `🔥 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
+        `\uD83D\uDC31 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
+        `\uD83D\uDE3A Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
+        `\uD83C\uDFAE Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
+        `\uD83D\uDD25 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
       ];
       const randomMessage = messages[Math.floor(Math.random() * messages.length)];
       tg.switchInlineQuery(randomMessage, ['users', 'groups', 'channels']);
@@ -1102,8 +1102,8 @@ export default function GameView({
           borderColor: getTimerColor(),
           boxShadow: `0 0 0 3px ${getTimerColor()}20`,
         }}
-      >
-        ⏰ {formatTime(timeLeft)}
+              >
+        \u23F0 {formatTime(timeLeft)}
       </div>
 
       <div className="row">
@@ -1117,7 +1117,7 @@ export default function GameView({
               style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
             ></div>
           </div>
-          <b>{combo > 0 ? `🔥 COMBO x${combo + 1}` : "Combo"}</b>
+          <b>{combo > 0 ? `\uD83D\uDD25 COMBO x${combo + 1}` : "Combo"}</b>
         </div>
         <div>
           <span className="muted">Moves</span> <b>{moves}</b>
@@ -1126,7 +1126,7 @@ export default function GameView({
 
       {combo > 0 && (
         <div className="combo-celebration">
-          💥 🍬 Sweet Combo x{combo + 1}! 🍬 💥
+          \uD83D\uDCA5 \uD83C\uDF6C Sweet Combo x{combo + 1}! \uD83C\uDF6C \uD83D\uDCA5
         </div>
       )}
 
@@ -1157,7 +1157,7 @@ export default function GameView({
               top: explosion.y,
             }}
           >
-            💥
+            {"\uD83D\uDCA5"}
           </div>
         ))}
         
@@ -1194,19 +1194,19 @@ export default function GameView({
 
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
-          💡 Hint
+          \uD83D\uDCA1 Hint
         </button>
         <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0}>
-          🔀 Shuffle
+          \uD83D\uDD00 Shuffle
         </button>
         <button className="btn" onClick={() => resetGame()}>
-          ♻️ Reset
+          \u267B\uFE0F Reset
         </button>
         <button
           className="btn"
           onClick={() => setPaused((p) => !p)}
         >
-          {paused ? "▶️ Resume" : "⏸ Pause"}
+          {paused ? "\u25B6\uFE0F Resume" : "\u23F8 Pause"}
         </button>
       </div>
 
