@@ -458,7 +458,7 @@ body{
   overflow: hidden;
   transition:
     left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
     transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 0.12s linear;
   background: var(--surface);
@@ -528,6 +528,35 @@ body{
 .tile.blasting .tile-emoji {
   transform: scale(1.1) translateZ(0);
   /* removed filter and text-shadow and emoji-glow animation */
+}
+
+/* NEW: 💥 Explosion Animation Above Items */
+.explosion-emoji {
+  position: absolute;
+  font-size: 32px;
+  pointer-events: none;
+  z-index: 200;
+  animation: explosion-pop 0.6s ease-out forwards;
+  transform: translate(-50%, -100%);
+}
+
+@keyframes explosion-pop {
+  0% {
+    transform: translate(-50%, -100%) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(-50%, -120%) scale(1.2);
+    opacity: 1;
+  }
+  60% {
+    transform: translate(-50%, -140%) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -160%) scale(0.6);
+    opacity: 0;
+  }
 }
 
 /* Particle animations - short duration */
@@ -660,7 +689,7 @@ body{
 
 /* Explosion effect above combo text */
 .combo-celebration::before {
-  content: '💥✨🎉💥';
+  content: 'ðŸ'¥âœ¨ðŸŽ‰ðŸ'¥';
   position: absolute;
   top: -20px;
   left: 50%;
@@ -832,7 +861,7 @@ body{
 }
 
 .country-filter input:checked + .checkbox-custom::after {
-  content: '✓';
+  content: 'âœ"';
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1439,7 +1468,7 @@ body{
 }
 
 .avatar-option.selected::after {
-  content: '✓';
+  content: 'âœ"';
   position: absolute;
   top: 4px;
   right: 4px;
@@ -1691,7 +1720,7 @@ body{
   flex-direction: column;
   overflow: hidden;
   padding: 16px;
-  align-items: center; /* 👈 ADD THIS LINE TO CENTER EVERYTHING */
+  align-items: center; /* ðŸ'ˆ ADD THIS LINE TO CENTER EVERYTHING */
 }
 
 .game-view-container .board-wrap {
@@ -2104,7 +2133,7 @@ body{
 }
 
 .reward-day-item.claimed::after {
-  content: '✓';
+  content: 'âœ"';
   position: absolute;
   top: 8px;
   right: 8px;
