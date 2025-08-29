@@ -13,7 +13,7 @@ const MemoizedTile = React.memo(({
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "...op-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""} ${isBlasting ? "blasting" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""} ${isBlasting ? "blasting" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
@@ -50,58 +50,7 @@ const MemoizedTile = React.memo(({
   );
 });
 
-// 2) OPTIMIZE: RAF helper
-const useAnimationFrame = () => {
-  const requestRef = useRef();
-  const previousTimeRef = useRef();
-
-  const animate = useCallback((callback) => {
-    const animateFrame = (time) => {
-      if (previousTimeRef.current !== undefined) {
-        const deltaTime = time - previousTimeRef.current;
-        callback(deltaTime);
-      }
-      previousTimeRef.current = time;
-      requestRef.current = requestAnimationFrame(animateFrame);
-    };
-    requestRef.current = requestAnimationFrame(animateFrame);
-
-    return () => {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
-    };
-  }, []);
-
-  return animate;
-};
-
-// 3) OPTIMIZE: Batched state helper
-const useBatchedState = () => {
-  const [pendingUpdates, setPendingUpdates] = useState({});
-  const timeoutRef = useRef();
-
-  const batchUpdate = useCallback((updates) => {
-    setPendingUpdates(prev => ({ ...prev, ...updates }));
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      Object.entries(pendingUpdates).forEach(([key, updater]) => {
-        if (typeof updater === 'function') {
-          updater();
-        }
-      });
-      setPendingUpdates({});
-    }, 16);
-  }, [pendingUpdates]);
-
-  return batchUpdate;
-};
-
-const COLS = 6;  // keep as in your working file
+const COLS = 6;
 const ROWS = 6;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
@@ -112,11 +61,11 @@ const CANDY_SET = ["\uD83D\uDE3A", "\uD83E\uDD68", "\uD83C\uDF53", "\uD83C\uDF6A
 const randEmoji = () =>
   CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
-// NEW: Power-up definitions
+// NEW: Power-up definitions with corrected icons
 const POWERUP_DEFINITIONS = {
-  shuffle: { name: "Paw-sitive Swap", icon: "\uD83D\uDC3E" },
-  hammer: { name: "Catnip Cookie", icon: "\uD83C\uDF6A" },
-  bomb: { name: "Marshmallow Bomb", icon: "\uD83D\uDCA3" },
+  shuffle: { name: "Paw-sitive Swap", icon: "🐾" },
+  hammer: { name: "Catnip Cookie", icon: "🍪" },
+  bomb: { name: "Marshmallow Bomb", icon: "💣" },
 };
 
 // Canvas-based particle system
@@ -128,7 +77,6 @@ class ParticleSystem {
   }
 
   addBlastEffect(x, y, cell) {
-    // Create explosion particles
     const particleCount = 8;
     const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
     
@@ -148,7 +96,6 @@ class ParticleSystem {
       });
     }
 
-    // Add center flash effect
     this.particles.push({
       x: x + cell / 2,
       y: y + cell / 2,
@@ -163,22 +110,18 @@ class ParticleSystem {
   }
 
   update(deltaTime) {
-    const dt = deltaTime / 1000; // Convert to seconds
+    const dt = deltaTime / 1000;
 
     this.particles = this.particles.filter(particle => {
-      // Update position
       particle.x += particle.vx * dt;
       particle.y += particle.vy * dt;
       
-      // Apply gravity to non-flash particles
       if (!particle.isFlash) {
-        particle.vy += 200 * dt; // Gravity
-        particle.vx *= 0.98; // Air resistance
+        particle.vy += 200 * dt;
+        particle.vx *= 0.98;
       }
       
-      // Update life
       particle.life -= particle.decay;
-      
       return particle.life > 0;
     });
   }
@@ -190,7 +133,6 @@ class ParticleSystem {
       this.ctx.save();
       
       if (particle.isFlash) {
-        // Render flash effect
         const alpha = particle.life * 0.5;
         this.ctx.globalAlpha = alpha;
         this.ctx.fillStyle = particle.color;
@@ -198,7 +140,6 @@ class ParticleSystem {
         this.ctx.arc(particle.x, particle.y, particle.size * particle.life, 0, Math.PI * 2);
         this.ctx.fill();
       } else {
-        // Render particle
         const alpha = particle.life;
         this.ctx.globalAlpha = alpha;
         this.ctx.fillStyle = particle.color;
@@ -224,22 +165,19 @@ export default function GameView({
 }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
-  const canvasRef = useRef(null); // NEW: Canvas for particle effects
+  const canvasRef = useRef(null);
   const particleSystemRef = useRef(null);
   const animationFrameRef = useRef(null);
   const [cell, setCell] = useState(48);
 
-  // Grid state
   const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
-  // Selection / hint / animation
   const [sel, setSel] = useState(null);
   const [hint, setHint] = useState(null);
   const [swapping, setSwapping] = useState(null);
 
-  // Stats
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(20);
   const [combo, setCombo] = useState(0);
@@ -260,28 +198,23 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
   
-  const [gameOverState, setGameOverState] = useState(null); // 'calculating' or 'results'
+  const [gameOverState, setGameOverState] = useState(null);
   const [draggedPowerup, setDraggedPowerup] = useState(null);
   const [draggedIconStyle, setDraggedIconStyle] = useState({});
 
-  // NEW: State for explosion emojis
-  const [explosions, setExplosions] = useState([]);
   const [blastingTiles, setBlastingTiles] = useState(new Set());
   const [feedbackText, setFeedbackText] = useState(null);
 
-  // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
 
-  // NEW: Initialize canvas particle system
   useEffect(() => {
     if (canvasRef.current) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       particleSystemRef.current = new ParticleSystem(canvas, ctx);
 
-      // Animation loop for particles
       const animate = (currentTime) => {
         if (particleSystemRef.current) {
           const deltaTime = currentTime - (animationFrameRef.current || currentTime);
@@ -301,7 +234,6 @@ export default function GameView({
     }
   }, []);
 
-  // Update canvas size when cell size changes
   useEffect(() => {
     if (canvasRef.current && cell > 0) {
       const canvas = canvasRef.current;
@@ -314,31 +246,8 @@ export default function GameView({
     }
   }, [cell]);
 
-  // NEW: Function to create explosion emoji animation
-  const createExplosionEmoji = useCallback((r, c) => {
-    const explosionId = `explosion-${r}-${c}-${Date.now()}`;
-    const explosion = {
-      id: explosionId,
-      r,
-      c,
-      x: c * cell + cell / 2,
-      y: r * cell + cell / 2,
-    };
-    
-    setExplosions(prev => [...prev, explosion]);
-    
-    // Remove explosion after animation completes
-    setTimeout(() => {
-      setExplosions(prev => prev.filter(e => e.id !== explosionId));
-    }, 600); // Match CSS animation duration
-    
-    return explosion;
-  }, [cell]);
-
-  // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
     try {
-      // Optimistically update the UI
       setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
       
       const response = await fetch('/api/powerups/use', {
@@ -352,34 +261,23 @@ export default function GameView({
       });
       
       if (!response.ok) {
-        // Revert UI on failure
         setPowerups(powerups);
         console.error("Failed to consume power-up on server");
       }
     } catch (error) {
-      // Revert UI on failure
       setPowerups(powerups);
       console.error("Error consuming powerup:", error);
     }
   };
 
-  // Enable closing confirmation during gameplay
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    if (tg?.enableClosingConfirmation) {
-      tg.enableClosingConfirmation();
-      console.log('✅ Closing confirmation enabled');
-    }
-
+    if (tg?.enableClosingConfirmation) tg.enableClosingConfirmation();
     return () => {
-      if (tg?.disableClosingConfirmation) {
-        tg.disableClosingConfirmation();
-        console.log('✅ Closing confirmation disabled');
-      }
+      if (tg?.disableClosingConfirmation) tg.disableClosingConfirmation();
     };
   }, []);
 
-  // Keep refs for async
   const movesRef = useRef(moves);
   movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
@@ -389,7 +287,6 @@ export default function GameView({
   const maxComboAchievedRef = useRef(maxComboAchieved);
   maxComboAchievedRef.current = maxComboAchieved;
 
-  // Responsive sizing
   useEffect(() => {
     const compute = () => {
       const el = containerRef.current;
@@ -417,7 +314,6 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
-  // Timer
   useEffect(() => {
     if (paused || gameOverState) return;
     const timer = setInterval(() => {
@@ -433,7 +329,6 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused, gameOverState]);
 
-  // Timer tick sounds (very light)
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
@@ -451,9 +346,7 @@ export default function GameView({
 
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
-    try {
-      navigator.vibrate?.(ms);
-    } catch {}
+    try { navigator.vibrate?.(ms); } catch {}
   }
 
   async function submitGameScore(finalScore) {
@@ -461,12 +354,9 @@ export default function GameView({
       console.log("No Telegram ID, skipping score submission");
       return { user_needs_profile: false, coins_earned: 0 };
     }
-
     const gameScore = Math.max(finalScore, 0);
     const currentMaxCombo = maxComboAchievedRef.current;
-
     const coinsEarned = game.calculateCoins(gameScore, currentMaxCombo);
-
     try {
       const tg = window.Telegram?.WebApp;
       const gameData = {
@@ -476,23 +366,17 @@ export default function GameView({
         max_combo: currentMaxCombo,
         game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
       };
-
-      if (tg?.initData) {
-        gameData.initData = tg.initData;
-      }
-
+      if (tg?.initData) gameData.initData = tg.initData;
       const response = await fetch("/api/game/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(gameData),
       });
-
       const result = await response.json();
       if (!response.ok) {
         console.error("Score submission failed:", result.error);
         return { user_needs_profile: false, coins_earned: coinsEarned };
       }
-
       return { ...result, coins_earned: coinsEarned };
     } catch (error) {
       console.error("Error submitting score:", error);
@@ -500,67 +384,6 @@ export default function GameView({
     }
   }
 
-  const shareGameResult = (score, combo, coins) => {
-    const tg = window.Telegram?.WebApp;
-    if (tg?.switchInlineQuery) {
-      const messages = [
-        `\uD83D\uDC31 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
-        `\uD83D\uDE3A Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
-        `\uD83C\uDFAE Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
-        `\uD83D\uDD25 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
-      ];
-      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-      tg.switchInlineQuery(randomMessage, ['users', 'groups', 'channels']);
-    }
-  };
-
-  const challengeFriend = (score) => {
-    const tg = window.Telegram?.WebApp;
-    const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
-
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
-    }
-  };
-
-  const autoShareMilestone = (achievement) => {
-    const milestones = {
-      first_1000: "🎉 Just hit 1,000 points in Meowchi for the first time!",
-      combo_5: "🔥 Got a 5x combo in Meowchi! This game is addictive!",
-      daily_streak_7: "🗓️ 7 days straight playing Meowchi! Who's joining me?",
-      coins_1000: "💰 Earned 1,000 $Meow coins! This cat game pays!"
-    };
-
-    const tg = window.Telegram?.WebApp;
-    if (tg?.switchInlineQuery && milestones[achievement]) {
-      setTimeout(() => {
-        if (confirm("🎉 Amazing achievement! Share with friends?")) {
-          tg.switchInlineQuery(milestones[achievement], ['users', 'groups']);
-        }
-      }, 1500);
-    }
-  };
-
-  const shareLeaderboardPosition = (rank, score) => {
-    const tg = window.Telegram?.WebApp;
-    const messages = {
-      top1: `👑 I'm #1 on the Meowchi leaderboard with ${score.toLocaleString()} points!`,
-      top10: `🏆 Made it to top 10 in Meowchi! Rank #${rank} with ${score.toLocaleString()} points!`,
-      top100: `📈 Climbing the Meowchi ranks! Currently #${rank}!`,
-      improved: `⬆️ Just improved my Meowchi ranking to #${rank}!`
-    };
-
-    let message = messages.improved;
-    if (rank === 1) message = messages.top1;
-    else if (rank <= 10) message = messages.top10;
-    else if (rank <= 100) message = messages.top100;
-
-    if (tg?.switchInlineQuery) {
-      tg.switchInlineQuery(message, ['users', 'groups']);
-    }
-  };
-
-  // Pointer interactions
   useEffect(() => {
     const el = boardRef.current;
     if (!el || paused) return;
@@ -575,7 +398,7 @@ export default function GameView({
     };
 
     const down = (e) => {
-      if (timeLeftRef.current <= 0) return;
+      if (timeLeftRef.current <= 0 || animatingRef.current) return;
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
@@ -644,7 +467,7 @@ export default function GameView({
   }, [cell, paused, settings?.haptics, activePowerup]);
 
   function trySwap(r1, c1, r2, c2) {
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0 || animatingRef.current) return;
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
 
     const g = cloneGrid(gridRef.current);
@@ -668,14 +491,11 @@ export default function GameView({
       audio.play?.("swap_invalid", { volume: 0.5 });
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
-
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
-
       return;
     }
 
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
-
     audio.play?.("swap", { volume: 0.6 });
     setMoveCount((prev) => prev + 1);
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
@@ -792,7 +612,7 @@ export default function GameView({
   }
 
   function doHint() {
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0 || animatingRef.current) return;
     const m = findFirstMove(gridRef.current);
     if (!m) {
       shuffleBoard();
@@ -807,7 +627,7 @@ export default function GameView({
   }
 
   function shuffleBoard() {
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0 || animatingRef.current) return;
     const g = shuffleToSolvable(gridRef.current);
     setGrid(g);
     haptic(12);
@@ -823,17 +643,12 @@ export default function GameView({
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
     
-    // Clear particle effects
-    if (particleSystemRef.current) {
-      particleSystemRef.current.clear();
-    }
+    if (particleSystemRef.current) particleSystemRef.current.clear();
     
     const result = await submitGameScore(finalScore);
 
     const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
-    if (serverCoins > 0 && settings?.sound) {
-      audio.play?.("coin", { volume: 0.7 });
-    }
+    if (serverCoins > 0 && settings?.sound) audio.play?.("coin", { volume: 0.7 });
     if (settings?.sound) {
       if (finalScore > 0) audio.play?.("finish_win", { volume: 0.8 });
       else audio.play?.("finish_lose", { volume: 0.7 });
@@ -848,10 +663,7 @@ export default function GameView({
       showSharing: true,
     };
     
-    // Wait a bit for the "calculating" animation before exiting
-    setTimeout(() => {
-      onExit(gameResultWithSharing);
-    }, 500);
+    setTimeout(() => onExit(gameResultWithSharing), 500);
   }
 
   function resetGame() {
@@ -871,16 +683,12 @@ export default function GameView({
     setMaxComboAchieved(0);
     maxComboAchievedRef.current = 0;
     scoreRef.current = 0;
-    setExplosions([]); // Clear explosions
     
-    // Clear particle effects
-    if (particleSystemRef.current) {
-      particleSystemRef.current.clear();
-    }
+    if (particleSystemRef.current) particleSystemRef.current.clear();
   }
 
   const handlePowerupSelect = (key) => {
-    if (powerups[key] > 0) {
+    if (powerups[key] > 0 && !animatingRef.current) {
       if (key === 'shuffle') {
         shuffleBoard();
         consumePowerup('shuffle');
@@ -892,8 +700,9 @@ export default function GameView({
   };
   
   const handlePowerupDragStart = (e, key, icon) => {
-    if (powerups[key] > 0 && key !== 'shuffle') {
+    if (powerups[key] > 0 && key !== 'shuffle' && !animatingRef.current) {
       setDraggedPowerup({ key, icon });
+      e.dataTransfer.setData('text/plain', key); // Necessary for Firefox
       const empty = new Image();
       e.dataTransfer.setDragImage(empty, 0, 0);
       haptic(8);
@@ -923,7 +732,7 @@ export default function GameView({
 
   const handleDrop = (e) => {
     e.preventDefault();
-    if (!draggedPowerup || !boardRef.current) return;
+    if (!draggedPowerup || !boardRef.current || animatingRef.current) return;
 
     const rect = boardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -938,16 +747,22 @@ export default function GameView({
   };
 
   const applyPowerup = (key, r, c) => {
+    if (animatingRef.current) return;
+    
     const g = cloneGrid(gridRef.current);
     let applied = false;
     let feedback = null;
+    let removedTiles = [];
 
     if (key === 'hammer') {
       const targetCookie = g[r][c];
       if (CANDY_SET.includes(targetCookie)) {
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
-            if (g[row][col] === targetCookie) g[row][col] = null;
+            if (g[row][col] === targetCookie) {
+              g[row][col] = null;
+              removedTiles.push([row, col]);
+            }
           }
         }
         feedback = { text: '🔥 FIRE!', r, c, key: `feedback-${Date.now()}` };
@@ -955,8 +770,11 @@ export default function GameView({
       }
     } else if (key === 'bomb') {
       for (let row = r - 1; row <= r + 1; row++) {
-        for (let col = c - 1; c <= c + 1; col++) {
-          if (inBounds(row, col)) g[row][col] = null;
+        for (let col = c - 1; col <= c + 1; col++) {
+          if (inBounds(row, col)) {
+            g[row][col] = null;
+            removedTiles.push([row, col]);
+          }
         }
       }
       feedback = { text: '💥 BOOM!', r, c, key: `feedback-${Date.now()}` };
@@ -964,20 +782,30 @@ export default function GameView({
     }
 
     if (applied) {
-      audio.play?.('powerup_spawn', { volume: 0.8 });
+      setAnimating(true);
+      audio.play?.('powerup_use', { volume: 0.8 });
       if (feedback) {
         setFeedbackText(feedback);
         setTimeout(() => setFeedbackText(null), 1000);
       }
       
-      // FIX: Trigger gravity and cascade after power-up use
-      const tempGrid = cloneGrid(g);
-      applyGravity(tempGrid);
-      refill(tempGrid);
-      setGrid(tempGrid);
-      setTimeout(() => optimizedResolveCascades(tempGrid, () => {}), 350);
+      const newBlastingTiles = new Set();
+      removedTiles.forEach(([row, col]) => newBlastingTiles.add(`${row}-${col}`));
+      setBlastingTiles(newBlastingTiles);
       
       consumePowerup(key);
+      
+      setTimeout(() => {
+        setGrid(cloneGrid(g));
+        setBlastingTiles(new Set());
+        
+        setTimeout(() => {
+          optimizedResolveCascades(g, () => {
+            if (timeLeftRef.current <= 0) finish();
+          });
+        }, 150);
+      }, 200);
+
     } else {
       haptic(8);
       audio.play?.("swap_invalid", { volume: 0.5 });
@@ -1055,14 +883,6 @@ export default function GameView({
       })
     );
   }, [grid, sel, hint, swapping, newTiles, grabTile, shake, fallDelay, cell, blastingTiles]);
-
-  useEffect(() => {
-    const cleanup = [];
-    return () => {
-      cleanup.forEach(clearTimeout);
-      cleanup.forEach(clearInterval);
-    };
-  }, []);
 
   return (
     <div className="section board-wrap" ref={containerRef} onDragOver={handleDragOver}>
@@ -1152,7 +972,6 @@ export default function GameView({
           </div>
         )}
         
-        {/* Canvas layer for particle effects */}
         <canvas
           ref={canvasRef}
           style={{
@@ -1174,7 +993,7 @@ export default function GameView({
             draggable={powerups[key] > 0 && key !== 'shuffle'}
             onDragStart={(e) => handlePowerupDragStart(e, key, def.icon)}
             onDragEnd={handlePowerupDragEnd}
-            disabled={!powerups[key] || powerups[key] <= 0}
+            disabled={!powerups[key] || powerups[key] <= 0 || animating}
             title={`${def.name} (Owned: ${powerups[key] || 0})`}
           >
             <div className="powerup-icon">{def.icon}</div>
@@ -1184,10 +1003,10 @@ export default function GameView({
       </div>
 
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
-        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
+        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0 || animating}>
           \uD83D\uDCA1 Hint
         </button>
-        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0}>
+        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0 || animating}>
           \uD83D\uDD00 Shuffle
         </button>
         <button className="btn" onClick={() => resetGame()}>
@@ -1215,7 +1034,7 @@ export default function GameView({
   );
 }
 
-// ====== Helpers (unchanged) ======
+// ====== Helpers ======
 
 function initSolvableGrid() {
   const g = Array.from({ length: ROWS }, () =>
@@ -1250,49 +1069,48 @@ function inBounds(r, c) {
 
 function findMatches(g) {
   const matches = [];
+  const matched = new Set();
+
+  const addMatch = (r, c) => {
+    const key = `${r}-${c}`;
+    if (!matched.has(key)) {
+      matches.push([r, c]);
+      matched.add(key);
+    }
+  };
 
   for (let r = 0; r < ROWS; r++) {
-    let streak = 1;
-    for (let c = 1; c < COLS; c++) {
-      if (g[r][c] && g[r][c] === g[r][c - 1]) streak++;
-      else {
-        if (streak >= 3) {
-          for (let k = 0; k < streak; k++) matches.push([r, c - 1 - k]);
-        }
-        streak = 1;
+    for (let c = 0; c < COLS - 2; c++) {
+      if (g[r][c] && g[r][c] === g[r][c + 1] && g[r][c] === g[r][c + 2]) {
+        addMatch(r, c);
+        addMatch(r, c + 1);
+        addMatch(r, c + 2);
       }
     }
-    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([r, COLS - 1 - k]);
   }
 
   for (let c = 0; c < COLS; c++) {
-    let streak = 1;
-    for (let r = 1; r < ROWS; r++) {
-      if (g[r][c] && g[r][c] === g[r - 1][c]) streak++;
-      else {
-        if (streak >= 3) {
-          for (let k = 0; k < streak; k++) matches.push([r - 1 - k, c]);
-        }
-        streak = 1;
+    for (let r = 0; r < ROWS - 2; r++) {
+      if (g[r][c] && g[r][c] === g[r + 1][c] && g[r][c] === g[r + 2][c]) {
+        addMatch(r, c);
+        addMatch(r + 1, c);
+        addMatch(r + 2, c);
       }
     }
-    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([ROWS - 1 - k, c]);
   }
-
   return matches;
 }
 
 function applyGravity(g) {
   for (let c = 0; c < COLS; c++) {
+    let writeRow = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
-      if (g[r][c] === null) {
-        for (let rr = r - 1; rr >= 0; rr--) {
-          if (g[rr][c] != null) {
-            g[r][c] = g[rr][c];
-            g[rr][c] = null;
-            break;
-          }
+      if (g[r][c] !== null) {
+        if (writeRow !== r) {
+          g[writeRow][c] = g[r][c];
+          g[r][c] = null;
         }
+        writeRow--;
       }
     }
   }
@@ -1309,18 +1127,14 @@ function refill(g) {
 function hasAnyMove(g) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const dirs = [
-        [0, 1],
-        [1, 0],
-      ];
+      const dirs = [[0, 1], [1, 0]];
       for (const [dr, dc] of dirs) {
         const r2 = r + dr;
         const c2 = c + dc;
         if (!inBounds(r2, c2)) continue;
         const ng = cloneGrid(g);
         [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
-        const m = findMatches(ng);
-        if (m.length > 0) return true;
+        if (findMatches(ng).length > 0) return true;
       }
     }
   }
@@ -1357,18 +1171,14 @@ function shuffleToSolvable(g) {
 function findFirstMove(g) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const dirs = [
-        [0, 1],
-        [1, 0],
-      ];
+      const dirs = [[0, 1], [1, 0]];
       for (const [dr, dc] of dirs) {
         const r2 = r + dr;
         const c2 = c + dc;
         if (!inBounds(r2, c2)) continue;
         const ng = cloneGrid(g);
         [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
-        const m = findMatches(ng);
-        if (m.length > 0) return [[r, c], [r2, c2]];
+        if (findMatches(ng).length > 0) return [[r, c], [r2, c2]];
       }
     }
   }
