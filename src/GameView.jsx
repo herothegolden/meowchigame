@@ -10,17 +10,12 @@ const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
   isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
-  const isImage = value && typeof value === 'string' && value.startsWith('/assets/');
-  
-  // Debug logging
-  if (r === 0 && c === 0) {
-    console.log('Tile (0,0) value:', value, 'isImage:', isImage);
-  }
+  const isImage = value && typeof value === 'string' && value.startsWith('https://ik.imagekit.io');
   
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "...op-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint-pulse" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
@@ -39,8 +34,8 @@ const MemoizedTile = React.memo(({
         className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
         style={{ 
           fontSize: isImage ? 'inherit' : Math.floor(cell * EMOJI_SIZE),
-          width: isImage ? '80%' : 'auto',
-          height: isImage ? '80%' : 'auto',
+          width: isImage ? '85%' : 'auto',
+          height: isImage ? '85%' : 'auto',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'
@@ -49,30 +44,27 @@ const MemoizedTile = React.memo(({
         {isImage ? (
           <img 
             src={value} 
-            alt="gem" 
+            alt="cat" 
             style={{ 
               width: '100%', 
               height: '100%', 
               objectFit: 'contain',
-              imageRendering: 'pixelated'
+              borderRadius: '8px'
             }}
             draggable={false}
             onError={(e) => {
-              console.error('Failed to load image:', value);
+              console.error('Failed to load cat image:', value);
               e.target.style.display = 'none';
-            }}
-            onLoad={() => {
-              console.log('Successfully loaded:', value);
             }}
           />
         ) : (
           value
         )}
       </div>
-      {/* simplified blast effect */}
+      {/* Enhanced blast effect */}
       {isBlasting && (
-        <div className="blast-simple">
-          💥
+        <div className="blast-enhanced">
+          ✨
         </div>
       )}
     </div>
@@ -142,28 +134,103 @@ const useBatchedState = () => {
   return batchUpdate;
 };
 
-const COLS = 6;  // keep as in your working file
+const COLS = 6;  // 6x6 grid for Rush mode
 const ROWS = 6;
 const CELL_MIN = 36;
 const CELL_MAX = 88;
-const GAME_DURATION = 60;
+const GAME_DURATION = 60; // 60 seconds for Rush mode
 const EMOJI_SIZE = 0.8;
 
-// Updated to use all 6 gems and added console logging
-const CANDY_SET = ["/assets/gem1.png", "/assets/gem2.png", "/assets/gem3.png", "/assets/gem4.png", "/assets/gem5.png", "/assets/gem6.png"];
-console.log('CANDY_SET initialized:', CANDY_SET);
+// 🐱 THE SIX MEOWCHI CATS (Phase 1 Update)
+const CAT_SET = [
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Boba.webp?updatedAt=1756284887939",      // Boba
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Cheese.webp?updatedAt=1756284888031",    // Cheese  
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490",   // Meowchi
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Oreo%20.webp?updatedAt=1756284888252",   // Oreo
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Panthera.webp?updatedAt=1756284887810",  // Panthera
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Patches.webp?updatedAt=1756284888179"    // Patches
+];
 
-const randEmoji = () => {
-  const selected = CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
-  console.log('Random gem selected:', selected);
-  return selected;
-};
+const randCat = () => CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
 
 // NEW: Power-up definitions
 const POWERUP_DEFINITIONS = {
   shuffle: { name: "Paw-sitive Swap", icon: "🐾" },
   hammer: { name: "Catnip Cookie", icon: "🍪" },
   bomb: { name: "Marshmallow Bomb", icon: "💣" },
+};
+
+// 🎯 NEW: Meowchi 6x6 Rush Scoring (Phase 1)
+const RUSH_SCORING = {
+  3: 60,   // 3-match = 60 points
+  4: 120,  // 4-match = 120 points  
+  5: 200,  // 5-match = 200 points
+  CASCADE_TIME_BONUS: 0.25, // +0.25s per cascade step
+  MAX_TIME_BONUS: 5,        // Cap at +5s total per game
+  CASCADE_MULTIPLIER: 0.3   // Each cascade step: ×(1 + 0.3 per step)
+};
+
+// 🔥 NEW: Hype Meter Component
+const HypeMeter = ({ currentScore, cascadeLevel }) => {
+  const tier1 = 1500;
+  const tier2 = 4500; 
+  const tier3 = 9000;
+  
+  let currentTier = 0;
+  let progress = 0;
+  
+  if (currentScore >= tier3) {
+    currentTier = 3;
+    progress = 100;
+  } else if (currentScore >= tier2) {
+    currentTier = 2;
+    progress = ((currentScore - tier2) / (tier3 - tier2)) * 100;
+  } else if (currentScore >= tier1) {
+    currentTier = 1;
+    progress = ((currentScore - tier1) / (tier2 - tier1)) * 100;
+  } else {
+    progress = (currentScore / tier1) * 100;
+  }
+  
+  const getTierColor = () => {
+    switch(currentTier) {
+      case 3: return '#ff6b35'; // Hot orange
+      case 2: return '#f7b731'; // Gold  
+      case 1: return '#26de81'; // Green
+      default: return '#74b9ff'; // Blue
+    }
+  };
+  
+  const getTierLabel = () => {
+    switch(currentTier) {
+      case 3: return 'FIRE! 🔥';
+      case 2: return 'HOT! ✨'; 
+      case 1: return 'WARM 💫';
+      default: return 'HYPE';
+    }
+  };
+  
+  return (
+    <div className="hype-meter">
+      <div className="hype-label">{getTierLabel()}</div>
+      <div className="hype-bar">
+        <div 
+          className="hype-fill" 
+          style={{ 
+            width: `${Math.min(progress, 100)}%`,
+            backgroundColor: getTierColor(),
+            boxShadow: `0 0 10px ${getTierColor()}40`
+          }}
+        />
+      </div>
+      <div className="hype-score">{currentScore.toLocaleString()}</div>
+      {cascadeLevel > 0 && (
+        <div className="cascade-indicator">
+          CASCADE x{cascadeLevel + 1}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function GameView({
@@ -176,12 +243,7 @@ export default function GameView({
   const [cell, setCell] = useState(48);
 
   // Grid state
-  const [grid, setGrid] = useState(() => {
-    console.log('Initializing grid...');
-    const newGrid = initSolvableGrid();
-    console.log('Grid initialized:', newGrid);
-    return newGrid;
-  });
+  const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
@@ -198,6 +260,9 @@ export default function GameView({
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
+  // 🆕 NEW: Enhanced Rush Mode Stats
+  const [totalTimeBonusEarned, setTotalTimeBonusEarned] = useState(0);
+  const [currentCascadeLevel, setCurrentCascadeLevel] = useState(0);
   const [gameStartTime, setGameStartTime] = useState(Date.now());
   const [moveCount, setMoveCount] = useState(0);
   const [maxComboAchieved, setMaxComboAchieved] = useState(0);
@@ -213,7 +278,7 @@ export default function GameView({
   const [grabTile, setGrabTile] = useState(null);
   const [shake, setShake] = useState(new Set());
   
-  const [gameOverState, setGameOverState] = useState(null); // 'calculating' or 'results'
+  const [gameOverState, setGameOverState] = useState(null);
   const [draggedPowerup, setDraggedPowerup] = useState(null);
   const [draggedIconStyle, setDraggedIconStyle] = useState({});
 
@@ -225,7 +290,6 @@ export default function GameView({
   // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
     try {
-      // Optimistically update the UI
       setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
       
       const response = await fetch('/api/powerups/use', {
@@ -239,12 +303,10 @@ export default function GameView({
       });
       
       if (!response.ok) {
-        // Revert UI on failure
         setPowerups(powerups);
         console.error("Failed to consume power-up on server");
       }
     } catch (error) {
-      // Revert UI on failure
       setPowerups(powerups);
       console.error("Error consuming powerup:", error);
     }
@@ -304,7 +366,7 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
-  // Timer
+  // 🕐 Enhanced Timer with Cascade Bonuses
   useEffect(() => {
     if (paused || gameOverState) return;
     const timer = setInterval(() => {
@@ -320,7 +382,7 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused, gameOverState]);
 
-  // Timer tick sounds (very light)
+  // Timer tick sounds (enhanced for Rush mode)
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
@@ -328,11 +390,11 @@ export default function GameView({
     if (timeLeftRef.current <= 10) {
       if (lastTickRef.current !== timeLeftRef.current) {
         lastTickRef.current = timeLeftRef.current;
-        audio.play?.("timer_tick", { volume: 0.25 });
+        audio.play?.("timer_tick", { volume: 0.35 });
       }
     }
     if (timeLeftRef.current === 5) {
-      audio.play?.("timer_hurry", { volume: 0.5 });
+      audio.play?.("timer_hurry", { volume: 0.7 });
     }
   }, [timeLeft, settings?.sound]);
 
@@ -342,6 +404,20 @@ export default function GameView({
       navigator.vibrate?.(ms);
     } catch {}
   }
+
+  // 🆕 NEW: Rush Mode Cascade Time Bonus
+  const addCascadeTimeBonus = (cascadeSteps) => {
+    const timeBonus = Math.min(
+      cascadeSteps * RUSH_SCORING.CASCADE_TIME_BONUS,
+      RUSH_SCORING.MAX_TIME_BONUS - totalTimeBonusEarned
+    );
+    
+    if (timeBonus > 0) {
+      setTimeLeft(prev => prev + timeBonus);
+      setTotalTimeBonusEarned(prev => prev + timeBonus);
+      console.log(`⏰ Time bonus: +${timeBonus}s (Total: ${totalTimeBonusEarned + timeBonus}s)`);
+    }
+  };
 
   async function submitGameScore(finalScore) {
     if (!userTelegramId) {
@@ -387,66 +463,6 @@ export default function GameView({
     }
   }
 
-  const shareGameResult = (score, combo, coins) => {
-    const tg = window.Telegram?.WebApp;
-    if (tg?.switchInlineQuery) {
-      const messages = [
-        `🐱 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
-        `😺 Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
-        `🎮 Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
-        `🔥 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
-      ];
-      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-      tg.switchInlineQuery(randomMessage, ['users', 'groups', 'channels']);
-    }
-  };
-
-  const challengeFriend = (score) => {
-    const tg = window.Telegram?.WebApp;
-    const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
-
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
-    }
-  };
-
-  const autoShareMilestone = (achievement) => {
-    const milestones = {
-      first_1000: "🎉 Just hit 1,000 points in Meowchi for the first time!",
-      combo_5: "🔥 Got a 5x combo in Meowchi! This game is addictive!",
-      daily_streak_7: "🗓️ 7 days straight playing Meowchi! Who's joining me?",
-      coins_1000: "💰 Earned 1,000 $Meow coins! This cat game pays!"
-    };
-
-    const tg = window.Telegram?.WebApp;
-    if (tg?.switchInlineQuery && milestones[achievement]) {
-      setTimeout(() => {
-        if (confirm("🎉 Amazing achievement! Share with friends?")) {
-          tg.switchInlineQuery(milestones[achievement], ['users', 'groups']);
-        }
-      }, 1500);
-    }
-  };
-
-  const shareLeaderboardPosition = (rank, score) => {
-    const tg = window.Telegram?.WebApp;
-    const messages = {
-      top1: `👑 I'm #1 on the Meowchi leaderboard with ${score.toLocaleString()} points!`,
-      top10: `🏆 Made it to top 10 in Meowchi! Rank #${rank} with ${score.toLocaleString()} points!`,
-      top100: `📈 Climbing the Meowchi ranks! Currently #${rank}!`,
-      improved: `⬆️ Just improved my Meowchi ranking to #${rank}!`
-    };
-
-    let message = messages.improved;
-    if (rank === 1) message = messages.top1;
-    else if (rank <= 10) message = messages.top10;
-    else if (rank <= 100) message = messages.top100;
-
-    if (tg?.switchInlineQuery) {
-      tg.switchInlineQuery(message, ['users', 'groups']);
-    }
-  };
-
   // Pointer interactions
   useEffect(() => {
     const el = boardRef.current;
@@ -470,11 +486,11 @@ export default function GameView({
       if (activePowerup) {
         const g = cloneGrid(gridRef.current);
         if (activePowerup === 'hammer') {
-          const targetCookie = g[p.r][p.c];
-          if (CANDY_SET.includes(targetCookie)) {
+          const targetCat = g[p.r][p.c];
+          if (CAT_SET.includes(targetCat)) {
             for (let r = 0; r < ROWS; r++) {
               for (let c = 0; c < COLS; c++) {
-                if (g[r][c] === targetCookie) g[r][c] = null;
+                if (g[r][c] === targetCat) g[r][c] = null;
               }
             }
             audio.play?.('powerup_spawn', { volume: 0.7 });
@@ -583,7 +599,6 @@ export default function GameView({
       setTimeout(() => setSel(null), 80);
 
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
-
       return;
     }
 
@@ -602,10 +617,11 @@ export default function GameView({
     }, 200);
   }
 
+  // 🚀 ENHANCED: Rush Mode Cascade Resolution
   function optimizedResolveCascades(start, done) {
     setAnimating(true);
     let g = cloneGrid(start);
-    let comboCount = 0;
+    let cascadeSteps = 0;
 
     const step = () => {
       const matches = findMatches(g);
@@ -614,18 +630,15 @@ export default function GameView({
           setGrid(g);
           setNewTiles(new Set());
           setFallDelay({});
+          setCurrentCascadeLevel(0);
 
-          if (comboCount > 0) {
+          // Add time bonus based on cascade steps
+          if (cascadeSteps > 0) {
+            addCascadeTimeBonus(cascadeSteps);
             setMaxComboAchieved(prev => {
-              const newMax = Math.max(prev, comboCount);
+              const newMax = Math.max(prev, cascadeSteps);
               maxComboAchievedRef.current = newMax;
               return newMax;
-            });
-            setCombo(comboCount);
-            const n = Math.min(4, Math.max(1, comboCount + 1));
-            audio.play?.(`combo_x${n}`, { volume: 0.6 });
-            requestAnimationFrame(() => {
-              setTimeout(() => setCombo(0), 1500);
             });
           }
 
@@ -638,6 +651,8 @@ export default function GameView({
       }
 
       audio.play?.("match_pop", { volume: 0.5 });
+      cascadeSteps++;
+      setCurrentCascadeLevel(cascadeSteps);
 
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
@@ -652,10 +667,24 @@ export default function GameView({
         })),
       ]);
 
-      const basePoints = 10 * matches.length;
-      const comboMultiplier = Math.max(1, comboCount + 1);
-      const pointsEarned = basePoints * comboMultiplier;
+      // 🎯 NEW: Rush Mode Scoring System
+      const matchSize = matches.length;
+      let basePoints = 0;
+      
+      if (matchSize >= 5) {
+        basePoints = RUSH_SCORING[5] * Math.floor(matchSize / 5) + RUSH_SCORING[3] * (matchSize % 5);
+      } else if (matchSize >= 4) {
+        basePoints = RUSH_SCORING[4] * Math.floor(matchSize / 4) + RUSH_SCORING[3] * (matchSize % 4);
+      } else {
+        basePoints = RUSH_SCORING[3] * Math.floor(matchSize / 3);
+      }
+
+      // Apply cascade multiplier: ×(1 + 0.3 per step)
+      const cascadeMultiplier = 1 + (cascadeSteps * RUSH_SCORING.CASCADE_MULTIPLIER);
+      const pointsEarned = Math.floor(basePoints * cascadeMultiplier);
+      
       setScore((s) => s + pointsEarned);
+      console.log(`💎 Match: ${matchSize} pieces, ${cascadeSteps} cascades, ${pointsEarned} points`);
 
       matches.forEach(([r, c]) => {
         g[r][c] = null;
@@ -697,7 +726,6 @@ export default function GameView({
 
         setTimeout(() => {
           setNewTiles(new Set());
-          comboCount++;
           setTimeout(step, 40);
         }, 80);
       }, 60);
@@ -754,7 +782,6 @@ export default function GameView({
       showSharing: true,
     };
     
-    // Wait a bit for the "calculating" animation before exiting
     setTimeout(() => {
       onExit(gameResultWithSharing);
     }, 500);
@@ -775,6 +802,8 @@ export default function GameView({
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
+    setTotalTimeBonusEarned(0);
+    setCurrentCascadeLevel(0);
     setFx([]);
     maxComboAchievedRef.current = 0;
     scoreRef.current = 0;
@@ -843,11 +872,11 @@ export default function GameView({
     let applied = false;
 
     if (key === 'hammer') {
-      const targetCookie = g[r][c];
-      if (CANDY_SET.includes(targetCookie)) {
+      const targetCat = g[r][c];
+      if (CAT_SET.includes(targetCat)) {
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
-            if (g[row][col] === targetCookie) g[row][col] = null;
+            if (g[row][col] === targetCat) g[row][col] = null;
           }
         }
         applied = true;
@@ -961,17 +990,19 @@ export default function GameView({
       {gameOverState === 'calculating' && (
         <div className="calculating-overlay">
           <div className="calculating-content">
-            <div className="calculating-icon">...</div>
+            <div className="calculating-icon">⏰</div>
             <div className="calculating-text">Time's Up!</div>
           </div>
         </div>
       )}
+      
+      {/* 🆕 NEW: Rush Mode Timer Display */}
       <div
-        className="timer-display"
+        className="timer-display rush-timer"
         style={{
           textAlign: "center",
           marginBottom: "12px",
-          fontSize: "24px",
+          fontSize: "20px",
           fontWeight: "800",
           color: getTimerColor(),
           padding: "8px 16px",
@@ -982,36 +1013,40 @@ export default function GameView({
           boxShadow: `0 0 0 3px ${getTimerColor()}20`,
         }}
       >
-        ⏰ {formatTime(timeLeft)}
-      </div>
-
-      <div className="row">
-        <div>
-          <span className="muted">Score</span> <b>{score}</b>
-        </div>
-        <div className="combo-meter-container">
-          <div className="combo-meter-bar">
-            <div
-              className="combo-meter-fill"
-              style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
-            ></div>
+        ⚡ RUSH MODE ⚡ {formatTime(timeLeft)}
+        {totalTimeBonusEarned > 0 && (
+          <div style={{ fontSize: "12px", opacity: 0.8 }}>
+            +{totalTimeBonusEarned.toFixed(1)}s bonus earned
           </div>
-          <b>{combo > 0 ? `🔥 COMBO x${combo + 1}` : "Combo"}</b>
+        )}
+      </div>
+
+      {/* 🔥 NEW: Hype Meter */}
+      <HypeMeter currentScore={score} cascadeLevel={currentCascadeLevel} />
+
+      {/* Enhanced Rush Mode Stats */}
+      <div className="row rush-stats">
+        <div>
+          <span className="muted">Score</span> <b>{score.toLocaleString()}</b>
         </div>
         <div>
-          <span className="muted">Moves</span> <b>{moves}</b>
+          <span className="muted">Swaps</span> <b>{moveCount}</b>
+        </div>
+        <div>
+          <span className="muted">Best</span> <b>{maxComboAchieved}x</b>
         </div>
       </div>
 
-      {combo > 0 && (
-        <div className="combo-celebration">
-          💥 🍬 Sweet Combo x{combo + 1}! 🍬 💥
+      {/* Enhanced Cascade Celebration */}
+      {currentCascadeLevel > 0 && (
+        <div className="cascade-celebration">
+          🌟 CASCADE COMBO x{currentCascadeLevel}! 🌟
         </div>
       )}
 
       <div
         ref={boardRef}
-        className="board"
+        className="board rush-board"
         style={{ width: boardW, height: boardH }}
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
@@ -1064,24 +1099,25 @@ export default function GameView({
       </div>
 
       <div
-        className="progress"
+        className="progress rush-progress"
         style={{
           width: `${(timeLeft / GAME_DURATION) * 100}%`,
-          height: 6,
-          background: getTimerColor(),
+          height: 8,
+          background: `linear-gradient(90deg, ${getTimerColor()}, ${getTimerColor()}80)`,
           borderRadius: 6,
           marginTop: 10,
+          boxShadow: `0 0 8px ${getTimerColor()}40`
         }}
       />
     </div>
   );
 }
 
-// ====== Helpers (unchanged) ======
+// ====== Helper Functions (Updated for Rush Mode) ======
 
 function initSolvableGrid() {
   const g = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => randEmoji())
+    Array.from({ length: COLS }, () => randCat())
   );
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -1098,7 +1134,7 @@ function initSolvableGrid() {
 }
 
 function pickDifferent(curr) {
-  const choices = CANDY_SET.filter((x) => x !== curr);
+  const choices = CAT_SET.filter((x) => x !== curr);
   return choices[(Math.random() * choices.length) | 0];
 }
 
@@ -1163,7 +1199,7 @@ function applyGravity(g) {
 function refill(g) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (g[r][c] === null) g[r][c] = randEmoji();
+      if (g[r][c] === null) g[r][c] = randCat();
     }
   }
 }
