@@ -24,8 +24,8 @@ const MemoizedTile = React.memo(({
         transition: isSwapping
           ? "transform 0.16s ease"
           : delaySeconds
-          ? `top 0.16s ease ${delaySeconds}s`
-          : "top 0.16s ease",
+          ? `top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${delaySeconds}s`
+          : "top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
       }}
     >
       <div
@@ -107,15 +107,15 @@ const CELL_MAX = 88;
 const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.8;
 
-const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
+const CANDY_SET = ["ðŸ˜º", "ðŸ¥¨", "ðŸ"", "ðŸª", "ðŸ¡"];
 const randEmoji = () =>
   CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
 // NEW: Power-up definitions
 const POWERUP_DEFINITIONS = {
-  shuffle: { name: "Paw-sitive Swap", icon: "🐾" },
-  hammer: { name: "Catnip Cookie", icon: "🍪" },
-  bomb: { name: "Marshmallow Bomb", icon: "💣" },
+  shuffle: { name: "Paw-sitive Swap", icon: "ðŸ¾" },
+  hammer: { name: "Catnip Cookie", icon: "ðŸª" },
+  bomb: { name: "Marshmallow Bomb", icon: "ðŸ'£" },
 };
 
 // Canvas-based particle system
@@ -263,6 +263,9 @@ export default function GameView({
   const [draggedPowerup, setDraggedPowerup] = useState(null);
   const [draggedIconStyle, setDraggedIconStyle] = useState({});
 
+  // NEW: State for explosion emojis
+  const [explosions, setExplosions] = useState([]);
+
   // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
   const powerups = useStore(s => s.powerups);
@@ -308,6 +311,27 @@ export default function GameView({
     }
   }, [cell]);
 
+  // NEW: Function to create explosion emoji animation
+  const createExplosionEmoji = useCallback((r, c) => {
+    const explosionId = `explosion-${r}-${c}-${Date.now()}`;
+    const explosion = {
+      id: explosionId,
+      r,
+      c,
+      x: c * cell + cell / 2,
+      y: r * cell + cell / 2,
+    };
+    
+    setExplosions(prev => [...prev, explosion]);
+    
+    // Remove explosion after animation completes
+    setTimeout(() => {
+      setExplosions(prev => prev.filter(e => e.id !== explosionId));
+    }, 600); // Match CSS animation duration
+    
+    return explosion;
+  }, [cell]);
+
   // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
     try {
@@ -341,13 +365,13 @@ export default function GameView({
     const tg = window.Telegram?.WebApp;
     if (tg?.enableClosingConfirmation) {
       tg.enableClosingConfirmation();
-      console.log('✅ Closing confirmation enabled');
+      console.log('âœ… Closing confirmation enabled');
     }
 
     return () => {
       if (tg?.disableClosingConfirmation) {
         tg.disableClosingConfirmation();
-        console.log('✅ Closing confirmation disabled');
+        console.log('âœ… Closing confirmation disabled');
       }
     };
   }, []);
@@ -477,10 +501,10 @@ export default function GameView({
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery) {
       const messages = [
-        `🐱 Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
-        `😺 Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
-        `🎮 Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
-        `🔥 On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
+        `ðŸ± Just scored ${score.toLocaleString()} in Meowchi! Can you beat my combo of x${combo}?`,
+        `ðŸ˜º Earned ${coins} $Meow coins in Meowchi! My best combo was x${combo}!`,
+        `ðŸŽ® Playing Meowchi and loving it! Just got ${score.toLocaleString()} points!`,
+        `ðŸ"¥ On fire in Meowchi! ${score.toLocaleString()} points with x${combo} combo!`
       ];
       const randomMessage = messages[Math.floor(Math.random() * messages.length)];
       tg.switchInlineQuery(randomMessage, ['users', 'groups', 'channels']);
@@ -492,22 +516,22 @@ export default function GameView({
     const challengeUrl = `https://t.me/your_bot_username?start=challenge_${userTelegramId}_${score}`;
 
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`🎯 I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(challengeUrl)}&text=${encodeURIComponent(`ðŸŽ¯ I scored ${score.toLocaleString()} in Meowchi! Can you beat me?`)}`);
     }
   };
 
   const autoShareMilestone = (achievement) => {
     const milestones = {
-      first_1000: "🎉 Just hit 1,000 points in Meowchi for the first time!",
-      combo_5: "🔥 Got a 5x combo in Meowchi! This game is addictive!",
-      daily_streak_7: "🗓️ 7 days straight playing Meowchi! Who's joining me?",
-      coins_1000: "💰 Earned 1,000 $Meow coins! This cat game pays!"
+      first_1000: "ðŸŽ‰ Just hit 1,000 points in Meowchi for the first time!",
+      combo_5: "ðŸ"¥ Got a 5x combo in Meowchi! This game is addictive!",
+      daily_streak_7: "ðŸ—"ï¸ 7 days straight playing Meowchi! Who's joining me?",
+      coins_1000: "ðŸ'° Earned 1,000 $Meow coins! This cat game pays!"
     };
 
     const tg = window.Telegram?.WebApp;
     if (tg?.switchInlineQuery && milestones[achievement]) {
       setTimeout(() => {
-        if (confirm("🎉 Amazing achievement! Share with friends?")) {
+        if (confirm("ðŸŽ‰ Amazing achievement! Share with friends?")) {
           tg.switchInlineQuery(milestones[achievement], ['users', 'groups']);
         }
       }, 1500);
@@ -517,10 +541,10 @@ export default function GameView({
   const shareLeaderboardPosition = (rank, score) => {
     const tg = window.Telegram?.WebApp;
     const messages = {
-      top1: `👑 I'm #1 on the Meowchi leaderboard with ${score.toLocaleString()} points!`,
-      top10: `🏆 Made it to top 10 in Meowchi! Rank #${rank} with ${score.toLocaleString()} points!`,
-      top100: `📈 Climbing the Meowchi ranks! Currently #${rank}!`,
-      improved: `⬆️ Just improved my Meowchi ranking to #${rank}!`
+      top1: `ðŸ'' I'm #1 on the Meowchi leaderboard with ${score.toLocaleString()} points!`,
+      top10: `ðŸ† Made it to top 10 in Meowchi! Rank #${rank} with ${score.toLocaleString()} points!`,
+      top100: `ðŸ"ˆ Climbing the Meowchi ranks! Currently #${rank}!`,
+      improved: `â¬†ï¸ Just improved my Meowchi ranking to #${rank}!`
     };
 
     let message = messages.improved;
@@ -724,8 +748,11 @@ export default function GameView({
 
       audio.play?.("match_pop", { volume: 0.5 });
 
-      // NEW: Render blast effects on canvas instead of DOM
+      // NEW: Create 💥 explosion emoji animations FIRST
       matches.forEach(([r, c]) => {
+        createExplosionEmoji(r, c);
+        
+        // Also create particle effects
         if (particleSystemRef.current) {
           const x = c * cell;
           const y = r * cell;
@@ -738,49 +765,55 @@ export default function GameView({
       const pointsEarned = basePoints * comboMultiplier;
       setScore((s) => s + pointsEarned);
 
-      matches.forEach(([r, c]) => {
-        g[r][c] = null;
-      });
-      setGrid(cloneGrid(g));
-
+      // Wait for explosion animation to play before removing items
       setTimeout(() => {
-        const delayMap = {};
-        for (let c = 0; c < COLS; c++) {
-          const nullsBelow = new Array(ROWS).fill(0);
-          let count = 0;
-          for (let r = ROWS - 1; r >= 0; r--) {
-            nullsBelow[r] = count;
-            if (g[r][c] === null) count++;
-          }
-          for (let r = ROWS - 1; r >= 0; r--) {
-            if (g[r][c] != null) {
-              const dist = nullsBelow[r];
-              const newR = r + dist;
-              if (dist > 0) {
-                delayMap[`${newR}-${c}`] = Math.min(0.03, dist * 0.008);
+        matches.forEach(([r, c]) => {
+          g[r][c] = null;
+        });
+        setGrid(cloneGrid(g));
+
+        // Wait a bit more before applying gravity for better visual flow
+        setTimeout(() => {
+          const delayMap = {};
+          for (let c = 0; c < COLS; c++) {
+            const nullsBelow = new Array(ROWS).fill(0);
+            let count = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+              nullsBelow[r] = count;
+              if (g[r][c] === null) count++;
+            }
+            for (let r = ROWS - 1; r >= 0; r--) {
+              if (g[r][c] != null) {
+                const dist = nullsBelow[r];
+                const newR = r + dist;
+                if (dist > 0) {
+                  // Improved staggered falling delays
+                  delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
+                }
               }
             }
           }
-        }
 
-        applyGravity(g);
-        const empties = new Set();
-        for (let r = 0; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
-        refill(g);
+          applyGravity(g);
+          const empties = new Set();
+          for (let r = 0; r < ROWS; r++)
+            for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
+          refill(g);
 
-        React.startTransition(() => {
-          setNewTiles(empties);
-          setFallDelay(delayMap);
-          setGrid(cloneGrid(g));
-        });
+          React.startTransition(() => {
+            setNewTiles(empties);
+            setFallDelay(delayMap);
+            setGrid(cloneGrid(g));
+          });
 
-        setTimeout(() => {
-          setNewTiles(new Set());
-          comboCount++;
-          setTimeout(step, 40);
-        }, 80);
-      }, 60);
+          // Wait longer for falling animation to complete
+          setTimeout(() => {
+            setNewTiles(new Set());
+            comboCount++;
+            setTimeout(step, 60);
+          }, 150);
+        }, 100);
+      }, 300); // Wait for explosion emoji animation
     };
     step();
   }
@@ -862,6 +895,7 @@ export default function GameView({
     setMaxComboAchieved(0);
     maxComboAchievedRef.current = 0;
     scoreRef.current = 0;
+    setExplosions([]); // Clear explosions
     
     // Clear particle effects
     if (particleSystemRef.current) {
@@ -1048,7 +1082,7 @@ export default function GameView({
       {gameOverState === 'calculating' && (
         <div className="calculating-overlay">
           <div className="calculating-content">
-            <div className="calculating-icon">⏳</div>
+            <div className="calculating-icon">â³</div>
             <div className="calculating-text">Time's Up!</div>
           </div>
         </div>
@@ -1069,7 +1103,7 @@ export default function GameView({
           boxShadow: `0 0 0 3px ${getTimerColor()}20`,
         }}
       >
-        ⏰ {formatTime(timeLeft)}
+        â° {formatTime(timeLeft)}
       </div>
 
       <div className="row">
@@ -1083,7 +1117,7 @@ export default function GameView({
               style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
             ></div>
           </div>
-          <b>{combo > 0 ? `🔥 COMBO x${combo + 1}` : "Combo"}</b>
+          <b>{combo > 0 ? `ðŸ"¥ COMBO x${combo + 1}` : "Combo"}</b>
         </div>
         <div>
           <span className="muted">Moves</span> <b>{moves}</b>
@@ -1092,7 +1126,7 @@ export default function GameView({
 
       {combo > 0 && (
         <div className="combo-celebration">
-          💥 🍬 Sweet Combo x{combo + 1}! 🍬 💥
+          ðŸ'¥ ðŸ¬ Sweet Combo x{combo + 1}! ðŸ¬ ðŸ'¥
         </div>
       )}
 
@@ -1112,7 +1146,22 @@ export default function GameView({
           }}
         />
         {optimizedGridRender}
-        {/* NEW: Canvas layer for particle effects */}
+        
+        {/* NEW: 💥 Explosion emoji animations */}
+        {explosions.map((explosion) => (
+          <div
+            key={explosion.id}
+            className="explosion-emoji"
+            style={{
+              left: explosion.x,
+              top: explosion.y,
+            }}
+          >
+            ðŸ'¥
+          </div>
+        ))}
+        
+        {/* Canvas layer for particle effects */}
         <canvas
           ref={canvasRef}
           style={{
@@ -1145,19 +1194,19 @@ export default function GameView({
 
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
-          💡 Hint
+          ðŸ'¡ Hint
         </button>
         <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0}>
-          🔀 Shuffle
+          ðŸ"€ Shuffle
         </button>
         <button className="btn" onClick={() => resetGame()}>
-          ♻️ Reset
+          â™»ï¸ Reset
         </button>
         <button
           className="btn"
           onClick={() => setPaused((p) => !p)}
         >
-          {paused ? "▶️ Resume" : "⏸ Pause"}
+          {paused ? "â–¶ï¸ Resume" : "â¸ Pause"}
         </button>
       </div>
 
