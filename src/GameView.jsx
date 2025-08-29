@@ -8,19 +8,19 @@ import { useStore } from "./store.js"; // NEW: Import Zustand store
 // 1) OPTIMIZE: Memoized tile component
 const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isSwapping,
-  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
+  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE, isBlasting
 }) => {
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "...op-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "...op-in" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""} ${isBlasting ? "blasting" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
         width: cell,
         height: cell,
         transform: swapTransform || undefined,
-        zIndex: isGrab ? 5 : 1,
+        zIndex: isGrab ? 5 : isBlasting ? 10 : 1,
         transition: isSwapping
           ? "transform 0.16s ease"
           : delaySeconds
@@ -45,7 +45,8 @@ const MemoizedTile = React.memo(({
     prevProps.isNewTile === nextProps.isNewTile &&
     prevProps.isGrab === nextProps.isGrab &&
     prevProps.isShake === nextProps.isShake &&
-    prevProps.swapTransform === nextProps.swapTransform
+    prevProps.swapTransform === nextProps.swapTransform &&
+    prevProps.isBlasting === nextProps.isBlasting
   );
 });
 
@@ -265,6 +266,8 @@ export default function GameView({
 
   // NEW: State for explosion emojis
   const [explosions, setExplosions] = useState([]);
+  const [blastingTiles, setBlastingTiles] = useState(new Set());
+  const [feedbackText, setFeedbackText] = useState(null);
 
   // Power-up state
   const [activePowerup, setActivePowerup] = useState(null);
@@ -578,34 +581,8 @@ export default function GameView({
       if (!inBounds(p.r, p.c)) return;
 
       if (activePowerup) {
-        const g = cloneGrid(gridRef.current);
-        if (activePowerup === 'hammer') {
-          const targetCookie = g[p.r][p.c];
-          if (CANDY_SET.includes(targetCookie)) {
-            for (let r = 0; r < ROWS; r++) {
-              for (let c = 0; c < COLS; c++) {
-                if (g[r][c] === targetCookie) g[r][c] = null;
-              }
-            }
-            audio.play?.('powerup_spawn', { volume: 0.7 });
-            optimizedResolveCascades(g, () => {});
-            consumePowerup('hammer');
-            setActivePowerup(null);
-          } else {
-            haptic(8);
-            audio.play?.("swap_invalid", { volume: 0.5 });
-          }
-        } else if (activePowerup === 'bomb') {
-          for (let r = p.r - 1; r <= p.r + 1; r++) {
-            for (let c = p.c - 1; c <= p.c + 1; c++) {
-              if (inBounds(r, c)) g[r][c] = null;
-            }
-          }
-          audio.play?.('powerup_spawn', { volume: 0.8 });
-          optimizedResolveCascades(g, () => {});
-          consumePowerup('bomb');
-          setActivePowerup(null);
-        }
+        applyPowerup(activePowerup, p.r, p.c);
+        setActivePowerup(null);
         return;
       }
 
@@ -747,32 +724,30 @@ export default function GameView({
       }
 
       audio.play?.("match_pop", { volume: 0.5 });
-
-      // NEW: Create explosion emoji animations FIRST
+      
+      const newBlastingTiles = new Set();
       matches.forEach(([r, c]) => {
-        createExplosionEmoji(r, c);
-        
-        // Also create particle effects
+        newBlastingTiles.add(`${r}-${c}`);
         if (particleSystemRef.current) {
           const x = c * cell;
           const y = r * cell;
           particleSystemRef.current.addBlastEffect(x, y, cell);
         }
       });
+      setBlastingTiles(newBlastingTiles);
 
       const basePoints = 10 * matches.length;
       const comboMultiplier = Math.max(1, comboCount + 1);
       const pointsEarned = basePoints * comboMultiplier;
       setScore((s) => s + pointsEarned);
 
-      // Wait for explosion animation to play before removing items
       setTimeout(() => {
         matches.forEach(([r, c]) => {
           g[r][c] = null;
         });
         setGrid(cloneGrid(g));
+        setBlastingTiles(new Set());
 
-        // Wait a bit more before applying gravity for better visual flow
         setTimeout(() => {
           const delayMap = {};
           for (let c = 0; c < COLS; c++) {
@@ -787,7 +762,6 @@ export default function GameView({
                 const dist = nullsBelow[r];
                 const newR = r + dist;
                 if (dist > 0) {
-                  // Improved staggered falling delays
                   delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
                 }
               }
@@ -806,14 +780,13 @@ export default function GameView({
             setGrid(cloneGrid(g));
           });
 
-          // Wait longer for falling animation to complete
           setTimeout(() => {
             setNewTiles(new Set());
             comboCount++;
             setTimeout(step, 60);
           }, 150);
         }, 100);
-      }, 300); // Wait for explosion emoji animation
+      }, 200);
     };
     step();
   }
@@ -826,7 +799,10 @@ export default function GameView({
       return;
     }
     setHint(m);
+    const key = `feedback-${Date.now()}`;
+    setFeedbackText({ text: '💡 TIP', r: m[0][0], c: m[0][1], key });
     setTimeout(() => setHint(null), 1200);
+    setTimeout(() => setFeedbackText(null), 1000);
     haptic(10);
   }
 
@@ -964,6 +940,7 @@ export default function GameView({
   const applyPowerup = (key, r, c) => {
     const g = cloneGrid(gridRef.current);
     let applied = false;
+    let feedback = null;
 
     if (key === 'hammer') {
       const targetCookie = g[r][c];
@@ -973,6 +950,7 @@ export default function GameView({
             if (g[row][col] === targetCookie) g[row][col] = null;
           }
         }
+        feedback = { text: '🔥 FIRE!', r, c, key: `feedback-${Date.now()}` };
         applied = true;
       }
     } else if (key === 'bomb') {
@@ -981,12 +959,24 @@ export default function GameView({
           if (inBounds(row, col)) g[row][col] = null;
         }
       }
+      feedback = { text: '💥 BOOM!', r, c, key: `feedback-${Date.now()}` };
       applied = true;
     }
 
     if (applied) {
       audio.play?.('powerup_spawn', { volume: 0.8 });
-      optimizedResolveCascades(g, () => {});
+      if (feedback) {
+        setFeedbackText(feedback);
+        setTimeout(() => setFeedbackText(null), 1000);
+      }
+      
+      // FIX: Trigger gravity and cascade after power-up use
+      const tempGrid = cloneGrid(g);
+      applyGravity(tempGrid);
+      refill(tempGrid);
+      setGrid(tempGrid);
+      setTimeout(() => optimizedResolveCascades(tempGrid, () => {}), 350);
+      
       consumePowerup(key);
     } else {
       haptic(8);
@@ -1041,6 +1031,7 @@ export default function GameView({
         const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
         const isShake = shake.has(tileKey);
         const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
+        const isBlasting = blastingTiles.has(tileKey);
 
         return (
           <MemoizedTile
@@ -1058,11 +1049,12 @@ export default function GameView({
             swapTransform={swapTransform}
             delaySeconds={delaySeconds}
             EMOJI_SIZE={EMOJI_SIZE}
+            isBlasting={isBlasting}
           />
         );
       })
     );
-  }, [grid, sel, hint, swapping, newTiles, grabTile, shake, fallDelay, cell]);
+  }, [grid, sel, hint, swapping, newTiles, grabTile, shake, fallDelay, cell, blastingTiles]);
 
   useEffect(() => {
     const cleanup = [];
@@ -1147,19 +1139,18 @@ export default function GameView({
         />
         {optimizedGridRender}
         
-        {/* NEW: Explosion emoji animations */}
-        {explosions.map((explosion) => (
+        {feedbackText && (
           <div
-            key={explosion.id}
-            className="explosion-emoji"
+            key={feedbackText.key}
+            className="feedback-text"
             style={{
-              left: explosion.x,
-              top: explosion.y,
+              left: feedbackText.c * cell + cell / 2,
+              top: feedbackText.r * cell + cell / 2,
             }}
           >
-            {"\uD83D\uDCA5"}
+            {feedbackText.text}
           </div>
-        ))}
+        )}
         
         {/* Canvas layer for particle effects */}
         <canvas
