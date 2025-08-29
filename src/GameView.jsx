@@ -417,7 +417,7 @@ export default function GameView({
     };
 
     const down = (e) => {
-      if (timeLeftRef.current <= 0 || animatingRef.current) return;
+      if (timeLeftRef.current <= 0) return;
       el.setPointerCapture?.(e.pointerId);
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
@@ -461,7 +461,7 @@ export default function GameView({
     };
 
     const move = (e) => {
-      if (!drag || timeLeftRef.current <= 0 || animatingRef.current) return;
+      if (!drag || timeLeftRef.current <= 0) return;
       const p = rc(e);
       const dx = p.x - drag.x;
       const dy = p.y - drag.y;
@@ -484,7 +484,7 @@ export default function GameView({
       if (!drag.dragging) {
         setSel({ r: drag.r, c: drag.c });
       } else {
-        if (timeLeftRef.current > 0 && !animatingRef.current) {
+        if (timeLeftRef.current > 0) {
           const horiz = Math.abs(dx) > Math.abs(dy);
           const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
           const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
@@ -608,30 +608,32 @@ export default function GameView({
       const pointsEarned = basePoints * comboMultiplier;
       setScore((s) => s + pointsEarned);
 
+      // Clear matched tiles
       matches.forEach(([r, c]) => {
         g[r][c] = null;
       });
-      
+
       setTimeout(() => setBlast(new Set()), 200);
 
       setTimeout(() => {
+        // Apply gravity and refill in one step
         applyGravity(g);
+        refill(g);
         
-        const delayMap = {};
+        // Calculate fall delays for animation
         const empties = new Set();
-        
+        const delayMap = {};
         for (let c = 0; c < COLS; c++) {
           let delay = 0;
           for (let r = ROWS - 1; r >= 0; r--) {
-            if (g[r][c] === null) {
-              empties.add(`${r}-${c}`);
-              delayMap[`${r}-${c}`] = delay * 0.05;
-              delay++;
+            const key = `${r}-${c}`;
+            if (delay > 0) {
+              empties.add(key);
+              delayMap[key] = delay * 0.05;
             }
+            if (g[r][c] === null) delay++;
           }
         }
-        
-        refill(g);
 
         setGrid(cloneGrid(g));
         setNewTiles(empties);
@@ -642,8 +644,8 @@ export default function GameView({
           setFallDelay({});
           comboCount++;
           step();
-        }, 300);
-      }, 200);
+        }, 400);
+      }, 250);
     };
     step();
   }
