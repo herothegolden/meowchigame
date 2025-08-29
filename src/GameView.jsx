@@ -10,7 +10,12 @@ const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
   isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
-  const isImage = value && value.startsWith('/assets/');
+  const isImage = value && typeof value === 'string' && value.startsWith('/assets/');
+  
+  // Debug logging
+  if (r === 0 && c === 0) {
+    console.log('Tile (0,0) value:', value, 'isImage:', isImage);
+  }
   
   return (
     <div
@@ -44,7 +49,7 @@ const MemoizedTile = React.memo(({
         {isImage ? (
           <img 
             src={value} 
-            alt="game piece" 
+            alt="gem" 
             style={{ 
               width: '100%', 
               height: '100%', 
@@ -52,6 +57,13 @@ const MemoizedTile = React.memo(({
               imageRendering: 'pixelated'
             }}
             draggable={false}
+            onError={(e) => {
+              console.error('Failed to load image:', value);
+              e.target.style.display = 'none';
+            }}
+            onLoad={() => {
+              console.log('Successfully loaded:', value);
+            }}
           />
         ) : (
           value
@@ -137,9 +149,15 @@ const CELL_MAX = 88;
 const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.8;
 
-const CANDY_SET = ["/assets/gem1.png", "/assets/gem2.png", "/assets/gem3.png", "/assets/gem4.png", "/assets/gem5.png"];
-const randEmoji = () =>
-  CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
+// Updated to use all 6 gems and added console logging
+const CANDY_SET = ["/assets/gem1.png", "/assets/gem2.png", "/assets/gem3.png", "/assets/gem4.png", "/assets/gem5.png", "/assets/gem6.png"];
+console.log('CANDY_SET initialized:', CANDY_SET);
+
+const randEmoji = () => {
+  const selected = CANDY_SET[Math.floor(Math.random() * CANDY_SET.length)];
+  console.log('Random gem selected:', selected);
+  return selected;
+};
 
 // NEW: Power-up definitions
 const POWERUP_DEFINITIONS = {
@@ -158,7 +176,12 @@ export default function GameView({
   const [cell, setCell] = useState(48);
 
   // Grid state
-  const [grid, setGrid] = useState(() => initSolvableGrid());
+  const [grid, setGrid] = useState(() => {
+    console.log('Initializing grid...');
+    const newGrid = initSolvableGrid();
+    console.log('Grid initialized:', newGrid);
+    return newGrid;
+  });
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
