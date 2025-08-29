@@ -3,9 +3,9 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import * as audio from "./audio"; // minimal sound hooks
 import ShareButtons from "./ShareButtons.jsx";
 import { game } from "./utils.js";
-import { useStore } from "./store.js"; // NEW: Import Zustand store
+import { useStore } from "./store.js";
 
-// 1) OPTIMIZE: Memoized tile component
+// Memoized tile component for performance
 const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isSwapping,
   isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE, isBlasting
@@ -36,18 +36,6 @@ const MemoizedTile = React.memo(({
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.value === nextProps.value &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.isHinted === nextProps.isHinted &&
-    prevProps.isSwapping === nextProps.isSwapping &&
-    prevProps.isNewTile === nextProps.isNewTile &&
-    prevProps.isGrab === nextProps.isGrab &&
-    prevProps.isShake === nextProps.isShake &&
-    prevProps.swapTransform === nextProps.swapTransform &&
-    prevProps.isBlasting === nextProps.isBlasting
-  );
 });
 
 const COLS = 6;
@@ -58,116 +46,17 @@ const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.8;
 
 const CANDY_SET = ["\uD83D\uDE3A", "\uD83E\uDD68", "\uD83C\uDF53", "\uD83C\uDF6A", "\uD83C\uDF61"];
-const randEmoji = () =>
-  CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
+const randEmoji = () => CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
-// NEW: Power-up definitions with corrected icons
 const POWERUP_DEFINITIONS = {
   shuffle: { name: "Paw-sitive Swap", icon: "🐾" },
   hammer: { name: "Catnip Cookie", icon: "🍪" },
   bomb: { name: "Marshmallow Bomb", icon: "💣" },
 };
 
-// Canvas-based particle system
-class ParticleSystem {
-  constructor(canvas, ctx) {
-    this.canvas = canvas;
-    this.ctx = ctx;
-    this.particles = [];
-  }
-
-  addBlastEffect(x, y, cell) {
-    const particleCount = 8;
-    const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
-    
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const velocity = 50 + Math.random() * 100;
-      
-      this.particles.push({
-        x: x + cell / 2,
-        y: y + cell / 2,
-        vx: Math.cos(angle) * velocity,
-        vy: Math.sin(angle) * velocity,
-        size: 4 + Math.random() * 6,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        life: 1.0,
-        decay: 0.02 + Math.random() * 0.02
-      });
-    }
-
-    this.particles.push({
-      x: x + cell / 2,
-      y: y + cell / 2,
-      vx: 0,
-      vy: 0,
-      size: cell * 0.8,
-      color: '#FFFFFF',
-      life: 1.0,
-      decay: 0.1,
-      isFlash: true
-    });
-  }
-
-  update(deltaTime) {
-    const dt = deltaTime / 1000;
-
-    this.particles = this.particles.filter(particle => {
-      particle.x += particle.vx * dt;
-      particle.y += particle.vy * dt;
-      
-      if (!particle.isFlash) {
-        particle.vy += 200 * dt;
-        particle.vx *= 0.98;
-      }
-      
-      particle.life -= particle.decay;
-      return particle.life > 0;
-    });
-  }
-
-  render() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
-    this.particles.forEach(particle => {
-      this.ctx.save();
-      
-      if (particle.isFlash) {
-        const alpha = particle.life * 0.5;
-        this.ctx.globalAlpha = alpha;
-        this.ctx.fillStyle = particle.color;
-        this.ctx.beginPath();
-        this.ctx.arc(particle.x, particle.y, particle.size * particle.life, 0, Math.PI * 2);
-        this.ctx.fill();
-      } else {
-        const alpha = particle.life;
-        this.ctx.globalAlpha = alpha;
-        this.ctx.fillStyle = particle.color;
-        this.ctx.beginPath();
-        this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        this.ctx.fill();
-      }
-      
-      this.ctx.restore();
-    });
-  }
-
-  clear() {
-    this.particles = [];
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-  }
-}
-
-export default function GameView({
-  onExit,
-  settings,
-  userTelegramId,
-}) {
+export default function GameView({ onExit, settings, userTelegramId }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
-  const canvasRef = useRef(null);
-  const particleSystemRef = useRef(null);
-  const animationFrameRef = useRef(null);
   const [cell, setCell] = useState(48);
 
   const [grid, setGrid] = useState(() => initSolvableGrid());
@@ -199,8 +88,10 @@ export default function GameView({
   const [shake, setShake] = useState(new Set());
   
   const [gameOverState, setGameOverState] = useState(null);
-  const [draggedPowerup, setDraggedPowerup] = useState(null);
-  const [draggedIconStyle, setDraggedIconStyle] = useState({});
+  
+  // --- NEW DRAG SYSTEM STATE ---
+  const [draggedPowerup, setDraggedPowerup] = useState(null); // { key, icon }
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0, visible: false });
 
   const [blastingTiles, setBlastingTiles] = useState(new Set());
   const [feedbackText, setFeedbackText] = useState(null);
@@ -209,47 +100,11 @@ export default function GameView({
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
 
-  useEffect(() => {
-    if (canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      particleSystemRef.current = new ParticleSystem(canvas, ctx);
+  const consumePowerup = useCallback(async (powerupKey) => {
+    // Optimistically update UI
+    setPowerups(prev => ({ ...prev, [powerupKey]: (prev[powerupKey] || 1) - 1 }));
 
-      const animate = (currentTime) => {
-        if (particleSystemRef.current) {
-          const deltaTime = currentTime - (animationFrameRef.current || currentTime);
-          particleSystemRef.current.update(deltaTime);
-          particleSystemRef.current.render();
-        }
-        animationFrameRef.current = requestAnimationFrame(animate);
-      };
-      
-      animationFrameRef.current = requestAnimationFrame(animate);
-
-      return () => {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-      };
-    }
-  }, []);
-
-  useEffect(() => {
-    if (canvasRef.current && cell > 0) {
-      const canvas = canvasRef.current;
-      const boardW = cell * COLS;
-      const boardH = cell * ROWS;
-      canvas.width = boardW;
-      canvas.height = boardH;
-      canvas.style.width = `${boardW}px`;
-      canvas.style.height = `${boardH}px`;
-    }
-  }, [cell]);
-
-  const consumePowerup = async (powerupKey) => {
     try {
-      setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
-      
       const response = await fetch('/api/powerups/use', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,27 +114,20 @@ export default function GameView({
           initData: window.Telegram?.WebApp?.initData,
         }),
       });
-      
-      if (!response.ok) {
-        setPowerups(powerups);
-        console.error("Failed to consume power-up on server");
-      }
+      if (!response.ok) throw new Error('Server error');
     } catch (error) {
-      setPowerups(powerups);
+      // Revert on failure
+      setPowerups(prev => ({ ...prev, [powerupKey]: (prev[powerupKey] || 0) + 1 }));
       console.error("Error consuming powerup:", error);
     }
-  };
+  }, [userTelegramId, setPowerups]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    if (tg?.enableClosingConfirmation) tg.enableClosingConfirmation();
-    return () => {
-      if (tg?.disableClosingConfirmation) tg.disableClosingConfirmation();
-    };
+    tg?.enableClosingConfirmation();
+    return () => tg?.disableClosingConfirmation();
   }, []);
 
-  const movesRef = useRef(moves);
-  movesRef.current = moves;
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
   const scoreRef = useRef(score);
@@ -298,26 +146,19 @@ export default function GameView({
       setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
     };
     compute();
-    let ro;
-    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
-      ro = new ResizeObserver(compute);
-      ro.observe(containerRef.current);
-    }
+    const ro = new ResizeObserver(compute);
+    if (containerRef.current) ro.observe(containerRef.current);
     window.addEventListener("resize", compute);
     return () => {
-      ro?.disconnect();
+      ro.disconnect();
       window.removeEventListener("resize", compute);
     };
   }, []);
 
   useEffect(() => {
-    window.currentGameScore = score;
-  }, [score]);
-
-  useEffect(() => {
     if (paused || gameOverState) return;
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
+      setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
           finish();
@@ -328,21 +169,6 @@ export default function GameView({
     }, 1000);
     return () => clearInterval(timer);
   }, [paused, gameOverState]);
-
-  const lastTickRef = useRef(null);
-  useEffect(() => {
-    if (!settings?.sound) return;
-    if (timeLeftRef.current <= 0) return;
-    if (timeLeftRef.current <= 10) {
-      if (lastTickRef.current !== timeLeftRef.current) {
-        lastTickRef.current = timeLeftRef.current;
-        audio.play?.("timer_tick", { volume: 0.25 });
-      }
-    }
-    if (timeLeftRef.current === 5) {
-      audio.play?.("timer_hurry", { volume: 0.5 });
-    }
-  }, [timeLeft, settings?.sound]);
 
   function haptic(ms = 12) {
     if (!settings?.haptics) return;
@@ -383,6 +209,53 @@ export default function GameView({
       return { user_needs_profile: false, coins_earned: coinsEarned };
     }
   }
+
+  const handlePowerupPointerDown = (e, key) => {
+    if (powerups[key] <= 0 || animatingRef.current || key === 'shuffle') return;
+    
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    
+    setDraggedPowerup({ key, icon: POWERUP_DEFINITIONS[key].icon });
+    setDragPosition({ x: e.clientX, y: e.clientY, visible: true });
+    haptic(8);
+
+    const handlePointerMove = (moveEvent) => {
+      setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY, visible: true });
+    };
+
+    const handlePointerUp = (upEvent) => {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      
+      const boardEl = boardRef.current;
+      if (boardEl) {
+        const rect = boardEl.getBoundingClientRect();
+        const isOverBoard = (
+          upEvent.clientX >= rect.left && upEvent.clientX <= rect.right &&
+          upEvent.clientY >= rect.top && upEvent.clientY <= rect.bottom
+        );
+
+        if (isOverBoard) {
+          const x = upEvent.clientX - rect.left;
+          const y = upEvent.clientY - rect.top;
+          const r = Math.floor(y / cell);
+          const c = Math.floor(x / cell);
+          if (inBounds(r, c)) {
+            applyPowerup(key, r, c);
+          }
+        }
+      }
+
+      setDraggedPowerup(null);
+      setDragPosition({ x: 0, y: 0, visible: false });
+      
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
 
   useEffect(() => {
     const el = boardRef.current;
@@ -491,12 +364,9 @@ export default function GameView({
       audio.play?.("swap_invalid", { volume: 0.5 });
       setSel({ r: r1, c: c1 });
       setTimeout(() => setSel(null), 80);
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
       return;
     }
 
-    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
-    audio.play?.("swap", { volume: 0.6 });
     setMoveCount((prev) => prev + 1);
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     setTimeout(() => {
@@ -509,107 +379,65 @@ export default function GameView({
     }, 200);
   }
 
-  function optimizedResolveCascades(start, done) {
+  const optimizedResolveCascades = useCallback((startGrid, done) => {
     setAnimating(true);
-    let g = cloneGrid(start);
-    let comboCount = 0;
+    let g = cloneGrid(startGrid);
+    let currentCombo = 0;
 
     const step = () => {
-      const matches = findMatches(g);
-      if (matches.length === 0) {
-        React.startTransition(() => {
-          setGrid(g);
-          setNewTiles(new Set());
-          setFallDelay({});
-
-          if (comboCount > 0) {
-            setMaxComboAchieved(prev => {
-              const newMax = Math.max(prev, comboCount);
-              maxComboAchievedRef.current = newMax;
-              return newMax;
-            });
-            setCombo(comboCount);
-            const n = Math.min(4, Math.max(1, comboCount + 1));
-            audio.play?.(`combo_x${n}`, { volume: 0.6 });
-            requestAnimationFrame(() => {
-              setTimeout(() => setCombo(0), 1500);
-            });
-          }
-
-          ensureSolvable();
-          setAnimating(false);
-          done && done();
-        });
-        return;
-      }
-
-      audio.play?.("match_pop", { volume: 0.5 });
-      
-      const newBlastingTiles = new Set();
-      matches.forEach(([r, c]) => {
-        newBlastingTiles.add(`${r}-${c}`);
-        if (particleSystemRef.current) {
-          const x = c * cell;
-          const y = r * cell;
-          particleSystemRef.current.addBlastEffect(x, y, cell);
+        const matches = findMatches(g);
+        if (matches.length === 0) {
+            setGrid(g);
+            setNewTiles(new Set());
+            setFallDelay({});
+            if (currentCombo > 0) {
+                setMaxComboAchieved(prev => Math.max(prev, currentCombo));
+                setCombo(currentCombo);
+                setTimeout(() => setCombo(0), 1500);
+            }
+            ensureSolvable();
+            setAnimating(false);
+            done?.();
+            return;
         }
-      });
-      setBlastingTiles(newBlastingTiles);
 
-      const basePoints = 10 * matches.length;
-      const comboMultiplier = Math.max(1, comboCount + 1);
-      const pointsEarned = basePoints * comboMultiplier;
-      setScore((s) => s + pointsEarned);
-
-      setTimeout(() => {
-        matches.forEach(([r, c]) => {
-          g[r][c] = null;
-        });
-        setGrid(cloneGrid(g));
-        setBlastingTiles(new Set());
+        audio.play?.("match_pop", { volume: 0.5 });
+        const newBlastingTiles = new Set();
+        matches.forEach(([r, c]) => newBlastingTiles.add(`${r}-${c}`));
+        setBlastingTiles(newBlastingTiles);
+        
+        const points = 10 * matches.length * (currentCombo + 1);
+        setScore(s => s + points);
 
         setTimeout(() => {
-          const delayMap = {};
-          for (let c = 0; c < COLS; c++) {
-            const nullsBelow = new Array(ROWS).fill(0);
-            let count = 0;
-            for (let r = ROWS - 1; r >= 0; r--) {
-              nullsBelow[r] = count;
-              if (g[r][c] === null) count++;
-            }
-            for (let r = ROWS - 1; r >= 0; r--) {
-              if (g[r][c] != null) {
-                const dist = nullsBelow[r];
-                const newR = r + dist;
-                if (dist > 0) {
-                  delayMap[`${newR}-${c}`] = Math.min(0.1, dist * 0.02);
-                }
-              }
-            }
-          }
-
-          applyGravity(g);
-          const empties = new Set();
-          for (let r = 0; r < ROWS; r++)
-            for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
-          refill(g);
-
-          React.startTransition(() => {
-            setNewTiles(empties);
-            setFallDelay(delayMap);
+            matches.forEach(([r, c]) => { g[r][c] = null; });
             setGrid(cloneGrid(g));
-          });
+            setBlastingTiles(new Set());
 
-          setTimeout(() => {
-            setNewTiles(new Set());
-            comboCount++;
-            setTimeout(step, 60);
-          }, 150);
-        }, 100);
-      }, 200);
+            setTimeout(() => {
+                applyGravity(g);
+                const empties = new Set();
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (g[r][c] === null) {
+                            empties.add(`${r}-${c}`);
+                            g[r][c] = randEmoji();
+                        }
+                    }
+                }
+                setNewTiles(empties);
+                setGrid(cloneGrid(g));
+                
+                setTimeout(() => {
+                    setNewTiles(new Set());
+                    currentCombo++;
+                    step();
+                }, 150);
+            }, 100);
+        }, 200);
     };
     step();
-  }
+  }, []);
 
   function doHint() {
     if (timeLeft <= 0 || animatingRef.current) return;
@@ -619,8 +447,7 @@ export default function GameView({
       return;
     }
     setHint(m);
-    const key = `feedback-${Date.now()}`;
-    setFeedbackText({ text: '💡 TIP', r: m[0][0], c: m[0][1], key });
+    setFeedbackText({ text: '💡 TIP', r: m[0][0], c: m[0][1], key: `feedback-${Date.now()}` });
     setTimeout(() => setHint(null), 1200);
     setTimeout(() => setFeedbackText(null), 1000);
     haptic(10);
@@ -643,17 +470,10 @@ export default function GameView({
     const finalScore = scoreRef.current;
     const finalMaxCombo = maxComboAchievedRef.current;
     
-    if (particleSystemRef.current) particleSystemRef.current.clear();
-    
     const result = await submitGameScore(finalScore);
 
     const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
-    if (serverCoins > 0 && settings?.sound) audio.play?.("coin", { volume: 0.7 });
-    if (settings?.sound) {
-      if (finalScore > 0) audio.play?.("finish_win", { volume: 0.8 });
-      else audio.play?.("finish_lose", { volume: 0.7 });
-    }
-
+    
     const gameResultWithSharing = {
       score: finalScore,
       coins: serverCoins,
@@ -667,7 +487,6 @@ export default function GameView({
   }
 
   function resetGame() {
-    if (timeLeft <= 0 && !paused) return;
     setGrid(initSolvableGrid());
     setScore(0);
     setMoves(20);
@@ -683,8 +502,6 @@ export default function GameView({
     setMaxComboAchieved(0);
     maxComboAchievedRef.current = 0;
     scoreRef.current = 0;
-    
-    if (particleSystemRef.current) particleSystemRef.current.clear();
   }
 
   const handlePowerupSelect = (key) => {
@@ -692,58 +509,9 @@ export default function GameView({
       if (key === 'shuffle') {
         shuffleBoard();
         consumePowerup('shuffle');
-      } else {
-        setActivePowerup(activePowerup === key ? null : key);
       }
       haptic(10);
     }
-  };
-  
-  const handlePowerupDragStart = (e, key, icon) => {
-    if (powerups[key] > 0 && key !== 'shuffle' && !animatingRef.current) {
-      setDraggedPowerup({ key, icon });
-      e.dataTransfer.setData('text/plain', key); // Necessary for Firefox
-      const empty = new Image();
-      e.dataTransfer.setDragImage(empty, 0, 0);
-      haptic(8);
-    } else {
-      e.preventDefault();
-    }
-  };
-
-  const handlePowerupDragEnd = () => {
-    setDraggedPowerup(null);
-    setDraggedIconStyle({});
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    if (draggedPowerup) {
-      setDraggedIconStyle({
-        position: 'fixed',
-        left: e.clientX,
-        top: e.clientY,
-        transform: 'translate(-50%, -50%)',
-        pointerEvents: 'none',
-        zIndex: 1000,
-      });
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    if (!draggedPowerup || !boardRef.current || animatingRef.current) return;
-
-    const rect = boardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const r = Math.floor(y / cell);
-    const c = Math.floor(x / cell);
-
-    if (inBounds(r, c)) {
-      applyPowerup(draggedPowerup.key, r, c);
-    }
-    handlePowerupDragEnd();
   };
 
   const applyPowerup = (key, r, c) => {
@@ -752,17 +520,14 @@ export default function GameView({
     const g = cloneGrid(gridRef.current);
     let applied = false;
     let feedback = null;
-    let removedTiles = [];
+    let tilesToRemove = new Set();
 
     if (key === 'hammer') {
       const targetCookie = g[r][c];
       if (CANDY_SET.includes(targetCookie)) {
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
-            if (g[row][col] === targetCookie) {
-              g[row][col] = null;
-              removedTiles.push([row, col]);
-            }
+            if (g[row][col] === targetCookie) tilesToRemove.add(`${row}-${col}`);
           }
         }
         feedback = { text: '🔥 FIRE!', r, c, key: `feedback-${Date.now()}` };
@@ -771,10 +536,7 @@ export default function GameView({
     } else if (key === 'bomb') {
       for (let row = r - 1; row <= r + 1; row++) {
         for (let col = c - 1; col <= c + 1; col++) {
-          if (inBounds(row, col)) {
-            g[row][col] = null;
-            removedTiles.push([row, col]);
-          }
+          if (inBounds(row, col)) tilesToRemove.add(`${row}-${col}`);
         }
       }
       feedback = { text: '💥 BOOM!', r, c, key: `feedback-${Date.now()}` };
@@ -789,21 +551,20 @@ export default function GameView({
         setTimeout(() => setFeedbackText(null), 1000);
       }
       
-      const newBlastingTiles = new Set();
-      removedTiles.forEach(([row, col]) => newBlastingTiles.add(`${row}-${col}`));
-      setBlastingTiles(newBlastingTiles);
-      
+      setBlastingTiles(tilesToRemove);
       consumePowerup(key);
       
       setTimeout(() => {
-        setGrid(cloneGrid(g));
-        setBlastingTiles(new Set());
+        const nextGrid = cloneGrid(g);
+        tilesToRemove.forEach(key => {
+          const [row, col] = key.split('-').map(Number);
+          nextGrid[row][col] = null;
+        });
         
-        setTimeout(() => {
-          optimizedResolveCascades(g, () => {
-            if (timeLeftRef.current <= 0) finish();
-          });
-        }, 150);
+        setBlastingTiles(new Set());
+        optimizedResolveCascades(nextGrid, () => {
+          if (timeLeftRef.current <= 0) finish();
+        });
       }, 200);
 
     } else {
@@ -814,28 +575,14 @@ export default function GameView({
 
   const boardW = cell * COLS;
   const boardH = cell * ROWS;
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const getTimerColor = () => {
-    if (timeLeft <= 10) return "#e74c3c";
-    if (timeLeft <= 30) return "#f39c12";
-    return "#27ae60";
-  };
+  const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, "0")}`;
+  const getTimerColor = () => timeLeft <= 10 ? "#e74c3c" : timeLeft <= 30 ? "#f39c12" : "#27ae60";
 
   const optimizedGridRender = useMemo(() => {
     return grid.map((row, r) =>
       row.map((v, c) => {
-        const isSelected = sel && sel.r === r && sel.c === c;
-        const isHinted =
-          hint &&
-          ((hint[0][0] === r && hint[0][1] === c) ||
-            (hint[1][0] === r && hint[1][1] === c));
-
+        const isSelected = sel?.r === r && sel?.c === c;
+        const isHinted = hint && ((hint[0][0] === r && hint[0][1] === c) || (hint[1][0] === r && hint[1][1] === c));
         let swapTransform = "";
         if (swapping) {
           if (swapping.from.r === r && swapping.from.c === c) {
@@ -848,36 +595,21 @@ export default function GameView({
             swapTransform = `translate(${dx}px, ${dy}px)`;
           }
         }
-
-        const isSwapping =
-          !!swapping &&
-          ((swapping.from.r === r && swapping.from.c === c) ||
-            (swapping.to.r === r && swapping.to.c === c));
-
+        const isSwapping = !!swapping && ((swapping.from.r === r && swapping.from.c === c) || (swapping.to.r === r && swapping.to.c === c));
         const tileKey = `${r}-${c}`;
         const isNewTile = newTiles.has(tileKey);
-        const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
+        const isGrab = grabTile?.r === r && grabTile?.c === c;
         const isShake = shake.has(tileKey);
         const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
         const isBlasting = blastingTiles.has(tileKey);
 
         return (
           <MemoizedTile
-            key={tileKey}
-            r={r}
-            c={c}
-            value={v}
-            cell={cell}
-            isSelected={isSelected}
-            isHinted={isHinted}
-            isSwapping={isSwapping}
-            isNewTile={isNewTile}
-            isGrab={isGrab}
-            isShake={isShake}
-            swapTransform={swapTransform}
-            delaySeconds={delaySeconds}
-            EMOJI_SIZE={EMOJI_SIZE}
-            isBlasting={isBlasting}
+            key={tileKey} r={r} c={c} value={v} cell={cell}
+            isSelected={isSelected} isHinted={isHinted} isSwapping={isSwapping}
+            isNewTile={isNewTile} isGrab={isGrab} isShake={isShake}
+            swapTransform={swapTransform} delaySeconds={delaySeconds}
+            EMOJI_SIZE={EMOJI_SIZE} isBlasting={isBlasting}
           />
         );
       })
@@ -885,12 +617,23 @@ export default function GameView({
   }, [grid, sel, hint, swapping, newTiles, grabTile, shake, fallDelay, cell, blastingTiles]);
 
   return (
-    <div className="section board-wrap" ref={containerRef} onDragOver={handleDragOver}>
-      {draggedPowerup && (
-        <div className="powerup-drag-icon" style={draggedIconStyle}>
+    <div className="section board-wrap" ref={containerRef}>
+      {draggedPowerup && dragPosition.visible && (
+        <div 
+          className="powerup-drag-icon" 
+          style={{ 
+            position: 'fixed', 
+            left: dragPosition.x, 
+            top: dragPosition.y,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            zIndex: 1001
+          }}
+        >
           {draggedPowerup.icon}
         </div>
       )}
+      
       {gameOverState === 'calculating' && (
         <div className="calculating-overlay">
           <div className="calculating-content">
@@ -899,89 +642,29 @@ export default function GameView({
           </div>
         </div>
       )}
-      <div
-        className="timer-display"
-        style={{
-          textAlign: "center",
-          marginBottom: "12px",
-          fontSize: "24px",
-          fontWeight: "800",
-          color: getTimerColor(),
-          padding: "8px 16px",
-          background: "var(--card)",
-          borderRadius: "16px",
-          border: "2px solid",
-          borderColor: getTimerColor(),
-          boxShadow: `0 0 0 3px ${getTimerColor()}20`,
-        }}
-              >
+      <div className="timer-display" style={{ borderColor: getTimerColor(), color: getTimerColor(), boxShadow: `0 0 0 3px ${getTimerColor()}20` }}>
         \u23F0 {formatTime(timeLeft)}
       </div>
 
       <div className="row">
-        <div>
-          <span className="muted">Score</span> <b>{score}</b>
-        </div>
+        <div><span className="muted">Score</span> <b>{score}</b></div>
         <div className="combo-meter-container">
-          <div className="combo-meter-bar">
-            <div
-              className="combo-meter-fill"
-              style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
-            ></div>
-          </div>
+          <div className="combo-meter-bar"><div className="combo-meter-fill" style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}></div></div>
           <b>{combo > 0 ? `\uD83D\uDD25 COMBO x${combo + 1}` : "Combo"}</b>
         </div>
-        <div>
-          <span className="muted">Moves</span> <b>{moves}</b>
-        </div>
+        <div><span className="muted">Moves</span> <b>{moves}</b></div>
       </div>
 
-      {combo > 0 && (
-        <div className="combo-celebration">
-          \uD83D\uDCA5 \uD83C\uDF6C Sweet Combo x{combo + 1}! \uD83C\uDF6C \uD83D\uDCA5
-        </div>
-      )}
+      {combo > 0 && <div className="combo-celebration">\uD83D\uDCA5 \uD83C\uDF6C Sweet Combo x{combo + 1}! \uD83C\uDF6C \uD83D\uDCA5</div>}
 
-      <div
-        ref={boardRef}
-        className="board"
-        style={{ width: boardW, height: boardH, position: 'relative' }}
-        onDrop={handleDrop}
-        onDragOver={(e) => e.preventDefault()}
-      >
-        <div
-          className="gridlines"
-          style={{
-            backgroundImage:
-              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-            backgroundSize: `${cell}px ${cell}px`,
-          }}
-        />
+      <div ref={boardRef} className="board" style={{ width: boardW, height: boardH, position: 'relative' }}>
+        <div className="gridlines" style={{ backgroundImage: `linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)`, backgroundSize: `${cell}px ${cell}px` }} />
         {optimizedGridRender}
-        
         {feedbackText && (
-          <div
-            key={feedbackText.key}
-            className="feedback-text"
-            style={{
-              left: feedbackText.c * cell + cell / 2,
-              top: feedbackText.r * cell + cell / 2,
-            }}
-          >
+          <div key={feedbackText.key} className="feedback-text" style={{ left: feedbackText.c * cell + cell / 2, top: feedbackText.r * cell + cell / 2 }}>
             {feedbackText.text}
           </div>
         )}
-        
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            pointerEvents: 'none',
-            zIndex: 100
-          }}
-        />
       </div>
 
       <div className="powerup-tray">
@@ -990,11 +673,10 @@ export default function GameView({
             key={key}
             className={`powerup-btn ${activePowerup === key ? 'active' : ''}`}
             onClick={() => handlePowerupSelect(key)}
-            draggable={powerups[key] > 0 && key !== 'shuffle'}
-            onDragStart={(e) => handlePowerupDragStart(e, key, def.icon)}
-            onDragEnd={handlePowerupDragEnd}
+            onPointerDown={(e) => handlePowerupPointerDown(e, key)}
             disabled={!powerups[key] || powerups[key] <= 0 || animating}
             title={`${def.name} (Owned: ${powerups[key] || 0})`}
+            style={{ touchAction: 'none' }}
           >
             <div className="powerup-icon">{def.icon}</div>
             <div className="powerup-quantity">{powerups[key] || 0}</div>
@@ -1003,51 +685,24 @@ export default function GameView({
       </div>
 
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
-        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0 || animating}>
-          \uD83D\uDCA1 Hint
-        </button>
-        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0 || animating}>
-          \uD83D\uDD00 Shuffle
-        </button>
-        <button className="btn" onClick={() => resetGame()}>
-          \u267B\uFE0F Reset
-        </button>
-        <button
-          className="btn"
-          onClick={() => setPaused((p) => !p)}
-        >
-          {paused ? "\u25B6\uFE0F Resume" : "\u23F8 Pause"}
-        </button>
+        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0 || animating}>💡 Hint</button>
+        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0 || animating}>🔀 Shuffle</button>
+        <button className="btn" onClick={() => resetGame()}>🔄 Reset</button>
+        <button className="btn" onClick={() => setPaused(p => !p)}>{paused ? "▶️ Resume" : "⏸ Pause"}</button>
       </div>
 
-      <div
-        className="progress"
-        style={{
-          width: `${(timeLeft / GAME_DURATION) * 100}%`,
-          height: 6,
-          background: getTimerColor(),
-          borderRadius: 6,
-          marginTop: 10,
-        }}
-      />
+      <div className="progress" style={{ width: `${(timeLeft / GAME_DURATION) * 100}%`, height: 6, background: getTimerColor(), borderRadius: 6, marginTop: 10 }} />
     </div>
   );
 }
 
 // ====== Helpers ======
-
 function initSolvableGrid() {
-  const g = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => randEmoji())
-  );
+  const g = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => randEmoji()));
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (c >= 2 && g[r][c] === g[r][c - 1] && g[r][c] === g[r][c - 2]) {
-        g[r][c] = pickDifferent(g[r][c]);
-      }
-      if (r >= 2 && g[r][c] === g[r - 1][c] && g[r][c] === g[r - 2][c]) {
-        g[r][c] = pickDifferent(g[r][c]);
-      }
+      if (c >= 2 && g[r][c] === g[r][c - 1] && g[r][c] === g[r][c - 2]) g[r][c] = pickDifferent(g[r][c]);
+      if (r >= 2 && g[r][c] === g[r - 1][c] && g[r][c] === g[r - 2][c]) g[r][c] = pickDifferent(g[r][c]);
     }
   }
   if (!hasAnyMove(g)) return shuffleToSolvable(g);
@@ -1059,18 +714,12 @@ function pickDifferent(curr) {
   return choices[(Math.random() * choices.length) | 0];
 }
 
-function cloneGrid(g) {
-  return g.map((row) => row.slice());
-}
-
-function inBounds(r, c) {
-  return r >= 0 && c >= 0 && r < ROWS && c < COLS;
-}
+function cloneGrid(g) { return g.map((row) => row.slice()); }
+function inBounds(r, c) { return r >= 0 && c >= 0 && r < ROWS && c < COLS; }
 
 function findMatches(g) {
   const matches = [];
   const matched = new Set();
-
   const addMatch = (r, c) => {
     const key = `${r}-${c}`;
     if (!matched.has(key)) {
@@ -1078,23 +727,17 @@ function findMatches(g) {
       matched.add(key);
     }
   };
-
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS - 2; c++) {
       if (g[r][c] && g[r][c] === g[r][c + 1] && g[r][c] === g[r][c + 2]) {
-        addMatch(r, c);
-        addMatch(r, c + 1);
-        addMatch(r, c + 2);
+        addMatch(r, c); addMatch(r, c + 1); addMatch(r, c + 2);
       }
     }
   }
-
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r < ROWS - 2; r++) {
       if (g[r][c] && g[r][c] === g[r + 1][c] && g[r][c] === g[r + 2][c]) {
-        addMatch(r, c);
-        addMatch(r + 1, c);
-        addMatch(r + 2, c);
+        addMatch(r, c); addMatch(r + 1, c); addMatch(r + 2, c);
       }
     }
   }
@@ -1129,8 +772,7 @@ function hasAnyMove(g) {
     for (let c = 0; c < COLS; c++) {
       const dirs = [[0, 1], [1, 0]];
       for (const [dr, dc] of dirs) {
-        const r2 = r + dr;
-        const c2 = c + dc;
+        const r2 = r + dr; const c2 = c + dc;
         if (!inBounds(r2, c2)) continue;
         const ng = cloneGrid(g);
         [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
@@ -1150,17 +792,11 @@ function shuffleToSolvable(g) {
       [flat[i], flat[j]] = [flat[j], flat[i]];
     }
     const ng = [];
-    for (let r = 0; r < ROWS; r++) {
-      ng.push(flat.slice(r * COLS, r * COLS + COLS));
-    }
+    for (let r = 0; r < ROWS; r++) ng.push(flat.slice(r * COLS, r * COLS + COLS));
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        if (c >= 2 && ng[r][c] === ng[r][c - 1] && ng[r][c] === ng[r][c - 2]) {
-          ng[r][c] = pickDifferent(ng[r][c]);
-        }
-        if (r >= 2 && ng[r][c] === ng[r - 1][c] && ng[r][c] === ng[r - 2][c]) {
-          ng[r][c] = pickDifferent(ng[r][c]);
-        }
+        if (c >= 2 && ng[r][c] === ng[r][c - 1] && ng[r][c] === ng[r][c - 2]) ng[r][c] = pickDifferent(ng[r][c]);
+        if (r >= 2 && ng[r][c] === ng[r - 1][c] && ng[r][c] === ng[r - 2][c]) ng[r][c] = pickDifferent(ng[r][c]);
       }
     }
     if (hasAnyMove(ng)) return ng;
@@ -1173,8 +809,7 @@ function findFirstMove(g) {
     for (let c = 0; c < COLS; c++) {
       const dirs = [[0, 1], [1, 0]];
       for (const [dr, dc] of dirs) {
-        const r2 = r + dr;
-        const c2 = c + dc;
+        const r2 = r + dr; const c2 = c + dc;
         if (!inBounds(r2, c2)) continue;
         const ng = cloneGrid(g);
         [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
