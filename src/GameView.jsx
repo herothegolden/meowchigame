@@ -89,8 +89,7 @@ export default function GameView({ onExit, settings, userTelegramId }) {
   
   const [gameOverState, setGameOverState] = useState(null);
   
-  // --- NEW DRAG SYSTEM STATE ---
-  const [draggedPowerup, setDraggedPowerup] = useState(null); // { key, icon }
+  const [draggedPowerup, setDraggedPowerup] = useState(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0, visible: false });
 
   const [blastingTiles, setBlastingTiles] = useState(new Set());
@@ -101,9 +100,7 @@ export default function GameView({ onExit, settings, userTelegramId }) {
   const setPowerups = useStore(s => s.setPowerups);
 
   const consumePowerup = useCallback(async (powerupKey) => {
-    // Optimistically update UI
     setPowerups(prev => ({ ...prev, [powerupKey]: (prev[powerupKey] || 1) - 1 }));
-
     try {
       const response = await fetch('/api/powerups/use', {
         method: 'POST',
@@ -114,9 +111,8 @@ export default function GameView({ onExit, settings, userTelegramId }) {
           initData: window.Telegram?.WebApp?.initData,
         }),
       });
-      if (!response.ok) throw new Error('Server error');
+      if (!response.ok) throw new Error('Server error on powerup use');
     } catch (error) {
-      // Revert on failure
       setPowerups(prev => ({ ...prev, [powerupKey]: (prev[powerupKey] || 0) + 1 }));
       console.error("Error consuming powerup:", error);
     }
@@ -130,10 +126,6 @@ export default function GameView({ onExit, settings, userTelegramId }) {
 
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
-  const scoreRef = useRef(score);
-  scoreRef.current = score;
-  const maxComboAchievedRef = useRef(maxComboAchieved);
-  maxComboAchievedRef.current = maxComboAchieved;
 
   useEffect(() => {
     const compute = () => {
@@ -176,33 +168,22 @@ export default function GameView({ onExit, settings, userTelegramId }) {
   }
 
   async function submitGameScore(finalScore) {
-    if (!userTelegramId) {
-      console.log("No Telegram ID, skipping score submission");
-      return { user_needs_profile: false, coins_earned: 0 };
-    }
-    const gameScore = Math.max(finalScore, 0);
-    const currentMaxCombo = maxComboAchievedRef.current;
-    const coinsEarned = game.calculateCoins(gameScore, currentMaxCombo);
+    if (!userTelegramId) return { user_needs_profile: false, coins_earned: 0 };
+    const coinsEarned = game.calculateCoins(finalScore, maxComboAchieved);
     try {
-      const tg = window.Telegram?.WebApp;
-      const gameData = {
-        telegram_id: userTelegramId,
-        score: gameScore,
-        coins_earned: coinsEarned,
-        max_combo: currentMaxCombo,
-        game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
-      };
-      if (tg?.initData) gameData.initData = tg.initData;
       const response = await fetch("/api/game/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(gameData),
+        body: JSON.stringify({
+          telegram_id: userTelegramId,
+          score: finalScore,
+          coins_earned: coinsEarned,
+          max_combo: maxComboAchieved,
+          game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
+          initData: window.Telegram?.WebApp?.initData,
+        }),
       });
       const result = await response.json();
-      if (!response.ok) {
-        console.error("Score submission failed:", result.error);
-        return { user_needs_profile: false, coins_earned: coinsEarned };
-      }
       return { ...result, coins_earned: coinsEarned };
     } catch (error) {
       console.error("Error submitting score:", error);
@@ -276,12 +257,6 @@ export default function GameView({ onExit, settings, userTelegramId }) {
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
 
-      if (activePowerup) {
-        applyPowerup(activePowerup, p.r, p.c);
-        setActivePowerup(null);
-        return;
-      }
-
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
       setSel({ r: p.r, c: p.c });
       setGrabTile({ r: p.r, c: p.c });
@@ -337,59 +312,18 @@ export default function GameView({ onExit, settings, userTelegramId }) {
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
     };
-  }, [cell, paused, settings?.haptics, activePowerup]);
+  }, [cell, paused, settings?.haptics]);
 
-  function trySwap(r1, c1, r2, c2) {
-    if (timeLeft <= 0 || animatingRef.current) return;
-    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
-
-    const g = cloneGrid(gridRef.current);
-    [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
-    const matches = findMatches(g);
-
-    if (matches.length === 0) {
-      const s = new Set(shake);
-      s.add(`${r1}-${c1}`);
-      s.add(`${r2}-${c2}`);
-      setShake(s);
-      setTimeout(() => {
-        setShake((prev) => {
-          const n = new Set(prev);
-          n.delete(`${r1}-${c1}`);
-          n.delete(`${r2}-${c2}`);
-          return n;
-        });
-      }, 140);
-      haptic(8);
-      audio.play?.("swap_invalid", { volume: 0.5 });
-      setSel({ r: r1, c: c1 });
-      setTimeout(() => setSel(null), 80);
-      return;
-    }
-
-    setMoveCount((prev) => prev + 1);
-    setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
-    setTimeout(() => {
-      setGrid(g);
-      setSwapping(null);
-      setMoves((m) => Math.max(0, m - 1));
-      optimizedResolveCascades(g, () => {
-        if (timeLeftRef.current <= 0) finish();
-      });
-    }, 200);
-  }
-
-  const optimizedResolveCascades = useCallback((startGrid, done) => {
+  const optimizedResolveCascades = useCallback((startGrid, done, initialCombo = 0) => {
     setAnimating(true);
     let g = cloneGrid(startGrid);
-    let currentCombo = 0;
+    let currentCombo = initialCombo;
 
     const step = () => {
         const matches = findMatches(g);
         if (matches.length === 0) {
             setGrid(g);
             setNewTiles(new Set());
-            setFallDelay({});
             if (currentCombo > 0) {
                 setMaxComboAchieved(prev => Math.max(prev, currentCombo));
                 setCombo(currentCombo);
@@ -439,13 +373,48 @@ export default function GameView({ onExit, settings, userTelegramId }) {
     step();
   }, []);
 
+  function trySwap(r1, c1, r2, c2) {
+    if (timeLeft <= 0 || animatingRef.current) return;
+    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
+
+    const g = cloneGrid(gridRef.current);
+    [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+    const matches = findMatches(g);
+
+    if (matches.length === 0) {
+      const s = new Set(shake);
+      s.add(`${r1}-${c1}`); s.add(`${r2}-${c2}`);
+      setShake(s);
+      setTimeout(() => {
+        setShake((prev) => {
+          const n = new Set(prev);
+          n.delete(`${r1}-${c1}`); n.delete(`${r2}-${c2}`);
+          return n;
+        });
+      }, 140);
+      haptic(8);
+      audio.play?.("swap_invalid", { volume: 0.5 });
+      setSel({ r: r1, c: c1 });
+      setTimeout(() => setSel(null), 80);
+      return;
+    }
+
+    setMoveCount((prev) => prev + 1);
+    setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
+    setTimeout(() => {
+      setGrid(g);
+      setSwapping(null);
+      setMoves((m) => Math.max(0, m - 1));
+      optimizedResolveCascades(g, () => {
+        if (timeLeftRef.current <= 0) finish();
+      });
+    }, 200);
+  }
+
   function doHint() {
     if (timeLeft <= 0 || animatingRef.current) return;
     const m = findFirstMove(gridRef.current);
-    if (!m) {
-      shuffleBoard();
-      return;
-    }
+    if (!m) { shuffleBoard(); return; }
     setHint(m);
     setFeedbackText({ text: '💡 TIP', r: m[0][0], c: m[0][1], key: `feedback-${Date.now()}` });
     setTimeout(() => setHint(null), 1200);
@@ -467,23 +436,18 @@ export default function GameView({ onExit, settings, userTelegramId }) {
 
   async function finish() {
     setGameOverState('calculating');
-    const finalScore = scoreRef.current;
-    const finalMaxCombo = maxComboAchievedRef.current;
-    
+    const finalScore = score.current;
     const result = await submitGameScore(finalScore);
-
     const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
-    
-    const gameResultWithSharing = {
+    const gameResult = {
       score: finalScore,
       coins: serverCoins,
       moves_used: moveCount,
-      max_combo: finalMaxCombo,
+      max_combo: maxComboAchieved,
       gameSubmitted: !!result,
       showSharing: true,
     };
-    
-    setTimeout(() => onExit(gameResultWithSharing), 500);
+    setTimeout(() => onExit(gameResult), 500);
   }
 
   function resetGame() {
@@ -500,8 +464,6 @@ export default function GameView({ onExit, settings, userTelegramId }) {
     setGameStartTime(Date.now());
     setMoveCount(0);
     setMaxComboAchieved(0);
-    maxComboAchievedRef.current = 0;
-    scoreRef.current = 0;
   }
 
   const handlePowerupSelect = (key) => {
@@ -562,9 +524,29 @@ export default function GameView({ onExit, settings, userTelegramId }) {
         });
         
         setBlastingTiles(new Set());
-        optimizedResolveCascades(nextGrid, () => {
-          if (timeLeftRef.current <= 0) finish();
-        });
+        
+        // --- CORRECTED REFILL LOGIC ---
+        applyGravity(nextGrid);
+        const empties = new Set();
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                if (nextGrid[row][col] === null) {
+                    empties.add(`${row}-${col}`);
+                    nextGrid[row][col] = randEmoji();
+                }
+            }
+        }
+        setNewTiles(empties);
+        setGrid(cloneGrid(nextGrid));
+
+        setTimeout(() => {
+          setNewTiles(new Set());
+          // Now check for cascades from the refilled grid
+          optimizedResolveCascades(nextGrid, () => {
+            if (timeLeftRef.current <= 0) finish();
+          });
+        }, 150);
+
       }, 200);
 
     } else {
