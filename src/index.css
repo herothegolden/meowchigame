@@ -472,26 +472,19 @@ body{
   outline: 3px solid var(--accent);
 }
 
-/* FIXED: hint pulse - 2 cycles then stop */
-.tile.hint .tile-emoji{
-  animation: simple-hint-pulse 1.2s ease-in-out; /* replaced hint-pulse */
+.tile.hint .emoji{
+  animation: hint-pulse 1.2s ease-in-out 2;
 }
 
 @keyframes hint-pulse{
-  0%{ transform: scale(1); }
-  25%{ transform: scale(1.08); }  /* First pulse */
-  50%{ transform: scale(1); }
-  75%{ transform: scale(1.08); }  /* Second pulse */
-  100%{ transform: scale(1); }    /* Then stops completely */
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
-/* press/grab feel */
-.tile.grab .tile-emoji{
-  transform: scale(0.96) translateZ(0); /* replaced drop-shadow with translateZ(0) */
-  /* removed filter: drop-shadow(...) */
+.tile.grab .emoji{
+  transform: scale(0.96);
 }
 
-/* invalid swap nudge */
 .tile.shake{
   animation: shakeH 0.12s ease both;
 }
@@ -504,270 +497,131 @@ body{
   100%{ transform: translateX(0); }
 }
 
-/* new spawn drop-in */
-.tile.drop-in{
-  animation: drop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes drop{
-  from{ transform: translateY(-14px); opacity: 0; }
-  to{ transform: translateY(0); opacity: 1; }
-}
-
-/* ========== FAST BLASTING ANIMATIONS (simplified) ========== */
-
 .tile.blasting {
-  animation: simple-blast 0.2s ease forwards; /* replaced mega-pop */
-  background: var(--accent2);                 /* simplified background */
+  animation: blast-out 0.2s ease-out forwards;
+  background: var(--accent2);
   border-radius: 50%;
   z-index: 10 !important;
-  transform: translateZ(0);
 }
 
-/* simplified inner emoji during blast */
-.tile.blasting .tile-emoji {
-  transform: scale(1.1) translateZ(0);
-  /* removed filter and text-shadow and emoji-glow animation */
+.tile.blasting .emoji {
+  animation: blast-emoji 0.2s ease-out forwards;
 }
 
-/* NEW: 💥 Explosion Animation Above Items */
-.explosion-emoji {
+@keyframes blast-out {
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes blast-emoji {
+  to {
+    transform: scale(0.5);
+  }
+}
+
+.feedback-text {
   position: absolute;
-  font-size: 32px;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.75);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 18px;
   pointer-events: none;
+  animation: feedback-pop 1s ease-out forwards;
   z-index: 200;
-  animation: explosion-pop 0.6s ease-out forwards;
-  transform: translate(-50%, -100%);
+  white-space: nowrap;
 }
 
-@keyframes explosion-pop {
-  0% {
-    transform: translate(-50%, -100%) scale(0.5);
-    opacity: 0;
-  }
-  20% {
-    transform: translate(-50%, -120%) scale(1.2);
-    opacity: 1;
-  }
-  60% {
-    transform: translate(-50%, -140%) scale(1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translate(-50%, -160%) scale(0.6);
-    opacity: 0;
-  }
+@keyframes feedback-pop {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  20% { transform: translate(-50%, -120%) scale(1.1); opacity: 1; }
+  80% { transform: translate(-50%, -150%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -150%) scale(0.8); opacity: 0; }
 }
 
-/* Particle animations - short duration */
-@keyframes fly {
-  0% { 
-    transform: translate(0, 0) scale(1) rotate(0deg); 
-    opacity: 1; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(360deg); 
-    opacity: 0; 
-  }
+/* ===== POWERUP TRAY STYLES (NEW) ===== */
+.powerup-tray {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
 }
 
-@keyframes fly-bounce {
-  0% { 
-    transform: translate(0, 0) scale(1); 
-    opacity: 1; 
-  }
-  40% { 
-    transform: translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.2)) scale(1.1); 
-    opacity: 1; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.1); 
-    opacity: 0; 
-  }
-}
-
-@keyframes fly-spiral {
-  0% { 
-    transform: translate(0, 0) scale(1) rotate(0deg); 
-    opacity: 1; 
-  }
-  50% { 
-    transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.3)) scale(0.8) rotate(180deg); 
-    opacity: 0.8; 
-  }
-  100% { 
-    transform: translate(var(--tx), var(--ty)) scale(0.1) rotate(360deg); 
-    opacity: 0; 
-  }
-}
-
-/* Explosion effects - short duration */
-@keyframes explosion-flash {
-  0% { 
-    transform: scale(0); 
-    opacity: 0.8; 
-  }
-  50% { 
-    transform: scale(1); 
-    opacity: 0.4; 
-  }
-  100% { 
-    transform: scale(1.5); 
-    opacity: 0; 
-  }
-}
-
-@keyframes shockwave {
-  0% { 
-    width: 0; 
-    height: 0; 
-    margin-left: 0; 
-    margin-top: 0; 
-    opacity: 0.8; 
-    border-width: 2px;
-  }
-  100% { 
-    width: 120px; 
-    height: 120px; 
-    margin-left: -60px; 
-    margin-top: -60px; 
-    opacity: 0; 
-    border-width: 1px;
-  }
-}
-
-.enhanced-spark {
-  will-change: transform, opacity;
-  pointer-events: none;
-}
-
-/* faster easing while swapping */
-.tile.swapping{
-  transition:
-    left 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
-    top 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
-    transform 0.12s cubic-bezier(0.3, 0.9, 0.1, 1),
-    opacity 0.12s linear;
-}
-
-/* REPLACED: expensive emoji drop-shadow */
-.tile .tile-emoji{
-  line-height: 1;
-  transform: translateZ(0);
-  will-change: transform;
-}
-
-/* FIXED: COMBO CELEBRATION OVER STATS ROW */
-.combo-celebration {
-  position: absolute;
-  top: 40px; /* Over the Score/Moves/Combo row */
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
+.powerup-btn {
+  appearance: none;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 0.5em 0.9em;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  color: #fff;
-  border: 2px solid #fff;
-  border-radius: 16px;
-  animation: combo-explosion 1.5s ease-in-out forwards;
-  text-shadow: 
-    0 0 8px rgba(255, 255, 255, 0.9),
-    0 1px 1px rgba(0,0,0,0.6);
-  z-index: 1000;
-  pointer-events: none;
-  white-space: nowrap; /* stay on one line */
-  transform-origin: center center;
-  width: auto;
-  max-width: min(92vw, 680px); /* keep within viewport */
-  box-sizing: border-box;
-  font-weight: 700;
-  font-size: clamp(14px, 2.8vw, 22px); /* auto-resize across screens */
 }
 
-/* Explosion effect above combo text */
-.combo-celebration::before {
-  content: 'ðŸ'¥âœ¨ðŸŽ‰ðŸ'¥';
-  position: absolute;
-  top: -20px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 32px;
-  animation: explosion-burst 1.5s ease-out forwards;
-  z-index: 1001;
+.powerup-btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
 }
 
-@keyframes combo-explosion {
-  0% { transform: translateX(-50%) scale(0.6) rotate(-5deg); opacity: 0; filter: blur(4px); }
-  15% { transform: translateX(-50%) scale(1.3) rotate(3deg); opacity: 1; filter: blur(0px); }
-  30% { transform: translateX(-50%) scale(1.1) rotate(-1deg); }
-  85% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; filter: blur(0px); }
-  100% { transform: translateX(-50%) scale(0.9) rotate(0deg); opacity: 0; filter: blur(2px); }
+.powerup-btn[draggable="true"] {
+  cursor: grab;
 }
 
-@keyframes explosion-burst {
-  0% {
-    transform: translateX(-50%) scale(0.5) rotate(0deg);
-    opacity: 0;
-  }
-  20% {
-    transform: translateX(-50%) scale(1.5) rotate(180deg);
-    opacity: 1;
-  }
-  70% {
-    transform: translateX(-50%) scale(1.2) rotate(360deg);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translateX(-50%) scale(2.0) rotate(540deg);
-    opacity: 0;
-  }
+.powerup-btn[draggable="true"]:active {
+  cursor: grabbing;
 }
 
-/* OLD combo style - REMOVED (was positioned in board center) */
-.combo {
-  /* This class is no longer used - replaced by combo-celebration */
-  display: none;
+.powerup-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 12px var(--accent-light);
 }
 
-/* pause overlay */
-.pause-overlay{
-  position: absolute;
-  inset: 0;
+.powerup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.powerup-icon {
+  font-size: 28px;
+}
+
+.powerup-drag-icon {
+  font-size: 40px;
+  background: var(--accent-light);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.95);
-  /* removed backdrop-filter: saturate(120%) blur(8px); */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
-/* controls under board */
-.controls{
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 0 4px;
-}
-
-.controls .btn{
-  padding: 10px 14px;
-  font-size: 13px;
-}
-
-.controls-size{
-  opacity: 0.7;
-  font-size: 12px;
-  color: var(--muted);
-  margin-left: auto;
-}
-
-/* poof particles - short duration */
-.spark{
+.powerup-quantity {
   position: absolute;
-  transform-origin: var(--cx) var(--cy);
-  animation: fly var(--dur, 0.4s) ease-out forwards;
+  bottom: -4px;
+  right: -4px;
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--card);
 }
 
 /* ===== Leaderboard Styles ===== */
@@ -861,7 +715,7 @@ body{
 }
 
 .country-filter input:checked + .checkbox-custom::after {
-  content: 'âœ"';
+  content: '✔';
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1468,7 +1322,7 @@ body{
 }
 
 .avatar-option.selected::after {
-  content: 'âœ"';
+  content: '✔';
   position: absolute;
   top: 4px;
   right: 4px;
@@ -1901,90 +1755,6 @@ body{
 }
 
 /* =================================== */
-/* ===== POWERUP TRAY STYLES (NEW) ===== */
-/* =================================== */
-
-.powerup-tray {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.powerup-btn {
-  appearance: none;
-  border: 2px solid var(--border);
-  background: var(--surface);
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.powerup-btn:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-}
-
-.powerup-btn[draggable="true"] {
-  cursor: grab;
-}
-
-.powerup-btn[draggable="true"]:active {
-  cursor: grabbing;
-}
-
-.powerup-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-light);
-  box-shadow: 0 0 12px var(--accent-light);
-}
-
-.powerup-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  background: var(--surface);
-  border-color: var(--border);
-}
-
-.powerup-icon {
-  font-size: 28px;
-}
-
-.powerup-drag-icon {
-  font-size: 40px;
-  background: var(--accent-light);
-  border-radius: 50%;
-  width: 60px;
-  height: 60px;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
-.powerup-quantity {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  background: var(--accent);
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  border: 2px solid var(--card);
-}
-
-/* =================================== */
 /* ===== GAME OVER FLOW (NEW) ====== */
 /* =================================== */
 
@@ -2133,7 +1903,7 @@ body{
 }
 
 .reward-day-item.claimed::after {
-  content: 'âœ"';
+  content: '✔';
   position: absolute;
   top: 8px;
   right: 8px;
@@ -2173,25 +1943,4 @@ body{
 
 .alert-modal .modal-footer {
     justify-content: center;
-}
-
-.feedback-text {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: bold;
-  font-size: 18px;
-  pointer-events: none;
-  animation: feedback-pop 1s ease-out forwards;
-  z-index: 200;
-}
-
-@keyframes feedback-pop {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-  20% { transform: translate(-50%, -100%) scale(1.1); opacity: 1; }
-  80% { transform: translate(-50%, -150%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -150%) scale(0.8); opacity: 0; }
 }
