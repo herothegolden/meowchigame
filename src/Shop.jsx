@@ -4,9 +4,12 @@ import { useStore } from './store.js';
 
 export default function Shop({ coins, onPurchase, userTelegramId }) {
   const [purchasing, setPurchasing] = useState(null);
-  const powerups = useStore(s => s.powerups); // Get powerups from the store
+  const { powerups, setPowerups, setCoins } = useStore(s => ({
+    powerups: s.powerups,
+    setPowerups: s.setPowerups,
+    setCoins: s.setCoins,
+  }));
 
-  // The new, thematic shop items
   const items = [
     { key: "shuffle", name: "The Paw-sitive Swap", desc: "Swap any two adjacent cookies", price: 50, icon: "🐾" },
     { key: "hammer", name: "The Catnip Cookie", desc: "Clear all cookies of one cat type", price: 75, icon: "🍪" },
@@ -19,6 +22,18 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
       return;
     }
     setPurchasing(item.key);
+
+    // --- OPTIMISTIC UPDATE ---
+    const originalCoins = coins;
+    const originalPowerups = { ...powerups };
+
+    // 1. Immediately update the UI
+    const newPowerupCount = (powerups[item.key] || 0) + 1;
+    setPowerups({ ...powerups, [item.key]: newPowerupCount });
+    setCoins(c => c - item.price);
+    try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch (e) {}
+
+
     try {
       const tg = window.Telegram?.WebApp;
       const response = await fetch('/api/shop/buy', {
@@ -31,14 +46,21 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
         })
       });
       const result = await response.json();
+
       if (response.ok) {
+        // 2. Server confirmed, finalize the state from server response
         try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch (e) {}
+        // The onPurchase callback might update the coin balance from the server
         onPurchase(item.key, result.newCoinBalance);
       } else {
-        throw new Error(result.error);
+        // 3. Server failed, revert the UI
+        throw new Error(result.error || "Purchase failed on server.");
       }
     } catch (error) {
-      console.error("Purchase failed:", error);
+      console.error("Purchase failed, reverting:", error);
+      // 3. Revert UI state on any failure
+      setCoins(originalCoins);
+      setPowerups(originalPowerups);
       try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
     } finally {
       setPurchasing(null);
