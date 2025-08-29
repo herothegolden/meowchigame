@@ -40,7 +40,6 @@ export default function Shop({ coins, onPurchase, userTelegramId }) {
     } catch (error) {
       console.error("Purchase failed:", error);
       try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch (e) {}
-      // You could show an error message to the user here
     } finally {
       setPurchasing(null);
     }
