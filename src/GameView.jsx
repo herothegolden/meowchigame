@@ -10,6 +10,8 @@ const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
   isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
+  const isImage = value && value.startsWith('/assets/');
+  
   return (
     <div
       key={`tile-${r}-${c}`}
@@ -30,9 +32,30 @@ const MemoizedTile = React.memo(({
     >
       <div
         className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
-        style={{ fontSize: Math.floor(cell * EMOJI_SIZE) }}
+        style={{ 
+          fontSize: isImage ? 'inherit' : Math.floor(cell * EMOJI_SIZE),
+          width: isImage ? '80%' : 'auto',
+          height: isImage ? '80%' : 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
       >
-        {value}
+        {isImage ? (
+          <img 
+            src={value} 
+            alt="game piece" 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain',
+              imageRendering: 'pixelated'
+            }}
+            draggable={false}
+          />
+        ) : (
+          value
+        )}
       </div>
       {/* simplified blast effect */}
       {isBlasting && (
@@ -114,7 +137,7 @@ const CELL_MAX = 88;
 const GAME_DURATION = 60;
 const EMOJI_SIZE = 0.8;
 
-const CANDY_SET = ["😺", "🥨", "🍓", "🍪", "🍡"];
+const CANDY_SET = ["/assets/gem1.png", "/assets/gem2.png", "/assets/gem3.png", "/assets/gem4.png", "/assets/gem5.png"];
 const randEmoji = () =>
   CANDY_SET[Math.floor(Math.random() * Math.random() * CANDY_SET.length)] || CANDY_SET[(Math.random() * CANDY_SET.length) | 0];
 
