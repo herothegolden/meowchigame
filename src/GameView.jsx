@@ -519,7 +519,6 @@ function GameView() {
       setActiveEffects(prev => prev.filter(fx => fx.id !== effectId));
     }, 200);
     
-    return { grid: g, specialGrid: sg };
   };
 
   const activateBoxCat = async (r, c, targetCat) => {
