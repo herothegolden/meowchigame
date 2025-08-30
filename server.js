@@ -26,16 +26,23 @@ app.use(express.urlencoded({ extended: true }));
 // Database
 pool.connect()
   .then(async (client) => {
-    client.release();
-    dbConnected = true;
-    console.log("✅ Database connected");
-    
-    // Add schema migration
-    await ensureSchema();
+    try {
+      client.release();
+      dbConnected = true;
+      console.log("✅ Database connected");
+      
+      // Run schema migration
+      await ensureSchema();
+    } catch (error) {
+      console.error("Schema migration error:", error);
+    }
   })
-  .catch((err) => { dbConnected = false; console.error("❌ DB connection error:", err); });
+  .catch((err) => { 
+    dbConnected = false; 
+    console.error("❌ DB connection error:", err); 
+  });
 
-// Add this function right after the pool.connect() block
+// Schema migration function
 async function ensureSchema() {
   try {
     await pool.query(`
