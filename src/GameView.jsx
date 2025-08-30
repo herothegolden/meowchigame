@@ -1,824 +1,1167 @@
-// src/GameView.jsx
+// src/GameView.jsx - FIXED VERSION
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import * as audio from "./audio"; // minimal sound hooks
+import ShareButtons from "./ShareButtons.jsx";
+import { game } from "./utils.js";
+import { useStore } from "./store.js"; // NEW: Import Zustand store
 
-// --- START: Inlined & Mocked Dependencies ---
-// To make this file standalone, the dependencies that were previously imported are now included here.
-
-// Mocked audio object
-const audio = {
-  play: (sound, options) => {
-    console.log(`Playing sound: ${sound}`, options || '');
-  }
-};
-
-// Mocked game utils
-const game = {
-  calculateCoins: (score, maxCombo) => {
-    return Math.floor(score / 10) + (maxCombo * 5);
-  }
-};
-
-// Inlined ShareButtons component
-const ShareButtons = ({ score }) => {
-  return (
-    <div style={{
-      padding: '20px',
-      background: 'rgba(255, 255, 255, 0.9)',
-      backdropFilter: 'blur(10px)',
-      borderRadius: '16px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '10px',
-      alignItems: 'center',
-      color: '#333',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-    }}>
-      <h2 style={{margin: 0, color: 'var(--text)', fontSize: '24px'}}>Game Over!</h2>
-      <p style={{fontSize: '18px', margin: '4px 0 12px', color: 'var(--muted)'}}>Final Score: <strong>{score.toLocaleString()}</strong></p>
-      <div style={{display: 'flex', gap: '10px', width: '100%'}}>
-        <button className="btn primary" style={{flex: 1}}>📢 Share to Chats</button>
-        <button className="btn" style={{flex: 1}}>⚔️ Challenge Friends</button>
-      </div>
-    </div>
-  );
-};
-
-// --- END: Inlined & Mocked Dependencies ---
-
-
-// 🎯 Meowchi 6×6 Rush Configuration
-const ROWS = 6;
-const COLS = 6;
-const GAME_DURATION = 60; // 60 seconds
-const EMOJI_SIZE = 0.75;
-
-// 🐱 Six Meowchi Cats (Phase 1)
+// CAT IMAGES - Using the updated image URLs
 const CAT_SET = [
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Boba.webp?updatedAt=1756284887507",
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Cheese.webp?updatedAt=1756284887499", 
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Meowchi.webp?updatedAt=1756284887490",
-  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Panthera.webp?updatedAt=1756284887493", // Replaced broken Oreo link
+  "https://ik.imagekit.io/59r2kpz8r/Meowchi/Oreo.webp?updatedAt=1756284887488",
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Panthera.webp?updatedAt=1756284887493", 
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Patches.webp?updatedAt=1756284887491",
 ];
 
-// 🆕 PHASE 2 & 3: Special Cat Types
-const SPECIAL_TYPES = {
-  WHISKER_STREAK_H: 'whisker_streak_h', // Horizontal line clear
-  WHISKER_STREAK_V: 'whisker_streak_v', // Vertical line clear
-  BOX_CAT: 'box_cat',              // 3x3 area clear
-  CATNIP_BOMB: 'catnip_bomb',          // Clear all of one type
-};
+const randCat = () => CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
 
-// 🎯 Meowchi 6x6 Rush Scoring (Updated for Phase 3)
-const RUSH_SCORING = {
-  3: 60,   // 3-match = 60 points
-  4: 120,  // 4-match = 120 points  
-  5: 200,  // 5-match = 200 points
-  CASCADE_TIME_BONUS: 0.25, // +0.25s per cascade step
-  MAX_TIME_BONUS: 5,       // Cap at +5s total per game
-  CASCADE_MULTIPLIER: 0.3,   // Each cascade step: ×(1 + 0.3 per step)
-  
-  // 🆕 PHASE 3: Special Scoring
-  WHISKER_STREAK_BASE: 160,  // +160 base + +15 per tile cleared
-  WHISKER_STREAK_PER_TILE: 15,
-  BOX_CAT_BASE: 180,         // +180 base + +20 per tile
-  BOX_CAT_PER_TILE: 20,
-  CATNIP_BOMB_BASE: 420,     // +420 base + +12 per tile
-  CATNIP_BOMB_PER_TILE: 12,
-};
-
-// 🆕 PHASE 3: Enhanced Memoized tile component with special rendering & click handling
+// FIXED: MemoizedTile with image support and proper onClick handling
 const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
-  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE, 
-  specialType, onClick // Simplified to use a single onClick prop
+  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
 }) => {
-  const isSpecial = !!specialType;
   const isImage = value && typeof value === 'string' && value.startsWith('https://ik.imagekit.io');
-  
-  // Get special overlay based on type
-  const getSpecialOverlay = () => {
-    switch(specialType) {
-      case SPECIAL_TYPES.WHISKER_STREAK_H:
-        return '⚡'; // Horizontal lightning
-      case SPECIAL_TYPES.WHISKER_STREAK_V:
-        return '⚡'; // Vertical lightning  
-      case SPECIAL_TYPES.BOX_CAT:
-        return '💥'; // Explosion symbol
-      case SPECIAL_TYPES.CATNIP_BOMB:
-        return '🌟'; // Star bomb
-      default:
-        return null;
-    }
-  };
-
-  const getSpecialBorder = () => {
-    switch(specialType) {
-      case SPECIAL_TYPES.WHISKER_STREAK_H:
-        return '3px solid #00d4ff'; // Cyan for horizontal
-      case SPECIAL_TYPES.WHISKER_STREAK_V:
-        return '3px solid #ff6b35'; // Orange for vertical
-      case SPECIAL_TYPES.BOX_CAT:
-        return '3px solid #f7b731'; // Gold for box
-      case SPECIAL_TYPES.CATNIP_BOMB:
-        return '3px solid #e056fd'; // Purple for bomb
-      default:
-        return '1px solid var(--border)';
-    }
-  };
   
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint-pulse" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""} ${isSpecial ? "special-tile" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint-pulse" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
         width: cell,
         height: cell,
         transform: swapTransform || undefined,
-        zIndex: isBlasting ? 10 : isGrab ? 5 : (isSpecial ? 3 : 1),
+        zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
         transition: isSwapping
           ? "transform 0.16s ease"
           : delaySeconds
           ? `top 0.16s ease ${delaySeconds}s`
           : "top 0.16s ease",
-        border: getSpecialBorder(),
-        boxShadow: isSpecial ? `0 0 12px ${getSpecialBorder().split(' ')[2]}40` : 'none',
-        cursor: 'pointer' // All tiles are clickable
       }}
-      onClick={onClick} // FIX: Using the onClick prop directly
     >
       <div
         className={`emoji ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
         style={{ 
           fontSize: isImage ? 'inherit' : Math.floor(cell * EMOJI_SIZE),
-          width: isImage ? '85%' : 'auto',
+          width: isImage ? '85%' : 'auto', 
           height: isImage ? '85%' : 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative'
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center' 
         }}
       >
         {isImage ? (
           <img 
             src={value} 
-            alt="cat" 
+            alt="cat"
             style={{ 
               width: '100%', 
               height: '100%', 
-              objectFit: 'contain',
-              borderRadius: '8px',
-              filter: isSpecial ? 'brightness(1.1) contrast(1.1)' : 'none'
+              objectFit: 'contain', 
+              borderRadius: '8px' 
+            }}
+            onError={(e) => {
+              console.error('Image failed to load:', value);
+              e.target.parentNode.innerHTML = 'ðŸ˜º'; // Fallback
             }}
           />
         ) : (
-          <span className="tile-emoji" style={{ filter: isSpecial ? 'brightness(1.2) drop-shadow(0 0 4px gold)' : 'none' }}>
-            {value}
-          </span>
-        )}
-        
-        {/* 🆕 PHASE 3: Special overlay indicator */}
-        {isSpecial && getSpecialOverlay() && (
-          <div className="special-overlay">
-            {getSpecialOverlay()}
-          </div>
+          value || 'ðŸ˜º'
         )}
       </div>
-    </div>
-  );
-});
-
-// 🔥 Hype Meter Component (unchanged from Phase 1)
-const HypeMeter = ({ currentScore, cascadeLevel }) => {
-  const tier1 = 1500;
-  const tier2 = 4500; 
-  const tier3 = 9000;
-  
-  let currentTier = 0;
-  let progress = 0;
-  
-  if (currentScore >= tier3) {
-    currentTier = 3;
-    progress = 100;
-  } else if (currentScore >= tier2) {
-    currentTier = 2;
-    progress = ((currentScore - tier2) / (tier3 - tier2)) * 100;
-  } else if (currentScore >= tier1) {
-    currentTier = 1;
-    progress = ((currentScore - tier1) / (tier2 - tier1)) * 100;
-  } else {
-    progress = (currentScore / tier1) * 100;
-  }
-  
-  const getTierColor = () => {
-    switch(currentTier) {
-      case 3: return '#ff6b35'; // Hot orange
-      case 2: return '#f7b731'; // Gold  
-      case 1: return '#26de81'; // Green
-      default: return '#74b9ff'; // Blue
-    }
-  };
-  
-  const getTierLabel = () => {
-    switch(currentTier) {
-      case 3: return 'FIRE! 🔥';
-      case 2: return 'HOT! 🌟';
-      case 1: return 'WARM 🔆';
-      default: return 'HYPE ⚡';
-    }
-  };
-  
-  return (
-    <div className="hype-meter">
-      <div className="hype-label">{getTierLabel()}</div>
-      <div className="hype-bar">
-        <div 
-          className="hype-progress"
-          style={{ 
-            width: `${Math.min(progress, 100)}%`,
-            background: `linear-gradient(90deg, ${getTierColor()}, ${getTierColor()}80)`
-          }}
-        />
-      </div>
-      <div className="hype-score">{currentScore.toLocaleString()}</div>
-      {cascadeLevel > 1 && (
-        <div style={{ fontSize: '10px', color: getTierColor(), fontWeight: '700' }}>
-          CASCADE ×{cascadeLevel}
+      {/* simplified blast effect */}
+      {isBlasting && (
+        <div className="blast-simple">
+          ðŸ'¥
         </div>
       )}
     </div>
   );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.value === nextProps.value &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isHinted === nextProps.isHinted &&
+    prevProps.isBlasting === nextProps.isBlasting &&
+    prevProps.isSwapping === nextProps.isSwapping &&
+    prevProps.isNewTile === nextProps.isNewTile &&
+    prevProps.isGrab === nextProps.isGrab &&
+    prevProps.isShake === nextProps.isShake &&
+    prevProps.swapTransform === nextProps.swapTransform
+  );
+});
+
+// 2) OPTIMIZE: RAF helper
+const useAnimationFrame = () => {
+  const requestRef = useRef();
+  const previousTimeRef = useRef();
+
+  const animate = useCallback((callback) => {
+    const animateFrame = (time) => {
+      if (previousTimeRef.current !== undefined) {
+        const deltaTime = time - previousTimeRef.current;
+        callback(deltaTime);
+      }
+      previousTimeRef.current = time;
+      requestRef.current = requestAnimationFrame(animateFrame);
+    };
+    requestRef.current = requestAnimationFrame(animateFrame);
+
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, []);
+
+  return animate;
 };
 
-// 📱 Rush Timer Component (updated)
-const RushTimer = ({ timeLeft, isPaused, onTogglePause }) => {
-  const getTimerColor = () => {
-    if (timeLeft <= 10) return '#e74c3c'; // Red
-    if (timeLeft <= 20) return '#f39c12'; // Orange  
-    return '#27ae60'; // Green
+// 3) OPTIMIZE: Batched state helper
+const useBatchedState = () => {
+  const [pendingUpdates, setPendingUpdates] = useState({});
+  const timeoutRef = useRef();
+
+  const batchUpdate = useCallback((updates) => {
+    setPendingUpdates(prev => ({ ...prev, ...updates }));
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      Object.entries(pendingUpdates).forEach(([key, updater]) => {
+        if (typeof updater === 'function') {
+          updater();
+        }
+      });
+      setPendingUpdates({});
+    }, 16);
+  }, [pendingUpdates]);
+
+  return batchUpdate;
+};
+
+const COLS = 6;  
+const ROWS = 6;
+const CELL_MIN = 36;
+const CELL_MAX = 88;
+const GAME_DURATION = 60;
+const EMOJI_SIZE = 0.8;
+
+// NEW: Power-up definitions
+const POWERUP_DEFINITIONS = {
+  shuffle: { name: "Paw-sitive Swap", icon: "ðŸ¾" },
+  hammer: { name: "Catnip Cookie", icon: "ðŸª" },
+  bomb: { name: "Marshmallow Bomb", icon: "ðŸ'£" },
+};
+
+export default function GameView({
+  onExit,
+  settings,
+  userTelegramId,
+}) {
+  const containerRef = useRef(null);
+  const boardRef = useRef(null);
+  const [cell, setCell] = useState(48);
+
+  // Grid state - FIXED: Keep object format for selection
+  const [grid, setGrid] = useState(() => initSolvableGrid());
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+
+  // Selection / hint / animation - RESTORED: Original object format
+  const [sel, setSel] = useState(null);
+  const [hint, setHint] = useState(null);
+  const [swapping, setSwapping] = useState(null);
+
+  // Stats
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(20);
+  const [combo, setCombo] = useState(0);
+  const [fx, setFx] = useState([]);
+  const [blast, setBlast] = useState(new Set());
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+
+  const [gameStartTime, setGameStartTime] = useState(Date.now());
+  const [moveCount, setMoveCount] = useState(0);
+  const [maxComboAchieved, setMaxComboAchieved] = useState(0);
+
+  const [newTiles, setNewTiles] = useState(new Set());
+  const [fallDelay, setFallDelay] = useState({});
+
+  const [paused, setPaused] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const animatingRef = useRef(animating);
+  animatingRef.current = animating;
+
+  const [grabTile, setGrabTile] = useState(null);
+  const [shake, setShake] = useState(new Set());
+  
+  const [gameOverState, setGameOverState] = useState(null);
+  const [draggedPowerup, setDraggedPowerup] = useState(null);
+  const [draggedIconStyle, setDraggedIconStyle] = useState({});
+
+  // Power-up state
+  const [activePowerup, setActivePowerup] = useState(null);
+  const powerups = useStore(s => s.powerups);
+  const setPowerups = useStore(s => s.setPowerups);
+
+  // NEW: Function to consume a power-up
+  const consumePowerup = async (powerupKey) => {
+    try {
+      // Optimistically update the UI
+      setPowerups({ ...powerups, [powerupKey]: (powerups[powerupKey] || 1) - 1 });
+      
+      const response = await fetch('/api/powerups/use', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: userTelegramId,
+          item_id: powerupKey,
+          initData: window.Telegram?.WebApp?.initData,
+        }),
+      });
+      
+      if (!response.ok) {
+        // Revert UI on failure
+        setPowerups(powerups);
+        console.error("Failed to consume power-up on server");
+      }
+    } catch (error) {
+      // Revert UI on failure
+      setPowerups(powerups);
+      console.error("Error consuming powerup:", error);
+    }
   };
 
+  // Enable closing confirmation during gameplay
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.enableClosingConfirmation) {
+      tg.enableClosingConfirmation();
+      console.log('Closing confirmation enabled');
+    }
+
+    return () => {
+      if (tg?.disableClosingConfirmation) {
+        tg.disableClosingConfirmation();
+        console.log('Closing confirmation disabled');
+      }
+    };
+  }, []);
+
+  // Keep refs for async
+  const movesRef = useRef(moves);
+  movesRef.current = moves;
+  const timeLeftRef = useRef(timeLeft);
+  timeLeftRef.current = timeLeft;
+  const scoreRef = useRef(score);
+  scoreRef.current = score;
+  const maxComboAchievedRef = useRef(maxComboAchieved);
+  maxComboAchievedRef.current = maxComboAchieved;
+
+  // Responsive sizing
+  useEffect(() => {
+    const compute = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const pad = 16;
+      const w = el.clientWidth - pad * 2;
+      const h = el.clientHeight - 84;
+      const size = Math.floor(Math.min(w / COLS, h / ROWS));
+      setCell(Math.max(CELL_MIN, Math.min(size, CELL_MAX)));
+    };
+    compute();
+    let ro;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(compute);
+      ro.observe(containerRef.current);
+    }
+    window.addEventListener("resize", compute);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", compute);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.currentGameScore = score;
+  }, [score]);
+
+  // Timer
+  useEffect(() => {
+    if (paused || gameOverState) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          finish();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [paused, gameOverState]);
+
+  // Timer tick sounds
+  const lastTickRef = useRef(null);
+  useEffect(() => {
+    if (!settings?.sound) return;
+    if (timeLeftRef.current <= 0) return;
+    if (timeLeftRef.current <= 10) {
+      if (lastTickRef.current !== timeLeftRef.current) {
+        lastTickRef.current = timeLeftRef.current;
+        audio.play?.("timer_tick", { volume: 0.25 });
+      }
+    }
+    if (timeLeftRef.current === 5) {
+      audio.play?.("timer_hurry", { volume: 0.5 });
+    }
+  }, [timeLeft, settings?.sound]);
+
+  function haptic(ms = 12) {
+    if (!settings?.haptics) return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {}
+  }
+
+  async function submitGameScore(finalScore) {
+    if (!userTelegramId) {
+      console.log("No Telegram ID, skipping score submission");
+      return { user_needs_profile: false, coins_earned: 0 };
+    }
+
+    const gameScore = Math.max(finalScore, 0);
+    const currentMaxCombo = maxComboAchievedRef.current;
+
+    const coinsEarned = game.calculateCoins(gameScore, currentMaxCombo);
+
+    try {
+      const tg = window.Telegram?.WebApp;
+      const gameData = {
+        telegram_id: userTelegramId,
+        score: gameScore,
+        coins_earned: coinsEarned,
+        max_combo: currentMaxCombo,
+        game_duration: Math.floor((Date.now() - gameStartTime) / 1000),
+      };
+
+      if (tg?.initData) {
+        gameData.initData = tg.initData;
+      }
+
+      const response = await fetch("/api/game/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gameData),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        console.error("Score submission failed:", result.error);
+        return { user_needs_profile: false, coins_earned: coinsEarned };
+      }
+
+      return { ...result, coins_earned: coinsEarned };
+    } catch (error) {
+      console.error("Error submitting score:", error);
+      return { user_needs_profile: false, coins_earned: coinsEarned };
+    }
+  }
+
+  // RESTORED: Original pointer interaction system
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el || paused) return;
+    let drag = null;
+    const thresholdBase = 18;
+
+    const rc = (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width - 1, e.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
+      return { r: Math.floor(y / cell), c: Math.floor(x / cell), x, y };
+    };
+
+    const down = (e) => {
+      if (timeLeftRef.current <= 0) return;
+      el.setPointerCapture?.(e.pointerId);
+      const p = rc(e);
+      if (!inBounds(p.r, p.c)) return;
+
+      if (activePowerup) {
+        const g = cloneGrid(gridRef.current);
+        if (activePowerup === 'hammer') {
+          const targetCookie = g[p.r][p.c];
+          if (CAT_SET.includes(targetCookie)) {
+            for (let r = 0; r < ROWS; r++) {
+              for (let c = 0; c < COLS; c++) {
+                if (g[r][c] === targetCookie) g[r][c] = null;
+              }
+            }
+            audio.play?.('powerup_spawn', { volume: 0.7 });
+            optimizedResolveCascades(g, () => {});
+            consumePowerup('hammer');
+            setActivePowerup(null);
+          } else {
+            haptic(8);
+            audio.play?.("swap_invalid", { volume: 0.5 });
+          }
+        } else if (activePowerup === 'bomb') {
+          for (let r = p.r - 1; r <= p.r + 1; r++) {
+            for (let c = p.c - 1; c <= p.c + 1; c++) {
+              if (inBounds(r, c)) g[r][c] = null;
+            }
+          }
+          audio.play?.('powerup_spawn', { volume: 0.8 });
+          optimizedResolveCascades(g, () => {});
+          consumePowerup('bomb');
+          setActivePowerup(null);
+        }
+        return;
+      }
+
+      drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
+      setSel({ r: p.r, c: p.c });
+      setGrabTile({ r: p.r, c: p.c });
+      haptic(5);
+    };
+
+    const move = (e) => {
+      if (!drag || timeLeftRef.current <= 0) return;
+      const p = rc(e);
+      const dx = p.x - drag.x;
+      const dy = p.y - drag.y;
+      const threshold = Math.min(thresholdBase, Math.floor(cell * 0.35));
+      if (!drag.dragging && Math.hypot(dx, dy) > threshold) {
+        drag.dragging = true;
+        haptic(8);
+        const horiz = Math.abs(dx) > Math.abs(dy);
+        const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
+        const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
+        if (inBounds(tr, tc)) setSel({ r: tr, c: tc });
+      }
+    };
+
+    const up = (e) => {
+      if (!drag) return;
+      const p = rc(e);
+      const dx = p.x - drag.x;
+      const dy = p.y - drag.y;
+      if (!drag.dragging) {
+        setSel({ r: drag.r, c: drag.c });
+      } else {
+        if (timeLeftRef.current > 0) {
+          const horiz = Math.abs(dx) > Math.abs(dy);
+          const tr = drag.r + (horiz ? 0 : dy > 0 ? 1 : -1);
+          const tc = drag.c + (horiz ? (dx > 0 ? 1 : -1) : 0);
+          if (inBounds(tr, tc)) {
+            trySwap(drag.r, drag.c, tr, tc);
+            haptic(12);
+          }
+        }
+        setSel(null);
+      }
+      drag = null;
+      setGrabTile(null);
+    };
+
+    el.addEventListener("pointerdown", down, { passive: true });
+    el.addEventListener("pointermove", move, { passive: true });
+    el.addEventListener("pointerup", up, { passive: true });
+    el.addEventListener("pointercancel", up, { passive: true });
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+  }, [cell, paused, settings?.haptics, activePowerup]);
+
+  // RESTORED: Original trySwap function
+  function trySwap(r1, c1, r2, c2) {
+    if (timeLeft <= 0) return;
+    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
+
+    const g = cloneGrid(gridRef.current);
+    [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+    const matches = findMatches(g);
+
+    if (matches.length === 0) {
+      const s = new Set(shake);
+      s.add(`${r1}-${c1}`);
+      s.add(`${r2}-${c2}`);
+      setShake(s);
+      setTimeout(() => {
+        setShake((prev) => {
+          const n = new Set(prev);
+          n.delete(`${r1}-${c1}`);
+          n.delete(`${r2}-${c2}`);
+          return n;
+        });
+      }, 140);
+      haptic(8);
+      audio.play?.("swap_invalid", { volume: 0.5 });
+      setSel({ r: r1, c: c1 });
+      setTimeout(() => setSel(null), 80);
+
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+
+      return;
+    }
+
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+
+    audio.play?.("swap", { volume: 0.6 });
+    setMoveCount((prev) => prev + 1);
+    setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
+    setTimeout(() => {
+      setGrid(g);
+      setSwapping(null);
+      setMoves((m) => Math.max(0, m - 1));
+      optimizedResolveCascades(g, () => {
+        if (timeLeftRef.current <= 0) finish();
+      });
+    }, 200);
+  }
+
+  function optimizedResolveCascades(start, done) {
+    setAnimating(true);
+    let g = cloneGrid(start);
+    let comboCount = 0;
+
+    const step = () => {
+      const matches = findMatches(g);
+      if (matches.length === 0) {
+        React.startTransition(() => {
+          setGrid(g);
+          setNewTiles(new Set());
+          setFallDelay({});
+
+          if (comboCount > 0) {
+            setMaxComboAchieved(prev => {
+              const newMax = Math.max(prev, comboCount);
+              maxComboAchievedRef.current = newMax;
+              return newMax;
+            });
+            setCombo(comboCount);
+            const n = Math.min(4, Math.max(1, comboCount + 1));
+            audio.play?.(`combo_x${n}`, { volume: 0.6 });
+            requestAnimationFrame(() => {
+              setTimeout(() => setCombo(0), 1500);
+            });
+          }
+
+          setTimeout(() => setFx([]), 800);
+          ensureSolvable();
+          setAnimating(false);
+          done && done();
+        });
+        return;
+      }
+
+      audio.play?.("match_pop", { volume: 0.5 });
+
+      const keys = matches.map(([r, c]) => `${r}:${c}`);
+      setBlast(new Set(keys));
+
+      const fxId = Date.now();
+      setFx((prev) => [
+        ...prev.slice(-5),
+        ...matches.slice(0, 10).map((m, i) => ({
+          id: fxId + i,
+          x: m[1] * cell,
+          y: m[0] * cell,
+        })),
+      ]);
+
+      const basePoints = 10 * matches.length;
+      const comboMultiplier = Math.max(1, comboCount + 1);
+      const pointsEarned = basePoints * comboMultiplier;
+      setScore((s) => s + pointsEarned);
+
+      matches.forEach(([r, c]) => {
+        g[r][c] = null;
+      });
+      setGrid(cloneGrid(g));
+      setTimeout(() => setBlast(new Set()), 80);
+
+      setTimeout(() => {
+        const delayMap = {};
+        for (let c = 0; c < COLS; c++) {
+          const nullsBelow = new Array(ROWS).fill(0);
+          let count = 0;
+          for (let r = ROWS - 1; r >= 0; r--) {
+            nullsBelow[r] = count;
+            if (g[r][c] === null) count++;
+          }
+          for (let r = ROWS - 1; r >= 0; r--) {
+            if (g[r][c] != null) {
+              const dist = nullsBelow[r];
+              const newR = r + dist;
+              if (dist > 0) {
+                delayMap[`${newR}-${c}`] = Math.min(0.03, dist * 0.008);
+              }
+            }
+          }
+        }
+
+        applyGravity(g);
+        const empties = new Set();
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
+        refill(g);
+
+        React.startTransition(() => {
+          setNewTiles(empties);
+          setFallDelay(delayMap);
+          setGrid(cloneGrid(g));
+        });
+
+        setTimeout(() => {
+          setNewTiles(new Set());
+          comboCount++;
+          setTimeout(step, 40);
+        }, 80);
+      }, 60);
+    };
+    step();
+  }
+
+  function doHint() {
+    if (timeLeft <= 0) return;
+    const m = findFirstMove(gridRef.current);
+    if (!m) {
+      shuffleBoard();
+      return;
+    }
+    setHint(m);
+    setTimeout(() => setHint(null), 1200);
+    haptic(10);
+  }
+
+  function shuffleBoard() {
+    if (timeLeft <= 0) return;
+    const g = shuffleToSolvable(gridRef.current);
+    setGrid(g);
+    haptic(12);
+  }
+
+  function ensureSolvable() {
+    if (!hasAnyMove(gridRef.current))
+      setGrid(shuffleToSolvable(gridRef.current));
+  }
+
+  async function finish() {
+    setGameOverState('calculating');
+    const finalScore = scoreRef.current;
+    const finalMaxCombo = maxComboAchievedRef.current;
+    
+    const result = await submitGameScore(finalScore);
+
+    const serverCoins = Math.max(0, Number(result?.coins_earned ?? 0));
+    if (serverCoins > 0 && settings?.sound) {
+      audio.play?.("coin", { volume: 0.7 });
+    }
+    if (settings?.sound) {
+      if (finalScore > 0) audio.play?.("finish_win", { volume: 0.8 });
+      else audio.play?.("finish_lose", { volume: 0.7 });
+    }
+
+    const gameResultWithSharing = {
+      score: finalScore,
+      coins: serverCoins,
+      moves_used: moveCount,
+      max_combo: finalMaxCombo,
+      gameSubmitted: !!result,
+      showSharing: true,
+    };
+    
+    setTimeout(() => {
+      onExit(gameResultWithSharing);
+    }, 500);
+  }
+
+  function resetGame() {
+    if (timeLeft <= 0 && !paused) return;
+    setGrid(initSolvableGrid());
+    setScore(0);
+    setMoves(20);
+    setCombo(0);
+    setSel(null);
+    setHint(null);
+    setSwapping(null);
+    setFallDelay({});
+    setNewTiles(new Set());
+    setTimeLeft(GAME_DURATION);
+    setGameStartTime(Date.now());
+    setMoveCount(0);
+    setMaxComboAchieved(0);
+    setFx([]);
+    maxComboAchievedRef.current = 0;
+    scoreRef.current = 0;
+  }
+
+  const handlePowerupSelect = (key) => {
+    if (powerups[key] > 0) {
+      if (key === 'shuffle') {
+        shuffleBoard();
+        consumePowerup('shuffle');
+      } else {
+        setActivePowerup(activePowerup === key ? null : key);
+      }
+      haptic(10);
+    }
+  };
+  
+  const handlePowerupDragStart = (e, key, icon) => {
+    if (powerups[key] > 0 && key !== 'shuffle') {
+      setDraggedPowerup({ key, icon });
+      const empty = new Image();
+      e.dataTransfer.setDragImage(empty, 0, 0);
+      haptic(8);
+    } else {
+      e.preventDefault();
+    }
+  };
+
+  const handlePowerupDragEnd = () => {
+    setDraggedPowerup(null);
+    setDraggedIconStyle({});
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (draggedPowerup) {
+      setDraggedIconStyle({
+        position: 'fixed',
+        left: e.clientX,
+        top: e.clientY,
+        transform: 'translate(-50%, -50%)',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      });
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (!draggedPowerup || !boardRef.current) return;
+
+    const rect = boardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const r = Math.floor(y / cell);
+    const c = Math.floor(x / cell);
+
+    if (inBounds(r, c)) {
+      applyPowerup(draggedPowerup.key, r, c);
+    }
+    handlePowerupDragEnd();
+  };
+
+  const applyPowerup = (key, r, c) => {
+    const g = cloneGrid(gridRef.current);
+    let applied = false;
+
+    if (key === 'hammer') {
+      const targetCookie = g[r][c];
+      if (CAT_SET.includes(targetCookie)) {
+        for (let row = 0; row < ROWS; row++) {
+          for (let col = 0; col < COLS; col++) {
+            if (g[row][col] === targetCookie) g[row][col] = null;
+          }
+        }
+        applied = true;
+      }
+    } else if (key === 'bomb') {
+      for (let row = r - 1; row <= r + 1; row++) {
+        for (let col = c - 1; col <= c + 1; col++) {
+          if (inBounds(row, col)) g[row][col] = null;
+        }
+      }
+      applied = true;
+    }
+
+    if (applied) {
+      audio.play?.('powerup_spawn', { volume: 0.8 });
+      optimizedResolveCascades(g, () => {});
+      consumePowerup(key);
+    } else {
+      haptic(8);
+      audio.play?.("swap_invalid", { volume: 0.5 });
+    }
+  };
+
+  const boardW = cell * COLS;
+  const boardH = cell * ROWS;
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const getTimerColor = () => {
+    if (timeLeft <= 10) return "#e74c3c";
+    if (timeLeft <= 30) return "#f39c12";
+    return "#27ae60";
+  };
+
+  const optimizedGridRender = useMemo(() => {
+    return grid.map((row, r) =>
+      row.map((v, c) => {
+        // FIXED: Use object format for selection
+        const isSelected = sel && sel.r === r && sel.c === c;
+        const isHinted =
+          hint &&
+          ((hint[0][0] === r && hint[0][1] === c) ||
+            (hint[1][0] === r && hint[1][1] === c));
+        const isBlasting = blast.has(`${r}:${c}`);
+
+        let swapTransform = "";
+        if (swapping) {
+          if (swapping.from.r === r && swapping.from.c === c) {
+            const dx = (swapping.to.c - swapping.from.c) * cell;
+            const dy = (swapping.to.r - swapping.from.r) * cell;
+            swapTransform = `translate(${dx}px, ${dy}px)`;
+          } else if (swapping.to.r === r && swapping.to.c === c) {
+            const dx = (swapping.from.c - swapping.to.c) * cell;
+            const dy = (swapping.from.r - swapping.to.r) * cell;
+            swapTransform = `translate(${dx}px, ${dy}px)`;
+          }
+        }
+
+        const isSwapping =
+          !!swapping &&
+          ((swapping.from.r === r && swapping.from.c === c) ||
+            (swapping.to.r === r && swapping.to.c === c));
+
+        const tileKey = `${r}-${c}`;
+        const isNewTile = newTiles.has(tileKey);
+        const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
+        const isShake = shake.has(tileKey);
+        const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
+
+        return (
+          <MemoizedTile
+            key={tileKey}
+            r={r}
+            c={c}
+            value={v}
+            cell={cell}
+            isSelected={isSelected}
+            isHinted={isHinted}
+            isBlasting={isBlasting}
+            isSwapping={isSwapping}
+            isNewTile={isNewTile}
+            isGrab={isGrab}
+            isShake={isShake}
+            swapTransform={swapTransform}
+            delaySeconds={delaySeconds}
+            EMOJI_SIZE={EMOJI_SIZE}
+          />
+        );
+      })
+    );
+  }, [grid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
+
+  useEffect(() => {
+    const cleanup = [];
+    return () => {
+      cleanup.forEach(clearTimeout);
+      cleanup.forEach(clearInterval);
+    };
+  }, []);
+
   return (
-    <div className="rush-timer" style={{ 
-      textAlign: 'center', 
-      padding: '12px 16px',
-      background: `linear-gradient(135deg, ${getTimerColor()}, ${getTimerColor()}cc)`,
-      color: 'white',
-      borderRadius: '12px',
-      margin: '8px 16px',
-      fontWeight: '800',
-      fontSize: '18px'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-        <span>{timeLeft}s</span>
-        <button 
-          onClick={onTogglePause}
+    <div className="section board-wrap" ref={containerRef} onDragOver={handleDragOver}>
+      {draggedPowerup && (
+        <div className="powerup-drag-icon" style={draggedIconStyle}>
+          {draggedPowerup.icon}
+        </div>
+      )}
+      {gameOverState === 'calculating' && (
+        <div className="calculating-overlay">
+          <div className="calculating-content">
+            <div className="calculating-icon">...</div>
+            <div className="calculating-text">Time's Up!</div>
+          </div>
+        </div>
+      )}
+      <div
+        className="timer-display"
+        style={{
+          textAlign: "center",
+          marginBottom: "12px",
+          fontSize: "24px",
+          fontWeight: "800",
+          color: getTimerColor(),
+          padding: "8px 16px",
+          background: "var(--card)",
+          borderRadius: "16px",
+          border: "2px solid",
+          borderColor: getTimerColor(),
+          boxShadow: `0 0 0 3px ${getTimerColor()}20`,
+        }}
+      >
+        {formatTime(timeLeft)}
+      </div>
+
+      <div className="row">
+        <div>
+          <span className="muted">Score</span> <b>{score}</b>
+        </div>
+        <div className="combo-meter-container">
+          <div className="combo-meter-bar">
+            <div
+              className="combo-meter-fill"
+              style={{ width: `${Math.min((combo / 5) * 100, 100)}%` }}
+            ></div>
+          </div>
+          <b>{combo > 0 ? `Combo x${combo + 1}` : "Combo"}</b>
+        </div>
+        <div>
+          <span className="muted">Moves</span> <b>{moves}</b>
+        </div>
+      </div>
+
+      {combo > 0 && (
+        <div className="combo-celebration">
+          Sweet Combo x{combo + 1}!
+        </div>
+      )}
+
+      <div
+        ref={boardRef}
+        className="board"
+        style={{ width: boardW, height: boardH }}
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+      >
+        <div
+          className="gridlines"
           style={{
-            background: 'rgba(255,255,255,0.2)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: '6px',
-            color: 'white',
-            padding: '4px 8px',
-            fontSize: '12px',
-            cursor: 'pointer'
+            backgroundImage:
+              "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
+            backgroundSize: `${cell}px ${cell}px`,
           }}
+        />
+        {optimizedGridRender}
+      </div>
+
+      <div className="powerup-tray">
+        {Object.entries(POWERUP_DEFINITIONS).map(([key, def]) => (
+          <button
+            key={key}
+            className={`powerup-btn ${activePowerup === key ? 'active' : ''}`}
+            onClick={() => handlePowerupSelect(key)}
+            draggable={powerups[key] > 0 && key !== 'shuffle'}
+            onDragStart={(e) => handlePowerupDragStart(e, key, def.icon)}
+            onDragEnd={handlePowerupDragEnd}
+            disabled={!powerups[key] || powerups[key] <= 0}
+            title={`${def.name} (Owned: ${powerups[key] || 0})`}
+          >
+            <div className="powerup-icon">{def.icon}</div>
+            <div className="powerup-quantity">{powerups[key] || 0}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button className="btn" onClick={() => doHint()} disabled={timeLeft <= 0}>
+          Hint
+        </button>
+        <button className="btn" onClick={() => shuffleBoard()} disabled={timeLeft <= 0}>
+          Shuffle
+        </button>
+        <button className="btn" onClick={() => resetGame()}>
+          Reset
+        </button>
+        <button
+          className="btn"
+          onClick={() => setPaused((p) => !p)}
         >
-          {isPaused ? "▶️ Resume" : "⏸ Pause"}
+          {paused ? "Resume" : "Pause"}
         </button>
       </div>
 
       <div
-        className="progress rush-progress"
+        className="progress"
         style={{
           width: `${(timeLeft / GAME_DURATION) * 100}%`,
-          height: 8,
-          background: `linear-gradient(90deg, ${getTimerColor()}, ${getTimerColor()}80)`,
+          height: 6,
+          background: getTimerColor(),
           borderRadius: 6,
           marginTop: 10,
-          boxShadow: `0 0 8px ${getTimerColor()}40`
         }}
       />
     </div>
   );
 }
 
-// ====== START: Game Logic Helper Functions ======
-// FIX: Moved all helper functions before the GameView component to prevent initialization errors.
+// ====== Helper Functions (Updated to use CAT_SET) ======
 
-function randCat() {
-    return CAT_SET[(Math.random() * CAT_SET.length) | 0];
+function initSolvableGrid() {
+  const g = Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => randCat())
+  );
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (c >= 2 && g[r][c] === g[r][c - 1] && g[r][c] === g[r][c - 2]) {
+        g[r][c] = pickDifferent(g[r][c]);
+      }
+      if (r >= 2 && g[r][c] === g[r - 1][c] && g[r][c] === g[r - 2][c]) {
+        g[r][c] = pickDifferent(g[r][c]);
+      }
+    }
+  }
+  if (!hasAnyMove(g)) return shuffleToSolvable(g);
+  return g;
 }
 
 function pickDifferent(curr) {
-    const choices = CAT_SET.filter((x) => x !== curr);
-    return choices[(Math.random() * choices.length) | 0];
+  const choices = CAT_SET.filter((x) => x !== curr);
+  return choices[(Math.random() * choices.length) | 0];
 }
 
 function cloneGrid(g) {
-    return g.map((row) => row.slice());
+  return g.map((row) => row.slice());
 }
 
 function inBounds(r, c) {
-    return r >= 0 && c >= 0 && r < ROWS && c < COLS;
+  return r >= 0 && c >= 0 && r < ROWS && c < COLS;
 }
 
 function findMatches(g) {
-    const matches = new Set();
-    // Horizontal matches
-    for (let r = 0; r < ROWS; r++) {
-        let streak = [];
-        for (let c = 0; c < COLS; c++) {
-            if (streak.length > 0 && g[r][c] === streak[0].value) {
-                streak.push({ r, c, value: g[r][c] });
-            } else {
-                if (streak.length >= 3) streak.forEach(t => matches.add(`${t.r}:${t.c}`));
-                streak = [{ r, c, value: g[r][c] }];
-            }
+  const matches = [];
+
+  for (let r = 0; r < ROWS; r++) {
+    let streak = 1;
+    for (let c = 1; c < COLS; c++) {
+      if (g[r][c] && g[r][c] === g[r][c - 1]) streak++;
+      else {
+        if (streak >= 3) {
+          for (let k = 0; k < streak; k++) matches.push([r, c - 1 - k]);
         }
-        if (streak.length >= 3) streak.forEach(t => matches.add(`${t.r}:${t.c}`));
+        streak = 1;
+      }
     }
-    // Vertical matches
+    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([r, COLS - 1 - k]);
+  }
+
+  for (let c = 0; c < COLS; c++) {
+    let streak = 1;
+    for (let r = 1; r < ROWS; r++) {
+      if (g[r][c] && g[r][c] === g[r - 1][c]) streak++;
+      else {
+        if (streak >= 3) {
+          for (let k = 0; k < streak; k++) matches.push([r - 1 - k, c]);
+        }
+        streak = 1;
+      }
+    }
+    if (streak >= 3) for (let k = 0; k < streak; k++) matches.push([ROWS - 1 - k, c]);
+  }
+
+  return matches;
+}
+
+function applyGravity(g) {
+  for (let c = 0; c < COLS; c++) {
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (g[r][c] === null) {
+        for (let rr = r - 1; rr >= 0; rr--) {
+          if (g[rr][c] != null) {
+            g[r][c] = g[rr][c];
+            g[rr][c] = null;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+function refill(g) {
+  for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-        let streak = [];
-        for (let r = 0; r < ROWS; r++) {
-            if (streak.length > 0 && g[r][c] === streak[0].value) {
-                streak.push({ r, c, value: g[r][c] });
-            } else {
-                if (streak.length >= 3) streak.forEach(t => matches.add(`${t.r}:${t.c}`));
-                streak = [{ r, c, value: g[r][c] }];
-            }
-        }
-        if (streak.length >= 3) streak.forEach(t => matches.add(`${t.r}:${t.c}`));
+      if (g[r][c] === null) g[r][c] = randCat();
     }
-    return Array.from(matches).map(s => s.split(':').map(Number));
+  }
 }
 
 function hasAnyMove(g) {
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const dirs = [[0, 1], [1, 0]];
-            for (const [dr, dc] of dirs) {
-                const r2 = r + dr,
-                    c2 = c + dc;
-                if (!inBounds(r2, c2)) continue;
-                const ng = cloneGrid(g);
-                [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
-                if (findMatches(ng).length > 0) return true;
-            }
-        }
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const dirs = [
+        [0, 1],
+        [1, 0],
+      ];
+      for (const [dr, dc] of dirs) {
+        const r2 = r + dr;
+        const c2 = c + dc;
+        if (!inBounds(r2, c2)) continue;
+        const ng = cloneGrid(g);
+        [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
+        const m = findMatches(ng);
+        if (m.length > 0) return true;
+      }
     }
-    return false;
+  }
+  return false;
 }
 
 function shuffleToSolvable(g) {
-    let attempts = 0;
-    while (attempts < 100) {
-        for (let i = 0; i < 50; i++) {
-            const r1 = Math.floor(Math.random() * ROWS);
-            const c1 = Math.floor(Math.random() * COLS);
-            const r2 = Math.floor(Math.random() * ROWS);
-            const c2 = Math.floor(Math.random() * COLS);
-            [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
-        }
-        let matches = findMatches(g);
-        while (matches.length > 0) {
-            matches.forEach(([r, c]) => g[r][c] = randCat());
-            matches = findMatches(g);
-        }
-        if (hasAnyMove(g)) return g;
-        attempts++;
+  let attempts = 0;
+  while (attempts++ < 200) {
+    const flat = g.flat();
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [flat[i], flat[j]] = [flat[j], flat[i]];
     }
-    console.warn("Could not generate a solvable grid.");
-    return g;
-}
-
-function initSolvableGrid() {
-    let g = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    const ng = [];
     for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) g[r][c] = randCat();
+      ng.push(flat.slice(r * COLS, r * COLS + COLS));
     }
-    let matches = findMatches(g);
-    while (matches.length > 0) {
-        matches.forEach(([r, c]) => g[r][c] = randCat());
-        matches = findMatches(g);
-    }
-    if (!hasAnyMove(g)) {
-        g = shuffleToSolvable(g);
-    }
-    return g;
-}
-
-const detect4Match = () => [];
-const detect5InLine = () => [];
-const detectLTShape = () => [];
-
-// ====== END: Game Logic Helper Functions ======
-
-
-// ====== Main GameView Component ======
-export default function GameView({ onGameOver }) {
-  // Game state
-  const [grid, setGrid] = useState(() => initSolvableGrid());
-  const [specialGrid, setSpecialGrid] = useState(() => Array.from({ length: ROWS }, () => Array(COLS).fill(null)));
-  const [score, setScore] = useState(0);
-  const [moves, setMoves] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
-  const [gameActive, setGameActive] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
-  
-  // Visual state
-  const [selectedTile, setSelectedTile] = useState(null);
-  const [hintTile, setHintTile] = useState(null);
-  const [comboCelebration, setComboCelebration] = useState(null);
-  const [cascadeCelebration, setCascadeCelebration] = useState(null);
-  const [specialEffects, setSpecialEffects] = useState([]); // 🆕 PHASE 3
-  
-  // Refs for persistence
-  const gridRef = useRef(grid);
-  const specialGridRef = useRef(specialGrid);
-  const cascadeLevelRef = useRef(0);
-  const totalTimeBonus = useRef(0);
-
-  // Update refs when state changes
-  useEffect(() => { gridRef.current = grid; }, [grid]);
-  useEffect(() => { specialGridRef.current = specialGrid; }, [specialGrid]);
-
-  const findFirstMove = useCallback((g) => {
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        const dirs = [[0, 1], [1, 0]];
-        for (const [dr, dc] of dirs) {
-          const r2 = r + dr, c2 = c + dc;
-          if (!inBounds(r2, c2)) continue;
-          const ng = cloneGrid(g);
-          [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
-          const m = findMatches(ng);
-          if (m.length > 0) return [[r, c], [r2, c2]];
+        if (c >= 2 && ng[r][c] === ng[r][c - 1] && ng[r][c] === ng[r][c - 2]) {
+          ng[r][c] = pickDifferent(ng[r][c]);
+        }
+        if (r >= 2 && ng[r][c] === ng[r - 1][c] && ng[r][c] === ng[r - 2][c]) {
+          ng[r][c] = pickDifferent(ng[r][c]);
         }
       }
     }
-    return null;
-  }, []);
+    if (hasAnyMove(ng)) return ng;
+  }
+  return g;
+}
 
-  const cascadeAndFillGrid = useCallback((currentGrid, currentSpecialGrid, cascadeLevel = 1) => {
-    cascadeLevelRef.current = cascadeLevel;
-    
-    const g = cloneGrid(currentGrid);
-    const sg = cloneGrid(currentSpecialGrid);
-    
+function findFirstMove(g) {
+  for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const columnCats = [];
-      const columnSpecials = [];
-      for (let r = ROWS - 1; r >= 0; r--) {
-        if (g[r][c] !== null) {
-          columnCats.push(g[r][c]);
-          columnSpecials.push(sg[r][c]);
-        }
-      }
-      for (let r = 0; r < ROWS; r++) {
-        g[r][c] = null;
-        sg[r][c] = null;
-      }
-      for (let i = 0; i < columnCats.length; i++) {
-        g[ROWS - 1 - i][c] = columnCats[i];
-        sg[ROWS - 1 - i][c] = columnSpecials[i];
-      }
-      for (let r = ROWS - columnCats.length - 1; r >= 0; r--) {
-        g[r][c] = randCat();
+      const dirs = [
+        [0, 1],
+        [1, 0],
+      ];
+      for (const [dr, dc] of dirs) {
+        const r2 = r + dr;
+        const c2 = c + dc;
+        if (!inBounds(r2, c2)) continue;
+        const ng = cloneGrid(g);
+        [ng[r][c], ng[r2][c2]] = [ng[r2][c2], ng[r][c]];
+        const m = findMatches(ng);
+        if (m.length > 0) return [[r, c], [r2, c2]];
       }
     }
-    
-    setGrid(g);
-    setSpecialGrid(sg);
-    
-    setTimeout(() => {
-      const matches = findMatches(g);
-      if (matches.length > 0) {
-        processMatches(g, sg, matches, cascadeLevel);
-      } else {
-        cascadeLevelRef.current = 0;
-      }
-    }, 300);
-  }, []); 
-
-
-  const processMatches = useCallback((currentGrid, currentSpecialGrid, matches, cascadeLevel = 1) => {
-    const specials4 = detect4Match(currentGrid, matches);
-    const specials5 = detect5InLine(currentGrid, matches);  
-    const specialsLT = detectLTShape(currentGrid, matches);
-    
-    const allSpecials = [...specials4, ...specials5, ...specialsLT];
-    
-    const g = cloneGrid(currentGrid);
-    const sg = cloneGrid(currentSpecialGrid);
-    
-    matches.forEach(([r, c]) => {
-      g[r][c] = null;
-      sg[r][c] = null;
-    });
-
-    allSpecials.forEach(special => {
-      if (inBounds(special.r, special.c)) {
-        g[special.r][special.c] = special.originalCat;
-        sg[special.r][special.c] = special.type;
-        console.log(`🌟 Created special: ${special.type} at (${special.r},${special.c})`);
-      }
-    });
-    
-    const basePoints = matches.length <= 3 ? RUSH_SCORING[3] :
-                       matches.length === 4 ? RUSH_SCORING[4] :
-                       RUSH_SCORING[5];
-    
-    const cascadeMultiplier = 1 + (cascadeLevel - 1) * RUSH_SCORING.CASCADE_MULTIPLIER;
-    const finalPoints = Math.floor(basePoints * cascadeMultiplier);
-    
-    setScore(s => s + finalPoints);
-    setCombo(cascadeLevel);
-    
-    if (cascadeLevel > 1) {
-      const timeBonus = Math.min(RUSH_SCORING.CASCADE_TIME_BONUS, 
-                                 RUSH_SCORING.MAX_TIME_BONUS - totalTimeBonus.current);
-      if (timeBonus > 0) {
-        setTimeLeft(t => Math.min(GAME_DURATION, t + timeBonus));
-        totalTimeBonus.current += timeBonus;
-      }
-    }
-    
-    if (cascadeLevel >= 3) {
-      setComboCelebration(`${cascadeLevel}x CASCADE! 🔥`);
-      setTimeout(() => setComboCelebration(null), 2000);
-    }
-
-    if (cascadeLevel >= 2) {
-      setCascadeCelebration(`+${Math.floor(cascadeMultiplier * 10) / 10}x CASCADE`);
-      setTimeout(() => setCascadeCelebration(null), 1500);
-    }
-
-    audio.play?.(cascadeLevel >= 4 ? 'combo_x4' : cascadeLevel >= 3 ? 'combo_x3' : cascadeLevel >= 2 ? 'combo_x2' : 'match_pop');
-    
-    setTimeout(() => {
-      cascadeAndFillGrid(g, sg, cascadeLevel + 1);
-    }, 400);
-  }, [cascadeAndFillGrid]);
-
-
-  const activateWhiskerStreak = (r, c, direction) => {
-    let g = cloneGrid(gridRef.current);
-    let sg = cloneGrid(specialGridRef.current);
-    let tilesCleared = 0;
-    
-    if (direction === 'horizontal') {
-      for (let col = 0; col < COLS; col++) if (g[r][col] !== null) { g[r][col] = null; sg[r][col] = null; tilesCleared++; }
-      setSpecialEffects(prev => [...prev, { type: 'line-clear', direction: 'horizontal', row: r, id: Date.now() }]);
-    } else {
-      for (let row = 0; row < ROWS; row++) if (g[row][c] !== null) { g[row][c] = null; sg[row][c] = null; tilesCleared++; }
-      setSpecialEffects(prev => [...prev, { type: 'line-clear', direction: 'vertical', col: c, id: Date.now() }]);
-    }
-    
-    const points = RUSH_SCORING.WHISKER_STREAK_BASE + (tilesCleared * RUSH_SCORING.WHISKER_STREAK_PER_TILE);
-    setScore(s => s + points);
-    audio.play?.('powerup_spawn', { volume: 0.8 });
-    return { grid: g, specialGrid: sg };
-  };
-
-  const activateBoxCat = (r, c) => {
-    let g = cloneGrid(gridRef.current);
-    let sg = cloneGrid(specialGridRef.current);
-    let tilesCleared = 0;
-    
-    for (let row = r - 1; row <= r + 1; row++) {
-      for (let col = c - 1; col <= c + 1; col++) {
-        if (inBounds(row, col) && g[row][col] !== null) { g[row][col] = null; sg[row][col] = null; tilesCleared++; }
-      }
-    }
-    
-    setSpecialEffects(prev => [...prev, { type: 'area-blast', r, c, id: Date.now() }]);
-    const points = RUSH_SCORING.BOX_CAT_BASE + (tilesCleared * RUSH_SCORING.BOX_CAT_PER_TILE);
-    setScore(s => s + points);
-    audio.play?.('combo_x2', { volume: 0.9 });
-    return { grid: g, specialGrid: sg };
-  };
-
-  const activateCatnipBomb = (targetCat) => {
-    let g = cloneGrid(gridRef.current);
-    let sg = cloneGrid(specialGridRef.current);
-    let tilesCleared = 0;
-    
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (g[row][col] === targetCat) { g[row][col] = null; sg[row][col] = null; tilesCleared++; }
-      }
-    }
-    
-    setSpecialEffects(prev => [...prev, { type: 'color-bomb', targetCat, id: Date.now() }]);
-    const points = RUSH_SCORING.CATNIP_BOMB_BASE + (tilesCleared * RUSH_SCORING.CATNIP_BOMB_PER_TILE);
-    setScore(s => s + points);
-    audio.play?.('combo_x4', { volume: 1.0 });
-    return { grid: g, specialGrid: sg };
-  };
-
-  const handleSpecialClick = useCallback((r, c, specialType, originalCat) => {
-    if (!gameActive || isPaused) return;
-    
-    let result;
-    switch(specialType) {
-      case SPECIAL_TYPES.WHISKER_STREAK_H: result = activateWhiskerStreak(r, c, 'horizontal'); break;
-      case SPECIAL_TYPES.WHISKER_STREAK_V: result = activateWhiskerStreak(r, c, 'vertical'); break;
-      case SPECIAL_TYPES.BOX_CAT: result = activateBoxCat(r, c); break;
-      case SPECIAL_TYPES.CATNIP_BOMB: result = activateCatnipBomb(originalCat); break;
-      default: return;
-    }
-    
-    if (result) {
-      setGrid(result.grid);
-      setSpecialGrid(result.specialGrid);
-      setSelectedTile(null);
-      setTimeout(() => cascadeAndFillGrid(result.grid, result.specialGrid), 500);
-    }
-  }, [gameActive, isPaused, cascadeAndFillGrid]);
-
-  const handleTileClick = useCallback((r, c) => {
-    if (!gameActive || isPaused) return;
-    
-    if (specialGridRef.current[r][c]) {
-      handleSpecialClick(r, c, specialGridRef.current[r][c], gridRef.current[r][c]);
-      return;
-    }
-    
-    if (selectedTile) {
-      const [r1, c1] = selectedTile;
-      if (r1 === r && c1 === c) {
-        setSelectedTile(null);
-        return;
-      }
-      
-      const isAdjacent = (Math.abs(r1 - r) + Math.abs(c1 - c)) === 1;
-      if (!isAdjacent) {
-        setSelectedTile([r, c]);
-        return;
-      }
-      
-      const g = cloneGrid(gridRef.current);
-      const sg = cloneGrid(specialGridRef.current);
-      [g[r1][c1], g[r][c]] = [g[r][c], g[r1][c1]];
-      [sg[r1][c1], sg[r][c]] = [sg[r][c], sg[r1][c1]];
-      
-      const matches = findMatches(g);
-      if (matches.length > 0) {
-        setGrid(g);
-        setSpecialGrid(sg);
-        setSelectedTile(null);
-        setMoves(m => m + 1);
-        setTimeout(() => processMatches(g, sg, matches), 200);
-      } else {
-        setSelectedTile(null);
-        audio.play?.('swap_invalid');
-      }
-    } else {
-      setSelectedTile([r, c]);
-    }
-  }, [selectedTile, gameActive, isPaused, handleSpecialClick, processMatches]);
-
-  // Game timer
-  useEffect(() => {
-    if (!gameActive || isPaused) return;
-    
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          setGameActive(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [gameActive, isPaused]);
-
-  // Auto-hint system
-  useEffect(() => {
-    if (!gameActive || selectedTile || isPaused) {
-        setHintTile(null);
-        return;
-    };
-    
-    const hintTimer = setTimeout(() => {
-      const firstMove = findFirstMove(gridRef.current);
-      if (firstMove) {
-        setHintTile(firstMove[0]);
-        setTimeout(() => setHintTile(null), 2000);
-      }
-    }, 8000);
-    
-    return () => clearTimeout(hintTimer);
-  }, [gameActive, selectedTile, grid, isPaused, findFirstMove]);
-
-  // Game over logic
-  useEffect(() => {
-    if (!gameActive) {
-      onGameOver?.({ score, moves, combo: cascadeLevelRef.current });
-    }
-  }, [gameActive, onGameOver, score, moves]);
-
-  // Clear special effects after animation
-  useEffect(() => {
-    if (specialEffects.length > 0) {
-      const timer = setTimeout(() => {
-        setSpecialEffects([]);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [specialEffects]);
-
-  // Calculate board dimensions
-  const containerWidth = typeof window !== 'undefined' ? Math.min(380, window.innerWidth - 40) : 340;
-  const cellSize = Math.floor(containerWidth / COLS);
-  const boardWidth = cellSize * COLS;
-  const boardHeight = cellSize * ROWS;
-
-  const isGameOver = !gameActive;
-
-  return (
-    <div className="section board-wrap">
-      {specialGrid.some(row => row.some(cell => cell)) && (
-        <div className="special-instructions">
-          <div className="instruction-text">
-            ✨ Tap special cats to activate their powers! ✨
-          </div>
-        </div>
-      )}
-      
-      <RushTimer 
-        timeLeft={timeLeft}
-        isPaused={isPaused}
-        onTogglePause={() => setIsPaused(!isPaused)}
-      />
-      
-      <HypeMeter currentScore={score} cascadeLevel={cascadeLevelRef.current} />
-      
-      <div className="stats">
-        <div className="stat">
-          <div className="stat-value">{score.toLocaleString()}</div>
-          <div className="stat-label">Score</div>
-        </div>
-        <div className="stat">
-          <div className="stat-value">{moves}</div>
-          <div className="stat-label">Moves</div>
-        </div>
-        <div className="stat">
-          <div className="stat-value">{combo}</div>
-          <div className="stat-label">Combo</div>
-        </div>
-        
-        {comboCelebration && <div className="combo-celebration">{comboCelebration}</div>}
-        {cascadeCelebration && <div className="cascade-celebration">{cascadeCelebration}</div>}
-      </div>
-
-      <div 
-        className={`board ${cascadeLevelRef.current > 1 ? 'rush-board' : ''}`}
-        style={{ width: boardWidth, height: boardHeight, position: 'relative' }}
-      >
-        <div className="gridlines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-            {/* Grid lines can be added via CSS for performance */}
-        </div>
-
-        {grid.map((row, r) =>
-          row.map((cat, c) => {
-            if (!cat) return null;
-            
-            return (
-              <MemoizedTile
-                key={`${r}-${c}-${cat}`}
-                r={r}
-                c={c}
-                value={cat}
-                cell={cellSize}
-                isSelected={selectedTile?.[0] === r && selectedTile?.[1] === c}
-                isHinted={hintTile?.[0] === r && hintTile?.[1] === c}
-                EMOJI_SIZE={EMOJI_SIZE}
-                specialType={specialGrid[r][c]}
-                onClick={() => handleTileClick(r, c)}
-              />
-            );
-          })
-        )}
-
-        {specialEffects.map(effect => {
-            if (effect.type === 'line-clear') {
-                return <div key={effect.id} className="special-activation-effect line-clear-effect" style={{[effect.direction === 'horizontal' ? 'top' : 'left']: effect.direction === 'horizontal' ? effect.row * cellSize : effect.col * cellSize, [effect.direction === 'horizontal' ? 'left' : 'top']: 0, [effect.direction === 'horizontal' ? 'width' : 'height']: effect.direction === 'horizontal' ? boardWidth : boardHeight, [effect.direction === 'horizontal' ? 'height' : 'width']: cellSize, }} />;
-            } else if (effect.type === 'area-blast') {
-                return <div key={effect.id} className="special-activation-effect area-blast-effect" style={{ left: (effect.c - 1) * cellSize, top: (effect.r - 1) * cellSize, width: cellSize * 3, height: cellSize * 3, }} />;
-            }
-            return null;
-        })}
-      </div>
-
-      {isGameOver && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 100, width: '90%' }}><ShareButtons score={score} /></div>}
-    </div>
-  );
+  }
+  return null;
 }
