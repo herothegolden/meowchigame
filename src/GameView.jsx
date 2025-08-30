@@ -822,4 +822,3 @@ export default function GameView({ onGameOver }) {
     </div>
   );
 }
-
