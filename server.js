@@ -40,9 +40,9 @@ async function initializeDatabase() {
     
     // Run schema migration
     await pool.query(`
-      ALTER TABLE users 
-      ADD COLUMN IF NOT EXISTS last_reward_claimed_date TIMESTAMP
-    `);
+  ALTER TABLE user_streaks 
+  ADD COLUMN IF NOT EXISTS last_reward_claimed_date TIMESTAMP
+`);
     console.log('Schema updated - last_reward_claimed_date column ensured');
   } catch (error) {
     dbConnected = false;
