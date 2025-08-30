@@ -20,7 +20,7 @@ const MemoizedTile = React.memo(({
   effectOverlay // 🆕 PHASE 3: Effect overlay
 }) => {
   const isSpecial = !!specialType;
-  const isImage = value && typeof value === 'string' && value.startsWith('https://ik.imagekit.io');
+  const isImage = value && typeof value === 'string' && value.startsWith('/assets/');
   
   // Get special overlay based on type
   const getSpecialOverlay = () => {
