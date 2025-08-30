@@ -5,29 +5,71 @@ import ShareButtons from "./ShareButtons.jsx";
 import { game } from "./utils.js";
 import { useStore } from "./store.js"; // NEW: Import Zustand store
 
-// 1) OPTIMIZE: Memoized tile component
+// 🆕 PHASE 2: Special Cat Types
+const SPECIAL_TYPES = {
+  WHISKER_STREAK_H: 'whisker_streak_h', // Horizontal line clear
+  WHISKER_STREAK_V: 'whisker_streak_v', // Vertical line clear
+  BOX_CAT: 'box_cat',                   // 3x3 area clear
+  CATNIP_BOMB: 'catnip_bomb',           // Clear all of one type
+};
+
+// 1) OPTIMIZE: Enhanced Memoized tile component with special rendering
 const MemoizedTile = React.memo(({
   r, c, value, cell, isSelected, isHinted, isBlasting, isSwapping,
-  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE
+  isNewTile, isGrab, isShake, swapTransform, delaySeconds, EMOJI_SIZE, specialType
 }) => {
+  const isSpecial = !!specialType;
   const isImage = value && typeof value === 'string' && value.startsWith('https://ik.imagekit.io');
+  
+  // Get special overlay based on type
+  const getSpecialOverlay = () => {
+    switch(specialType) {
+      case SPECIAL_TYPES.WHISKER_STREAK_H:
+        return '⚡'; // Horizontal lightning
+      case SPECIAL_TYPES.WHISKER_STREAK_V:
+        return '⚡'; // Vertical lightning  
+      case SPECIAL_TYPES.BOX_CAT:
+        return '💥'; // Explosion symbol
+      case SPECIAL_TYPES.CATNIP_BOMB:
+        return '🌟'; // Star bomb
+      default:
+        return null;
+    }
+  };
+
+  const getSpecialBorder = () => {
+    switch(specialType) {
+      case SPECIAL_TYPES.WHISKER_STREAK_H:
+        return '3px solid #00d4ff'; // Cyan for horizontal
+      case SPECIAL_TYPES.WHISKER_STREAK_V:
+        return '3px solid #ff6b35'; // Orange for vertical
+      case SPECIAL_TYPES.BOX_CAT:
+        return '3px solid #f7b731'; // Gold for box
+      case SPECIAL_TYPES.CATNIP_BOMB:
+        return '3px solid #e056fd'; // Purple for bomb
+      default:
+        return '1px solid var(--border)';
+    }
+  };
   
   return (
     <div
       key={`tile-${r}-${c}`}
-      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint-pulse" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""}`}
+      className={`tile ${isSelected ? "sel" : ""} ${isHinted ? "hint-pulse" : ""} ${isGrab ? "grab" : ""} ${isShake ? "shake" : ""} ${isSpecial ? "special-tile" : ""}`}
       style={{
         left: c * cell,
         top: r * cell,
         width: cell,
         height: cell,
         transform: swapTransform || undefined,
-        zIndex: isBlasting ? 10 : isGrab ? 5 : 1,
+        zIndex: isBlasting ? 10 : isGrab ? 5 : (isSpecial ? 3 : 1),
         transition: isSwapping
           ? "transform 0.16s ease"
           : delaySeconds
           ? `top 0.16s ease ${delaySeconds}s`
           : "top 0.16s ease",
+        border: getSpecialBorder(),
+        boxShadow: isSpecial ? `0 0 12px ${getSpecialBorder().split(' ')[2]}40` : 'none'
       }}
     >
       <div
@@ -38,7 +80,8 @@ const MemoizedTile = React.memo(({
           height: isImage ? '85%' : 'auto',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          position: 'relative'
         }}
       >
         {isImage ? (
@@ -49,7 +92,8 @@ const MemoizedTile = React.memo(({
               width: '100%', 
               height: '100%', 
               objectFit: 'contain',
-              borderRadius: '8px'
+              borderRadius: '8px',
+              filter: isSpecial ? 'brightness(1.2) saturate(1.3)' : 'none'
             }}
             draggable={false}
             onError={(e) => {
@@ -60,7 +104,15 @@ const MemoizedTile = React.memo(({
         ) : (
           value
         )}
+        
+        {/* Special overlay */}
+        {isSpecial && (
+          <div className="special-overlay">
+            {getSpecialOverlay()}
+          </div>
+        )}
       </div>
+      
       {/* Enhanced blast effect */}
       {isBlasting && (
         <div className="blast-enhanced">
@@ -79,7 +131,8 @@ const MemoizedTile = React.memo(({
     prevProps.isNewTile === nextProps.isNewTile &&
     prevProps.isGrab === nextProps.isGrab &&
     prevProps.isShake === nextProps.isShake &&
-    prevProps.swapTransform === nextProps.swapTransform
+    prevProps.swapTransform === nextProps.swapTransform &&
+    prevProps.specialType === nextProps.specialType
   );
 });
 
@@ -141,7 +194,7 @@ const CELL_MAX = 88;
 const GAME_DURATION = 60; // 60 seconds for Rush mode
 const EMOJI_SIZE = 0.8;
 
-// 🐱 THE SIX MEOWCHI CATS (Phase 1 Update)
+// 🐱 THE SIX MEOWCHI CATS (Phase 1)
 const CAT_SET = [
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Boba.webp?updatedAt=1756284887939",      // Boba
   "https://ik.imagekit.io/59r2kpz8r/Meowchi/Cheese.webp?updatedAt=1756284888031",    // Cheese  
@@ -160,17 +213,25 @@ const POWERUP_DEFINITIONS = {
   bomb: { name: "Marshmallow Bomb", icon: "💣" },
 };
 
-// 🎯 NEW: Meowchi 6x6 Rush Scoring (Phase 1)
+// 🎯 Meowchi 6x6 Rush Scoring (Updated for Phase 2)
 const RUSH_SCORING = {
   3: 60,   // 3-match = 60 points
   4: 120,  // 4-match = 120 points  
   5: 200,  // 5-match = 200 points
   CASCADE_TIME_BONUS: 0.25, // +0.25s per cascade step
   MAX_TIME_BONUS: 5,        // Cap at +5s total per game
-  CASCADE_MULTIPLIER: 0.3   // Each cascade step: ×(1 + 0.3 per step)
+  CASCADE_MULTIPLIER: 0.3,   // Each cascade step: ×(1 + 0.3 per step)
+  
+  // 🆕 PHASE 2: Special Scoring
+  WHISKER_STREAK_BASE: 160,  // +160 base + +15 per tile cleared
+  WHISKER_STREAK_PER_TILE: 15,
+  BOX_CAT_BASE: 180,         // +180 base + +20 per tile
+  BOX_CAT_PER_TILE: 20,
+  CATNIP_BOMB_BASE: 420,     // +420 base + +12 per tile
+  CATNIP_BOMB_PER_TILE: 12,
 };
 
-// 🔥 NEW: Hype Meter Component
+// 🔥 Hype Meter Component (unchanged from Phase 1)
 const HypeMeter = ({ currentScore, cascadeLevel }) => {
   const tier1 = 1500;
   const tier2 = 4500; 
@@ -246,6 +307,11 @@ export default function GameView({
   const [grid, setGrid] = useState(() => initSolvableGrid());
   const gridRef = useRef(grid);
   gridRef.current = grid;
+  
+  // 🆕 PHASE 2: Special cats grid
+  const [specialGrid, setSpecialGrid] = useState(() => Array.from({ length: ROWS }, () => Array(COLS).fill(null)));
+  const specialGridRef = useRef(specialGrid);
+  specialGridRef.current = specialGrid;
 
   // Selection / hint / animation
   const [sel, setSel] = useState(null);
@@ -260,7 +326,7 @@ export default function GameView({
   const [blast, setBlast] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
 
-  // 🆕 NEW: Enhanced Rush Mode Stats
+  // Enhanced Rush Mode Stats
   const [totalTimeBonusEarned, setTotalTimeBonusEarned] = useState(0);
   const [currentCascadeLevel, setCurrentCascadeLevel] = useState(0);
   const [gameStartTime, setGameStartTime] = useState(Date.now());
@@ -287,6 +353,9 @@ export default function GameView({
   const powerups = useStore(s => s.powerups);
   const setPowerups = useStore(s => s.setPowerups);
 
+  // 🆕 PHASE 2: Special activation mode
+  const [specialActivationMode, setSpecialActivationMode] = useState(false);
+
   // NEW: Function to consume a power-up
   const consumePowerup = async (powerupKey) => {
     try {
@@ -310,6 +379,220 @@ export default function GameView({
       setPowerups(powerups);
       console.error("Error consuming powerup:", error);
     }
+  };
+
+  // 🆕 PHASE 2: Special Detection Functions
+
+  // Detect 4-in-a-row/column for Whisker-Streak
+  const detect4Match = (matches) => {
+    const specials = [];
+    
+    // Group matches by position to find 4+ consecutive
+    const horizontalGroups = {};
+    const verticalGroups = {};
+    
+    matches.forEach(([r, c]) => {
+      // Group horizontal matches by row
+      if (!horizontalGroups[r]) horizontalGroups[r] = [];
+      horizontalGroups[r].push(c);
+      
+      // Group vertical matches by column
+      if (!verticalGroups[c]) verticalGroups[c] = [];
+      verticalGroups[c].push(r);
+    });
+    
+    // Check horizontal groups for 4+
+    Object.entries(horizontalGroups).forEach(([row, cols]) => {
+      cols.sort((a, b) => a - b);
+      if (cols.length >= 4) {
+        // Create horizontal Whisker-Streak in the middle
+        const middleCol = cols[Math.floor(cols.length / 2)];
+        specials.push({
+          r: parseInt(row),
+          c: middleCol,
+          type: SPECIAL_TYPES.WHISKER_STREAK_H
+        });
+      }
+    });
+    
+    // Check vertical groups for 4+
+    Object.entries(verticalGroups).forEach(([col, rows]) => {
+      rows.sort((a, b) => a - b);
+      if (rows.length >= 4) {
+        // Create vertical Whisker-Streak in the middle
+        const middleRow = rows[Math.floor(rows.length / 2)];
+        specials.push({
+          r: middleRow,
+          c: parseInt(col),
+          type: SPECIAL_TYPES.WHISKER_STREAK_V
+        });
+      }
+    });
+    
+    return specials;
+  };
+
+  // Detect 5-in-a-line for Catnip Bomb
+  const detect5InLine = (matches) => {
+    const specials = [];
+    
+    // Check for exactly 5 in a straight line
+    const horizontalGroups = {};
+    const verticalGroups = {};
+    
+    matches.forEach(([r, c]) => {
+      if (!horizontalGroups[r]) horizontalGroups[r] = [];
+      horizontalGroups[r].push(c);
+      
+      if (!verticalGroups[c]) verticalGroups[c] = [];
+      verticalGroups[c].push(r);
+    });
+    
+    // Check for exactly 5 horizontal
+    Object.entries(horizontalGroups).forEach(([row, cols]) => {
+      if (cols.length >= 5) {
+        cols.sort((a, b) => a - b);
+        const middleCol = cols[Math.floor(cols.length / 2)];
+        specials.push({
+          r: parseInt(row),
+          c: middleCol,
+          type: SPECIAL_TYPES.CATNIP_BOMB
+        });
+      }
+    });
+    
+    // Check for exactly 5 vertical
+    Object.entries(verticalGroups).forEach(([col, rows]) => {
+      if (rows.length >= 5) {
+        rows.sort((a, b) => a - b);
+        const middleRow = rows[Math.floor(rows.length / 2)];
+        specials.push({
+          r: middleRow,
+          c: parseInt(col),
+          type: SPECIAL_TYPES.CATNIP_BOMB
+        });
+      }
+    });
+    
+    return specials;
+  };
+
+  // Detect L/T shapes for Box Cat (simplified version)
+  const detectLTShape = (grid, matches) => {
+    const specials = [];
+    
+    // For Phase 2, we'll use a simplified approach:
+    // If we have 5+ matches and they form a rough L or T, create a Box Cat
+    if (matches.length >= 5) {
+      // Find the center point of the match group
+      const centerR = Math.round(matches.reduce((sum, [r]) => sum + r, 0) / matches.length);
+      const centerC = Math.round(matches.reduce((sum, [, c]) => sum + c, 0) / matches.length);
+      
+      // Check if this forms an L or T pattern (simplified)
+      const hasHorizontal = matches.some(([r, c]) => r === centerR && Math.abs(c - centerC) >= 1);
+      const hasVertical = matches.some(([r, c]) => c === centerC && Math.abs(r - centerR) >= 1);
+      
+      if (hasHorizontal && hasVertical && matches.length >= 5) {
+        specials.push({
+          r: centerR,
+          c: centerC,
+          type: SPECIAL_TYPES.BOX_CAT
+        });
+      }
+    }
+    
+    return specials;
+  };
+
+  // 🆕 PHASE 2: Special Activation Functions
+
+  const activateWhiskerStreak = (r, c, direction, targetCat) => {
+    const g = cloneGrid(gridRef.current);
+    const sg = cloneGrid(specialGridRef.current);
+    let tilesCleared = 0;
+    
+    if (direction === 'horizontal') {
+      // Clear entire row
+      for (let col = 0; col < COLS; col++) {
+        if (g[r][col] !== null) {
+          g[r][col] = null;
+          sg[r][col] = null;
+          tilesCleared++;
+        }
+      }
+    } else {
+      // Clear entire column
+      for (let row = 0; row < ROWS; row++) {
+        if (g[row][c] !== null) {
+          g[row][c] = null;
+          sg[row][c] = null;
+          tilesCleared++;
+        }
+      }
+    }
+    
+    const points = RUSH_SCORING.WHISKER_STREAK_BASE + (tilesCleared * RUSH_SCORING.WHISKER_STREAK_PER_TILE);
+    setScore(s => s + points);
+    
+    audio.play?.('powerup_spawn', { volume: 0.8 });
+    console.log(`⚡ Whisker-Streak activated: ${tilesCleared} tiles, ${points} points`);
+    
+    return { grid: g, specialGrid: sg };
+  };
+
+  const activateBoxCat = (r, c, targetCat) => {
+    const g = cloneGrid(gridRef.current);
+    const sg = cloneGrid(specialGridRef.current);
+    let tilesCleared = 0;
+    
+    // Clear 3x3 area around the Box Cat
+    for (let row = r - 1; row <= r + 1; row++) {
+      for (let col = c - 1; col <= c + 1; col++) {
+        if (inBounds(row, col) && g[row][col] !== null) {
+          g[row][col] = null;
+          sg[row][col] = null;
+          tilesCleared++;
+        }
+      }
+    }
+    
+    const points = RUSH_SCORING.BOX_CAT_BASE + (tilesCleared * RUSH_SCORING.BOX_CAT_PER_TILE);
+    setScore(s => s + points);
+    
+    audio.play?.('powerup_spawn', { volume: 0.9 });
+    console.log(`💥 Box Cat activated: ${tilesCleared} tiles, ${points} points`);
+    
+    return { grid: g, specialGrid: sg };
+  };
+
+  const activateCatnipBomb = (r, c, targetCat) => {
+    const g = cloneGrid(gridRef.current);
+    const sg = cloneGrid(specialGridRef.current);
+    let tilesCleared = 0;
+    
+    // Clear all cats of the target type
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (g[row][col] === targetCat && (row !== r || col !== c)) {
+          g[row][col] = null;
+          sg[row][col] = null;
+          tilesCleared++;
+        }
+      }
+    }
+    
+    // Also clear the bomb itself
+    g[r][c] = null;
+    sg[r][c] = null;
+    tilesCleared++;
+    
+    const points = RUSH_SCORING.CATNIP_BOMB_BASE + (tilesCleared * RUSH_SCORING.CATNIP_BOMB_PER_TILE);
+    setScore(s => s + points);
+    
+    audio.play?.('powerup_spawn', { volume: 1.0 });
+    console.log(`🌟 Catnip Bomb activated: ${tilesCleared} tiles, ${points} points`);
+    
+    return { grid: g, specialGrid: sg };
   };
 
   // Enable closing confirmation during gameplay
@@ -366,7 +649,7 @@ export default function GameView({
     window.currentGameScore = score;
   }, [score]);
 
-  // 🕐 Enhanced Timer with Cascade Bonuses
+  // Enhanced Timer with Cascade Bonuses
   useEffect(() => {
     if (paused || gameOverState) return;
     const timer = setInterval(() => {
@@ -382,7 +665,7 @@ export default function GameView({
     return () => clearInterval(timer);
   }, [paused, gameOverState]);
 
-  // Timer tick sounds (enhanced for Rush mode)
+  // Timer tick sounds
   const lastTickRef = useRef(null);
   useEffect(() => {
     if (!settings?.sound) return;
@@ -405,7 +688,7 @@ export default function GameView({
     } catch {}
   }
 
-  // 🆕 NEW: Rush Mode Cascade Time Bonus
+  // Rush Mode Cascade Time Bonus
   const addCascadeTimeBonus = (cascadeSteps) => {
     const timeBonus = Math.min(
       cascadeSteps * RUSH_SCORING.CASCADE_TIME_BONUS,
@@ -463,7 +746,7 @@ export default function GameView({
     }
   }
 
-  // Pointer interactions
+  // 🆕 PHASE 2: Enhanced Pointer Interactions with Special Activation
   useEffect(() => {
     const el = boardRef.current;
     if (!el || paused) return;
@@ -483,6 +766,36 @@ export default function GameView({
       const p = rc(e);
       if (!inBounds(p.r, p.c)) return;
 
+      // 🆕 PHASE 2: Check for special activation
+      const specialType = specialGridRef.current[p.r][p.c];
+      if (specialType) {
+        const targetCat = gridRef.current[p.r][p.c];
+        let result;
+        
+        if (specialType === SPECIAL_TYPES.WHISKER_STREAK_H) {
+          result = activateWhiskerStreak(p.r, p.c, 'horizontal', targetCat);
+        } else if (specialType === SPECIAL_TYPES.WHISKER_STREAK_V) {
+          result = activateWhiskerStreak(p.r, p.c, 'vertical', targetCat);
+        } else if (specialType === SPECIAL_TYPES.BOX_CAT) {
+          result = activateBoxCat(p.r, p.c, targetCat);
+        } else if (specialType === SPECIAL_TYPES.CATNIP_BOMB) {
+          result = activateCatnipBomb(p.r, p.c, targetCat);
+        }
+        
+        if (result) {
+          setGrid(result.grid);
+          setSpecialGrid(result.specialGrid);
+          haptic(15);
+          
+          // Trigger cascade after special activation
+          setTimeout(() => {
+            optimizedResolveCascades(result.grid, result.specialGrid, () => {});
+          }, 100);
+        }
+        return;
+      }
+
+      // Regular powerup handling
       if (activePowerup) {
         const g = cloneGrid(gridRef.current);
         if (activePowerup === 'hammer') {
@@ -494,7 +807,7 @@ export default function GameView({
               }
             }
             audio.play?.('powerup_spawn', { volume: 0.7 });
-            optimizedResolveCascades(g, () => {});
+            optimizedResolveCascades(g, specialGridRef.current, () => {});
             consumePowerup('hammer');
             setActivePowerup(null);
           } else {
@@ -508,13 +821,14 @@ export default function GameView({
             }
           }
           audio.play?.('powerup_spawn', { volume: 0.8 });
-          optimizedResolveCascades(g, () => {});
+          optimizedResolveCascades(g, specialGridRef.current, () => {});
           consumePowerup('bomb');
           setActivePowerup(null);
         }
         return;
       }
 
+      // Regular drag behavior
       drag = { r: p.r, c: p.c, x: p.x, y: p.y, dragging: false };
       setSel({ r: p.r, c: p.c });
       setGrabTile({ r: p.r, c: p.c });
@@ -577,7 +891,12 @@ export default function GameView({
     if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
 
     const g = cloneGrid(gridRef.current);
+    const sg = cloneGrid(specialGridRef.current);
+    
+    // Swap both regular and special grids
     [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+    [sg[r1][c1], sg[r2][c2]] = [sg[r2][c2], sg[r1][c1]];
+    
     const matches = findMatches(g);
 
     if (matches.length === 0) {
@@ -609,18 +928,20 @@ export default function GameView({
     setSwapping({ from: { r: r1, c: c1 }, to: { r: r2, c: c2 } });
     setTimeout(() => {
       setGrid(g);
+      setSpecialGrid(sg);
       setSwapping(null);
       setMoves((m) => Math.max(0, m - 1));
-      optimizedResolveCascades(g, () => {
+      optimizedResolveCascades(g, sg, () => {
         if (timeLeftRef.current <= 0) finish();
       });
     }, 200);
   }
 
-  // 🚀 ENHANCED: Rush Mode Cascade Resolution
-  function optimizedResolveCascades(start, done) {
+  // 🚀 ENHANCED: Phase 2 Cascade Resolution with Special Creation
+  function optimizedResolveCascades(startGrid, startSpecialGrid, done) {
     setAnimating(true);
-    let g = cloneGrid(start);
+    let g = cloneGrid(startGrid);
+    let sg = cloneGrid(startSpecialGrid);
     let cascadeSteps = 0;
 
     const step = () => {
@@ -628,6 +949,7 @@ export default function GameView({
       if (matches.length === 0) {
         React.startTransition(() => {
           setGrid(g);
+          setSpecialGrid(sg);
           setNewTiles(new Set());
           setFallDelay({});
           setCurrentCascadeLevel(0);
@@ -654,6 +976,25 @@ export default function GameView({
       cascadeSteps++;
       setCurrentCascadeLevel(cascadeSteps);
 
+      // 🆕 PHASE 2: Create specials from matches before clearing
+      const newSpecials = [];
+      
+      // Detect 5-in-line first (Catnip Bomb)
+      const bombSpecials = detect5InLine(matches);
+      newSpecials.push(...bombSpecials);
+      
+      // Then detect L/T shapes (Box Cat)
+      if (bombSpecials.length === 0) { // Only if no bomb was created
+        const boxSpecials = detectLTShape(g, matches);
+        newSpecials.push(...boxSpecials);
+      }
+      
+      // Finally detect 4-match (Whisker-Streak)
+      if (newSpecials.length === 0) { // Only if no other special was created
+        const streakSpecials = detect4Match(matches);
+        newSpecials.push(...streakSpecials);
+      }
+
       const keys = matches.map(([r, c]) => `${r}:${c}`);
       setBlast(new Set(keys));
 
@@ -667,7 +1008,7 @@ export default function GameView({
         })),
       ]);
 
-      // 🎯 NEW: Rush Mode Scoring System
+      // Rush Mode Scoring System
       const matchSize = matches.length;
       let basePoints = 0;
       
@@ -679,17 +1020,33 @@ export default function GameView({
         basePoints = RUSH_SCORING[3] * Math.floor(matchSize / 3);
       }
 
-      // Apply cascade multiplier: ×(1 + 0.3 per step)
+      // Apply cascade multiplier
       const cascadeMultiplier = 1 + (cascadeSteps * RUSH_SCORING.CASCADE_MULTIPLIER);
       const pointsEarned = Math.floor(basePoints * cascadeMultiplier);
       
       setScore((s) => s + pointsEarned);
-      console.log(`💎 Match: ${matchSize} pieces, ${cascadeSteps} cascades, ${pointsEarned} points`);
 
+      // Clear matched tiles
       matches.forEach(([r, c]) => {
         g[r][c] = null;
+        // Don't clear specials that were just created
+        if (!newSpecials.some(special => special.r === r && special.c === c)) {
+          sg[r][c] = null;
+        }
       });
+
+      // 🆕 PHASE 2: Place new specials AFTER clearing matches
+      newSpecials.forEach(special => {
+        // Keep the original cat at the special position
+        if (g[special.r][special.c] === null) {
+          g[special.r][special.c] = randCat(); // Generate new cat for the special
+        }
+        sg[special.r][special.c] = special.type;
+        console.log(`✨ Special created: ${special.type} at (${special.r}, ${special.c})`);
+      });
+
       setGrid(cloneGrid(g));
+      setSpecialGrid(cloneGrid(sg));
       setTimeout(() => setBlast(new Set()), 80);
 
       setTimeout(() => {
@@ -712,7 +1069,7 @@ export default function GameView({
           }
         }
 
-        applyGravity(g);
+        applyGravity(g, sg); // Apply gravity to both grids
         const empties = new Set();
         for (let r = 0; r < ROWS; r++)
           for (let c = 0; c < COLS; c++) if (g[r][c] === null) empties.add(`${r}-${c}`);
@@ -722,6 +1079,7 @@ export default function GameView({
           setNewTiles(empties);
           setFallDelay(delayMap);
           setGrid(cloneGrid(g));
+          setSpecialGrid(cloneGrid(sg));
         });
 
         setTimeout(() => {
@@ -748,13 +1106,19 @@ export default function GameView({
   function shuffleBoard() {
     if (timeLeft <= 0) return;
     const g = shuffleToSolvable(gridRef.current);
+    const sg = Array.from({ length: ROWS }, () => Array(COLS).fill(null)); // Reset specials
     setGrid(g);
+    setSpecialGrid(sg);
     haptic(12);
   }
 
   function ensureSolvable() {
-    if (!hasAnyMove(gridRef.current))
-      setGrid(shuffleToSolvable(gridRef.current));
+    if (!hasAnyMove(gridRef.current)) {
+      const g = shuffleToSolvable(gridRef.current);
+      const sg = Array.from({ length: ROWS }, () => Array(COLS).fill(null)); // Reset specials
+      setGrid(g);
+      setSpecialGrid(sg);
+    }
   }
 
   async function finish() {
@@ -790,6 +1154,7 @@ export default function GameView({
   function resetGame() {
     if (timeLeft <= 0 && !paused) return;
     setGrid(initSolvableGrid());
+    setSpecialGrid(Array.from({ length: ROWS }, () => Array(COLS).fill(null)));
     setScore(0);
     setMoves(20);
     setCombo(0);
@@ -869,6 +1234,7 @@ export default function GameView({
 
   const applyPowerup = (key, r, c) => {
     const g = cloneGrid(gridRef.current);
+    const sg = cloneGrid(specialGridRef.current);
     let applied = false;
 
     if (key === 'hammer') {
@@ -876,7 +1242,10 @@ export default function GameView({
       if (CAT_SET.includes(targetCat)) {
         for (let row = 0; row < ROWS; row++) {
           for (let col = 0; col < COLS; col++) {
-            if (g[row][col] === targetCat) g[row][col] = null;
+            if (g[row][col] === targetCat) {
+              g[row][col] = null;
+              sg[row][col] = null;
+            }
           }
         }
         applied = true;
@@ -884,7 +1253,10 @@ export default function GameView({
     } else if (key === 'bomb') {
       for (let row = r - 1; row <= r + 1; row++) {
         for (let col = c - 1; col <= c + 1; col++) {
-          if (inBounds(row, col)) g[row][col] = null;
+          if (inBounds(row, col)) {
+            g[row][col] = null;
+            sg[row][col] = null;
+          }
         }
       }
       applied = true;
@@ -892,7 +1264,7 @@ export default function GameView({
 
     if (applied) {
       audio.play?.('powerup_spawn', { volume: 0.8 });
-      optimizedResolveCascades(g, () => {});
+      optimizedResolveCascades(g, sg, () => {});
       consumePowerup(key);
     } else {
       haptic(8);
@@ -948,6 +1320,7 @@ export default function GameView({
         const isGrab = grabTile && grabTile.r === r && grabTile.c === c;
         const isShake = shake.has(tileKey);
         const delaySeconds = isSwapping ? 0 : fallDelay[tileKey] || 0;
+        const specialType = specialGrid[r] && specialGrid[r][c];
 
         return (
           <MemoizedTile
@@ -966,11 +1339,12 @@ export default function GameView({
             swapTransform={swapTransform}
             delaySeconds={delaySeconds}
             EMOJI_SIZE={EMOJI_SIZE}
+            specialType={specialType}
           />
         );
       })
     );
-  }, [grid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
+  }, [grid, specialGrid, sel, hint, blast, swapping, newTiles, grabTile, shake, fallDelay, cell]);
 
   useEffect(() => {
     const cleanup = [];
@@ -996,7 +1370,7 @@ export default function GameView({
         </div>
       )}
       
-      {/* 🆕 NEW: Rush Mode Timer Display */}
+      {/* Rush Mode Timer Display */}
       <div
         className="timer-display rush-timer"
         style={{
@@ -1021,7 +1395,14 @@ export default function GameView({
         )}
       </div>
 
-      {/* 🔥 NEW: Hype Meter */}
+      {/* 🆕 PHASE 2: Special Instructions */}
+      <div className="special-instructions">
+        <div className="instruction-text">
+          ✨ Tap special cats to activate! ⚡ Line Clear • 💥 Area Blast • 🌟 Color Bomb
+        </div>
+      </div>
+
+      {/* Hype Meter */}
       <HypeMeter currentScore={score} cascadeLevel={currentCascadeLevel} />
 
       {/* Enhanced Rush Mode Stats */}
@@ -1113,7 +1494,7 @@ export default function GameView({
   );
 }
 
-// ====== Helper Functions (Updated for Rush Mode) ======
+// ====== Helper Functions (Updated for Phase 2) ======
 
 function initSolvableGrid() {
   const g = Array.from({ length: ROWS }, () =>
@@ -1180,7 +1561,8 @@ function findMatches(g) {
   return matches;
 }
 
-function applyGravity(g) {
+// 🆕 PHASE 2: Enhanced gravity that handles special grid
+function applyGravity(g, sg) {
   for (let c = 0; c < COLS; c++) {
     for (let r = ROWS - 1; r >= 0; r--) {
       if (g[r][c] === null) {
@@ -1188,6 +1570,11 @@ function applyGravity(g) {
           if (g[rr][c] != null) {
             g[r][c] = g[rr][c];
             g[rr][c] = null;
+            // Move specials too
+            if (sg) {
+              sg[r][c] = sg[rr][c];
+              sg[rr][c] = null;
+            }
             break;
           }
         }
