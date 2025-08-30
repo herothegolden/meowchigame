@@ -24,36 +24,27 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Database
-pool.connect()
-  .then(async (client) => {
-    try {
-      client.release();
-      dbConnected = true;
-      console.log("✅ Database connected");
-      
-      // Run schema migration
-      await ensureSchema();
-    } catch (error) {
-      console.error("Schema migration error:", error);
-    }
-  })
-  .catch((err) => { 
-    dbConnected = false; 
-    console.error("❌ DB connection error:", err); 
-  });
-
-// Schema migration function
-async function ensureSchema() {
+async function initializeDatabase() {
   try {
+    const client = await pool.connect();
+    client.release();
+    dbConnected = true;
+    console.log("✅ Database connected");
+    
+    // Run schema migration
     await pool.query(`
       ALTER TABLE users 
       ADD COLUMN IF NOT EXISTS last_reward_claimed_date TIMESTAMP
     `);
     console.log('✅ Schema updated - last_reward_claimed_date column ensured');
   } catch (error) {
-    console.log('Schema check:', error.message);
+    dbConnected = false;
+    console.error("❌ Database initialization error:", error);
   }
 }
+
+// Call the initialization
+initializeDatabase();
 
 // Daily Tasks Configuration
 const DAILY_TASKS = [
