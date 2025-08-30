@@ -103,7 +103,7 @@ const MemoizedTile = React.memo(({
       )}
     </div>
   );
-}
+});
 
 export default GameView;
 
