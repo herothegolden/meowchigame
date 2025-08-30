@@ -24,22 +24,29 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Database
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
+
+let dbConnected = false;
+
 async function initializeDatabase() {
   try {
     const client = await pool.connect();
     client.release();
     dbConnected = true;
-    console.log("✅ Database connected");
+    console.log("Database connected");
     
     // Run schema migration
     await pool.query(`
       ALTER TABLE users 
       ADD COLUMN IF NOT EXISTS last_reward_claimed_date TIMESTAMP
     `);
-    console.log('✅ Schema updated - last_reward_claimed_date column ensured');
+    console.log('Schema updated - last_reward_claimed_date column ensured');
   } catch (error) {
     dbConnected = false;
-    console.error("❌ Database initialization error:", error);
+    console.error("Database initialization error:", error);
   }
 }
 
