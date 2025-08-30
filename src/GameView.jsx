@@ -105,7 +105,7 @@ const MemoizedTile = React.memo(({
   );
 }
 
-export default GameView;);
+export default GameView;
 
 function GameView() {
   const ROWS = 6, COLS = 6;
