@@ -267,6 +267,11 @@ function GameView() {
     return CAT_SET[Math.floor(Math.random() * CAT_SET.length)];
   }
 
+  function preventMatches(grid) {
+  // Simple implementation - just return grid for now
+  return grid;
+  }
+  
   function createGrid() {
     const g = [];
     const sg = []; // 🆕 PHASE 2: Special grid
