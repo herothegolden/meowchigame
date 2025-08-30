@@ -231,12 +231,12 @@ function GameView() {
 
   // 🎯 Meowchi Rush Cat Set (Phase 1)
   const CAT_SET = useMemo(() => [
-    "https://ik.imagekit.io/devtrm/profile_/boba_transparent.png",     // Boba
-    "https://ik.imagekit.io/devtrm/profile_/cheese_transparent.png",   // Cheese  
-    "https://ik.imagekit.io/devtrm/profile_/meowchi_transparent.png",  // Meowchi
-    "https://ik.imagekit.io/devtrm/profile_/oreo_transparent.png",     // Oreo
-    "https://ik.imagekit.io/devtrm/profile_/panthera_transparent.png", // Panthera
-    "https://ik.imagekit.io/devtrm/profile_/patches_transparent.png"   // Patches
+      "/assets/gem1.png",
+      "/assets/gem2.png", 
+      "/assets/gem3.png",
+      "/assets/gem4.png",
+      "/assets/gem5.png",
+      "/assets/gem6.png"
   ], []);
 
   const POWERUP_DEFINITIONS = {
