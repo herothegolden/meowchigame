@@ -278,7 +278,7 @@ function GameView() {
         sg[r][c] = null; // 🆕 PHASE 2: No special initially
       }
     }
-    return { grid: preventMatches(g), specialGrid: sg };
+    return { grid: g, specialGrid: sg };
   }
 
   function findMatches(g) {
