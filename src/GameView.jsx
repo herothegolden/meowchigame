@@ -1,5 +1,5 @@
 // src/GameView.jsx
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo, useLayoutEffect } from "react";
 import * as audio from "./audio"; // minimal sound hooks
 import ShareButtons from "./ShareButtons.jsx";
 import { game } from "./utils.js";
@@ -65,7 +65,7 @@ const MemoizedTile = React.memo(({
         transform: swapTransform || undefined,
         zIndex: isBlasting ? 10 : isGrab ? 5 : (isSpecial ? 3 : 1),
         transition: isSwapping
-          ? "transform 0.16s ease"
+          ? "transform 0.1s ease"
           : delaySeconds
           ? `top 0.16s ease ${delaySeconds}s`
           : "top 0.16s ease",
@@ -245,13 +245,23 @@ function GameView() {
     bomb: { name: "Marshmallow Bomb", icon: "💣" },
   };
 
-  const cell = useMemo(() => {
-    const dim = Math.min(
-      (window.innerWidth || 400) - 64,
-      (window.innerHeight || 600) - 300
-    );
-    return Math.floor(dim / COLS);
+  const boardRef = useRef(null);
+  const [cell, setCell] = useState(40); // Start with a sensible default to avoid division by zero
+
+  useLayoutEffect(() => {
+    const boardElement = boardRef.current;
+    if (!boardElement) return;
+  
+    const resizeObserver = new ResizeObserver(() => {
+      if (boardElement.offsetWidth > 0) {
+        setCell(Math.floor(boardElement.offsetWidth / COLS));
+      }
+    });
+  
+    resizeObserver.observe(boardElement);
+    return () => resizeObserver.disconnect();
   }, []);
+
 
   const EMOJI_SIZE = 0.72;
 
@@ -739,7 +749,7 @@ function GameView() {
       gridRef.current = currentGrid;
       specialGridRef.current = currentSpecialGrid; // 🆕 PHASE 2: Update special grid ref
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
 
     // Final score update
@@ -817,6 +827,7 @@ function GameView() {
   }
 
   function rc(e) {
+    if (!cell) return { r: 0, c: 0 }; // Prevent crash if cell is 0
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX || e.touches?.[0]?.clientX || 0) - rect.left;
     const y = (e.clientY || e.touches?.[0]?.clientY || 0) - rect.top;
@@ -955,7 +966,7 @@ function GameView() {
       specialGridRef.current = sg; // 🆕 PHASE 2: Update special grid ref
       setSwapPair(null);
       optimizedResolveCascades(g, sg, () => {});
-    }, 160);
+    }, 100);
   }, [gameStarted, gameOver, isProcessing, activePowerup, drag, cell, optimizedResolveCascades, CAT_SET]);
 
   const handlePointerDown = useCallback((e) => {
@@ -975,7 +986,7 @@ function GameView() {
     });
     setSelectedTile([p.r, p.c]);
     haptic(8);
-  }, [gameStarted, gameOver, isProcessing]);
+  }, [gameStarted, gameOver, isProcessing, cell]);
 
   // Timer color logic
   const getTimerColor = () => {
@@ -1117,14 +1128,19 @@ function GameView() {
   }
 
   return (
-    <div className="section board-wrap">
+    <div className="section board-wrap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', boxSizing: 'border-box' }}>
       {/* Enhanced Rush Mode UI */}
       <div className="rush-board" style={{
         background: 'var(--card)',
         borderRadius: '20px',
         padding: '16px',
         border: '2px solid var(--accent-light)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
+        boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        maxWidth: '420px',
+        maxHeight: '90vh'
       }}>
         
         {/* 🆕 PHASE 2: Special activation instructions */}
@@ -1194,21 +1210,23 @@ function GameView() {
 
         {/* Game Board */}
         <div
+          ref={boardRef}
           className="board rush-board"
           style={{
-            width: COLS * cell,
-            height: ROWS * cell,
             position: 'relative',
-            margin: '16px auto',
+            margin: '16px auto 0',
             background: 'var(--surface)',
             borderRadius: '16px',
             border: '2px solid var(--border)',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            width: '100%',
+            aspectRatio: '1 / 1'
           }}
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
           onPointerMove={(e) => e.preventDefault()}
         >
+        { cell > 0 && <>
           {/* Grid Lines */}
           <div className="gridlines">
             {Array.from({ length: ROWS + 1 }, (_, i) => (
@@ -1335,6 +1353,7 @@ function GameView() {
               </div>
             </div>
           )}
+        </> }
         </div>
 
         {/* Action Buttons */}
