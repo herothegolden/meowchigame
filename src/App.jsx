@@ -20,13 +20,14 @@ const DailyRewardModal = lazy(() => import('./DailyRewardModal.jsx'));
 const getTG = () => (typeof window !== "undefined" ? window.Telegram?.WebApp : undefined);
 
 export default function App() {
-  // Stable viewport setup (no changes needed here)
+  // FIXED: Optimized viewport setup for better height calculation
   useEffect(() => {
     const setVH = () => {
       const tg = getTG();
       const height = tg?.viewportStableHeight || window.innerHeight;
       const vh = height / 100;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
+      document.documentElement.style.setProperty("--safe-height", `${height}px`);
     };
     setVH();
     window.addEventListener("resize", setVH);
@@ -51,202 +52,70 @@ export default function App() {
       document.readyState === "complete"
         ? Promise.resolve()
         : new Promise((r) => window.addEventListener("load", r, { once: true }));
+    
     Promise.all([minDelay, pageReady]).then(() => setShowSplash(false));
   }, []);
 
-  // --- App state from Zustand store ---
-  const coins = useStore(s => s.coins);
-  const setCoins = useStore(s => s.setCoins);
-  const settings = useStore(s => s.settings);
-  const setSettings = useStore(s => s.setSettings);
-  const userProfile = useStore(s => s.userProfile);
-  const setUserProfile = useStore(s => s.setUserProfile);
-  const userStats = useStore(s => s.userStats);
-  const setUserStats = useStore(s => s.setUserStats);
-  const streak = useStore(s => s.streak);
-  const setStreak = useStore(s => s.setStreak);
-  const setPowerups = useStore(s => s.setPowerups); // NEW: Get powerup setter
+  // Store state
+  const {
+    screen, navigateTo, settings,
+    coins, setCoins,
+    userStats, userProfile, streakData,
+    userTelegramId, lastRun,
+    showProfileModal, setShowProfileModal,
+    showRewardModal, setShowRewardModal,
+    fetchUserData, fetchUserPowerups
+  } = useStore();
 
-  // --- Local component state ---
-  const [screen, setScreen] = useState("home");
-  const [lastRun, setLastRun] = useState(null);
-  const [userTelegramId, setUserTelegramId] = useState(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [streakData, setStreakData] = useState(null);
-  const [showRewardModal, setShowRewardModal] = useState(false);
-
-  // --- Initialization ---
+  // Initialize user data
   useEffect(() => {
-    initializeUser();
-  }, []);
+    if (userTelegramId) {
+      fetchUserData();
+      fetchUserPowerups(userTelegramId);
+    }
+  }, [userTelegramId]);
 
-  const initializeUser = async () => {
-    try {
-      const tg = getTG();
-      let telegramId = tg?.initDataUnsafe?.user?.id || null;
-      
-      if (!telegramId) {
-        console.warn("Telegram ID not found. Running in dev mode.");
-        telegramId = 12345678;
-        console.log("🔧 Using dev mode telegram ID:", telegramId);
-      }
-      
-      setUserTelegramId(telegramId);
-      
-      performDailyCheckIn(telegramId);
-
-      const response = await fetch('/api/user/upsert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg?.initData || 'dev_mode',
-          telegram_id: telegramId 
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUserProfile(data.user);
-        fetchUserStats(telegramId);
-        fetchUserPowerups(telegramId); // NEW: Fetch powerups after user is initialized
-      } else {
-        console.error('Failed to upsert user:', response.status, await response.text());
-      }
-    } catch (error) {
-      console.error('User initialization failed:', error);
+  const handleGameExit = (gameResult) => {
+    if (gameResult) {
+      navigateTo("gameover");
+    } else {
+      navigateTo("home");
     }
   };
 
-  const performDailyCheckIn = async (telegramId) => {
-    if (!telegramId) return;
-    try {
-      const tg = getTG();
-      const response = await fetch('/api/user/check-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg?.initData || 'dev_mode',
-          telegram_id: telegramId 
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setStreak(data.streak);
-        setStreakData(data);
-        if (!data.claimed_today) {
-          setShowRewardModal(true);
-        }
-        console.log(`🔥 Daily streak updated to: ${data.streak}`);
-      }
-    } catch (error) {
-      console.error("Failed to check in for streak:", error);
-    }
-  };
-
-  const handleRewardClaimed = (result) => {
-    getTG()?.HapticFeedback?.notificationOccurred('success');
-    setShowRewardModal(false);
-    // Refresh user stats and powerups to reflect the reward
-    fetchUserStats(userTelegramId);
-    fetchUserPowerups(userTelegramId);
-    setStreakData(prev => ({...prev, claimed_today: true}));
-  };
-
-  const fetchUserStats = async (telegramId) => {
-    try {
-      const tg = getTG();
-      const response = await fetch(`/api/user/${telegramId}/stats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg?.initData || 'dev_mode',
-          telegram_id: telegramId 
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setUserStats(data.user);
-        setCoins(parseInt(data.user.bonus_coins || 0));
-        console.log('✅ User stats loaded:', data.user);
-      } else {
-        console.error('Failed to fetch user stats:', response.status, await response.text());
-      }
-    } catch (error) {
-      console.error('Failed to fetch user stats:', error);
-    }
-  };
-
-  // NEW: Function to fetch user's powerups
-  const fetchUserPowerups = async (telegramId) => {
-    try {
-      const response = await fetch(`/api/user/${telegramId}/powerups`);
-      if (response.ok) {
-        const data = await response.json();
-        setPowerups(data.powerups || {});
-        console.log('✅ User powerups loaded:', data.powerups);
-      } else {
-        console.error('Failed to fetch user powerups:', response.status, await response.text());
-      }
-    } catch (error) {
-      console.error('Failed to fetch user powerups:', error);
-    }
-  };
-
-  const handleProfileSaved = (updatedUser) => {
-    setUserProfile(updatedUser);
+  const handleProfileSaved = (updatedProfile) => {
     setShowProfileModal(false);
-    getTG()?.HapticFeedback?.notificationOccurred('success');
+    if (userTelegramId) {
+      fetchUserData();
+    }
   };
 
-  const [audioReady, setAudioReady] = useState(false);
-  async function ensureAudio() {
-    if (audioReady || !settings?.sound) return;
-    try {
-      await audio.unlock?.();
-      await audio.preload?.({
-        cascade_tick: '/sfx/cascade_tick.wav',
-        coin: '/sfx/coin.wav',
-        combo_x1: '/sfx/combo_x1.wav',
-        combo_x2: '/sfx/combo_x2.wav',
-        combo_x3: '/sfx/combo_x3.wav',
-        combo_x4: '/sfx/combo_x4.wav',
-        finish_lose: '/sfx/finish_lose.wav',
-        finish_win: '/sfx/finish_win.wav',
-        match_pop: '/sfx/match_pop.wav',
-        powerup_spawn: '/sfx/powerup_spawn.wav',
-        swap: '/sfx/swap.wav',
-        swap_invalid: '/sfx/swap_invalid.wav',
-        timer_hurry: '/sfx/timer_hurry.wav',
-        timer_tick: '/sfx/timer_tick.wav'
-      });
-      setAudioReady(true);
-    } catch (e) { console.warn("audio preload failed", e); }
+  const handleRewardClaimed = (reward) => {
+    setCoins(prev => prev + reward.coins);
+    setShowRewardModal(false);
+    if (userTelegramId) {
+      fetchUserData();
+    }
+  };
+
+  if (showSplash) {
+    return <Splash />;
   }
 
-  const navigateTo = async (s) => {
-    if (s === "game") await ensureAudio();
-    getTG()?.HapticFeedback?.selectionChanged();
-    setScreen(s);
-  };
-  
-  const handleGameExit = (gameResult) => {
-    setLastRun(gameResult);
-    if (userTelegramId) {
-      setTimeout(() => {
-        fetchUserStats(userTelegramId);
-        fetchUserPowerups(userTelegramId); // Refresh powerups after game
-      }, 800);
-    }
-    setScreen("gameover");
-  };
-
-  // --- Render ---
   return (
     <ErrorBoundary>
-      <Splash show={showSplash} />
-      <div className="shell" style={{ visibility: showSplash ? "hidden" : "visible" }}>
-        <Header coins={coins} />
-        <main className="content">
+      {/* FIXED: Optimized shell with better height management */}
+      <div className="shell" style={{ 
+        height: 'var(--safe-height, 100vh)',
+        overflow: 'hidden' // Prevent document scroll
+      }}>
+        {/* FIXED: Only show header for non-game screens */}
+        <div style={{ visibility: screen === "game" ? "hidden" : "visible" }}>
+          <Header coins={coins} />
+        </div>
+        
+        {/* FIXED: Content with proper height calculation */}
+        <main className={`content ${screen === "game" ? "game-content" : ""}`}>
           <ErrorBoundary>
             {screen === "home" && (
               userStats ? (
@@ -277,7 +146,7 @@ export default function App() {
           <ErrorBoundary>
             {screen === "shop" && <Shop coins={coins} userTelegramId={userTelegramId} onPurchase={(item, newBalance) => {
               setCoins(newBalance);
-              fetchUserPowerups(userTelegramId); // Refresh powerups after purchase
+              fetchUserPowerups(userTelegramId);
             }} />}
           </ErrorBoundary>
           
@@ -301,8 +170,11 @@ export default function App() {
             )}
           </ErrorBoundary>
         </main>
-        <BottomNav screen={screen} onNavigate={navigateTo} />
+        
+        {/* FIXED: Only show navigation for non-game screens */}
+        {screen !== "game" && <BottomNav screen={screen} onNavigate={navigateTo} />}
       </div>
+      
       <ErrorBoundary>
         <Suspense fallback={<div />}>
           {showProfileModal && (
