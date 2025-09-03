@@ -20,7 +20,9 @@ app.get("/health", async () => ({ ok: true }));
 // Auth preHandler: verify Telegram initData for state-changing routes
 app.addHook("preHandler", async (req, reply) => {
   if (req.method === "GET") return;
-  const initData = (req.headers["x-telegram-init-data"] || req.body?.initData || "") as string;
+  // Force type so TS doesn't complain about body shape
+  const body: any = req.body;
+  const initData = (req.headers["x-telegram-init-data"] || body?.initData || "") as string;
   const ok = verifyInitData(initData, process.env.BOT_TOKEN || "");
   if (!ok) {
     reply.code(401).send({ error: "Unauthorized" });
