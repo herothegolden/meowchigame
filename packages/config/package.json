@@ -1,0 +1,11 @@
+{
+  "name": "@meowchi/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint": "./eslint-config.js",
+    "./prettier": "./prettier.config.cjs",
+    "./tsconfig": "./tsconfig.base.json"
+  }
+}
