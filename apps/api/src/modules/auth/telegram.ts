@@ -2,24 +2,45 @@ import crypto from "crypto";
 import { URLSearchParams } from "url";
 
 /**
- * Verify Telegram initData per https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+ * Telegram WebApp verification (WebAppData method)
+ * Spec: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+ *
+ * secretKey = HMAC_SHA256(BOT_TOKEN, key="WebAppData")
+ * data_check_string = "\n".join(sorted(["key=value" for key != 'hash']))
+ * computed_hash = HMAC_SHA256(data_check_string, secretKey).hex
  */
-export function verifyInitData(initData: string, botToken: string): boolean {
-  try {
-    if (!initData || !botToken) return false;
-    const secret = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
-    const url = new URLSearchParams(initData);
-    const hash = url.get("hash");
-    url.delete("hash");
+export function verifyInitData(
+  initData: string,
+  botToken: string
+): { ok: true; parsed: Record<string, string> } | { ok: false; reason: string } {
+  if (!botToken) return { ok: false, reason: "bot_token_missing" };
 
-    const dataCheckString = Array.from(url.entries())
-      .sort(([a],[b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
+  const params = new URLSearchParams(initData);
+  const receivedHash = params.get("hash") || "";
+  if (!receivedHash) return { ok: false, reason: "missing_hash" };
 
-    const computed = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
-    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(hash || ""));
-  } catch {
-    return false;
-  }
+  const keys = Array.from(params.keys())
+    .filter((k) => k !== "hash")
+    .sort();
+
+  const dataCheckString = keys
+    .map((k) => {
+      const v = params.get(k);
+      return `${k}=${v}`;
+    })
+    .join("\n");
+
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const computedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+  const match =
+    receivedHash.length === computedHash.length &&
+    crypto.timingSafeEqual(Buffer.from(receivedHash, "utf8"), Buffer.from(computedHash, "utf8"));
+
+  if (!match) return { ok: false, reason: "bad_signature" };
+
+  const parsed: Record<string, string> = {};
+  for (const [k, v] of params.entries()) parsed[k] = v;
+
+  return { ok: true, parsed };
 }
