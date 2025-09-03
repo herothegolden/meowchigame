@@ -1,6 +1,3 @@
-// Telegram WebApp "user" object normalizer
-// Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
-
 export type TelegramUserRaw = {
   id: number;
   is_bot?: boolean;
@@ -13,7 +10,7 @@ export type TelegramUserRaw = {
 };
 
 export type AppUser = {
-  tgId: string;            // store as string to avoid bigint pitfalls
+  tgId: string;
   isBot: boolean;
   firstName: string | null;
   lastName: string | null;
@@ -42,7 +39,7 @@ export function parseUser(input: unknown): { user: AppUser } {
     username: u.username ?? null,
     languageCode: u.language_code ?? null,
     isPremium: Boolean(u.is_premium),
-    photoUrl: u.photo_url ?? null,
+    photoUrl: u.photo_url ?? null
   };
 
   return { user };
