@@ -2,14 +2,13 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 
-# Install deps for the API workspace only
-COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
-WORKDIR /app/apps/api
+# Install deps for THIS directory (apps/api)
+COPY package.json tsconfig.json ./
 RUN npm ci || npm i
 
-# Copy API source and prisma schema
-COPY apps/api/src ./src
-COPY apps/api/prisma ./prisma
+# Copy source and Prisma schema (paths are relative to apps/api)
+COPY src ./src
+COPY prisma ./prisma
 
 # Generate Prisma client and build
 RUN npx prisma generate
