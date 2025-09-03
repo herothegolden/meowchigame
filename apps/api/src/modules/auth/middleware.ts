@@ -1,18 +1,14 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { verifyInitData } from "./telegram";
-import { parseUser } from "./parse-user";
+import { verifyInitData } from "./telegram.js";
+import { parseUser } from "./parse-user.js";
 
-// 24h replay window (adjust if needed)
 const MAX_AGE_SECONDS = 24 * 60 * 60;
 
 function extractInitData(req: FastifyRequest): string | null {
-  // Preferred header: X-Telegram-Init-Data
-  const headerKey = "x-telegram-init-data";
-  const headerVal = req.headers[headerKey] as string | string[] | undefined;
+  const headerVal = req.headers["x-telegram-init-data"];
   if (typeof headerVal === "string" && headerVal.trim()) return headerVal;
   if (Array.isArray(headerVal) && headerVal[0] && headerVal[0].trim()) return headerVal[0];
 
-  // Fallbacks for early integration (remove later if you want stricter gate)
   const q = (req.query ?? {}) as Record<string, unknown>;
   if (typeof q.initData === "string" && q.initData.trim()) return q.initData;
 
