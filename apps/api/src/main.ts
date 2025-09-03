@@ -1,38 +1,46 @@
-import express from "express";
-import { telegramAuth } from "./modules/auth/middleware";
+import Fastify from "fastify";
+import type { FastifyServerOptions } from "fastify";
+import fastifyCors from "@fastify/cors";
 
-const app = express();
+import { authPreHandler } from "./modules/auth/middleware";
+import gameRoutes from "./modules/game/routes";
+import rewardsRoutes from "./modules/rewards/routes";
+import walletRoutes from "./modules/wallet/routes";
 
-// Body parsers
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Health (no auth)
-app.get("/health", (_req, res) => {
-  res.json({ ok: true });
-});
-
-// Example protected route — proves end-to-end auth wiring
-app.get("/me", telegramAuth(), (req, res) => {
-  res.json({ user: req.auth?.user });
-});
-
-// Error handler (kept minimal)
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  const status = typeof err?.status === "number" ? err.status : 500;
-  res.status(status).json({
-    error: err?.code || "INTERNAL_ERROR",
-    message: err?.message || "Unexpected error",
+const build = (opts: FastifyServerOptions = {}) => {
+  const app = Fastify({
+    logger: true,
+    ...opts,
   });
-});
 
-// Export for tests; start server if run directly
-const PORT = Number(process.env.PORT || 3000);
-if (require.main === module) {
-  app.listen(PORT, () => {
-    // eslint-disable-next-line no-console
-    console.log(`API listening on :${PORT}`);
+  // CORS (Mini Apps often make cross-origin XHRs)
+  app.register(fastifyCors, { origin: true });
+
+  // Health (no auth)
+  app.get("/health", async () => ({ ok: true }));
+
+  // Auth-protected identity endpoint
+  app.get("/me", { preHandler: [authPreHandler] }, async (req) => {
+    return { user: req.auth!.user };
   });
-}
 
-export default app;
+  // Feature routes
+  app.register(gameRoutes, { prefix: "/game" });
+  app.register(rewardsRoutes, { prefix: "/rewards" });
+  app.register(walletRoutes, { prefix: "/wallet" });
+
+  return app;
+};
+
+const server = build();
+const PORT = Number(process.env.PORT || 8080);
+
+server
+  .listen({ port: PORT, host: "0.0.0.0" })
+  .then(() => server.log.info(`API listening on :${PORT}`))
+  .catch((err) => {
+    server.log.error(err, "Failed to start server");
+    process.exit(1);
+  });
+
+export default build;
