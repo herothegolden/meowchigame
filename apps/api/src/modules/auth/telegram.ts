@@ -3,7 +3,7 @@ import { URLSearchParams } from "url";
 
 /**
  * Telegram WebApp verification (WebAppData method)
- * Spec: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+ * https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  *
  * secretKey = HMAC_SHA256(BOT_TOKEN, key="WebAppData")
  * data_check_string = "\n".join(sorted(["key=value" for key != 'hash']))
@@ -24,10 +24,7 @@ export function verifyInitData(
     .sort();
 
   const dataCheckString = keys
-    .map((k) => {
-      const v = params.get(k);
-      return `${k}=${v}`;
-    })
+    .map((k) => `${k}=${params.get(k)}`)
     .join("\n");
 
   const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
