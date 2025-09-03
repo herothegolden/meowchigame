@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine AS base
+FROM node:20-alpine
+
 WORKDIR /app
+
+# Prisma on Alpine (musl) needs OpenSSL 1.1 compatibility libs
+RUN apk add --no-cache openssl1.1-compat
 
 # Install deps for THIS directory (apps/api)
 COPY package.json tsconfig.json ./
-RUN npm ci || npm i
+RUN npm install
 
-# Copy source and Prisma schema (paths are relative to apps/api)
+# Copy source and Prisma schema
 COPY src ./src
 COPY prisma ./prisma
 
