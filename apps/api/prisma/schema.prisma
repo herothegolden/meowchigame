@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RewardKind {
+  digital
+  irl
+}
+
+model User {
+  id        BigInt   @id @default(autoincrement())
+  tgUserId  BigInt   @unique
+  name      String?
+  locale    String?
+  createdAt DateTime @default(now())
+
+  wallet    Wallet?
+  vouchers  Voucher[]
+}
+
+model Wallet {
+  // 1:1 with User
+  userId BigInt @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  points Int    @default(0)
+  xp     Int    @default(0)
+  level  Int    @default(1)
+}
+
+model Reward {
+  id         BigInt     @id @default(autoincrement())
+  kind       RewardKind
+  title      String
+  costPoints Int?
+  costStars  Int?
+  payload    Json?
+  active     Boolean    @default(true)
+
+  vouchers   Voucher[]
+}
+
+model Voucher {
+  id         BigInt   @id @default(autoincrement())
+  rewardId   BigInt
+  userId     BigInt
+  code       String   @unique
+  expiresAt  DateTime?
+  redeemedAt DateTime?
+
+  reward     Reward   @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([rewardId])
+}
