@@ -1,10 +1,7 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
-
-# Prisma on Alpine (musl) needs OpenSSL 1.1 compatibility libs
-RUN apk add --no-cache openssl1.1-compat
 
 # Install deps for THIS directory (apps/api)
 COPY package.json tsconfig.json ./
