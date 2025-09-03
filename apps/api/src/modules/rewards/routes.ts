@@ -1,13 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
-import { authPreHandler } from "../auth/middleware";
-import { prisma } from "../../prisma";
+import { authPreHandler } from "../auth/middleware.js";
+import { prisma } from "../../prisma.js";
 
 const rewardsRoutes: FastifyPluginAsync = async (app) => {
-  // List recent rewards for current user
   app.get("/", { preHandler: [authPreHandler] }, async (req) => {
     const tgId = req.auth!.user.tgId;
 
-    // Ensure user exists in DB
     await prisma.user.upsert({
       where: { id: tgId },
       create: {
@@ -18,7 +16,7 @@ const rewardsRoutes: FastifyPluginAsync = async (app) => {
         photoUrl: req.auth!.user.photoUrl ?? undefined,
         languageCode: req.auth!.user.languageCode ?? undefined,
         isPremium: req.auth!.user.isPremium,
-        isBot: req.auth!.user.isBot,
+        isBot: req.auth!.user.isBot
       },
       update: {
         username: req.auth!.user.username ?? undefined,
@@ -27,20 +25,19 @@ const rewardsRoutes: FastifyPluginAsync = async (app) => {
         photoUrl: req.auth!.user.photoUrl ?? undefined,
         languageCode: req.auth!.user.languageCode ?? undefined,
         isPremium: req.auth!.user.isPremium,
-        isBot: req.auth!.user.isBot,
-      },
+        isBot: req.auth!.user.isBot
+      }
     });
 
     const rewards = await prisma.reward.findMany({
       where: { userId: tgId },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: 50
     });
 
     return { rewards };
   });
 
-  // Grant a reward to current user (e.g., daily login, invite, etc.)
   app.post("/grant", { preHandler: [authPreHandler] }, async (req, reply) => {
     const body = (req.body ?? {}) as { type?: string; points?: number };
     const type = (body.type || "generic").trim();
@@ -51,26 +48,25 @@ const rewardsRoutes: FastifyPluginAsync = async (app) => {
 
     const tgId = req.auth!.user.tgId;
 
-    // Ensure user & wallet exist
     await prisma.user.upsert({
       where: { id: tgId },
       create: { id: tgId },
-      update: {},
+      update: {}
     });
 
     const wallet = await prisma.wallet.upsert({
       where: { userId: tgId },
       create: { userId: tgId, balance: 0 },
-      update: {},
+      update: {}
     });
 
     const reward = await prisma.reward.create({
-      data: { userId: tgId, type, points },
+      data: { userId: tgId, type, points }
     });
 
     const updated = await prisma.wallet.update({
       where: { userId: tgId },
-      data: { balance: wallet.balance + points },
+      data: { balance: wallet.balance + points }
     });
 
     return { reward, wallet: updated };
