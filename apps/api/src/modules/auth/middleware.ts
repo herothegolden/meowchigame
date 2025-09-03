@@ -1,91 +1,29 @@
-import crypto from "crypto";
-import type { Request, Response, NextFunction } from "express";
-import { URLSearchParams } from "url";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { verifyInitData } from "./telegram";
 import { parseUser } from "./parse-user";
 
-// Fail fast so we don't boot in an insecure state
-const BOT_TOKEN = process.env.BOT_TOKEN || "";
-if (!BOT_TOKEN) {
-  throw new Error(
-    "BOT_TOKEN is not set. Configure it in your environment before starting the API."
-  );
-}
+// 24h replay window (adjust if needed)
+const MAX_AGE_SECONDS = 24 * 60 * 60;
 
-/**
- * Telegram verification per spec:
- * 1) secret_key = SHA256(BOT_TOKEN)
- * 2) data_check_string = '\n'-joined "key=value" for all keys except 'hash', keys sorted ASC
- * 3) computed_hash = HMAC_SHA256(data_check_string, secret_key), hex
- * 4) timing-safe compare with received 'hash'
- */
-function verifyTelegramInitData(
-  initData: string
-): { ok: boolean; reason?: string; parsed?: Record<string, string> } {
-  const params = new URLSearchParams(initData);
-  const receivedHash = params.get("hash") || "";
-  if (!receivedHash) return { ok: false, reason: "missing_hash" };
+function extractInitData(req: FastifyRequest): string | null {
+  // Preferred header: X-Telegram-Init-Data
+  const headerKey = "x-telegram-init-data";
+  const headerVal = req.headers[headerKey] as string | string[] | undefined;
+  if (typeof headerVal === "string" && headerVal.trim()) return headerVal;
+  if (Array.isArray(headerVal) && headerVal[0] && headerVal[0].trim()) return headerVal[0];
 
-  const keys = Array.from(params.keys()).filter((k) => k !== "hash").sort();
-  const kvPairs: string[] = [];
-  for (const k of keys) {
-    const v = params.get(k);
-    if (v !== null) kvPairs.push(`${k}=${v}`);
-  }
-  const dataCheckString = kvPairs.join("\n");
+  // Fallbacks for early integration (remove later if you want stricter gate)
+  const q = (req.query ?? {}) as Record<string, unknown>;
+  if (typeof q.initData === "string" && q.initData.trim()) return q.initData;
 
-  const secretKey = crypto.createHash("sha256").update(BOT_TOKEN).digest();
-  const computedHash = crypto
-    .createHmac("sha256", secretKey)
-    .update(dataCheckString)
-    .digest("hex");
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof b.initData === "string" && b.initData.trim()) return b.initData;
 
-  const ok =
-    receivedHash.length === computedHash.length &&
-    crypto.timingSafeEqual(
-      Buffer.from(receivedHash, "utf8"),
-      Buffer.from(computedHash, "utf8")
-    );
-
-  if (!ok) return { ok: false, reason: "bad_signature" };
-
-  const parsed: Record<string, string> = {};
-  for (const [k, v] of params.entries()) parsed[k] = v;
-
-  // Replay guard via auth_date
-  const authDateStr = parsed["auth_date"];
-  if (!authDateStr) return { ok: false, reason: "missing_auth_date" };
-
-  const authDate = Number(authDateStr);
-  if (!Number.isFinite(authDate)) return { ok: false, reason: "invalid_auth_date" };
-
-  // 24h window (tune if needed)
-  const MAX_AGE_SECONDS = 24 * 60 * 60;
-  const now = Math.floor(Date.now() / 1000);
-  if (now - authDate > MAX_AGE_SECONDS) return { ok: false, reason: "expired_auth_date" };
-
-  return { ok: true, parsed };
-}
-
-/**
- * Extract initData string from:
- *  - Header: 'x-telegram-init-data'  (preferred)
- *  - Fallbacks: query 'initData' (GET) or body.initData (dev only)
- */
-function extractInitData(req: Request): string | null {
-  const fromHeader = req.header("x-telegram-init-data");
-  if (fromHeader && typeof fromHeader === "string" && fromHeader.trim()) return fromHeader;
-
-  if (typeof req.query?.initData === "string" && req.query.initData.trim()) return req.query.initData;
-
-  if (req.body && typeof (req.body as any).initData === "string" && (req.body as any).initData.trim()) {
-    return (req.body as any).initData;
-  }
   return null;
 }
 
-// Local typing for convenience; keeps change small/surgical
-declare module "express-serve-static-core" {
-  interface Request {
+declare module "fastify" {
+  interface FastifyRequest {
     auth?: {
       user: ReturnType<typeof parseUser>["user"];
       raw: Record<string, string>;
@@ -93,42 +31,48 @@ declare module "express-serve-static-core" {
   }
 }
 
-/**
- * Express middleware:
- *  - Verifies Telegram Mini App initData signature
- *  - Parses user (via parseUser)
- *  - Attaches req.auth = { user, raw }
- */
-export function telegramAuth() {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const initData = extractInitData(req);
-    if (!initData) {
-      return res
-        .status(400)
-        .json({ error: "INIT_DATA_MISSING", message: "Provide X-Telegram-Init-Data header." });
-    }
+export async function authPreHandler(req: FastifyRequest, reply: FastifyReply) {
+  const BOT_TOKEN = process.env.BOT_TOKEN || "";
+  if (!BOT_TOKEN) {
+    req.log.error("BOT_TOKEN is not set");
+    return reply.code(500).send({ error: "CONFIG_ERROR", message: "BOT_TOKEN missing" });
+  }
 
-    const verified = verifyTelegramInitData(initData);
-    if (!verified.ok || !verified.parsed) {
-      const reason = verified.reason || "verification_failed";
-      const status = reason === "bad_signature" ? 401 : 400;
-      return res.status(status).json({ error: "INIT_DATA_INVALID", reason });
-    }
+  const initData = extractInitData(req);
+  if (!initData) {
+    return reply
+      .code(400)
+      .send({ error: "INIT_DATA_MISSING", message: "Provide X-Telegram-Init-Data header." });
+  }
 
-    const userJson = verified.parsed["user"];
-    if (!userJson) {
-      return res.status(400).json({ error: "USER_MISSING", message: "No 'user' field in initData." });
-    }
+  const verified = verifyInitData(initData, BOT_TOKEN);
+  if (!verified.ok) {
+    const status = verified.reason === "bad_signature" ? 401 : 400;
+    return reply.code(status).send({ error: "INIT_DATA_INVALID", reason: verified.reason });
+  }
 
-    try {
-      const userObj = JSON.parse(userJson);
-      const parsed = parseUser(userObj);
-      req.auth = { user: parsed.user, raw: verified.parsed };
-      next();
-    } catch (err: any) {
-      return res
-        .status(400)
-        .json({ error: "USER_PARSE_FAILED", message: err?.message || "Invalid user JSON" });
-    }
-  };
+  const parsed = verified.parsed;
+  const authDateStr = parsed["auth_date"];
+  if (!authDateStr) return reply.code(400).send({ error: "MISSING_AUTH_DATE" });
+
+  const authDate = Number(authDateStr);
+  if (!Number.isFinite(authDate)) return reply.code(400).send({ error: "INVALID_AUTH_DATE" });
+
+  const now = Math.floor(Date.now() / 1000);
+  if (now - authDate > MAX_AGE_SECONDS) {
+    return reply.code(401).send({ error: "AUTH_EXPIRED" });
+  }
+
+  const userJson = parsed["user"];
+  if (!userJson) return reply.code(400).send({ error: "USER_MISSING" });
+
+  let userPayload: any;
+  try {
+    userPayload = JSON.parse(userJson);
+  } catch (e: any) {
+    return reply.code(400).send({ error: "USER_PARSE_FAILED", message: String(e?.message || e) });
+  }
+
+  const { user } = parseUser(userPayload);
+  req.auth = { user, raw: parsed };
 }
