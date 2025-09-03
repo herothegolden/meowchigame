@@ -31,11 +31,10 @@ const build = (opts: FastifyServerOptions = {}) => {
 const server = build();
 const PORT = Number(process.env.PORT || 8080);
 
-server
-  .listen({ port: PORT, host: "0.0.0.0" })
+server.listen({ port: PORT, host: "0.0.0.0" })
   .then(() => server.log.info(`API listening on :${PORT}`))
   .catch((err) => {
-    server.log.error(err, "Failed to start server");
+    console.error("FATAL: could not start server", err);
     process.exit(1);
   });
 
