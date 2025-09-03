@@ -1,24 +1,49 @@
-import { URLSearchParams } from "url";
+// Telegram WebApp "user" object normalizer
+// Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
 
-/**
- * Extract Telegram user from initData (after verifyInitData succeeds).
- * Returns { id, name?, locale? } or null if invalid.
- */
-export function parseTelegramUser(initData: string | undefined) {
-  if (!initData) return null;
-  const params = new URLSearchParams(initData);
-  const userStr = params.get("user");
-  if (!userStr) return null;
+export type TelegramUserRaw = {
+  id: number;
+  is_bot?: boolean;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+  is_premium?: boolean;
+  photo_url?: string;
+};
 
-  try {
-    const obj = JSON.parse(userStr);
-    if (!obj?.id) return null;
-    return {
-      id: Number(obj.id),
-      name: [obj.first_name, obj.last_name].filter(Boolean).join(" ") || undefined,
-      locale: obj.language_code || undefined
-    };
-  } catch {
-    return null;
+export type AppUser = {
+  tgId: string;            // store as string to avoid bigint pitfalls
+  isBot: boolean;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  languageCode: string | null;
+  isPremium: boolean;
+  photoUrl: string | null;
+};
+
+export function parseUser(input: unknown): { user: AppUser } {
+  if (!input || typeof input !== "object") {
+    throw new Error("Invalid Telegram user payload");
   }
+
+  const u = input as TelegramUserRaw;
+
+  if (typeof u.id !== "number" || !Number.isFinite(u.id)) {
+    throw new Error("Telegram user id missing or invalid");
+  }
+
+  const user: AppUser = {
+    tgId: String(u.id),
+    isBot: Boolean(u.is_bot),
+    firstName: u.first_name ?? null,
+    lastName: u.last_name ?? null,
+    username: u.username ?? null,
+    languageCode: u.language_code ?? null,
+    isPremium: Boolean(u.is_premium),
+    photoUrl: u.photo_url ?? null,
+  };
+
+  return { user };
 }
