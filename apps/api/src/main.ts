@@ -2,10 +2,10 @@ import Fastify from "fastify";
 import type { FastifyServerOptions } from "fastify";
 import fastifyCors from "@fastify/cors";
 
-import { authPreHandler } from "./modules/auth/middleware";
-import gameRoutes from "./modules/game/routes";
-import rewardsRoutes from "./modules/rewards/routes";
-import walletRoutes from "./modules/wallet/routes";
+import { authPreHandler } from "./modules/auth/middleware.js";
+import gameRoutes from "./modules/game/routes.js";
+import rewardsRoutes from "./modules/rewards/routes.js";
+import walletRoutes from "./modules/wallet/routes.js";
 
 const build = (opts: FastifyServerOptions = {}) => {
   const app = Fastify({
@@ -13,18 +13,14 @@ const build = (opts: FastifyServerOptions = {}) => {
     ...opts,
   });
 
-  // CORS (Mini Apps often make cross-origin XHRs)
   app.register(fastifyCors, { origin: true });
 
-  // Health (no auth)
   app.get("/health", async () => ({ ok: true }));
 
-  // Auth-protected identity endpoint
   app.get("/me", { preHandler: [authPreHandler] }, async (req) => {
     return { user: req.auth!.user };
   });
 
-  // Feature routes
   app.register(gameRoutes, { prefix: "/game" });
   app.register(rewardsRoutes, { prefix: "/rewards" });
   app.register(walletRoutes, { prefix: "/wallet" });
