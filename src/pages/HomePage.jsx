@@ -1,15 +1,76 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, ChevronRight } from 'lucide-react';
+import { User, Star, Flame, ChevronRight, LoaderCircle } from 'lucide-react';
 
-// This is placeholder data. In Phase 2, we will fetch this from the backend.
-const userData = {
-  level: 1,
-  points: 1250,
-  dailyStreak: 3,
-};
+// Get the backend URL from the environment variables
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const HomePage = () => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      // Check if the Telegram Web App script is loaded
+      if (!window.Telegram || !window.Telegram.WebApp) {
+        setError('Telegram script not loaded. Make sure you are running in the Telegram app.');
+        setLoading(false);
+        return;
+      }
+
+      const tg = window.Telegram.WebApp;
+      tg.ready(); // Inform Telegram that the app is ready
+
+      // Check if initData is available
+      if (!tg.initData) {
+        setError('No initialization data found.');
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/validate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ initData: tg.initData }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Server responded with status: ${res.status}`);
+        }
+
+        const userData = await res.json();
+        setUser(userData);
+      } catch (err) {
+        setError(`Failed to fetch user data: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-center text-red-400">
+        <p>Oops! Something went wrong.</p>
+        <p className="text-sm text-secondary">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 space-y-6">
       
@@ -24,8 +85,8 @@ const HomePage = () => {
           <User className="w-8 h-8 text-secondary" />
         </div>
         <div>
-          <p className="text-secondary text-sm">Level {userData.level}</p>
-          <h1 className="text-2xl font-bold text-primary">Welcome Back!</h1>
+          <p className="text-secondary text-sm">Level {user.level}</p>
+          <h1 className="text-2xl font-bold text-primary">Welcome, {user.first_name}!</h1>
         </div>
       </motion.div>
 
@@ -41,14 +102,14 @@ const HomePage = () => {
             <Star className="w-4 h-4 mr-2" />
             <span className="text-sm">My Points</span>
           </div>
-          <p className="text-2xl font-bold text-accent">{userData.points.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-accent">{user.points.toLocaleString()}</p>
         </div>
         <div className="bg-nav p-4 rounded-lg">
           <div className="flex items-center text-secondary mb-1">
             <Flame className="w-4 h-4 mr-2" />
             <span className="text-sm">Daily Streak</span>
           </div>
-          <p className="text-2xl font-bold text-accent">{userData.dailyStreak} Days</p>
+          <p className="text-2xl font-bold text-accent">{user.daily_streak} Days</p>
         </div>
       </motion.div>
       
