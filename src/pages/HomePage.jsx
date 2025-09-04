@@ -5,29 +5,37 @@ import { User, Star, Flame, ChevronRight, LoaderCircle } from 'lucide-react';
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+// This is our mock user data for testing in a regular browser
+const MOCK_USER_DATA = {
+  id: 1,
+  telegram_id: 123456789,
+  first_name: 'Dev User',
+  last_name: '',
+  username: 'devuser',
+  points: 5000,
+  level: 8,
+  daily_streak: 4,
+};
+
 const HomePage = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+
+    // If Telegram script isn't loaded or we're not in the Telegram environment, use mock data
+    if (!tg || !tg.initData) {
+      console.log('Running in browser mode. Using mock data.');
+      setUser(MOCK_USER_DATA);
+      setLoading(false);
+      return;
+    }
+    
+    // --- If we are in Telegram, proceed with fetching real data ---
     const fetchUserData = async () => {
-      // Check if the Telegram Web App script is loaded
-      if (!window.Telegram || !window.Telegram.WebApp) {
-        setError('Telegram script not loaded. Make sure you are running in the Telegram app.');
-        setLoading(false);
-        return;
-      }
-
-      const tg = window.Telegram.WebApp;
       tg.ready(); // Inform Telegram that the app is ready
-
-      // Check if initData is available
-      if (!tg.initData) {
-        setError('No initialization data found.');
-        setLoading(false);
-        return;
-      }
       
       try {
         const res = await fetch(`${BACKEND_URL}/api/validate`, {
