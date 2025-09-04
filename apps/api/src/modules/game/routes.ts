@@ -12,7 +12,7 @@ function makeLevelSpec(userId: string): LevelSpec {
   return { levelId, seed, rows: 6, cols: 6, colors: 5 };
 }
 
-const gameRoutes: FastifyPluginAsync = async (app) => {
+export const gameRoutes: FastifyPluginAsync = async (app) => {
   // Liveness
   app.get("/ping", async () => ({ ok: true, module: "game" }));
 
@@ -129,5 +129,3 @@ const gameRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 };
-
-export default gameRoutes;
