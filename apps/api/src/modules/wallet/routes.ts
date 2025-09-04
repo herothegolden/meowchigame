@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { authPreHandler } from "../auth/middleware.js";
 import { prisma } from "../../prisma.js";
 
-const walletRoutes: FastifyPluginAsync = async (app) => {
+export const walletRoutes: FastifyPluginAsync = async (app) => {
   app.get("/balance", { preHandler: [authPreHandler] }, async (req) => {
     const tgId = req.auth!.user.tgId;
 
@@ -61,5 +61,3 @@ const walletRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, balance: updated.balance };
   });
 };
-
-export default walletRoutes;
