@@ -40,45 +40,17 @@ async function start() {
       reply.code(500).send({ error: "Server misconfigured: BOT_TOKEN is not set" });
       return;
     }
-    const ok = verifyInitData(initData, process.env.BOT_TOKEN);
-    if (!ok) {
+    const verification = verifyInitData(initData, process.env.BOT_TOKEN);
+    if (!verification.ok) {
       reply.code(401).send({ error: "Invalid Telegram signature" });
       return;
     }
   });
 
   // --- Route plugins
-  app.register(gameRoutes, { prefix: "/game" });
-  app.register(rewardsRoutes, { prefix: "/rewards" });
-  app.register(walletRoutes, { prefix: "/wallet" });
-
-  // --- Safety fallback: keep /rewards/catalog alive even if plugin fails to mount
-  app.get("/rewards/catalog", async () => {
-    const count = await prisma.reward.count();
-    if (count === 0) {
-      await prisma.reward.createMany({
-        data: [
-          { kind: "digital", title: "Extra Life",       costStars: 150, costPoints: null, payload: {} },
-          { kind: "digital", title: "Power-Up Pack",    costStars: 200, costPoints: null, payload: {} },
-          { kind: "digital", title: "Avatar Frame",     costStars: 300, costPoints: null, payload: {} },
-          { kind: "irl",     title: "Free Delivery",           costPoints: 300,  costStars: null, payload: {} },
-          { kind: "irl",     title: "10% Discount",            costPoints: 500,  costStars: null, payload: {} },
-          { kind: "irl",     title: "Buy 2 Get 1",             costPoints: 800,  costStars: null, payload: {} },
-          { kind: "irl",     title: "Limited Flavor Voucher",  costPoints: 1000, costStars: null, payload: {} }
-        ]
-      });
-    }
-
-    const rewards = await prisma.reward.findMany({
-      where: { active: true },
-      orderBy: { id: "asc" },
-      select: { id: true, kind: true, title: true, costPoints: true, costStars: true }
-    });
-
-    const digital = rewards.filter((r) => r.kind === "digital");
-    const irl     = rewards.filter((r) => r.kind === "irl");
-    return { digital, irl };
-  });
+  await app.register(gameRoutes, { prefix: "/game" });
+  await app.register(rewardsRoutes, { prefix: "/rewards" });
+  await app.register(walletRoutes, { prefix: "/wallet" });
 
   // Start server
   const port = Number(process.env.PORT || 8080);
@@ -91,4 +63,7 @@ async function start() {
   }
 }
 
-start();
+start().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});
