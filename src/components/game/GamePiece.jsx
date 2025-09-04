@@ -2,6 +2,11 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 const GamePiece = ({ color, index, onDragStart, onDragOver, onDragDrop, onDragEnd }) => {
+  // If the piece has no color (i.e., it's cleared), render an empty space.
+  if (!color) {
+    return <div className="w-full h-full"></div>;
+  }
+
   return (
     <motion.div 
       className="w-full h-full flex items-center justify-center p-1 cursor-grab"
@@ -25,3 +30,4 @@ const GamePiece = ({ color, index, onDragStart, onDragOver, onDragDrop, onDragEn
 };
 
 export default GamePiece;
+
