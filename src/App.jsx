@@ -2,7 +2,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
 
-// Import the new page components
+// Import all page components
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import GamePage from './pages/GamePage';
