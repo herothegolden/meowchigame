@@ -22,7 +22,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   wallet       Wallet?
-  rewards      Reward[]
+  rewards      UserReward[]
   sessions     GameSession[]
 }
 
@@ -35,14 +35,34 @@ model Wallet {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Catalog of available rewards
 model Reward {
+  id          String  @id @default(cuid())
+  kind        String  // "digital" or "irl"
+  title       String
+  description String?
+  costPoints  Int?
+  costStars   Int?
+  active      Boolean @default(true)
+  payload     Json    @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRewards UserReward[]
+
+  @@index([active])
+}
+
+// User's claimed/purchased rewards
+model UserReward {
   id        String   @id @default(cuid())
   userId    String
-  type      String
+  rewardId  String
   points    Int      @default(0)
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reward    Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
