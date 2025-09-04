@@ -124,5 +124,3 @@ const startServer = () => {
 
 // Run setup and then start the server
 setupDatabase().then(startServer);
-
-
