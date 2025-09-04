@@ -1,11 +1,34 @@
-import React, { useState } from 'react';
-import { generateInitialBoard, BOARD_SIZE } from '../../utils/gameLogic';
+import React, { useState, useEffect } from 'react';
+import { generateInitialBoard, BOARD_SIZE, checkForMatches } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
 const GameBoard = () => {
   const [board, setBoard] = useState(generateInitialBoard());
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [replacedPiece, setReplacedPiece] = useState(null);
+
+  // This useEffect hook will run every time the board state changes.
+  useEffect(() => {
+    const checkMatchesAndClear = () => {
+      const matches = checkForMatches(board);
+      if (matches.size > 0) {
+        // A short delay to allow the user to see the match
+        setTimeout(() => {
+          const newBoardFlat = [...board.flat()];
+          matches.forEach(index => {
+            newBoardFlat[index] = null; // Clear the matched pieces
+          });
+
+          const newBoard2D = [];
+          while (newBoardFlat.length) newBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
+          setBoard(newBoard2D);
+        }, 100); // 100ms delay
+      }
+    };
+    
+    checkMatchesAndClear();
+  }, [board]); // The dependency array ensures this runs only when 'board' changes
+
 
   const dragStart = (e) => {
     setDraggedPiece(e.target);
@@ -30,32 +53,34 @@ const GameBoard = () => {
     const isLeftEdge = draggedColumn === 0;
     const isRightEdge = draggedColumn === BOARD_SIZE - 1;
     
-    // Check for valid adjacent moves
     const validMoves = [
       draggedIndex - BOARD_SIZE, // up
       draggedIndex + BOARD_SIZE, // down
     ];
-    // Add left move if not on the left edge
     if (!isLeftEdge) validMoves.push(draggedIndex - 1);
-    // Add right move if not on the right edge
     if (!isRightEdge) validMoves.push(draggedIndex + 1);
     
     const isValidMove = validMoves.includes(replacedIndex);
     
     if (isValidMove) {
-        // If the move is valid, swap the pieces on the board
         const newBoardFlat = [...board.flat()];
         const draggedColor = newBoardFlat[draggedIndex];
         newBoardFlat[draggedIndex] = newBoardFlat[replacedIndex];
         newBoardFlat[replacedIndex] = draggedColor;
 
-        // Convert the flat array back into a 2D array for the state
-        const newBoard2D = [];
-        while (newBoardFlat.length) newBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
-        setBoard(newBoard2D);
+        // --- Check if this swap CREATES a match ---
+        const tempBoard2D = [];
+        const tempBoardFlat = [...newBoardFlat]; // Create a copy for checking
+        while (tempBoardFlat.length) tempBoard2D.push(tempBoardFlat.splice(0, BOARD_SIZE));
+
+        const matches = checkForMatches(tempBoard2D);
+        
+        // Only update the board if the move results in a match
+        if (matches.size > 0) {
+            setBoard(tempBoard2D);
+        }
     }
 
-    // Reset drag states
     setDraggedPiece(null);
     setReplacedPiece(null);
   };
