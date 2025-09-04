@@ -2,20 +2,20 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
 
-// We'll create these page components in the next step
-const HomePage = () => <div className="p-4">Home Page</div>;
-const ProfilePage = () => <div className="p-4">Profile Page</div>;
-const GamePage = () => <div className="p-4">Game Page</div>;
-const ShopPage = () => <div className="p-4">Shop Page</div>;
-const TasksPage = () => <div className="p-4">Tasks Page</div>;
-const PartnersPage = () => <div className="p-4">Partners Page</div>;
-const LeaderboardsPage = () => <div className="p-4">Leaderboards Page</div>;
+// Import the new page components
+import HomePage from './pages/HomePage';
+import ProfilePage from './pages/ProfilePage';
+import GamePage from './pages/GamePage';
+import ShopPage from './pages/ShopPage';
+import TasksPage from './pages/TasksPage';
+import PartnersPage from './pages/PartnersPage';
+import LeaderboardsPage from './pages/LeaderboardsPage';
 
 function App() {
   return (
-    <div className="h-screen w-screen flex flex-col font-sans">
+    <div className="h-screen w-screen flex flex-col font-sans overflow-hidden">
       {/* Main content area */}
-      <main className="flex-grow overflow-y-auto pb-20">
+      <main className="flex-grow overflow-y-auto pb-20 bg-background text-primary">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/profile" element={<ProfilePage />} />
