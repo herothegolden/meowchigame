@@ -1,8 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import GameBoard from '../components/game/GameBoard';
 import { Star, MoveRight } from 'lucide-react';
 
 const GamePage = () => {
+  // NEW: State for managing score and moves
+  const [score, setScore] = useState(0);
+  const [moves, setMoves] = useState(30);
 
   // This useEffect hook is the key to disabling the pull-down gesture.
   useEffect(() => {
@@ -26,19 +29,21 @@ const GamePage = () => {
       <div className="flex justify-between w-full max-w-md">
         <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg">
           <Star className="w-6 h-6 text-accent" />
-          <span className="text-xl font-bold">0</span>
+          {/* UPDATE: Display the dynamic score */}
+          <span className="text-xl font-bold">{score}</span>
         </div>
         <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg">
           <MoveRight className="w-6 h-6 text-secondary" />
-          <span className="text-xl font-bold">30</span>
+          {/* UPDATE: Display the dynamic moves remaining */}
+          <span className="text-xl font-bold">{moves}</span>
         </div>
       </div>
 
       {/* The Game Board itself */}
-      <GameBoard />
+      {/* UPDATE: Pass the state setters to the GameBoard */}
+      <GameBoard setScore={setScore} setMoves={setMoves} />
     </div>
   );
 };
 
 export default GamePage;
-
