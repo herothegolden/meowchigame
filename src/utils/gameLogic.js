@@ -27,7 +27,7 @@ export const generateInitialBoard = () => {
       }
       board.push(row);
     }
-  } while (checkForMatches(board).size > 0); // Keep generating until a match-free board is made
+  } while (checkForMatches(board).size > 0);
   return board;
 };
 
@@ -41,39 +41,78 @@ export const checkForMatches = (board) => {
     const flatBoard = board.flat();
     const matches = new Set();
 
-    // --- Check for Horizontal Matches ---
+    // Check for Horizontal Matches
     for (let i = 0; i < BOARD_SIZE; i++) {
         for (let j = 0; j < BOARD_SIZE - 2; j++) {
-            const row = i;
-            const col = j;
-            const index1 = row * BOARD_SIZE + col;
-            const index2 = row * BOARD_SIZE + (col + 1);
-            const index3 = row * BOARD_SIZE + (col + 2);
-
-            if (flatBoard[index1] && flatBoard[index1] === flatBoard[index2] && flatBoard[index1] === flatBoard[index3]) {
-                matches.add(index1);
-                matches.add(index2);
-                matches.add(index3);
+            const indices = [i * BOARD_SIZE + j, i * BOARD_SIZE + j + 1, i * BOARD_SIZE + j + 2];
+            const firstPiece = flatBoard[indices[0]];
+            if (firstPiece && indices.every(index => flatBoard[index] === firstPiece)) {
+                indices.forEach(index => matches.add(index));
             }
         }
     }
 
-    // --- Check for Vertical Matches ---
+    // Check for Vertical Matches
     for (let i = 0; i < BOARD_SIZE - 2; i++) {
         for (let j = 0; j < BOARD_SIZE; j++) {
-            const row = i;
-            const col = j;
-            const index1 = row * BOARD_SIZE + col;
-            const index2 = (row + 1) * BOARD_SIZE + col;
-            const index3 = (row + 2) * BOARD_SIZE + col;
-            
-            if (flatBoard[index1] && flatBoard[index1] === flatBoard[index2] && flatBoard[index1] === flatBoard[index3]) {
-                matches.add(index1);
-                matches.add(index2);
-                matches.add(index3);
+            const indices = [i * BOARD_SIZE + j, (i + 1) * BOARD_SIZE + j, (i + 2) * BOARD_SIZE + j];
+             const firstPiece = flatBoard[indices[0]];
+            if (firstPiece && indices.every(index => flatBoard[index] === firstPiece)) {
+                indices.forEach(index => matches.add(index));
             }
         }
     }
 
     return matches;
+};
+
+/**
+ * Applies gravity to the board.
+ * @param {string[][]} board - The game board with nulls for empty spaces.
+ * @returns {string[][]} The board after pieces have fallen.
+ */
+export const applyGravity = (board) => {
+    const newBoard = JSON.parse(JSON.stringify(board));
+    for (let j = 0; j < BOARD_SIZE; j++) {
+        let emptyRow = BOARD_SIZE - 1;
+        for (let i = BOARD_SIZE - 1; i >= 0; i--) {
+            if (newBoard[i][j] !== null) {
+                if (emptyRow !== i) {
+                    newBoard[emptyRow][j] = newBoard[i][j];
+                    newBoard[i][j] = null;
+                }
+                emptyRow--;
+            }
+        }
+    }
+    return newBoard;
+};
+
+/**
+ * Fills the empty spaces at the top of the board with new random pieces.
+ * @param {string[][]} board - The game board after gravity has been applied.
+ * @returns {string[][]} The refilled board.
+ */
+export const refillBoard = (board) => {
+    const newBoard = JSON.parse(JSON.stringify(board));
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            if (newBoard[i][j] === null) {
+                newBoard[i][j] = PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
+            }
+        }
+    }
+    return newBoard;
+};
+
+/**
+ * Gets the row and column from a flat index.
+ * @param {number} index - The flat index of the piece.
+ * @returns {{row: number, col: number}} The row and column.
+ */
+export const getPosition = (index) => {
+    return {
+        row: Math.floor(index / BOARD_SIZE),
+        col: index % BOARD_SIZE,
+    };
 };
