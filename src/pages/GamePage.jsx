@@ -1,100 +1,147 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import GameBoard from '../components/game/GameBoard';
-import { Star, MoveRight, LoaderCircle } from 'lucide-react';
+import { Star, Timer, LoaderCircle, ChevronsUp, PlusCircle, Play } from 'lucide-react';
 
-// Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const GamePage = () => {
+  const [gameState, setGameState] = useState('ready'); // ready, playing, over
   const [score, setScore] = useState(0);
-  const [moves, setMoves] = useState(30);
-  const [isGameOver, setIsGameOver] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const navigate = useNavigate();
+  const [timeRemaining, setTimeRemaining] = useState(30);
+  const [gameSettings, setGameSettings] = useState({ initialTime: 30, pointMultiplier: 1 });
+  const [finalScore, setFinalScore] = useState(0);
+  
+  const tg = window.Telegram?.WebApp;
 
-  // This useEffect hook handles the game over logic
+  // --- Disable vertical swipes for better gameplay ---
   useEffect(() => {
-    if (moves <= 0 && !isGameOver) {
-      setIsGameOver(true);
-      setIsSubmitting(true);
-      
-      // Ensure we have a score to submit
-      if (score > 0) {
-        const tg = window.Telegram?.WebApp;
-        if (tg && tg.initData) {
-          fetch(`${BACKEND_URL}/api/update-score`, {
+    tg?.disableVerticalSwipes();
+    return () => tg?.enableVerticalSwipes();
+  }, [tg]);
+
+  // --- Timer Countdown Logic ---
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    if (timeRemaining <= 0) {
+      setGameState('over');
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeRemaining(prevTime => prevTime - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, timeRemaining]);
+  
+  // --- Game Over Logic: Submit Score ---
+  useEffect(() => {
+    if (gameState === 'over') {
+      tg?.HapticFeedback.notificationOccurred('warning');
+      setFinalScore(score);
+
+      const submitScore = async () => {
+        try {
+           await fetch(`${BACKEND_URL}/api/update-score`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ initData: tg.initData, score: score }),
-          })
-          .then(res => res.json())
-          .then(data => {
-            console.log('Score submitted successfully:', data);
-            // Show a confirmation pop-up from Telegram
-            tg.showPopup({
-              title: 'Game Over!',
-              message: `You scored ${score} points! Your new total is ${data.newScore}.`,
-              buttons: [{ text: 'OK', type: 'ok' }]
-            }, () => navigate('/')); // Navigate home after popup is closed
-          })
-          .catch(err => {
-            console.error('Error submitting score:', err);
-            tg.showAlert('Could not save your score. Please try again later.');
-          })
-          .finally(() => setIsSubmitting(false));
-        } else {
-            console.log("Running in browser, score not submitted.");
-            setIsSubmitting(false);
+            body: JSON.stringify({ initData: tg.initData, score }),
+          });
+        } catch (err) {
+          console.error("Failed to submit score:", err);
         }
-      } else {
-          // If score is 0, just navigate home
-          navigate('/');
+      };
+      
+      if (tg?.initData) {
+        submitScore();
       }
     }
-  }, [moves, score, isGameOver, navigate]);
+  }, [gameState, score, tg]);
 
-  // This useEffect hook disables the pull-to-refresh gesture in Telegram
-  useEffect(() => {
-    if (window.Telegram && window.Telegram.WebApp) {
-      window.Telegram.WebApp.disableVerticalSwipes();
-      return () => {
-        window.Telegram.WebApp.enableVerticalSwipes();
-      };
+
+  // --- Start Game Logic ---
+  const handleStartGame = useCallback(async () => {
+    setGameState('loading');
+    setScore(0);
+    setFinalScore(0);
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/start-game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+      const settings = await res.json();
+      if (!res.ok) throw new Error(settings.error || 'Failed to start game');
+      
+      setGameSettings(settings);
+      setTimeRemaining(settings.initialTime);
+      setGameState('playing');
+      tg?.HapticFeedback.impactOccurred('heavy');
+
+    } catch (err) {
+      tg?.showPopup({ title: 'Error', message: err.message, buttons: [{ type: 'ok' }] });
+      setGameState('ready');
     }
-  }, []);
+  }, [tg]);
+  
+  // --- UI Components ---
+
+  const renderHeader = () => (
+    <div className="flex justify-between w-full max-w-md">
+      <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg text-lg">
+        <Star className="w-6 h-6 text-accent" />
+        <span className="font-bold w-16 text-right">{score.toLocaleString()}</span>
+        {gameSettings.pointMultiplier > 1 && <ChevronsUp className="w-5 h-5 text-green-400" />}
+      </div>
+      <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg text-lg">
+        <Timer className="w-6 h-6 text-secondary" />
+        <span className="font-bold w-12 text-right">{timeRemaining}s</span>
+        {gameSettings.initialTime > 30 && <PlusCircle className="w-5 h-5 text-blue-400" />}
+      </div>
+    </div>
+  );
+  
+  const renderContent = () => {
+    switch(gameState) {
+      case 'loading':
+        return <LoaderCircle className="w-16 h-16 text-accent animate-spin" />;
+      case 'playing':
+        return <GameBoard setScore={setScore} isGameActive={true} />;
+      case 'over':
+        return (
+          <div className="text-center bg-nav p-8 rounded-lg shadow-lg">
+            <h2 className="text-3xl font-bold text-accent mb-2">Time's Up!</h2>
+            <p className="text-secondary mb-4">You scored</p>
+            <p className="text-5xl font-bold mb-6">{finalScore.toLocaleString()}</p>
+            <button onClick={handleStartGame} className="w-full bg-accent text-background font-bold py-3 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105">
+              Play Again
+            </button>
+          </div>
+        );
+      case 'ready':
+      default:
+        return (
+           <div className="text-center">
+            <h2 className="text-3xl font-bold mb-4">Ready to Play?</h2>
+            <button onClick={handleStartGame} className="bg-accent text-background font-bold py-4 px-8 rounded-full flex items-center justify-center text-xl transition-transform hover:scale-105 shadow-lg">
+              <Play className="w-7 h-7 mr-3" />
+              Start Game
+            </button>
+          </div>
+        );
+    }
+  };
 
   return (
-    <div className="relative flex flex-col items-center justify-center h-full p-4 space-y-4">
-      {/* Game Over Overlay */}
-      {isGameOver && (
-        <div className="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-10">
-          <h2 className="text-4xl font-bold text-accent mb-4">Game Over</h2>
-          {isSubmitting ? (
-            <div className="flex items-center space-x-2 text-primary">
-              <LoaderCircle className="w-8 h-8 animate-spin" />
-              <span>Saving your score...</span>
-            </div>
-          ) : (
-            <p className="text-secondary">Your score has been submitted!</p>
-          )}
-        </div>
-      )}
-
-      {/* Header for Score and Moves */}
-      <div className="flex justify-between w-full max-w-md">
-        <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg">
-          <Star className="w-6 h-6 text-accent" />
-          <span className="text-xl font-bold">{score}</span>
-        </div>
-        <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg">
-          <MoveRight className="w-6 h-6 text-secondary" />
-          <span className="text-xl font-bold">{moves}</span>
-        </div>
+    <div className="flex flex-col items-center justify-between h-full p-4 space-y-4">
+      {gameState === 'playing' && renderHeader()}
+      <div className="flex-grow flex items-center justify-center">
+        {renderContent()}
       </div>
-
-      {/* The Game Board itself */}
-      <GameBoard setScore={setScore} setMoves={setMoves} />
+       {gameState !== 'playing' && <div style={{height: '54px'}} /> /* Placeholder to keep layout consistent */}
     </div>
   );
 };
