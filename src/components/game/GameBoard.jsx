@@ -1,90 +1,106 @@
-import React, { useState, useEffect } from 'react';
-import { generateInitialBoard, BOARD_SIZE, checkForMatches } from '../../utils/gameLogic';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  generateInitialBoard,
+  BOARD_SIZE,
+  checkForMatches,
+  applyGravity,
+  refillBoard,
+  getPosition
+} from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
 const GameBoard = () => {
   const [board, setBoard] = useState(generateInitialBoard());
+  const [isProcessing, setIsProcessing] = useState(false);
   const [draggedPiece, setDraggedPiece] = useState(null);
-  const [replacedPiece, setReplacedPiece] = useState(null);
 
-  // This useEffect hook will run every time the board state changes.
-  useEffect(() => {
-    const checkMatchesAndClear = () => {
-      const matches = checkForMatches(board);
+  // This function handles the game's core loop: checking for matches,
+  // clearing them, applying gravity, and refilling the board until
+  // no more matches are found (a stable state).
+  const processBoardChanges = useCallback(() => {
+    setIsProcessing(true);
+
+    const checkAndResolve = (currentBoard) => {
+      const matches = checkForMatches(currentBoard);
+      
       if (matches.size > 0) {
-        // A short delay to allow the user to see the match
+        // Use a short timeout to allow the player to see the match before it disappears.
         setTimeout(() => {
-          const newBoardFlat = [...board.flat()];
-          matches.forEach(index => {
-            newBoardFlat[index] = null; // Clear the matched pieces
-          });
+          // Flatten the board for easier manipulation
+          const newBoardFlat = [...currentBoard.flat()];
+          matches.forEach(index => { newBoardFlat[index] = null; }); // Set matched pieces to null
+          
+          // Re-create the 2D board from the flat array
+          let clearedBoard = [];
+          while (newBoardFlat.length) clearedBoard.push(newBoardFlat.splice(0, BOARD_SIZE));
 
-          const newBoard2D = [];
-          while (newBoardFlat.length) newBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
-          setBoard(newBoard2D);
-        }, 100); // 100ms delay
+          const gravityBoard = applyGravity(clearedBoard);
+          const refilledBoard = refillBoard(gravityBoard);
+
+          // Update the board and recursively check for new "cascade" matches
+          setBoard(refilledBoard);
+          checkAndResolve(refilledBoard);
+        }, 200);
+      } else {
+        // No more matches, the board is stable. End processing.
+        setIsProcessing(false);
       }
     };
     
-    checkMatchesAndClear();
-  }, [board]); // The dependency array ensures this runs only when 'board' changes
+    checkAndResolve(board);
+  }, [board]);
+
+  // This useEffect hook triggers the processing loop whenever the board changes.
+  useEffect(() => {
+    processBoardChanges();
+  }, [board, processBoardChanges]);
 
 
-  const dragStart = (e) => {
-    setDraggedPiece(e.target);
+  // Called when a player first touches or clicks on a piece.
+  const handleDragStart = (event, { index }) => {
+    if (isProcessing) return; // Prevent moves while the board is resolving
+    setDraggedPiece({ index });
   };
 
-  const dragOver = (e) => {
-    e.preventDefault();
-  };
+  // Called when a player releases a piece after dragging.
+  const handleDragEnd = (event, info) => {
+    if (isProcessing || !draggedPiece) return;
 
-  const dragDrop = (e) => {
-    setReplacedPiece(e.target);
-  };
-  
-  const dragEnd = () => {
-    if (!draggedPiece || !replacedPiece) return;
+    const { offset } = info;
+    const { index } = draggedPiece;
+    const { row, col } = getPosition(index);
 
-    const draggedIndex = parseInt(draggedPiece.getAttribute('data-index'));
-    const replacedIndex = parseInt(replacedPiece.getAttribute('data-index'));
+    let replacedIndex;
+    const threshold = 20; // How far the player must drag to register a move
 
-    // --- Move Validation Logic ---
-    const draggedColumn = draggedIndex % BOARD_SIZE;
-    const isLeftEdge = draggedColumn === 0;
-    const isRightEdge = draggedColumn === BOARD_SIZE - 1;
-    
-    const validMoves = [
-      draggedIndex - BOARD_SIZE, // up
-      draggedIndex + BOARD_SIZE, // down
-    ];
-    if (!isLeftEdge) validMoves.push(draggedIndex - 1);
-    if (!isRightEdge) validMoves.push(draggedIndex + 1);
-    
-    const isValidMove = validMoves.includes(replacedIndex);
-    
-    if (isValidMove) {
+    // Determine drag direction (horizontal vs. vertical)
+    if (Math.abs(offset.x) > Math.abs(offset.y)) {
+        if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1; // Right
+        else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;       // Left
+    } else {
+        if (offset.y > threshold && row < BOARD_SIZE - 1) replacedIndex = index + BOARD_SIZE; // Down
+        else if (offset.y < -threshold && row > 0) replacedIndex = index - BOARD_SIZE;       // Up
+    }
+
+    if (replacedIndex !== undefined) {
+        // Create a temporary new board with the swapped pieces
         const newBoardFlat = [...board.flat()];
-        const draggedColor = newBoardFlat[draggedIndex];
-        newBoardFlat[draggedIndex] = newBoardFlat[replacedIndex];
+        const draggedColor = newBoardFlat[index];
+        newBoardFlat[index] = newBoardFlat[replacedIndex];
         newBoardFlat[replacedIndex] = draggedColor;
 
-        // --- Check if this swap CREATES a match ---
         const tempBoard2D = [];
-        const tempBoardFlat = [...newBoardFlat]; // Create a copy for checking
-        while (tempBoardFlat.length) tempBoard2D.push(tempBoardFlat.splice(0, BOARD_SIZE));
+        while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
 
+        // Only commit the move if it results in a match
         const matches = checkForMatches(tempBoard2D);
-        
-        // Only update the board if the move results in a match
         if (matches.size > 0) {
             setBoard(tempBoard2D);
         }
     }
 
     setDraggedPiece(null);
-    setReplacedPiece(null);
   };
-
 
   return (
     <div
@@ -103,10 +119,8 @@ const GameBoard = () => {
           key={index} 
           color={color} 
           index={index}
-          onDragStart={dragStart}
-          onDragOver={dragOver}
-          onDragDrop={dragDrop}
-          onDragEnd={dragEnd}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
         />
       ))}
     </div>
