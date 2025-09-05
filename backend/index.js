@@ -16,10 +16,11 @@ if (!DATABASE_URL || !BOT_TOKEN) {
 // ---- DATABASE ----
 const pool = new Pool({ connectionString: DATABASE_URL });
 
+// THIS IS THE STABLE DATABASE SETUP FUNCTION, BASED ON YOUR WORKING FILE'S LOGIC
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    // Create users table
+    // Users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -35,7 +36,7 @@ const setupDatabase = async () => {
       );
     `);
     
-    // Create shop_items table
+    // Shop items table
     await client.query(`
       CREATE TABLE IF NOT EXISTS shop_items (
         id SERIAL PRIMARY KEY,
@@ -46,18 +47,18 @@ const setupDatabase = async () => {
       );
     `);
     
-    // Create user_inventory table
+    // User inventory table - CRITICAL FIX: Foreign key now correctly references telegram_id
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
         item_id INT REFERENCES shop_items(id) ON DELETE CASCADE,
         quantity INT DEFAULT 1,
         UNIQUE(user_id, item_id)
       );
     `);
 
-    // --- Robust Column Addition ---
+    // --- Robust Column Addition for Boosters ---
     const columns = [
       { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE' },
       { name: 'extra_time_active', type: 'BOOLEAN DEFAULT FALSE' },
@@ -75,7 +76,7 @@ const setupDatabase = async () => {
       }
     }
 
-    // --- Populate Shop Items (if empty) ---
+    // --- Populate Shop Items (if empty) with new items ---
     const itemCount = await client.query('SELECT COUNT(*) FROM shop_items');
     if (itemCount.rows[0].count === '0') {
       await client.query(`
@@ -86,7 +87,7 @@ const setupDatabase = async () => {
       console.log('✅ Shop items have been populated.');
     }
     
-    console.log('✅ Database tables are set up.');
+    console.log('✅ Database tables are set up correctly.');
   } catch (err) {
     console.error('🚨 Error setting up database:', err);
     process.exit(1);
@@ -95,31 +96,20 @@ const setupDatabase = async () => {
   }
 };
 
-// ---- Middleware to authenticate and get user ----
-const getUser = async (req, res, next) => {
+// ---- Middleware - STABLE VERSION ----
+const validateUser = (req, res, next) => {
   const { initData } = req.body;
-  if (!initData) return res.status(400).json({ error: 'initData is required' });
-  if (!validate(initData, BOT_TOKEN)) return res.status(401).json({ error: 'Invalid data' });
-  
+  if (!initData || !validate(initData, BOT_TOKEN)) {
+    return res.status(401).json({ error: 'Invalid data' });
+  }
   const params = new URLSearchParams(initData);
   const user = JSON.parse(params.get('user'));
-  if (!user || !user.id) return res.status(400).json({ error: 'Invalid user data' });
-
-  const client = await pool.connect();
-  try {
-    const dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
-    if (dbUserResult.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    req.user = dbUserResult.rows[0];
-    req.tgUser = user;
-    next();
-  } catch (error) {
-    console.error('🚨 Error in getUser middleware:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
+  if (!user || !user.id) {
+    return res.status(400).json({ error: 'Invalid user data' });
   }
+  req.user = user; // req.user now holds the telegram user object, user.id is the telegram_id
+  next();
 };
-
 
 // ---- EXPRESS APP ----
 const app = express();
@@ -129,25 +119,15 @@ app.use(express.json());
 // ---- ROUTES ----
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-app.post('/api/validate', async (req, res) => {
+app.post('/api/validate', validateUser, async (req, res) => {
   try {
-    const { initData } = req.body;
-    if (!initData || !validate(initData, BOT_TOKEN)) {
-      return res.status(401).json({ error: 'Invalid data' });
-    }
-    
-    const params = new URLSearchParams(initData);
-    const user = JSON.parse(params.get('user'));
-    if (!user || !user.id) return res.status(400).json({ error: 'Invalid user data' });
-
+    const { user } = req;
     const client = await pool.connect();
     try {
       let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
       let appUser = dbUserResult.rows[0];
       let dailyBonus = null;
 
-      const now = new Date();
-      
       if (!appUser) {
         const insertResult = await client.query(
           `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -155,6 +135,7 @@ app.post('/api/validate', async (req, res) => {
         );
         appUser = insertResult.rows[0];
       } else {
+        const now = new Date();
         const lastLogin = new Date(appUser.last_login_at);
         const isNewDay = now.toISOString().split('T')[0] > lastLogin.toISOString().split('T')[0];
         
@@ -167,20 +148,14 @@ app.post('/api/validate', async (req, res) => {
           const bonusPoints = 100;
           
           const updatedUser = await client.query(
-            `UPDATE users SET 
-              last_login_at = CURRENT_TIMESTAMP, 
-              daily_streak = $1, 
-              points = points + $2 
-             WHERE id = $3 RETURNING *`,
-            [newStreak, bonusPoints, appUser.id]
+            `UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $1, points = points + $2 WHERE telegram_id = $3 RETURNING *`,
+            [newStreak, bonusPoints, user.id]
           );
           appUser = updatedUser.rows[0];
           dailyBonus = { points: bonusPoints, streak: newStreak };
         }
       }
-      
       return res.status(200).json({ ...appUser, dailyBonus });
-
     } finally {
       client.release();
     }
@@ -190,24 +165,24 @@ app.post('/api/validate', async (req, res) => {
   }
 });
 
-app.post('/api/user-stats', getUser, async (req, res) => {
+app.post('/api/user-stats', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
-        const inventoryIdsResult = await client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [req.user.id]);
-        
-        let inventory = [];
-        if (inventoryIdsResult.rows.length > 0) {
-            const inventoryIds = inventoryIdsResult.rows.map(r => r.item_id);
-            const inventoryResult = await client.query(
-                `SELECT id, name, description, icon_name FROM shop_items WHERE id = ANY($1::int[])`,
-                [inventoryIds]
-            );
-            inventory = inventoryResult.rows;
-        }
+        const userResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [req.user.id]);
+        if(userResult.rows.length === 0) return res.status(404).json({error: 'User not found'});
+        const dbUser = userResult.rows[0];
 
+        // CRITICAL FIX: Query user_inventory with telegram_id (req.user.id)
+        const inventoryResult = await client.query(
+            `SELECT si.id, si.name, si.description, si.icon_name 
+             FROM user_inventory ui 
+             JOIN shop_items si ON ui.item_id = si.id 
+             WHERE ui.user_id = $1`, [req.user.id]
+        );
+        
         res.status(200).json({
-            user: req.user,
-            inventory: inventory
+            user: dbUser,
+            inventory: inventoryResult.rows
         });
     } catch (error) {
         console.error('🚨 Error fetching user stats:', error);
@@ -217,20 +192,22 @@ app.post('/api/user-stats', getUser, async (req, res) => {
     }
 });
 
-
-app.post('/api/start-game', getUser, async (req, res) => {
-    let { point_booster_active, extra_time_active, id } = req.user;
-    let settings = { initialTime: 30, pointMultiplier: 1 };
+app.post('/api/start-game', validateUser, async (req, res) => {
     const client = await pool.connect();
-    
     try {
+        const userResult = await client.query('SELECT point_booster_active, extra_time_active FROM users WHERE telegram_id = $1', [req.user.id]);
+        if (userResult.rows.length === 0) return res.status(404).json({error: 'User not found'});
+
+        let { point_booster_active, extra_time_active } = userResult.rows[0];
+        let settings = { initialTime: 30, pointMultiplier: 1 };
+        
         if (point_booster_active) {
             settings.pointMultiplier = 2;
-            await client.query('UPDATE users SET point_booster_active = FALSE WHERE id = $1', [id]);
+            await client.query('UPDATE users SET point_booster_active = FALSE WHERE telegram_id = $1', [req.user.id]);
         }
         if (extra_time_active) {
             settings.initialTime = 35;
-            await client.query('UPDATE users SET extra_time_active = FALSE WHERE id = $1', [id]);
+            await client.query('UPDATE users SET extra_time_active = FALSE WHERE telegram_id = $1', [req.user.id]);
         }
         res.status(200).json(settings);
     } catch (error) {
@@ -241,13 +218,13 @@ app.post('/api/start-game', getUser, async (req, res) => {
     }
 });
 
-app.post('/api/update-score', getUser, async (req, res) => {
+app.post('/api/update-score', validateUser, async (req, res) => {
     const { score } = req.body;
     if (typeof score !== 'number') return res.status(400).json({ error: 'Score is required' });
     
     const client = await pool.connect();
     try {
-        await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [score, req.user.id]);
+        await client.query('UPDATE users SET points = points + $1 WHERE telegram_id = $2', [score, req.user.id]);
         res.status(200).json({ success: true });
     } catch (error) {
         console.error('🚨 Error updating score:', error);
@@ -257,17 +234,19 @@ app.post('/api/update-score', getUser, async (req, res) => {
     }
 });
 
-app.post('/api/get-shop-data', getUser, async (req, res) => {
+app.post('/api/get-shop-data', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
+        const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1', [req.user.id]);
+        if(userResult.rows.length === 0) return res.status(404).json({error: 'User not found'});
+        
         const itemsResult = await client.query('SELECT * FROM shop_items ORDER BY price');
-        const inventoryResult = await client.query(
-            `SELECT item_id FROM user_inventory WHERE user_id = $1`, [req.user.id]
-        );
+        // CRITICAL FIX: Query user_inventory with telegram_id (req.user.id)
+        const inventoryResult = await client.query(`SELECT item_id FROM user_inventory WHERE user_id = $1`, [req.user.id]);
         const ownedItemIds = new Set(inventoryResult.rows.map(r => r.item_id));
 
         res.status(200).json({
-            points: req.user.points,
+            points: userResult.rows[0].points,
             items: itemsResult.rows,
             ownedItemIds: Array.from(ownedItemIds)
         });
@@ -279,60 +258,52 @@ app.post('/api/get-shop-data', getUser, async (req, res) => {
     }
 });
 
-app.post('/api/buy-item', getUser, async (req, res) => {
-    const { itemId } = req.body;
-    if (!itemId) return res.status(400).json({ error: 'itemId is required' });
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN'); // Start transaction
-        const itemResult = await client.query('SELECT * FROM shop_items WHERE id = $1', [itemId]);
-        if (itemResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ error: 'Item not found' });
-        }
-        const item = itemResult.rows[0];
-        
-        if (req.user.points < item.price) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: "You don't have enough points!" });
-        }
-        
-        const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [req.user.id, itemId]);
-        if (inventoryResult.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'You already own this item!' });
-        }
-        
-        await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [item.price, req.user.id]);
-        await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [req.user.id, itemId]);
-        
-        await client.query('COMMIT'); // Commit transaction
-        
-        const updatedUser = await client.query('SELECT points FROM users WHERE id = $1', [req.user.id]);
-        res.status(200).json({ success: true, newPoints: updatedUser.rows[0].points });
-
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('🚨 Error buying item:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    } finally {
-        client.release();
-    }
-});
-
-app.post('/api/activate-item', getUser, async (req, res) => {
+app.post('/api/buy-item', validateUser, async (req, res) => {
     const { itemId } = req.body;
     if (!itemId) return res.status(400).json({ error: 'itemId is required' });
     const client = await pool.connect();
     
     try {
         await client.query('BEGIN');
-        const inventoryCheck = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [req.user.id, itemId]);
-        if (inventoryCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: "You don't own this item." });
-        }
+        const itemResult = await client.query('SELECT * FROM shop_items WHERE id = $1', [itemId]);
+        if (itemResult.rows.length === 0) throw new Error('Item not found');
+        const item = itemResult.rows[0];
+        
+        const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [req.user.id]);
+        if (userResult.rows.length === 0) throw new Error('User not found');
+        if (userResult.rows[0].points < item.price) throw new Error("You don't have enough points!");
+        
+        const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [req.user.id, itemId]);
+        if (inventoryResult.rows.length > 0) throw new Error('You already own this item!');
+        
+        await client.query('UPDATE users SET points = points - $1 WHERE telegram_id = $2', [item.price, req.user.id]);
+        await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [req.user.id, itemId]);
+        await client.query('COMMIT');
+        
+        const updatedUser = await client.query('SELECT points FROM users WHERE telegram_id = $1', [req.user.id]);
+        res.status(200).json({ success: true, newPoints: updatedUser.rows[0].points });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('🚨 Error buying item:', error.message);
+        res.status(400).json({ error: error.message || 'Internal server error' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/activate-item', validateUser, async (req, res) => {
+    const { itemId } = req.body;
+    if (!itemId) return res.status(400).json({ error: 'itemId is required' });
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        const userResult = await client.query('SELECT * FROM users WHERE telegram_id = $1 FOR UPDATE', [req.user.id]);
+        if (userResult.rows.length === 0) throw new Error('User not found');
+        const dbUser = userResult.rows[0];
+
+        const inventoryCheck = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [dbUser.telegram_id, itemId]);
+        if (inventoryCheck.rows.length === 0) throw new Error("You don't own this item.");
 
         const itemResult = await client.query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
         const itemName = itemResult.rows[0].name;
@@ -340,32 +311,23 @@ app.post('/api/activate-item', getUser, async (req, res) => {
         let boosterField = '';
         if (itemName === 'Point Booster') boosterField = 'point_booster_active';
         else if (itemName === 'Extra Time') boosterField = 'extra_time_active';
-        else {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'Item is not activatable.' });
-        }
+        else throw new Error('Item is not activatable.');
         
-        // Check if a booster is already active
-        if (req.user.point_booster_active || req.user.extra_time_active) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'Another booster is already active.' });
-        }
+        if (dbUser.point_booster_active || dbUser.extra_time_active) throw new Error('Another booster is already active.');
 
-        await client.query(`UPDATE users SET ${boosterField} = TRUE WHERE id = $1`, [req.user.id]);
-        await client.query('DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2', [req.user.id, itemId]);
+        await client.query(`UPDATE users SET ${boosterField} = TRUE WHERE telegram_id = $1`, [dbUser.telegram_id]);
+        await client.query('DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2', [dbUser.telegram_id, itemId]);
         await client.query('COMMIT');
         
         res.status(200).json({ success: true });
-
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('🚨 Error activating item:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('🚨 Error activating item:', error.message);
+        res.status(400).json({ error: error.message || 'Internal server error' });
     } finally {
         client.release();
     }
 });
-
 
 // ---- SERVER START ----
 const startServer = () => {
