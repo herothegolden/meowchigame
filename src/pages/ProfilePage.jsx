@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { User, Star, Flame, Award, Calendar, LoaderCircle, Badge, ChevronsUp, Clock, AlertTriangle } from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-
 // A map to dynamically render icons for items
 const iconMap = {
   Badge,
@@ -20,14 +18,14 @@ const ProfilePage = () => {
 
   const fetchProfileData = useCallback(async () => {
     if (!tg?.initData) {
-      setError("Telegram data not available.");
+      setError("Telegram data not available. Please open this app inside Telegram.");
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(`${BACKEND_URL}/api/get-profile-data`, {
+      const res = await fetch(`/api/get-profile-data`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg.initData }),
@@ -57,7 +55,7 @@ const ProfilePage = () => {
     tg.HapticFeedback.impactOccurred('light');
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
+        const res = await fetch(`/api/activate-item`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ initData: tg.initData, itemId }),
@@ -196,3 +194,4 @@ const StatCard = ({ icon: Icon, label, value }) => (
 );
 
 export default ProfilePage;
+
