@@ -260,19 +260,119 @@ app.post('/api/user-stats', async (req, res) => {
   }
 });
 
-// New endpoint to fetch all shop items
-app.get('/api/shop-items', async (req, res) => {
-  const client = await pool.connect();
+// NEW: More efficient endpoint to get all data for the shop page
+app.post('/api/get-shop-data', async (req, res) => {
   try {
-    const result = await client.query('SELECT * FROM shop_items ORDER BY price ASC');
-    res.status(200).json(result.rows);
+    const { initData } = req.body;
+    if (!initData) {
+      return res.status(400).json({ error: 'initData is required' });
+    }
+
+    if (!validate(initData, BOT_TOKEN)) {
+      return res.status(401).json({ error: 'Invalid data' });
+    }
+    
+    const params = new URLSearchParams(initData);
+    const user = JSON.parse(params.get('user'));
+
+    if (!user || !user.id) {
+        return res.status(400).json({ error: 'Invalid user data in initData' });
+    }
+
+    const client = await pool.connect();
+    try {
+      // Fetch all required data in parallel for maximum efficiency
+      const [itemsResult, userResult, inventoryResult] = await Promise.all([
+        client.query('SELECT * FROM shop_items ORDER BY price ASC'),
+        client.query('SELECT points FROM users WHERE telegram_id = $1', [user.id]),
+        client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [user.id])
+      ]);
+      
+      if (userResult.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const shopData = {
+        items: itemsResult.rows,
+        userPoints: userResult.rows[0].points,
+        inventory: inventoryResult.rows.map(row => row.item_id)
+      };
+      
+      return res.status(200).json(shopData);
+
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
-    console.error('🚨 Error in /api/shop-items:', error);
+    console.error('🚨 Error in /api/get-shop-data:', error);
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
   }
 });
+
+
+// NEW: Endpoint to handle purchasing an item
+app.post('/api/buy-item', async (req, res) => {
+  try {
+    const { initData, itemId } = req.body;
+    if (!initData || !itemId) {
+      return res.status(400).json({ error: 'initData and itemId are required' });
+    }
+
+    if (!validate(initData, BOT_TOKEN)) {
+      return res.status(401).json({ error: 'Invalid data' });
+    }
+
+    const params = new URLSearchParams(initData);
+    const user = JSON.parse(params.get('user'));
+
+    if (!user || !user.id) {
+      return res.status(400).json({ error: 'Invalid user data in initData' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN'); // Start transaction
+
+      const itemResult = await client.query('SELECT price FROM shop_items WHERE id = $1', [itemId]);
+      if (itemResult.rowCount === 0) throw new Error('Item not found.');
+      const itemPrice = itemResult.rows[0].price;
+
+      const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
+      if (userResult.rowCount === 0) throw new Error('User not found.');
+      const userPoints = userResult.rows[0].points;
+      
+      if (userPoints < itemPrice) throw new Error('Insufficient points.');
+      
+      const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
+      if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+
+      const newPoints = userPoints - itemPrice;
+      await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
+      await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
+
+      await client.query('COMMIT'); // Commit transaction
+
+      res.status(200).json({ success: true, newPoints: newPoints, message: 'Purchase successful!' });
+
+    } catch (error) {
+      await client.query('ROLLBACK'); // Rollback on error
+      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Item not found.', 'User not found.'];
+      if (knownErrors.includes(error.message)) {
+          return res.status(400).json({ success: false, error: error.message });
+      }
+      console.error('🚨 Error in /api/buy-item transaction:', error);
+      res.status(500).json({ success: false, error: 'Internal server error during purchase.' });
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('🚨 Error in /api/buy-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 const startServer = () => {
   app.listen(PORT, () => {
