@@ -4,8 +4,31 @@ import { motion, useDragControls } from 'framer-motion';
 const GamePiece = ({ color, index, onDragStart, onDragEnd }) => {
   const controls = useDragControls();
 
-  // If there's no color, it's an empty space.
-  // We render a placeholder so the grid doesn't collapse.
+  // Variants for the pop animation
+  const variants = {
+    initial: {
+      scale: 0,
+      opacity: 0,
+    },
+    animate: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        type: 'spring',
+        stiffness: 300,
+        damping: 20,
+      }
+    },
+    exit: {
+      scale: 0,
+      opacity: 0,
+      rotate: 360,
+      transition: {
+        duration: 0.3
+      }
+    }
+  };
+
   if (!color) {
     return <div className="w-full h-full rounded-full" />;
   }
@@ -13,21 +36,17 @@ const GamePiece = ({ color, index, onDragStart, onDragEnd }) => {
   return (
     <div 
       className="w-full h-full flex items-center justify-center p-1"
-      // This allows dragging to start immediately on touch/click
       onPointerDown={(e) => {
         onDragStart(e, { index });
-        controls.start(e, { snapToCursor: true });
+        controls.start(e);
       }}
     >
       <motion.div
-        // NEW: Animation properties for appearing and disappearing
-        layout // Ensures smooth movement when pieces fall
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        exit={{ scale: 0 }}
-        transition={{ duration: 0.2 }}
-
-        // Drag functionality
+        layout // This helps animate position changes smoothly
+        variants={variants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
         drag={true}
         dragControls={controls}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
