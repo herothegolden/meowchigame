@@ -16,7 +16,7 @@ const GamePiece = ({ color, index, onDragStart, onDragEnd }) => {
       initial="hidden"
       animate="visible"
       exit="exit"
-      layout
+      // The "layout" prop has been removed to stop the shifting animation
       className="w-full h-full flex items-center justify-center p-1"
       onPointerDown={(e) => {
         if (onDragStart) {
