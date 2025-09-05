@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, ShieldAlert } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, PlusCircle } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -25,10 +25,18 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
     setIsActivating(false);
   };
 
+  const getIcon = () => {
+    switch(item.id) {
+      case 1: return <PlusCircle size={28} />; // Extra Time
+      case 2: return <ChevronsUp size={28} />; // Point Booster
+      default: return <Package size={28} />;
+    }
+  }
+
   return (
     <div className="bg-nav p-4 rounded-lg flex items-center justify-between">
       <div className="flex items-center">
-        <div className="mr-4 text-accent"><ChevronsUp size={28} /></div>
+        <div className="mr-4 text-accent">{getIcon()}</div>
         <div>
           <p className="font-bold text-primary">{item.name}</p>
           <p className="text-sm text-secondary">{item.description}</p>
@@ -36,9 +44,9 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
       </div>
       <button 
         onClick={handleActivate}
-        disabled={disabled || isActivating}
+        disabled={disabled}
         className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
-          disabled 
+          disabled || isActivating
             ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
             : 'bg-accent text-background hover:scale-105'
         }`}
@@ -53,7 +61,7 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
 // --- Main Profile Page Component ---
 
 const ProfilePage = () => {
-  const [profileData, setProfileData] = useState({ stats: null, inventory: [], allItems: [], boosterActive: false });
+  const [profileData, setProfileData] = useState({ stats: null, inventory: {}, allItems: [], activeBoosters: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const tg = window.Telegram?.WebApp;
@@ -90,7 +98,7 @@ const ProfilePage = () => {
         stats,
         inventory: shopData.inventory,
         allItems: shopData.items,
-        boosterActive: shopData.boosterActive,
+        activeBoosters: shopData.activeBoosters,
       });
 
     } catch (err) {
@@ -118,12 +126,8 @@ const ProfilePage = () => {
       tg.HapticFeedback.notificationOccurred('success');
       tg.showPopup({ title: 'Success!', message: result.message, buttons: [{ type: 'ok' }] });
 
-      // Instantly update UI
-      setProfileData(prev => ({
-        ...prev,
-        inventory: prev.inventory.filter(id => id !== itemId),
-        boosterActive: true,
-      }));
+      // Refresh data to show updated state
+      fetchProfileData();
 
     } catch (err) {
       tg.HapticFeedback.notificationOccurred('error');
@@ -139,8 +143,8 @@ const ProfilePage = () => {
     return <div className="p-4 text-center text-red-400"><p>Could not load profile.</p><p className="text-sm text-secondary">{error}</p></div>;
   }
   
-  const { stats, inventory, allItems, boosterActive } = profileData;
-  const ownedConsumables = allItems.filter(item => item.type === 'consumable' && inventory.includes(item.id));
+  const { stats, inventory, allItems, activeBoosters } = profileData;
+  const ownedConsumables = allItems.filter(item => item.type === 'consumable' && (inventory[item.id] || 0) > 0);
 
   return (
     <div className="p-4 space-y-6">
@@ -167,19 +171,31 @@ const ProfilePage = () => {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
         <h2 className="text-xl font-bold mb-3 flex items-center"><Package className="w-6 h-6 mr-2 text-secondary"/> My Boosters</h2>
         <div className="space-y-3">
-          {boosterActive && (
+          {activeBoosters.point_booster && (
             <div className="bg-green-800/50 border border-green-500 text-green-300 p-3 rounded-lg flex items-center">
               <Zap className="w-5 h-5 mr-3"/>
               <span>A Point Booster is active for your next game!</span>
             </div>
           )}
+           {activeBoosters.extra_time && (
+            <div className="bg-blue-800/50 border border-blue-500 text-blue-300 p-3 rounded-lg flex items-center">
+              <Zap className="w-5 h-5 mr-3"/>
+              <span>An Extra Time booster is active for your next game!</span>
+            </div>
+          )}
 
           {ownedConsumables.length > 0 ? (
             ownedConsumables.map(item => (
-              <InventoryItemCard key={item.id} item={item} onActivate={handleActivateItem} disabled={boosterActive} />
+              <InventoryItemCard 
+                key={item.id} 
+                item={item} 
+                onActivate={handleActivateItem} 
+                disabled={(item.id === 1 && activeBoosters.extra_time) || (item.id === 2 && activeBoosters.point_booster)} 
+              />
             ))
           ) : (
-            !boosterActive && <p className="text-secondary text-center p-4 bg-nav rounded-lg">You have no boosters. Visit the shop to buy some!</p>
+             (!activeBoosters.point_booster && !activeBoosters.extra_time) && 
+             <p className="text-secondary text-center p-4 bg-nav rounded-lg">You have no boosters. Visit the shop to buy some!</p>
           )}
         </div>
       </motion.div>
