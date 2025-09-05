@@ -245,14 +245,22 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
           return res.status(404).json({ error: 'User profile not found.' });
         }
 
+        // THIS IS THE DEFINITIVE FIX:
+        // We use a LEFT JOIN to prevent the query from failing if there is orphaned data
+        // (e.g., an inventory item that points to a non-existent shop item).
         const inventoryRes = await client.query(`
-                SELECT si.id, si.name, si.icon_name, si.type FROM user_inventory ui
-                JOIN shop_items si ON ui.item_id = si.id WHERE ui.user_id = $1
+                SELECT si.id, si.name, si.icon_name, si.type 
+                FROM user_inventory ui
+                LEFT JOIN shop_items si ON ui.item_id = si.id 
+                WHERE ui.user_id = $1
             `, [user.id]);
+
+        // This filters out any broken inventory items where the shop item was not found.
+        const cleanInventory = inventoryRes.rows.filter(item => item.id !== null);
 
         res.status(200).json({
             stats: userStatsRes.rows[0],
-            inventory: inventoryRes.rows,
+            inventory: cleanInventory,
         });
     } catch (error) {
         console.error('🚨 Error in /api/get-profile-data:', error);
