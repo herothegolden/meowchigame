@@ -16,6 +16,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [shake, setShake] = useState(false);
+  const [poppedEmojis, setPoppedEmojis] = useState([]);
 
   const tg = window.Telegram?.WebApp;
 
@@ -28,6 +29,17 @@ const GameBoard = ({ setScore, isGameActive }) => {
       if (matches.size > 0) {
         tg?.HapticFeedback.impactOccurred('light');
         setScore(prevScore => prevScore + (matches.size * POINTS_PER_PIECE));
+
+        // --- New Emoji Logic ---
+        const newPops = [];
+        const flatBoard = boardToCheck.flat();
+        flatBoard.forEach((piece, index) => {
+          if (matches.has(piece.id)) {
+            newPops.push({ id: piece.id, index });
+          }
+        });
+        setPoppedEmojis(current => [...current, ...newPops]);
+        setTimeout(() => setPoppedEmojis([]), 600); // Clear emojis after animation
 
         setTimeout(() => {
           const newBoard = boardToCheck.map(row => 
@@ -49,15 +61,13 @@ const GameBoard = ({ setScore, isGameActive }) => {
   }, [setScore, tg]);
 
   useEffect(() => {
-    // Initial check for any accidental matches on load
     processBoardChanges(board);
-  }, []); // Only run once on initial load
+  }, []); 
 
 
   const handleDragStart = (event, { index }) => {
     if (isProcessing || !isGameActive) return;
-    const flatBoard = board.flat();
-    setDraggedPiece({ index, piece: flatBoard[index] });
+    setDraggedPiece({ index });
   };
 
   const handleDragEnd = (event, info) => {
@@ -65,7 +75,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
 
     const { offset } = info;
     const { index } = draggedPiece;
-    const { row, col } = getPosition(index);
+    const { col } = getPosition(index);
 
     let replacedIndex;
     const threshold = 20;
@@ -74,11 +84,11 @@ const GameBoard = ({ setScore, isGameActive }) => {
         if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
         else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;
     } else {
-        if (offset.y > threshold && row < BOARD_SIZE - 1) replacedIndex = index + BOARD_SIZE;
-        else if (offset.y < -threshold && row > 0) replacedIndex = index - BOARD_SIZE;
+        if (offset.y > threshold) replacedIndex = index + BOARD_SIZE;
+        else if (offset.y < -threshold) replacedIndex = index - BOARD_SIZE;
     }
 
-    if (replacedIndex !== undefined) {
+    if (replacedIndex !== undefined && replacedIndex >= 0 && replacedIndex < BOARD_SIZE * BOARD_SIZE) {
       const newBoard = JSON.parse(JSON.stringify(board));
       const {row: r1, col: c1} = getPosition(index);
       const {row: r2, col: c2} = getPosition(replacedIndex);
@@ -86,8 +96,8 @@ const GameBoard = ({ setScore, isGameActive }) => {
 
       const matches = checkForMatches(newBoard);
       if (matches.size > 0) {
-          setBoard(newBoard); // Set the swapped board first
-          processBoardChanges(newBoard); // Then process it
+          setBoard(newBoard);
+          processBoardChanges(newBoard);
       } else {
           tg?.HapticFeedback.notificationOccurred('error');
           setShake(true);
@@ -102,7 +112,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
     <motion.div
       animate={{ x: shake ? [-10, 10, -10, 10, 0] : 0 }}
       transition={{ duration: 0.5 }}
-      className="grid bg-nav rounded-lg p-2 shadow-inner"
+      className="grid bg-nav rounded-lg p-2 shadow-inner relative"
       style={{
         gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
         gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
@@ -122,6 +132,27 @@ const GameBoard = ({ setScore, isGameActive }) => {
             onDragEnd={handleDragEnd}
           />
         ))}
+      </AnimatePresence>
+      <AnimatePresence>
+        {poppedEmojis.map(pop => {
+            const { row, col } = getPosition(pop.index);
+            return (
+                <motion.div
+                    key={pop.id}
+                    initial={{ opacity: 1, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1.2 }}
+                    exit={{ opacity: 0, scale: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="absolute text-3xl pointer-events-none"
+                    style={{
+                        top: `calc(${row * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
+                        left: `calc(${col * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
+                    }}
+                >
+                    🔥
+                </motion.div>
+            );
+        })}
       </AnimatePresence>
     </motion.div>
   );
