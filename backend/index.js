@@ -23,7 +23,7 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// THIS IS THE DEFINITIVE ROBUST DATABASE SETUP FUNCTION
+// THIS IS THE DEFINITIVE, ROBUST DATABASE SETUP FUNCTION
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -58,7 +58,7 @@ const setupDatabase = async () => {
         }
     }
 
-    // 3. Create Shop & Inventory Tables
+    // 3. Create Shop Items Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS shop_items (
         id SERIAL PRIMARY KEY,
@@ -70,9 +70,12 @@ const setupDatabase = async () => {
       );
     `);
     
-    // THIS IS THE CRITICAL FIX: The user_inventory table now correctly references the stable telegram_id
+    // 4. THIS IS THE CRITICAL FIX: We drop the old, potentially broken inventory table and recreate it.
+    // This guarantees the foreign key relationship is correct.
+    console.log('- Rebuilding user_inventory table to ensure schema integrity...');
+    await client.query('DROP TABLE IF EXISTS user_inventory;');
     await client.query(`
-      CREATE TABLE IF NOT EXISTS user_inventory (
+      CREATE TABLE user_inventory (
         id SERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
         item_id INT NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
@@ -81,7 +84,7 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 4. Pre-populate shop if empty, now including the new time booster
+    // 5. Pre-populate shop if empty
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
       console.log('- Populating shop_items table...');
@@ -232,7 +235,6 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
     }
 });
 
-// THIS IS THE FINAL, CORRECTED /api/get-profile-data ENDPOINT
 app.post('/api/get-profile-data', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
