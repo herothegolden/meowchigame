@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import GameBoard from '../components/game/GameBoard';
 import { Star, Timer, LoaderCircle, ChevronsUp, Clock, Play } from 'lucide-react';
@@ -11,20 +11,29 @@ const GamePage = () => {
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [gameSettings, setGameSettings] = useState({ initialTime: 30, pointMultiplier: 1 });
   const [finalScore, setFinalScore] = useState(0);
+  const gamePageRef = useRef(null);
   
   const tg = window.Telegram?.WebApp;
 
-  // --- Disable vertical swipes for better gameplay ---
+  // --- SAFER SWIPE PREVENTION ---
+  // This now only activates when the game is being played and is scoped to this component.
   useEffect(() => {
     const handler = (e) => e.preventDefault();
-    document.body.addEventListener('touchmove', handler, { passive: false });
-    tg?.disableVerticalSwipes();
+    const node = gamePageRef.current;
+
+    if (gameState === 'playing' && node) {
+      node.addEventListener('touchmove', handler, { passive: false });
+      tg?.disableVerticalSwipes();
+    }
     
     return () => {
-      document.body.removeEventListener('touchmove', handler);
+      if (node) {
+        node.removeEventListener('touchmove', handler);
+      }
+      // Always re-enable swipes when the component unmounts or the game ends.
       tg?.enableVerticalSwipes();
     }
-  }, [tg]);
+  }, [gameState, tg]);
 
   // --- Timer Countdown Logic ---
   useEffect(() => {
@@ -152,7 +161,7 @@ const GamePage = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4 space-y-4">
+    <div ref={gamePageRef} className="flex flex-col items-center justify-center h-full p-4 space-y-4 w-full">
       {gameState === 'playing' && renderHeader()}
       <div className="flex-grow flex items-center justify-center w-full">
         {renderContent()}
@@ -163,3 +172,4 @@ const GamePage = () => {
 };
 
 export default GamePage;
+
