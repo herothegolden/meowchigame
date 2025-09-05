@@ -14,9 +14,6 @@ const GameBoard = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [draggedPiece, setDraggedPiece] = useState(null);
 
-  // This function handles the game's core loop: checking for matches,
-  // clearing them, applying gravity, and refilling the board until
-  // no more matches are found (a stable state).
   const processBoardChanges = useCallback(() => {
     setIsProcessing(true);
 
@@ -24,25 +21,20 @@ const GameBoard = () => {
       const matches = checkForMatches(currentBoard);
       
       if (matches.size > 0) {
-        // Use a short timeout to allow the player to see the match before it disappears.
         setTimeout(() => {
-          // Flatten the board for easier manipulation
           const newBoardFlat = [...currentBoard.flat()];
-          matches.forEach(index => { newBoardFlat[index] = null; }); // Set matched pieces to null
+          matches.forEach(index => { newBoardFlat[index] = null; });
           
-          // Re-create the 2D board from the flat array
           let clearedBoard = [];
           while (newBoardFlat.length) clearedBoard.push(newBoardFlat.splice(0, BOARD_SIZE));
 
           const gravityBoard = applyGravity(clearedBoard);
           const refilledBoard = refillBoard(gravityBoard);
 
-          // Update the board and recursively check for new "cascade" matches
           setBoard(refilledBoard);
           checkAndResolve(refilledBoard);
         }, 200);
       } else {
-        // No more matches, the board is stable. End processing.
         setIsProcessing(false);
       }
     };
@@ -50,19 +42,16 @@ const GameBoard = () => {
     checkAndResolve(board);
   }, [board]);
 
-  // This useEffect hook triggers the processing loop whenever the board changes.
   useEffect(() => {
     processBoardChanges();
   }, [board, processBoardChanges]);
 
 
-  // Called when a player first touches or clicks on a piece.
   const handleDragStart = (event, { index }) => {
-    if (isProcessing) return; // Prevent moves while the board is resolving
+    if (isProcessing) return;
     setDraggedPiece({ index });
   };
 
-  // Called when a player releases a piece after dragging.
   const handleDragEnd = (event, info) => {
     if (isProcessing || !draggedPiece) return;
 
@@ -71,19 +60,17 @@ const GameBoard = () => {
     const { row, col } = getPosition(index);
 
     let replacedIndex;
-    const threshold = 20; // How far the player must drag to register a move
+    const threshold = 20;
 
-    // Determine drag direction (horizontal vs. vertical)
     if (Math.abs(offset.x) > Math.abs(offset.y)) {
-        if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1; // Right
-        else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;       // Left
+        if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
+        else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;
     } else {
-        if (offset.y > threshold && row < BOARD_SIZE - 1) replacedIndex = index + BOARD_SIZE; // Down
-        else if (offset.y < -threshold && row > 0) replacedIndex = index - BOARD_SIZE;       // Up
+        if (offset.y > threshold && row < BOARD_SIZE - 1) replacedIndex = index + BOARD_SIZE;
+        else if (offset.y < -threshold && row > 0) replacedIndex = index - BOARD_SIZE;
     }
 
     if (replacedIndex !== undefined) {
-        // Create a temporary new board with the swapped pieces
         const newBoardFlat = [...board.flat()];
         const draggedColor = newBoardFlat[index];
         newBoardFlat[index] = newBoardFlat[replacedIndex];
@@ -92,9 +79,12 @@ const GameBoard = () => {
         const tempBoard2D = [];
         while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
 
-        // Only commit the move if it results in a match
         const matches = checkForMatches(tempBoard2D);
         if (matches.size > 0) {
+            // This is the new haptic feedback trigger!
+            if (window.Telegram && window.Telegram.WebApp) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
             setBoard(tempBoard2D);
         }
     }
