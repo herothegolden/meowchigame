@@ -10,8 +10,8 @@ export const PIECE_TYPES = [
   '#2A7B88', // Milk Drop (Teal)
 ];
 
-// Each match is worth 10 points
-export const SCORE_PER_MATCH = 10;
+// NEW: The number of points awarded for a standard 3-piece match.
+export const POINTS_PER_MATCH = 10;
 
 /**
  * Generates the initial random layout of the game board.
