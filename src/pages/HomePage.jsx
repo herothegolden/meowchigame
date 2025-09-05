@@ -3,18 +3,22 @@ import { motion } from 'framer-motion';
 import { User, Star, Flame, ChevronRight, LoaderCircle, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
-const MOCK_USER_DATA = {
-  id: 1,
-  telegram_id: 123456789,
-  first_name: 'Dev User',
-  last_name: '',
-  username: 'devuser',
-  points: 5000,
-  level: 8,
-  daily_streak: 4,
-  dailyBonus: { points: 400, streak: 4 } // Mock bonus for browser testing
+// --- THIS FUNCTION PREVENTS THE BLACK SCREEN ---
+// It checks if the URL is valid before the app tries to use it.
+const isValidUrl = (urlString) => {
+  // The URL must be a valid https URL and must NOT contain "google.com"
+  if (!urlString || !urlString.startsWith('https://') || urlString.includes('google.com')) {
+    return false;
+  }
+  try {
+    // This will throw an error if the URL is malformed.
+    new URL(urlString);
+    return true;
+  } catch (e) {
+    return false;
+  }
 };
 
 const HomePage = () => {
@@ -22,23 +26,22 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-
-  // --- CRITICAL FIX: Environment Variable Check ---
-  // A "black screen" is often caused by the frontend not knowing where the backend is.
-  // This check provides a clear error message if the .env file is missing.
-  if (!BACKEND_URL) {
-    return (
+  
+  // --- THIS IS THE DEFINITIVE FIX FOR THE BLACK SCREEN ---
+  // If the URL is missing or invalid, this error screen is shown instead of a crash.
+  if (import.meta.env.PROD && !isValidUrl(BACKEND_URL)) {
+     return (
       <div className="p-4 text-center text-red-400 flex flex-col items-center justify-center h-full">
         <AlertTriangle className="w-16 h-16 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold">Configuration Error</h1>
-        <p className="mt-2 text-secondary">The backend URL is not configured.</p>
-        <div className="mt-4 text-left text-sm bg-nav p-4 rounded-lg">
-          <p className="font-bold text-primary">To fix this:</p>
-          <p className="mt-1">1. Create a file named <code className="font-mono text-accent">.env</code> in the root of your frontend project.</p>
-          <p className="mt-1">2. Add this line to the file: <br />
-             <code className="font-mono text-accent">VITE_BACKEND_URL=http://localhost:3000</code>
-          </p>
-           <p className="mt-2 text-xs text-secondary">(Adjust the URL if your backend runs on a different port or address).</p>
+        <h1 className="text-2xl font-bold">CRITICAL CONFIGURATION ERROR</h1>
+        <p className="mt-2 text-secondary">The app cannot load because the backend URL is invalid.</p>
+        <div className="mt-4 text-left text-sm bg-nav p-4 rounded-lg w-full max-w-md">
+          <p className="font-bold text-primary">Your Current Invalid URL:</p>
+          <code className="font-mono text-red-500 text-xs break-all">{BACKEND_URL}</code>
+          <p className="mt-4 font-bold text-primary">How to Fix:</p>
+          <p className="mt-1">1. Create a file named <code className="font-mono text-accent">.env</code> in your frontend's root directory.</p>
+          <p className="mt-1">2. Add the following line, replacing the example with your real backend URL:</p>
+          <code className="font-mono text-accent text-xs break-all mt-1 block">VITE_BACKEND_URL=https://your-backend-name.up.railway.app</code>
         </div>
       </div>
     );
@@ -56,16 +59,14 @@ const HomePage = () => {
         });
       }
     };
-
-    if (!tg || !tg.initData) {
-      console.log('Running in browser mode. Using mock data.');
-      setUser(MOCK_USER_DATA);
-      setLoading(false);
-      showBonusPopup(MOCK_USER_DATA.dailyBonus); // Show mock bonus in browser
-      return;
-    }
     
     const fetchUserData = async () => {
+      if (!tg || !tg.initData) {
+        console.warn('Running in browser mode. App requires Telegram.');
+        setLoading(false);
+        return;
+      }
+
       tg.ready();
       
       try {
@@ -76,7 +77,8 @@ const HomePage = () => {
         });
 
         if (!res.ok) {
-          throw new Error(`Server responded with status: ${res.status}`);
+          const errorText = await res.text();
+          throw new Error(`Server responded with status: ${res.status}. Details: ${errorText}`);
         }
 
         const userData = await res.json();
@@ -87,7 +89,8 @@ const HomePage = () => {
         }
 
       } catch (err) {
-        setError(`Failed to fetch user data: ${err.message}`);
+        console.error("Full fetch error:", err);
+        setError(`Could not connect to the server. Please verify the backend URL and your network connection.`);
       } finally {
         setLoading(false);
       }
@@ -107,17 +110,20 @@ const HomePage = () => {
   if (error) {
     return (
       <div className="p-4 text-center text-red-400">
-        <p>Oops! Something went wrong.</p>
-        <p className="text-sm text-secondary">{error}</p>
+        <AlertTriangle className="w-10 h-10 mx-auto mb-3" />
+        <p className="font-bold">Oops! Something went wrong.</p>
+        <p className="text-sm text-secondary mt-1 px-4">{error}</p>
       </div>
     );
   }
   
   if (!user) {
     return (
-        <div className="flex items-center justify-center h-full">
-            <p className="text-secondary">Could not load user data.</p>
-        </div>
+      <div className="p-4 text-center text-secondary flex flex-col items-center justify-center h-full">
+          <h1 className="text-xl font-bold text-primary mb-2">Welcome!</h1>
+          <p>This app is designed to be used inside Telegram.</p>
+          <p className="text-xs mt-4">(If you are in Telegram and see this, please try restarting the app).</p>
+      </div>
     )
   }
 
@@ -187,3 +193,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
