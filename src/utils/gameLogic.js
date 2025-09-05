@@ -1,4 +1,3 @@
-import { BOARD_SIZE, PIECE_TYPES } from './gameLogic';
 // The size of our game board (8x8)
 export const BOARD_SIZE = 8;
 
