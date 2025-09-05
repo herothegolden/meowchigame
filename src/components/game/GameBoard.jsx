@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -6,7 +7,7 @@ import {
   applyGravity,
   refillBoard,
   getPosition,
-  POINTS_PER_MATCH // Import our new constant
+  POINTS_PER_PIECE, // Import the new scoring constant
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
@@ -16,15 +17,19 @@ const GameBoard = ({ setScore, setMoves }) => {
   const [draggedPiece, setDraggedPiece] = useState(null);
 
   const processBoardChanges = useCallback(() => {
+    if (isProcessing) return;
     setIsProcessing(true);
 
     const checkAndResolve = (currentBoard) => {
       const matches = checkForMatches(currentBoard);
       
       if (matches.size > 0) {
-        // NEW: Update the score based on the number of matched pieces
-        setScore(prevScore => prevScore + (matches.size * POINTS_PER_MATCH / 3));
+        // FIX: Scoring is now based on the number of pieces matched.
+        // This ensures whole numbers and scales with larger matches.
+        const pointsGained = matches.size * POINTS_PER_PIECE;
+        setScore(prev => prev + pointsGained);
 
+        // FIX: The timeout is much shorter for a faster, more fluid feel.
         setTimeout(() => {
           const newBoardFlat = [...currentBoard.flat()];
           matches.forEach(index => { newBoardFlat[index] = null; });
@@ -36,19 +41,20 @@ const GameBoard = ({ setScore, setMoves }) => {
           const refilledBoard = refillBoard(gravityBoard);
 
           setBoard(refilledBoard);
-          checkAndResolve(refilledBoard);
-        }, 200);
+          checkAndResolve(refilledBoard); // Recursively check for new matches
+        }, 150); // A brief delay to let animations play out
       } else {
-        setIsProcessing(false);
+        setIsProcessing(false); // Unlock the board for the next move
       }
     };
     
     checkAndResolve(board);
-  }, [board, setScore]);
+  }, [board, setScore, isProcessing]);
 
   useEffect(() => {
+    // This effect now only triggers when the board state changes, not on every render.
     processBoardChanges();
-  }, [board, processBoardChanges]);
+  }, [board]);
 
 
   const handleDragStart = (event, { index }) => {
@@ -64,8 +70,9 @@ const GameBoard = ({ setScore, setMoves }) => {
     const { row, col } = getPosition(index);
 
     let replacedIndex;
-    const threshold = 20;
+    const threshold = 20; // How far the user must drag to trigger a swap
 
+    // Determine swap direction
     if (Math.abs(offset.x) > Math.abs(offset.y)) {
         if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
         else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;
@@ -76,22 +83,20 @@ const GameBoard = ({ setScore, setMoves }) => {
 
     if (replacedIndex !== undefined) {
         const newBoardFlat = [...board.flat()];
-        const draggedColor = newBoardFlat[index];
-        newBoardFlat[index] = newBoardFlat[replacedIndex];
-        newBoardFlat[replacedIndex] = draggedColor;
+        // Swap the pieces
+        [newBoardFlat[index], newBoardFlat[replacedIndex]] = [newBoardFlat[replacedIndex], newBoardFlat[index]];
 
         const tempBoard2D = [];
         while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
 
+        // Check if the swap results in a match
         const matches = checkForMatches(tempBoard2D);
         if (matches.size > 0) {
-            // NEW: A successful move was made, so decrement moves count
-            setMoves(prevMoves => prevMoves - 1);
-            
             if (window.Telegram && window.Telegram.WebApp) {
               window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
             }
-            setBoard(tempBoard2D);
+            setMoves(prev => prev - 1); // A move is only used up if it's successful
+            setBoard(tempBoard2D); // This triggers the processBoardChanges effect
         }
     }
 
@@ -110,15 +115,18 @@ const GameBoard = ({ setScore, setMoves }) => {
         maxHeight: '400px',
       }}
     >
-      {board.flat().map((color, index) => (
-        <GamePiece 
-          key={index} 
-          color={color} 
-          index={index}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        />
-      ))}
+      {/* NEW: AnimatePresence wrapper enables the exit animations on the GamePieces */}
+      <AnimatePresence>
+        {board.flat().map((color, index) => (
+          <GamePiece 
+            key={index} 
+            color={color} 
+            index={index}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          />
+        ))}
+      </AnimatePresence>
     </div>
   );
 };
