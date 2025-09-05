@@ -33,9 +33,10 @@ const GameBoard = ({ setScore, isGameActive }) => {
         // --- New Emoji Logic ---
         const newPops = [];
         const flatBoard = boardToCheck.flat();
-        flatBoard.forEach((piece, index) => {
-          if (matches.has(piece.id)) {
-            newPops.push({ id: `pop-${piece.id}-${Date.now()}`, index });
+        flatBoard.forEach((piece) => {
+          if (piece && matches.has(piece.id)) {
+             const { row, col } = getPosition(piece.id);
+             newPops.push({ id: `pop-${piece.id}-${Date.now()}`, row, col });
           }
         });
         setPoppedEmojis(current => [...current, ...newPops]);
@@ -47,7 +48,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
 
         setTimeout(() => {
           const newBoard = boardToCheck.map(row => 
-            row.map(piece => (matches.has(piece.id) ? null : piece))
+            row.map(piece => (piece && matches.has(piece.id) ? null : piece))
           );
           
           const gravityBoard = applyGravity(newBoard);
@@ -67,6 +68,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
   useEffect(() => {
     // This effect now only runs once to initialize the board without side effects.
     processBoardChanges(board);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
 
@@ -129,7 +131,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
     >
       <AnimatePresence>
         {board.flat().map((piece, index) => (
-          <GamePiece 
+          piece && <GamePiece 
             key={piece.id}
             color={piece.color} 
             index={index}
@@ -140,7 +142,6 @@ const GameBoard = ({ setScore, isGameActive }) => {
       </AnimatePresence>
       <AnimatePresence>
         {poppedEmojis.map(pop => {
-            const { row, col } = getPosition(pop.index);
             return (
                 <motion.div
                     key={pop.id}
@@ -150,8 +151,8 @@ const GameBoard = ({ setScore, isGameActive }) => {
                     transition={{ duration: 0.4 }}
                     className="absolute text-3xl pointer-events-none"
                     style={{
-                        top: `calc(${row * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
-                        left: `calc(${col * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
+                        top: `calc(${pop.row * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
+                        left: `calc(${pop.col * (100 / BOARD_SIZE)}% + ${100 / BOARD_SIZE / 4}%)`,
                     }}
                 >
                     🔥
