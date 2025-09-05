@@ -193,9 +193,11 @@ app.post('/api/validate', async (req, res) => {
 app.post('/api/user-stats', getUser, async (req, res) => {
   const client = await pool.connect();
   try {
+      // THIS IS THE FIX: Use a LEFT JOIN to ensure the query works even with an empty inventory.
       const inventoryResult = await client.query(
-          `SELECT i.id, i.name, i.description, i.icon_name FROM user_inventory ui
-           JOIN shop_items i ON ui.item_id = i.id
+          `SELECT i.id, i.name, i.description, i.icon_name 
+           FROM shop_items i
+           JOIN user_inventory ui ON ui.item_id = i.id
            WHERE ui.user_id = $1`, [req.user.id]
       );
       res.status(200).json({
@@ -254,7 +256,6 @@ app.post('/api/get-shop-data', getUser, async (req, res) => {
     const client = await pool.connect();
     try {
         const itemsResult = await client.query('SELECT * FROM shop_items ORDER BY price');
-        // THIS IS THE FIX: Use LEFT JOIN to always get inventory, even if empty
         const inventoryResult = await client.query(
             `SELECT item_id FROM user_inventory WHERE user_id = $1`, [req.user.id]
         );
