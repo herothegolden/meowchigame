@@ -1,34 +1,25 @@
 import React from 'react';
-import { motion, useDragControls } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const GamePiece = ({ color, index, onDragStart, onDragEnd }) => {
-  const controls = useDragControls();
-
+const GamePiece = ({ color, dragControls, onDragEnd }) => {
   if (!color) {
-    return <div className="w-full h-full rounded-full" />;
+    return <div className="w-full h-full" />;
   }
 
   return (
-    <div 
-      className="w-full h-full flex items-center justify-center p-1"
-      onPointerDown={(e) => {
-        onDragStart(e, { index });
-        controls.start(e);
+    <motion.div
+      drag
+      dragControls={dragControls}
+      dragListener={false} // We trigger drag manually via onPointerDown
+      onDragEnd={onDragEnd}
+      whileDrag={{ scale: 1.2, zIndex: 10 }}
+      dragSnapToOrigin // Snaps back to its original position after drag
+      className="w-10/12 h-10/12 rounded-full cursor-grab"
+      style={{ 
+        backgroundColor: color,
+        boxShadow: `inset 0 0 5px rgba(0,0,0,0.4)`,
       }}
-    >
-      <motion.div
-        // This is the fix: Changed from drag="x" to drag={true}
-        // This allows the piece to be dragged freely in any direction.
-        drag={true}
-        dragControls={controls}
-        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        dragElasticity={0.5}
-        onDragEnd={onDragEnd}
-        whileDrag={{ scale: 1.15 }}
-        className="w-full h-full rounded-full shadow-lg cursor-grab"
-        style={{ backgroundColor: color, touchAction: 'none' }}
-      />
-    </div>
+    />
   );
 };
 
