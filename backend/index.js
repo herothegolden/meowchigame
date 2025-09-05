@@ -74,8 +74,8 @@ const setupDatabase = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
-        user_id BIGINT NOT NULL REFERENCES users(telegram_id),
-        item_id INT NOT NULL REFERENCES shop_items(id),
+        user_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+        item_id INT NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
         acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, item_id)
       );
@@ -177,7 +177,6 @@ app.post('/api/start-game', validateUser, async (req, res) => {
             timeBoosterWasActive: extra_time_active,
         };
         
-        // Consume boosters
         await client.query('UPDATE users SET point_booster_active = FALSE, extra_time_active = FALSE WHERE telegram_id = $1', [user.id]);
         
         res.status(200).json(gameConfig);
@@ -218,6 +217,8 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
             client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [user.id]),
         ]);
         
+        if (userRes.rowCount === 0) return res.status(404).json({error: 'User not found'});
+
         res.status(200).json({
             items: itemsRes.rows,
             userPoints: userRes.rows[0].points,
@@ -231,6 +232,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
     }
 });
 
+// THIS IS THE FINAL, CORRECTED /api/get-profile-data ENDPOINT
 app.post('/api/get-profile-data', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
@@ -243,6 +245,11 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
             `, [user.id])
         ]);
         
+        // THIS IS THE CRITICAL FIX: We check if the user exists before trying to send data
+        if (userStatsRes.rowCount === 0) {
+          return res.status(404).json({ error: 'User profile not found.' });
+        }
+
         res.status(200).json({
             stats: userStatsRes.rows[0],
             inventory: inventoryRes.rows,
@@ -254,6 +261,7 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
         client.release();
     }
 });
+
 
 app.post('/api/buy-item', validateUser, async (req, res) => {
     const { user } = req;
@@ -272,11 +280,12 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
             if (owned) throw new Error('Item already owned.');
         }
 
-        await client.query('UPDATE users SET points = points - $1 WHERE telegram_id = $2', [item.price, user.id]);
+        const newPoints = userData.points - item.price;
+        await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
         
         await client.query('COMMIT');
-        res.status(200).json({ success: true, newPoints: userData.points - item.price });
+        res.status(200).json({ success: true, newPoints: newPoints });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error in /api/buy-item:', error.message);
