@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -7,31 +7,34 @@ import {
   applyGravity,
   refillBoard,
   getPosition,
-  POINTS_PER_PIECE, // Import the new scoring constant
+  POINTS_PER_PIECE,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
-const GameBoard = ({ setScore, setMoves }) => {
+const GameBoard = ({ setScore, isGameActive }) => {
   const [board, setBoard] = useState(generateInitialBoard());
   const [isProcessing, setIsProcessing] = useState(false);
   const [draggedPiece, setDraggedPiece] = useState(null);
+  const [shake, setShake] = useState(false); // State for the shake animation
 
-  const processBoardChanges = useCallback(() => {
-    if (isProcessing) return;
+  const tg = window.Telegram?.WebApp;
+
+  const processBoardChanges = useCallback((currentBoard) => {
     setIsProcessing(true);
 
-    const checkAndResolve = (currentBoard) => {
-      const matches = checkForMatches(currentBoard);
+    const checkAndResolve = (boardToCheck) => {
+      const matches = checkForMatches(boardToCheck);
       
       if (matches.size > 0) {
-        // FIX: Scoring is now based on the number of pieces matched.
-        // This ensures whole numbers and scales with larger matches.
-        const pointsGained = matches.size * POINTS_PER_PIECE;
-        setScore(prev => prev + pointsGained);
+        // Haptic feedback for a successful match
+        tg?.HapticFeedback.impactOccurred('light');
+        
+        // Update score based on the number of matched pieces
+        setScore(prevScore => prevScore + (matches.size * POINTS_PER_PIECE));
 
-        // FIX: The timeout is much shorter for a faster, more fluid feel.
+        // Use a short timeout to allow the "exit" animation to play
         setTimeout(() => {
-          const newBoardFlat = [...currentBoard.flat()];
+          const newBoardFlat = [...boardToCheck.flat()];
           matches.forEach(index => { newBoardFlat[index] = null; });
           
           let clearedBoard = [];
@@ -41,38 +44,34 @@ const GameBoard = ({ setScore, setMoves }) => {
           const refilledBoard = refillBoard(gravityBoard);
 
           setBoard(refilledBoard);
-          checkAndResolve(refilledBoard); // Recursively check for new matches
-        }, 150); // A brief delay to let animations play out
+          // Recursively check the new board for more matches
+          checkAndResolve(refilledBoard);
+        }, 300); // This duration should be similar to the exit animation
       } else {
-        setIsProcessing(false); // Unlock the board for the next move
+        // No more matches, end the processing loop
+        setIsProcessing(false);
       }
     };
     
-    checkAndResolve(board);
-  }, [board, setScore, isProcessing]);
-
-  useEffect(() => {
-    // This effect now only triggers when the board state changes, not on every render.
-    processBoardChanges();
-  }, [board]);
-
+    checkAndResolve(currentBoard);
+  }, [setScore, tg]);
 
   const handleDragStart = (event, { index }) => {
-    if (isProcessing) return;
+    if (isProcessing || !isGameActive) return;
     setDraggedPiece({ index });
   };
 
   const handleDragEnd = (event, info) => {
-    if (isProcessing || !draggedPiece) return;
+    if (isProcessing || !draggedPiece || !isGameActive) return;
 
     const { offset } = info;
     const { index } = draggedPiece;
     const { row, col } = getPosition(index);
 
     let replacedIndex;
-    const threshold = 20; // How far the user must drag to trigger a swap
+    const threshold = 20;
 
-    // Determine swap direction
+    // Determine the swap direction
     if (Math.abs(offset.x) > Math.abs(offset.y)) {
         if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
         else if (offset.x < -threshold && col > 0) replacedIndex = index - 1;
@@ -83,20 +82,20 @@ const GameBoard = ({ setScore, setMoves }) => {
 
     if (replacedIndex !== undefined) {
         const newBoardFlat = [...board.flat()];
-        // Swap the pieces
         [newBoardFlat[index], newBoardFlat[replacedIndex]] = [newBoardFlat[replacedIndex], newBoardFlat[index]];
 
         const tempBoard2D = [];
         while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
 
-        // Check if the swap results in a match
         const matches = checkForMatches(tempBoard2D);
         if (matches.size > 0) {
-            if (window.Telegram && window.Telegram.WebApp) {
-              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-            }
-            setMoves(prev => prev - 1); // A move is only used up if it's successful
-            setBoard(tempBoard2D); // This triggers the processBoardChanges effect
+            // If the move is valid, start the processing chain
+            processBoardChanges(tempBoard2D);
+        } else {
+            // If the move is invalid, trigger feedback
+            tg?.HapticFeedback.notificationOccurred('error');
+            setShake(true);
+            setTimeout(() => setShake(false), 500); // Reset shake after animation
         }
     }
 
@@ -104,7 +103,9 @@ const GameBoard = ({ setScore, setMoves }) => {
   };
 
   return (
-    <div
+    <motion.div
+      animate={{ x: shake ? [-10, 10, -10, 10, 0] : 0 }}
+      transition={{ duration: 0.5 }}
       className="grid bg-nav rounded-lg p-2 shadow-inner"
       style={{
         gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
@@ -115,11 +116,10 @@ const GameBoard = ({ setScore, setMoves }) => {
         maxHeight: '400px',
       }}
     >
-      {/* NEW: AnimatePresence wrapper enables the exit animations on the GamePieces */}
       <AnimatePresence>
         {board.flat().map((color, index) => (
           <GamePiece 
-            key={index} 
+            key={`${index}-${color}`} // A more stable key for animations
             color={color} 
             index={index}
             onDragStart={handleDragStart}
@@ -127,7 +127,7 @@ const GameBoard = ({ setScore, setMoves }) => {
           />
         ))}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 };
 
