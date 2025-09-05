@@ -114,6 +114,55 @@ app.post('/api/validate', async (req, res) => {
   }
 });
 
+// NEW: Endpoint to update a user's points
+app.post('/api/update-score', async (req, res) => {
+  try {
+    const { initData, score } = req.body;
+
+    if (!initData || score === undefined) {
+      return res.status(400).json({ error: 'initData and score are required' });
+    }
+
+    // 1. Securely validate the data from Telegram
+    if (!validate(initData, BOT_TOKEN)) {
+      return res.status(401).json({ error: 'Invalid data' });
+    }
+
+    // 2. Extract user data
+    const params = new URLSearchParams(initData);
+    const user = JSON.parse(params.get('user'));
+
+    if (!user || !user.id) {
+      return res.status(400).json({ error: 'Invalid user data in initData' });
+    }
+
+    // 3. Update the user's points in the database
+    const client = await pool.connect();
+    try {
+      // We use UPDATE ... SET points = points + $1 to prevent race conditions
+      // and ensure we're adding to the current score, not overwriting it.
+      const result = await client.query(
+        'UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points',
+        [score, user.id]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const updatedUser = result.rows[0];
+      return res.status(200).json({ newScore: updatedUser.points });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('🚨 Error in /api/update-score:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ---- SERVER START ----
 // We wrap the server start in a function to run it after the database setup
 const startServer = () => {
