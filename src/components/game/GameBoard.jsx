@@ -35,11 +35,15 @@ const GameBoard = ({ setScore, isGameActive }) => {
         const flatBoard = boardToCheck.flat();
         flatBoard.forEach((piece, index) => {
           if (matches.has(piece.id)) {
-            newPops.push({ id: piece.id, index });
+            newPops.push({ id: `pop-${piece.id}-${Date.now()}`, index });
           }
         });
         setPoppedEmojis(current => [...current, ...newPops]);
-        setTimeout(() => setPoppedEmojis([]), 600); // Clear emojis after animation
+        
+        // This timer now reliably clears emojis after their animation is done
+        setTimeout(() => {
+          setPoppedEmojis(currentPops => currentPops.filter(p => !newPops.some(np => np.id === p.id)));
+        }, 600); 
 
         setTimeout(() => {
           const newBoard = boardToCheck.map(row => 
@@ -61,6 +65,7 @@ const GameBoard = ({ setScore, isGameActive }) => {
   }, [setScore, tg]);
 
   useEffect(() => {
+    // This effect now only runs once to initialize the board without side effects.
     processBoardChanges(board);
   }, []); 
 
@@ -139,8 +144,8 @@ const GameBoard = ({ setScore, isGameActive }) => {
             return (
                 <motion.div
                     key={pop.id}
-                    initial={{ opacity: 1, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1.2 }}
+                    initial={{ opacity: 1, scale: 0.5, y: 0 }}
+                    animate={{ opacity: 1, scale: 1.2, y: -20 }}
                     exit={{ opacity: 0, scale: 0 }}
                     transition={{ duration: 0.4 }}
                     className="absolute text-3xl pointer-events-none"
