@@ -23,7 +23,6 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// THIS IS THE NEW FUNCTION TO AUTOMATE DATABASE SETUP
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -45,7 +44,7 @@ const setupDatabase = async () => {
     console.log('✅ Database tables are set up.');
   } catch (err) {
     console.error('🚨 Error setting up database:', err);
-    process.exit(1); // Exit if we can't set up the database
+    process.exit(1);
   } finally {
     client.release();
   }
@@ -54,7 +53,7 @@ const setupDatabase = async () => {
 
 // ---- EXPRESS APP ----
 const app = express();
-app.use(cors()); // Allow requests from our frontend
+app.use(cors());
 app.use(express.json());
 
 // ---- ROUTES ----
@@ -69,12 +68,10 @@ app.post('/api/validate', async (req, res) => {
       return res.status(400).json({ error: 'initData is required' });
     }
 
-    // 1. Validate the data from Telegram
     if (!validate(initData, BOT_TOKEN)) {
       return res.status(401).json({ error: 'Invalid data' });
     }
     
-    // 2. Extract user data
     const params = new URLSearchParams(initData);
     const user = JSON.parse(params.get('user'));
 
@@ -82,27 +79,50 @@ app.post('/api/validate', async (req, res) => {
         return res.status(400).json({ error: 'Invalid user data in initData' });
     }
 
-    // 3. Find or create the user in the database
     const client = await pool.connect();
     try {
       let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
       let appUser = dbUserResult.rows[0];
+      let dailyBonus = null; // To hold bonus info
+
+      const now = new Date();
 
       if (!appUser) {
-        // User is new, create an entry
         const insertResult = await client.query(
-          `INSERT INTO users (telegram_id, first_name, last_name, username)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO users (telegram_id, first_name, last_name, username, daily_streak, last_login_at)
+           VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP)
            RETURNING *`,
           [user.id, user.first_name, user.last_name, user.username]
         );
         appUser = insertResult.rows[0];
+        // First time user gets a "streak" of 1
+        dailyBonus = { points: 100, streak: 1 }; 
       } else {
-        // User exists, update their last login time
-        await client.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE telegram_id = $1', [user.id]);
+        const lastLogin = new Date(appUser.last_login_at);
+        const isSameDay = now.toDateString() === lastLogin.toDateString();
+
+        if (!isSameDay) {
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          const isConsecutiveDay = lastLogin.toDateString() === yesterday.toDateString();
+          
+          let newStreak = isConsecutiveDay ? appUser.daily_streak + 1 : 1;
+          let bonusPoints = 100 * newStreak;
+
+          const updateResult = await client.query(
+            `UPDATE users 
+             SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $1, points = points + $2
+             WHERE telegram_id = $3
+             RETURNING *`,
+            [newStreak, bonusPoints, user.id]
+          );
+          appUser = updateResult.rows[0];
+          dailyBonus = { points: bonusPoints, streak: newStreak };
+        }
       }
       
-      return res.status(200).json(appUser);
+      // Return user data and any bonus they received
+      return res.status(200).json({ ...appUser, dailyBonus });
 
     } finally {
       client.release();
@@ -114,7 +134,7 @@ app.post('/api/validate', async (req, res) => {
   }
 });
 
-// NEW: Endpoint to update a user's points
+
 app.post('/api/update-score', async (req, res) => {
   try {
     const { initData, score } = req.body;
@@ -123,12 +143,10 @@ app.post('/api/update-score', async (req, res) => {
       return res.status(400).json({ error: 'initData and score are required' });
     }
 
-    // 1. Securely validate the data from Telegram
     if (!validate(initData, BOT_TOKEN)) {
       return res.status(401).json({ error: 'Invalid data' });
     }
 
-    // 2. Extract user data
     const params = new URLSearchParams(initData);
     const user = JSON.parse(params.get('user'));
 
@@ -136,11 +154,8 @@ app.post('/api/update-score', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user data in initData' });
     }
 
-    // 3. Update the user's points in the database
     const client = await pool.connect();
     try {
-      // We use UPDATE ... SET points = points + $1 to prevent race conditions
-      // and ensure we're adding to the current score, not overwriting it.
       const result = await client.query(
         'UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points',
         [score, user.id]
@@ -163,13 +178,10 @@ app.post('/api/update-score', async (req, res) => {
   }
 });
 
-// ---- SERVER START ----
-// We wrap the server start in a function to run it after the database setup
 const startServer = () => {
   app.listen(PORT, () => {
     console.log(`✅ Server is running on port ${PORT}`);
   });
 };
 
-// Run setup and then start the server
 setupDatabase().then(startServer);
