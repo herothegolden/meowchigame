@@ -126,6 +126,7 @@ const validateUser = (req, res, next) => {
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.post('/api/validate', validateUser, async (req, res) => {
+    console.log(`[API] POST /api/validate received for user: ${req.user.id}`);
     const { user } = req;
     const client = await pool.connect();
     try {
@@ -133,6 +134,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
         let dailyBonus = null;
 
         if (!dbUser) {
+            console.log(`[DB] New user detected: ${user.id}. Creating profile...`);
             dbUser = (await client.query(
                 `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
                 [user.id, user.first_name, user.last_name, user.username]
@@ -147,6 +149,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                 const bonusPoints = 100 * newStreak;
                 
                 dailyBonus = { points: bonusPoints, streak: newStreak };
+                console.log(`[AUTH] User ${user.id} gets daily bonus of ${bonusPoints} for a ${newStreak}-day streak.`);
                 
                 dbUser = (await client.query(
                     'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = points + $3 WHERE telegram_id = $1 RETURNING *',
@@ -156,7 +159,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
         }
         res.status(200).json({ ...dbUser, dailyBonus });
     } catch (error) {
-        console.error('🚨 Error in /api/validate:', error);
+        console.error(`🚨 Error in /api/validate for user ${req.user.id}:`, error);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
         client.release();
@@ -164,6 +167,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
 });
 
 app.post('/api/start-game', validateUser, async (req, res) => {
+    console.log(`[API] POST /api/start-game received for user: ${req.user.id}`);
     const { user } = req;
     const client = await pool.connect();
     try {
@@ -180,7 +184,7 @@ app.post('/api/start-game', validateUser, async (req, res) => {
         
         res.status(200).json(gameConfig);
     } catch (error) {
-        console.error('🚨 Error in /api/start-game:', error);
+        console.error(`🚨 Error in /api/start-game for user ${req.user.id}:`, error);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
         client.release();
@@ -190,6 +194,7 @@ app.post('/api/start-game', validateUser, async (req, res) => {
 app.post('/api/update-score', validateUser, async (req, res) => {
     const { user } = req;
     const { score } = req.body;
+    console.log(`[API] POST /api/update-score received for user: ${user.id} with score: ${score}`);
     if (score === undefined) {
         return res.status(400).json({ error: 'Score is required' });
     }
@@ -198,7 +203,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
         const { rows } = await client.query('UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points', [score, user.id]);
         res.status(200).json({ new_points: rows[0].points, score_awarded: score });
     } catch (error) {
-        console.error('🚨 Error in /api/update-score:', error);
+        console.error(`🚨 Error in /api/update-score for user ${user.id}:`, error);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
         client.release();
@@ -206,6 +211,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
 });
 
 app.post('/api/get-shop-data', validateUser, async (req, res) => {
+    console.log(`[API] POST /api/get-shop-data received for user: ${req.user.id}`);
     const { user } = req;
     const client = await pool.connect();
     try {
@@ -223,7 +229,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
             inventory: inventoryRes.rows.map(r => r.item_id),
         });
     } catch (error) {
-        console.error('🚨 Error in /api/get-shop-data:', error);
+        console.error(`🚨 Error in /api/get-shop-data for user ${req.user.id}:`, error);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
         client.release();
@@ -231,6 +237,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
 });
 
 app.post('/api/get-profile-data', validateUser, async (req, res) => {
+    console.log(`[API] POST /api/get-profile-data received for user: ${req.user.id}`);
     const { user } = req;
     const client = await pool.connect();
     try {
@@ -254,7 +261,7 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
             inventory: cleanInventory,
         });
     } catch (error) {
-        console.error('🚨 Error in /api/get-profile-data:', error);
+        console.error(`🚨 Error in /api/get-profile-data for user ${req.user.id}:`, error);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
         client.release();
@@ -265,6 +272,7 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
 app.post('/api/buy-item', validateUser, async (req, res) => {
     const { user } = req;
     const { itemId } = req.body;
+    console.log(`[API] POST /api/buy-item received for user: ${user.id}, item: ${itemId}`);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -287,7 +295,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
         res.status(200).json({ success: true, newPoints: newPoints, message: `Successfully purchased ${item.name}!` });
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error in /api/buy-item:', error.message);
+        console.error(`🚨 Error in /api/buy-item for user ${user.id}:`, error.message);
         res.status(400).json({ success: false, error: error.message });
     } finally {
         client.release();
@@ -297,6 +305,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 app.post('/api/activate-item', validateUser, async (req, res) => {
     const { user } = req;
     const { itemId } = req.body;
+    console.log(`[API] POST /api/activate-item received for user: ${user.id}, item: ${itemId}`);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -322,7 +331,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
         res.status(200).json({ success: true });
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error in /api/activate-item:', error.message);
+        console.error(`🚨 Error in /api/activate-item for user ${user.id}:`, error.message);
         res.status(400).json({ success: false, error: error.message });
     } finally {
         client.release();
