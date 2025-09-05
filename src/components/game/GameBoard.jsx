@@ -5,11 +5,12 @@ import {
   checkForMatches,
   applyGravity,
   refillBoard,
-  getPosition
+  getPosition,
+  SCORE_PER_MATCH,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
-const GameBoard = () => {
+const GameBoard = ({ setScore, setMoves }) => {
   const [board, setBoard] = useState(generateInitialBoard());
   const [isProcessing, setIsProcessing] = useState(false);
   const [draggedPiece, setDraggedPiece] = useState(null);
@@ -21,6 +22,14 @@ const GameBoard = () => {
       const matches = checkForMatches(currentBoard);
       
       if (matches.size > 0) {
+        // Haptic feedback for a successful match
+        if (window.Telegram && window.Telegram.WebApp) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+        }
+        
+        // Update the score based on the number of matched pieces
+        setScore(prev => prev + matches.size * SCORE_PER_MATCH);
+
         setTimeout(() => {
           const newBoardFlat = [...currentBoard.flat()];
           matches.forEach(index => { newBoardFlat[index] = null; });
@@ -40,7 +49,7 @@ const GameBoard = () => {
     };
     
     checkAndResolve(board);
-  }, [board]);
+  }, [board, setScore]);
 
   useEffect(() => {
     processBoardChanges();
@@ -78,13 +87,11 @@ const GameBoard = () => {
 
         const tempBoard2D = [];
         while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
-
+        
+        // Check if the new move creates a match
         const matches = checkForMatches(tempBoard2D);
         if (matches.size > 0) {
-            // This is the new haptic feedback trigger!
-            if (window.Telegram && window.Telegram.WebApp) {
-              window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-            }
+            setMoves(prev => prev - 1); // Only decrement moves on a valid match
             setBoard(tempBoard2D);
         }
     }
