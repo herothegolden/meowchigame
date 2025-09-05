@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useDragControls } from 'framer-motion';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -13,7 +14,9 @@ import GamePiece from './GamePiece';
 const GameBoard = ({ setScore, setMoves }) => {
   const [board, setBoard] = useState(generateInitialBoard());
   const [isProcessing, setIsProcessing] = useState(false);
-  const [draggedPiece, setDraggedPiece] = useState(null);
+  
+  // This single controls instance will manage all drags
+  const dragControls = useDragControls();
 
   const processBoardChanges = useCallback(() => {
     setIsProcessing(true);
@@ -53,21 +56,15 @@ const GameBoard = ({ setScore, setMoves }) => {
     processBoardChanges();
   }, [board, processBoardChanges]);
 
-
-  const handleDragStart = (event, { index }) => {
+  // The index of the piece being dragged is now passed directly
+  const handleDragEnd = (event, info, index) => {
     if (isProcessing) return;
-    setDraggedPiece({ index });
-  };
-
-  const handleDragEnd = (event, info) => {
-    if (isProcessing || !draggedPiece) return;
 
     const { offset } = info;
-    const { index } = draggedPiece;
     const { row, col } = getPosition(index);
 
     let replacedIndex;
-    const threshold = 20;
+    const threshold = 20; // How far the user must drag to trigger a swap
 
     if (Math.abs(offset.x) > Math.abs(offset.y)) {
         if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
@@ -92,8 +89,6 @@ const GameBoard = ({ setScore, setMoves }) => {
             setBoard(tempBoard2D);
         }
     }
-
-    setDraggedPiece(null);
   };
 
   return (
@@ -109,13 +104,19 @@ const GameBoard = ({ setScore, setMoves }) => {
       }}
     >
       {board.flat().map((color, index) => (
-        <GamePiece 
-          key={index} 
-          color={color} 
-          index={index}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        />
+        <div
+          key={index}
+          // This wrapper tells the dragControls which piece to move on touch
+          onPointerDown={(e) => !isProcessing && dragControls.start(e, { snapToCursor: true })}
+          className="w-full h-full flex items-center justify-center"
+          style={{ touchAction: 'none' }}
+        >
+          <GamePiece 
+            color={color} 
+            dragControls={dragControls}
+            onDragEnd={(event, info) => handleDragEnd(event, info, index)}
+          />
+        </div>
       ))}
     </div>
   );
