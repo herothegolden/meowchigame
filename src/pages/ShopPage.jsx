@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Star, LoaderCircle, PlusCircle, ChevronsUp, Badge, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Star, LoaderCircle, PlusCircle, ChevronsUp, Badge, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const iconComponents = {
-  PlusCircle: <PlusCircle size={28} />,
+  Clock: <Clock size={28} />, // Using Clock icon for the item
   ChevronsUp: <ChevronsUp size={28} />,
   Badge: <Badge size={28} />,
   Default: <Star size={28} />
@@ -37,7 +37,7 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned }) => {
         </div>
       </div>
       
-      {isOwned ? (
+      {isOwned && item.type === 'permanent' ? (
         <div className="flex items-center text-green-400 font-bold py-2 px-4">
           <CheckCircle className="w-5 h-5 mr-2" />
           Owned
@@ -73,14 +73,21 @@ const ShopPage = () => {
   const tg = window.Telegram?.WebApp;
 
   const fetchShopData = useCallback(async () => {
+    if (!tg?.initData) {
+      setError("Telegram data not available.");
+      setLoading(false);
+      return;
+    }
+
     try {
+      setLoading(true);
       const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData }),
+        body: JSON.stringify({ initData: tg.initData }),
       });
 
-      if (!res.ok) throw new Error('Failed to fetch shop data.');
+      if (!res.ok) throw new Error('Failed to fetch shop data from server.');
       
       const data = await res.json();
       setShopData(data);
@@ -111,31 +118,33 @@ const ShopPage = () => {
         throw new Error(result.error || 'Purchase failed.');
       }
       
-      // Haptic feedback for success
       tg.HapticFeedback.notificationOccurred('success');
 
-      // Show a success popup
       tg.showPopup({
         title: 'Success!',
-        message: result.message,
+        message: result.message, // Using the new message from the backend
         buttons: [{ type: 'ok' }]
       });
       
-      // Update state instantly without a full reload
-      setShopData(prevData => ({
-        ...prevData,
-        userPoints: result.newPoints,
-        inventory: [...prevData.inventory, itemId],
-      }));
+      // Refresh data to show new point total and inventory
+      fetchShopData();
 
     } catch (err) {
-      // Haptic feedback for error
       tg.HapticFeedback.notificationOccurred('error');
       
-      // Show an error popup
+      // FIX: Provide a more specific error message for server failures.
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      if (err.message.toLowerCase().includes('failed to fetch')) {
+          errorMessage = 'Could not connect to the server.';
+      } else if (err.message.includes('JSON')) {
+          errorMessage = 'Internal server error during purchase.';
+      } else {
+          errorMessage = err.message;
+      }
+
       tg.showPopup({
         title: 'Error',
-        message: err.message,
+        message: errorMessage,
         buttons: [{ type: 'ok' }]
       });
     }
@@ -146,7 +155,13 @@ const ShopPage = () => {
   }
 
   if (error) {
-    return <div className="p-4 text-center text-red-400"><p>Could not load the shop.</p><p className="text-sm text-secondary">{error}</p></div>;
+    return (
+        <div className="p-4 text-center text-red-400">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+            <h1 className="text-xl font-bold">Could not load the shop.</h1>
+            <p className="text-sm text-secondary">{error}</p>
+        </div>
+    );
   }
 
   return (
@@ -169,7 +184,7 @@ const ShopPage = () => {
             item={item} 
             userPoints={shopData.userPoints}
             onPurchase={handlePurchase}
-            isOwned={shopData.inventory.includes(item.id)}
+            isOwned={item.type === 'permanent' && shopData.inventory.includes(item.id)}
           />
         ))}
       </div>
