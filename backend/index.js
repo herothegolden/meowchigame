@@ -74,19 +74,21 @@ const setupDatabase = async () => {
         id SERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(telegram_id),
         item_id INT REFERENCES shop_items(id),
-        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, item_id)
+        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        -- UPDATED: Removed unique constraint to allow multiple consumable purchases
       );
     `);
     
     // 4. Pre-populate shop if empty
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
+      // UPDATED: Changed shop items for time-based gameplay
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Moves', '+5 moves for your next game.', 500, 'PlusCircle', 'consumable'),
+        (1, 'Extra 10 Seconds', '+10s for your next game.', 750, 'Clock', 'consumable'),
         (2, 'Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp', 'consumable'),
-        (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent')
+        (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent'),
+        (4, 'Starter Bomb', 'Start your next game with a bomb.', 1000, 'Bomb', 'consumable')
         ON CONFLICT (id) DO NOTHING;
       `);
     }
@@ -215,6 +217,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
 
       await client.query('COMMIT');
 
+      // UPDATED: Return the new total points and the actual score awarded
       return res.status(200).json({ new_points: updateResult.rows[0].points, score_awarded: finalScore });
 
     } catch(e){
@@ -262,7 +265,13 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       const [itemsResult, userResult, inventoryResult] = await Promise.all([
         client.query('SELECT * FROM shop_items ORDER BY price ASC'),
         client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
-        client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [user.id])
+        // UPDATED: Count consumable items instead of just listing them
+        client.query(`
+          SELECT item_id, COUNT(item_id) as quantity 
+          FROM user_inventory 
+          WHERE user_id = $1 
+          GROUP BY item_id
+        `, [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -272,7 +281,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       const shopData = {
         items: itemsResult.rows,
         userPoints: userResult.rows[0].points,
-        inventory: inventoryResult.rows.map(row => row.item_id),
+        inventory: inventoryResult.rows, // Now returns { item_id, quantity }
         boosterActive: userResult.rows[0].point_booster_active
       };
       
@@ -309,6 +318,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       
       if (userPoints < price) throw new Error('Insufficient points.');
       
+      // UPDATED: Allow buying multiple consumables but only one permanent item.
       if(type === 'permanent') {
         const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
         if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
@@ -339,6 +349,52 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
   }
 });
 
+// NEW: Endpoint to get game start configuration based on inventory
+app.post('/api/start-game-session', validateUser, async (req, res) => {
+  const { user } = req;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Consume +10s item (ID 1)
+    const timeBoosterResult = await client.query(
+      `DELETE FROM user_inventory 
+       WHERE id = (
+         SELECT id FROM user_inventory 
+         WHERE user_id = $1 AND item_id = 1 
+         LIMIT 1
+       ) RETURNING item_id`,
+      [user.id]
+    );
+
+    // Consume Starter Bomb item (ID 4)
+    const bombBoosterResult = await client.query(
+      `DELETE FROM user_inventory 
+       WHERE id = (
+         SELECT id FROM user_inventory 
+         WHERE user_id = $1 AND item_id = 4
+         LIMIT 1
+       ) RETURNING item_id`,
+      [user.id]
+    );
+
+    await client.query('COMMIT');
+    
+    res.status(200).json({
+      startTime: 30 + (timeBoosterResult.rowCount > 0 ? 10 : 0),
+      startWithBomb: bombBoosterResult.rowCount > 0,
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('🚨 Error in /api/start-game-session:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+
 app.post('/api/activate-item', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -359,13 +415,18 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) throw new Error('User not found.');
       if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
 
+      // UPDATED: Consume one item from inventory instead of just checking for existence
       const inventoryResult = await client.query(
-        'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2', 
+        `DELETE FROM user_inventory 
+         WHERE id = (
+           SELECT id FROM user_inventory 
+           WHERE user_id = $1 AND item_id = $2 
+           LIMIT 1
+         ) RETURNING id`,
         [user.id, itemId]
       );
       if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
 
-      await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryResult.rows[0].id]);
       await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
       
       await client.query('COMMIT');
