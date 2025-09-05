@@ -15,48 +15,44 @@ const GameBoard = ({ setScore, setMoves }) => {
   const [board, setBoard] = useState(generateInitialBoard());
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // This single controls instance will manage all drags
   const dragControls = useDragControls();
 
-  const processBoardChanges = useCallback(() => {
-    setIsProcessing(true);
-
-    const checkAndResolve = (currentBoard) => {
-      const matches = checkForMatches(currentBoard);
-      
-      if (matches.size > 0) {
-        if (window.Telegram && window.Telegram.WebApp) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-        }
-        
-        setScore(prev => prev + matches.size * SCORE_PER_MATCH);
-
-        setTimeout(() => {
-          const newBoardFlat = [...currentBoard.flat()];
-          matches.forEach(index => { newBoardFlat[index] = null; });
-          
-          let clearedBoard = [];
-          while (newBoardFlat.length) clearedBoard.push(newBoardFlat.splice(0, BOARD_SIZE));
-
-          const gravityBoard = applyGravity(clearedBoard);
-          const refilledBoard = refillBoard(gravityBoard);
-
-          setBoard(refilledBoard);
-          checkAndResolve(refilledBoard);
-        }, 200);
-      } else {
-        setIsProcessing(false);
-      }
-    };
+  const handleBoardCheck = useCallback((currentBoard) => {
+    const matches = checkForMatches(currentBoard);
     
-    checkAndResolve(board);
-  }, [board, setScore]);
+    if (matches.size > 0) {
+      setIsProcessing(true);
 
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+      }
+      
+      setScore(prev => prev + matches.size * SCORE_PER_MATCH);
+
+      // Create a delay for the visual effect of clearing
+      setTimeout(() => {
+        const newBoardFlat = [...currentBoard.flat()];
+        matches.forEach(index => { newBoardFlat[index] = null; });
+        
+        let clearedBoard = [];
+        while (newBoardFlat.length) clearedBoard.push(newBoardFlat.splice(0, BOARD_SIZE));
+
+        const gravityBoard = applyGravity(clearedBoard);
+        const refilledBoard = refillBoard(gravityBoard);
+
+        setBoard(refilledBoard); // This will trigger the useEffect to run again
+      }, 200);
+
+    } else {
+      setIsProcessing(false); // No more matches, stop processing
+    }
+  }, [setScore]);
+
+  // Main game loop effect
   useEffect(() => {
-    processBoardChanges();
-  }, [board, processBoardChanges]);
+    handleBoardCheck(board);
+  }, [board, handleBoardCheck]);
 
-  // The index of the piece being dragged is now passed directly
   const handleDragEnd = (event, info, index) => {
     if (isProcessing) return;
 
@@ -64,7 +60,7 @@ const GameBoard = ({ setScore, setMoves }) => {
     const { row, col } = getPosition(index);
 
     let replacedIndex;
-    const threshold = 20; // How far the user must drag to trigger a swap
+    const threshold = 20;
 
     if (Math.abs(offset.x) > Math.abs(offset.y)) {
         if (offset.x > threshold && col < BOARD_SIZE - 1) replacedIndex = index + 1;
@@ -75,19 +71,21 @@ const GameBoard = ({ setScore, setMoves }) => {
     }
 
     if (replacedIndex !== undefined) {
-        const newBoardFlat = [...board.flat()];
-        const draggedColor = newBoardFlat[index];
-        newBoardFlat[index] = newBoardFlat[replacedIndex];
-        newBoardFlat[replacedIndex] = draggedColor;
+      const newBoardFlat = [...board.flat()];
+      const draggedColor = newBoardFlat[index];
+      newBoardFlat[index] = newBoardFlat[replacedIndex];
+      newBoardFlat[replacedIndex] = draggedColor;
 
-        const tempBoard2D = [];
-        while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
-        
-        const matches = checkForMatches(tempBoard2D);
-        if (matches.size > 0) {
-            setMoves(prev => prev - 1);
-            setBoard(tempBoard2D);
-        }
+      const tempBoard2D = [];
+      while (newBoardFlat.length) tempBoard2D.push(newBoardFlat.splice(0, BOARD_SIZE));
+      
+      // Check if the move is valid (creates a match)
+      const matches = checkForMatches(tempBoard2D);
+      if (matches.size > 0) {
+          setMoves(prev => prev - 1);
+          setBoard(tempBoard2D); // A valid move starts the game loop
+      }
+      // If the move is invalid, the piece will snap back because we don't update the board state.
     }
   };
 
@@ -106,7 +104,6 @@ const GameBoard = ({ setScore, setMoves }) => {
       {board.flat().map((color, index) => (
         <div
           key={index}
-          // This wrapper tells the dragControls which piece to move on touch
           onPointerDown={(e) => !isProcessing && dragControls.start(e, { snapToCursor: true })}
           className="w-full h-full flex items-center justify-center"
           style={{ touchAction: 'none' }}
