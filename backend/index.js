@@ -70,17 +70,15 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 4. THIS IS THE CRITICAL FIX: We drop the old, potentially broken inventory table and recreate it.
-    // This guarantees the foreign key relationship is correct.
-    console.log('- Rebuilding user_inventory table to ensure schema integrity...');
-    await client.query('DROP TABLE IF EXISTS user_inventory;');
+    // 4. THIS IS THE CRITICAL FIX: We create the table if it doesn't exist instead of dropping it.
+    // This prevents wiping all user purchases every time the server restarts.
+    console.log('- Ensuring user_inventory table exists...');
     await client.query(`
-      CREATE TABLE user_inventory (
+      CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
         item_id INT NOT NULL REFERENCES shop_items(id) ON DELETE CASCADE,
-        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, item_id)
+        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
     
@@ -88,9 +86,11 @@ const setupDatabase = async () => {
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
       console.log('- Populating shop_items table...');
+      // Note: Changed "Extra Time" to "Extra Moves" to align with potential frontend text,
+      // but the functionality remains giving extra time via 'extra_time_active'.
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time', '+5 seconds for your next game.', 750, 'Clock', 'consumable'),
+        (1, 'Extra Moves', '+5 seconds for your next game.', 750, 'Clock', 'consumable'),
         (2, 'Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp', 'consumable'),
         (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent')
         ON CONFLICT (id) DO NOTHING;
@@ -174,10 +174,8 @@ app.post('/api/start-game', validateUser, async (req, res) => {
 
         const { point_booster_active, extra_time_active } = rows[0];
         const gameConfig = {
-            time: 30 + (extra_time_active ? 5 : 0),
+            initialTime: 30 + (extra_time_active ? 5 : 0),
             pointMultiplier: point_booster_active ? 2 : 1,
-            pointBoosterWasActive: point_booster_active,
-            timeBoosterWasActive: extra_time_active,
         };
         
         await client.query('UPDATE users SET point_booster_active = FALSE, extra_time_active = FALSE WHERE telegram_id = $1', [user.id]);
@@ -193,15 +191,14 @@ app.post('/api/start-game', validateUser, async (req, res) => {
 
 app.post('/api/update-score', validateUser, async (req, res) => {
     const { user } = req;
-    const { score, multiplier } = req.body;
-    if (score === undefined || multiplier === undefined) {
-        return res.status(400).json({ error: 'Score and multiplier are required' });
+    const { score } = req.body;
+    if (score === undefined) {
+        return res.status(400).json({ error: 'Score is required' });
     }
-    const finalScore = score * multiplier;
     const client = await pool.connect();
     try {
-        const { rows } = await client.query('UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points', [finalScore, user.id]);
-        res.status(200).json({ new_points: rows[0].points, score_awarded: finalScore });
+        const { rows } = await client.query('UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points', [score, user.id]);
+        res.status(200).json({ new_points: rows[0].points, score_awarded: score });
     } catch (error) {
         console.error('🚨 Error in /api/update-score:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -245,9 +242,6 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
           return res.status(404).json({ error: 'User profile not found.' });
         }
 
-        // THIS IS THE DEFINITIVE FIX:
-        // We use a LEFT JOIN to prevent the query from failing if there is orphaned data
-        // (e.g., an inventory item that points to a non-existent shop item).
         const inventoryRes = await client.query(`
                 SELECT si.id, si.name, si.icon_name, si.type 
                 FROM user_inventory ui
@@ -277,7 +271,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const item = (await client.query('SELECT price, type FROM shop_items WHERE id = $1', [itemId])).rows[0];
+        const item = (await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId])).rows[0];
         const userData = (await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id])).rows[0];
 
         if (!item) throw new Error('Item not found.');
@@ -293,7 +287,8 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
         
         await client.query('COMMIT');
-        res.status(200).json({ success: true, newPoints: newPoints });
+        // FIX: Add a success message for the frontend popup
+        res.status(200).json({ success: true, newPoints: newPoints, message: `Successfully purchased ${item.name}!` });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error in /api/buy-item:', error.message);
@@ -315,7 +310,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
         const userData = (await client.query('SELECT point_booster_active, extra_time_active FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id])).rows[0];
         if (userData.point_booster_active || userData.extra_time_active) throw new Error('A booster is already active.');
         
-        const inventoryItem = (await client.query('SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId])).rows[0];
+        const inventoryItem = (await client.query('SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2 LIMIT 1', [user.id, itemId])).rows[0];
         if (!inventoryItem) throw new Error('You do not own this item.');
 
         await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryItem.id]);
@@ -345,4 +340,3 @@ const startServer = () => {
 };
 
 setupDatabase().then(startServer);
-
