@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Timer, LoaderCircle, ChevronsUp, PlusCircle, Play } from 'lucide-react';
+import { Star, Timer, LoaderCircle, ChevronsUp, Clock, Play } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -16,8 +16,14 @@ const GamePage = () => {
 
   // --- Disable vertical swipes for better gameplay ---
   useEffect(() => {
+    const handler = (e) => e.preventDefault();
+    document.body.addEventListener('touchmove', handler, { passive: false });
     tg?.disableVerticalSwipes();
-    return () => tg?.enableVerticalSwipes();
+    
+    return () => {
+      document.body.removeEventListener('touchmove', handler);
+      tg?.enableVerticalSwipes();
+    }
   }, [tg]);
 
   // --- Timer Countdown Logic ---
@@ -40,14 +46,15 @@ const GamePage = () => {
   useEffect(() => {
     if (gameState === 'over') {
       tg?.HapticFeedback.notificationOccurred('warning');
-      setFinalScore(score);
+      const finalScoreValue = score * gameSettings.pointMultiplier;
+      setFinalScore(finalScoreValue);
 
       const submitScore = async () => {
         try {
            await fetch(`${BACKEND_URL}/api/update-score`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ initData: tg.initData, score }),
+            body: JSON.stringify({ initData: tg.initData, score: finalScoreValue }),
           });
         } catch (err) {
           console.error("Failed to submit score:", err);
@@ -58,7 +65,7 @@ const GamePage = () => {
         submitScore();
       }
     }
-  }, [gameState, score, tg]);
+  }, [gameState, score, gameSettings.pointMultiplier, tg]);
 
 
   // --- Start Game Logic ---
@@ -68,6 +75,15 @@ const GamePage = () => {
     setFinalScore(0);
     
     try {
+      if (!tg?.initData) {
+        // Fallback for browser testing
+        const mockSettings = { initialTime: 30, pointMultiplier: 1 };
+        setGameSettings(mockSettings);
+        setTimeRemaining(mockSettings.initialTime);
+        setGameState('playing');
+        return;
+      }
+
       const res = await fetch(`${BACKEND_URL}/api/start-game`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,13 +109,13 @@ const GamePage = () => {
     <div className="flex justify-between w-full max-w-md">
       <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg text-lg">
         <Star className="w-6 h-6 text-accent" />
-        <span className="font-bold w-16 text-right">{score.toLocaleString()}</span>
+        <span className="font-bold w-20 text-right">{score.toLocaleString()}</span>
         {gameSettings.pointMultiplier > 1 && <ChevronsUp className="w-5 h-5 text-green-400" />}
       </div>
       <div className="flex items-center space-x-2 bg-nav p-2 rounded-lg text-lg">
         <Timer className="w-6 h-6 text-secondary" />
         <span className="font-bold w-12 text-right">{timeRemaining}s</span>
-        {gameSettings.initialTime > 30 && <PlusCircle className="w-5 h-5 text-blue-400" />}
+        {gameSettings.initialTime > 30 && <Clock className="w-5 h-5 text-blue-400" />}
       </div>
     </div>
   );
@@ -136,9 +152,9 @@ const GamePage = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-between h-full p-4 space-y-4">
+    <div className="flex flex-col items-center justify-center h-full p-4 space-y-4">
       {gameState === 'playing' && renderHeader()}
-      <div className="flex-grow flex items-center justify-center">
+      <div className="flex-grow flex items-center justify-center w-full">
         {renderContent()}
       </div>
        {gameState !== 'playing' && <div style={{height: '54px'}} /> /* Placeholder to keep layout consistent */}
