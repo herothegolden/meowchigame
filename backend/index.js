@@ -191,25 +191,30 @@ app.post('/api/validate', async (req, res) => {
 });
 
 app.post('/api/user-stats', getUser, async (req, res) => {
-  const client = await pool.connect();
-  try {
-      // THIS IS THE FIX: Use a LEFT JOIN to ensure the query works even with an empty inventory.
-      const inventoryResult = await client.query(
-          `SELECT i.id, i.name, i.description, i.icon_name 
-           FROM shop_items i
-           JOIN user_inventory ui ON ui.item_id = i.id
-           WHERE ui.user_id = $1`, [req.user.id]
-      );
-      res.status(200).json({
-          user: req.user,
-          inventory: inventoryResult.rows
-      });
-  } catch (error) {
-      console.error('🚨 Error fetching user stats:', error);
-      res.status(500).json({ error: 'Internal server error' });
-  } finally {
-      client.release();
-  }
+    const client = await pool.connect();
+    try {
+        const inventoryIdsResult = await client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [req.user.id]);
+        
+        let inventory = [];
+        if (inventoryIdsResult.rows.length > 0) {
+            const inventoryIds = inventoryIdsResult.rows.map(r => r.item_id);
+            const inventoryResult = await client.query(
+                `SELECT id, name, description, icon_name FROM shop_items WHERE id = ANY($1::int[])`,
+                [inventoryIds]
+            );
+            inventory = inventoryResult.rows;
+        }
+
+        res.status(200).json({
+            user: req.user,
+            inventory: inventory
+        });
+    } catch (error) {
+        console.error('🚨 Error fetching user stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        client.release();
+    }
 });
 
 
