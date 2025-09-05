@@ -237,18 +237,16 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-        const [userStatsRes, inventoryRes] = await Promise.all([
-            client.query('SELECT first_name, username, points, level, daily_streak, created_at, point_booster_active, extra_time_active FROM users WHERE telegram_id = $1', [user.id]),
-            client.query(`
-                SELECT si.id, si.name, si.icon_name, si.type FROM user_inventory ui
-                JOIN shop_items si ON ui.item_id = si.id WHERE ui.user_id = $1
-            `, [user.id])
-        ]);
+        const userStatsRes = await client.query('SELECT first_name, username, points, level, daily_streak, created_at, point_booster_active, extra_time_active FROM users WHERE telegram_id = $1', [user.id]);
         
-        // THIS IS THE CRITICAL FIX: We check if the user exists before trying to send data
         if (userStatsRes.rowCount === 0) {
           return res.status(404).json({ error: 'User profile not found.' });
         }
+
+        const inventoryRes = await client.query(`
+                SELECT si.id, si.name, si.icon_name, si.type FROM user_inventory ui
+                JOIN shop_items si ON ui.item_id = si.id WHERE ui.user_id = $1
+            `, [user.id]);
 
         res.status(200).json({
             stats: userStatsRes.rows[0],
@@ -337,3 +335,4 @@ const startServer = () => {
 };
 
 setupDatabase().then(startServer);
+
