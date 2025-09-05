@@ -23,10 +23,11 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
+// THIS IS THE ROBUST DATABASE SETUP FUNCTION
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    // Users Table - NOW WITH A BOOSTER FLAG
+    // 1. Create Users Table if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -38,12 +39,26 @@ const setupDatabase = async () => {
           level INT DEFAULT 1 NOT NULL,
           daily_streak INT DEFAULT 0 NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          point_booster_active BOOLEAN DEFAULT FALSE NOT NULL
+          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // Shop Items Table
+    // 2. Add the new point_booster_active column if it doesn't exist
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='point_booster_active'
+    `);
+
+    if (columnCheck.rowCount === 0) {
+      console.log('Migrating users table: adding point_booster_active column...');
+      await client.query(`
+        ALTER TABLE users 
+        ADD COLUMN point_booster_active BOOLEAN DEFAULT FALSE NOT NULL
+      `);
+    }
+
+    // 3. Create Shop & Inventory tables
     await client.query(`
       CREATE TABLE IF NOT EXISTS shop_items (
         id SERIAL PRIMARY KEY,
@@ -51,11 +66,9 @@ const setupDatabase = async () => {
         description TEXT,
         price INT NOT NULL,
         icon_name VARCHAR(50),
-        type VARCHAR(50) DEFAULT 'consumable' NOT NULL -- Added for future item types
+        type VARCHAR(50) DEFAULT 'consumable' NOT NULL
       );
     `);
-
-    // User Inventory Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
@@ -66,7 +79,7 @@ const setupDatabase = async () => {
       );
     `);
     
-    // Pre-populate shop if empty
+    // 4. Pre-populate shop if empty
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
       await client.query(`
@@ -78,7 +91,7 @@ const setupDatabase = async () => {
       `);
     }
 
-    console.log('✅ Database tables are set up.');
+    console.log('✅ Database tables are set up correctly.');
   } catch (err) {
     console.error('🚨 Error setting up database:', err);
     process.exit(1);
@@ -111,7 +124,7 @@ const validateUser = (req, res, next) => {
     return res.status(400).json({ error: 'Invalid user data in initData' });
   }
   
-  req.user = user; // Attach user to request object
+  req.user = user;
   next();
 };
 
@@ -326,7 +339,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
   }
 });
 
-// NEW ENDPOINT: ACTIVATE A CONSUMABLE ITEM
 app.post('/api/activate-item', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -334,9 +346,8 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
     if (!itemId) {
       return res.status(400).json({ error: 'itemId is required' });
     }
-
-    // For this example, we'll hardcode the logic for the Point Booster (ID 2)
-    if (itemId !== 2) {
+    
+    if (itemId !== 2) { // Logic specific to Point Booster (ID 2)
       return res.status(400).json({ error: 'This item is not an activatable booster.' });
     }
 
@@ -354,7 +365,6 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       );
       if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
 
-      // Consume the item and activate the booster
       await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryResult.rows[0].id]);
       await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
       
