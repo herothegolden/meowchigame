@@ -14,123 +14,108 @@ export const PIECE_TYPES = [
 export const SCORE_PER_MATCH = 10;
 
 /**
- * Checks the entire board for any horizontal or vertical matches of 3 or more.
- * @param {string[][]} board - The 2D array representing the board.
- * @returns {Set<number>} A set of flat indices for the pieces that are part of a match.
- */
-export const checkForMatches = (board) => {
-  const matches = new Set();
-  const flatBoard = board.flat();
-
-  // Horizontal check
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE - 2; c++) {
-      const index1 = r * BOARD_SIZE + c;
-      const index2 = r * BOARD_SIZE + c + 1;
-      const index3 = r * BOARD_SIZE + c + 2;
-      if (flatBoard[index1] && flatBoard[index1] === flatBoard[index2] && flatBoard[index2] === flatBoard[index3]) {
-        matches.add(index1);
-        matches.add(index2);
-        matches.add(index3);
-      }
-    }
-  }
-
-  // Vertical check
-  for (let c = 0; c < BOARD_SIZE; c++) {
-    for (let r = 0; r < BOARD_SIZE - 2; r++) {
-      const index1 = r * BOARD_SIZE + c;
-      const index2 = (r + 1) * BOARD_SIZE + c;
-      const index3 = (r + 2) * BOARD_SIZE + c;
-      if (flatBoard[index1] && flatBoard[index1] === flatBoard[index2] && flatBoard[index2] === flatBoard[index3]) {
-        matches.add(index1);
-        matches.add(index2);
-        matches.add(index3);
-      }
-    }
-  }
-
-  return matches;
-};
-
-/**
- * Generates the initial random layout of the game board, ensuring no initial matches.
+ * Generates the initial random layout of the game board.
+ * Ensures the generated board has no initial matches.
  * @returns {string[][]} A 2D array representing the board with piece types.
  */
 export const generateInitialBoard = () => {
   let board;
-  let hasMatches = true;
-
-  // Keep generating a new board until it has no matches
-  while (hasMatches) {
-    const newBoard = [];
+  do {
+    board = [];
     for (let i = 0; i < BOARD_SIZE; i++) {
       const row = [];
       for (let j = 0; j < BOARD_SIZE; j++) {
         const randomPiece = PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
         row.push(randomPiece);
       }
-      newBoard.push(row);
+      board.push(row);
     }
-    
-    const matches = checkForMatches(newBoard);
-    if (matches.size === 0) {
-      hasMatches = false;
-      board = newBoard;
-    }
-  }
-  
+  } while (checkForMatches(board).size > 0);
   return board;
 };
 
 
-// --- Helper Functions ---
-
 /**
- * Applies gravity to the board, making pieces fall into empty spaces.
- * @param {string[][]} board - The board with nulls representing empty spaces.
- * @returns {string[][]} The board after gravity has been applied.
+ * Checks the entire board for matches of 3 or more.
+ * @param {string[][]} board - The 2D array representing the game board.
+ * @returns {Set<number>} A Set containing the flat indices of all matched pieces.
  */
-export const applyGravity = (board) => {
-  const newBoard = JSON.parse(JSON.stringify(board)); // Deep copy
-  for (let c = 0; c < BOARD_SIZE; c++) {
-    let emptyRow = BOARD_SIZE - 1;
-    for (let r = BOARD_SIZE - 1; r >= 0; r--) {
-      if (newBoard[r][c] !== null) {
-        if (r !== emptyRow) {
-          newBoard[emptyRow][c] = newBoard[r][c];
-          newBoard[r][c] = null;
+export const checkForMatches = (board) => {
+    const flatBoard = board.flat();
+    const matches = new Set();
+
+    // Check for Horizontal Matches
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE - 2; j++) {
+            const indices = [i * BOARD_SIZE + j, i * BOARD_SIZE + j + 1, i * BOARD_SIZE + j + 2];
+            const firstPiece = flatBoard[indices[0]];
+            if (firstPiece && indices.every(index => flatBoard[index] === firstPiece)) {
+                indices.forEach(index => matches.add(index));
+            }
         }
-        emptyRow--;
-      }
     }
-  }
-  return newBoard;
+
+    // Check for Vertical Matches
+    for (let i = 0; i < BOARD_SIZE - 2; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            const indices = [i * BOARD_SIZE + j, (i + 1) * BOARD_SIZE + j, (i + 2) * BOARD_SIZE + j];
+             const firstPiece = flatBoard[indices[0]];
+            if (firstPiece && indices.every(index => flatBoard[index] === firstPiece)) {
+                indices.forEach(index => matches.add(index));
+            }
+        }
+    }
+
+    return matches;
 };
 
 /**
- * Fills the empty (null) spaces at the top of the board with new random pieces.
- * @param {string[][]} board - The board after gravity.
+ * Applies gravity to the board.
+ * @param {string[][]} board - The game board with nulls for empty spaces.
+ * @returns {string[][]} The board after pieces have fallen.
+ */
+export const applyGravity = (board) => {
+    const newBoard = JSON.parse(JSON.stringify(board));
+    for (let j = 0; j < BOARD_SIZE; j++) {
+        let emptyRow = BOARD_SIZE - 1;
+        for (let i = BOARD_SIZE - 1; i >= 0; i--) {
+            if (newBoard[i][j] !== null) {
+                if (emptyRow !== i) {
+                    newBoard[emptyRow][j] = newBoard[i][j];
+                    newBoard[i][j] = null;
+                }
+                emptyRow--;
+            }
+        }
+    }
+    return newBoard;
+};
+
+/**
+ * Fills the empty spaces at the top of the board with new random pieces.
+ * @param {string[][]} board - The game board after gravity has been applied.
  * @returns {string[][]} The refilled board.
  */
 export const refillBoard = (board) => {
-  const newBoard = JSON.parse(JSON.stringify(board));
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (newBoard[r][c] === null) {
-        newBoard[r][c] = PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
-      }
+    const newBoard = JSON.parse(JSON.stringify(board));
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            if (newBoard[i][j] === null) {
+                newBoard[i][j] = PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
+            }
+        }
     }
-  }
-  return newBoard;
+    return newBoard;
 };
 
 /**
- * Converts a flat array index to a {row, col} object.
- * @param {number} index - The flat index.
- * @returns {{row: number, col: number}}
+ * Gets the row and column from a flat index.
+ * @param {number} index - The flat index of the piece.
+ * @returns {{row: number, col: number}} The row and column.
  */
-export const getPosition = (index) => ({
-  row: Math.floor(index / BOARD_SIZE),
-  col: index % BOARD_SIZE,
-});
+export const getPosition = (index) => {
+    return {
+        row: Math.floor(index / BOARD_SIZE),
+        col: index % BOARD_SIZE,
+    };
+};
