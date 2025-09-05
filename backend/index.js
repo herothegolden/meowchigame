@@ -23,56 +23,44 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// THIS IS THE DEFINITIVE, ROBUST DATABASE SETUP FUNCTION
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
     console.log('🏁 Starting database setup...');
     
-    // 1. Create Users Table
+    await client.query('BEGIN');
+
+    // 1. Users Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           telegram_id BIGINT UNIQUE NOT NULL,
-          first_name VARCHAR(255),
-          last_name VARCHAR(255),
-          username VARCHAR(255),
-          points INT DEFAULT 100 NOT NULL,
-          level INT DEFAULT 1 NOT NULL,
-          daily_streak INT DEFAULT 0 NOT NULL,
+          first_name VARCHAR(255), last_name VARCHAR(255), username VARCHAR(255),
+          points INT DEFAULT 100 NOT NULL, level INT DEFAULT 1 NOT NULL, daily_streak INT DEFAULT 0 NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // 2. Check and add all required columns to the users table
+    // 2. Add columns to users table if they don't exist
     const columns = ['point_booster_active', 'extra_time_active'];
     for (const col of columns) {
-        const res = await client.query(`
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_name='users' AND column_name=$1
-        `, [col]);
+        const res = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name=$1`, [col]);
         if (res.rowCount === 0) {
             console.log(`- Migrating users table: adding '${col}' column...`);
             await client.query(`ALTER TABLE users ADD COLUMN ${col} BOOLEAN DEFAULT FALSE NOT NULL`);
         }
     }
 
-    // 3. Create Shop Items Table
+    // 3. Shop Items Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS shop_items (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        price INT NOT NULL,
-        icon_name VARCHAR(50),
-        type VARCHAR(50) DEFAULT 'consumable' NOT NULL
+        id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT,
+        price INT NOT NULL, icon_name VARCHAR(50), type VARCHAR(50) DEFAULT 'consumable' NOT NULL
       );
     `);
     
-    // 4. THIS IS THE CRITICAL FIX: We create the table if it doesn't exist instead of dropping it.
-    // This prevents wiping all user purchases every time the server restarts.
-    console.log('- Ensuring user_inventory table exists...');
+    // 4. User Inventory Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
@@ -81,24 +69,36 @@ const setupDatabase = async () => {
         acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // 5. THIS IS THE DEFINITIVE FIX for the purchasing bug.
+    // It checks for and removes the old unique constraint that prevented buying multiple consumables.
+    const constraintCheck = await client.query(`
+        SELECT constraint_name FROM information_schema.table_constraints 
+        WHERE table_name = 'user_inventory' AND constraint_type = 'UNIQUE' AND constraint_schema = 'public'
+    `);
+    if (constraintCheck.rowCount > 0) {
+        const constraintName = constraintCheck.rows[0].constraint_name;
+        console.log(`- Migrating user_inventory: dropping old unique constraint '${constraintName}'...`);
+        await client.query(`ALTER TABLE user_inventory DROP CONSTRAINT "${constraintName}"`);
+    }
     
-    // 5. Pre-populate shop if empty
+    // 6. Pre-populate shop if empty
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
       console.log('- Populating shop_items table...');
-      // Note: Changed "Extra Time" to "Extra Moves" to align with potential frontend text,
-      // but the functionality remains giving extra time via 'extra_time_active'.
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Moves', '+5 seconds for your next game.', 750, 'Clock', 'consumable'),
+        (1, 'Extra Time', '+5 seconds for your next game.', 750, 'Clock', 'consumable'),
         (2, 'Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp', 'consumable'),
         (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent')
         ON CONFLICT (id) DO NOTHING;
       `);
     }
-
+    
+    await client.query('COMMIT');
     console.log('✅ Database is fully set up and migrated.');
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('🚨 FATAL: Error setting up database:', err);
     process.exit(1);
   } finally {
@@ -140,9 +140,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
         } else {
             const now = new Date();
             const lastLogin = new Date(dbUser.last_login_at);
-            const isNewDay = now.toDateString() !== lastLogin.toDateString();
-            
-            if (isNewDay) {
+            if (now.toDateString() !== lastLogin.toDateString()) {
                 const oneDay = 24 * 60 * 60 * 1000;
                 const diffDays = Math.round(Math.abs((now - lastLogin) / oneDay));
                 const newStreak = diffDays === 1 ? dbUser.daily_streak + 1 : 1;
@@ -249,7 +247,6 @@ app.post('/api/get-profile-data', validateUser, async (req, res) => {
                 WHERE ui.user_id = $1
             `, [user.id]);
 
-        // This filters out any broken inventory items where the shop item was not found.
         const cleanInventory = inventoryRes.rows.filter(item => item.id !== null);
 
         res.status(200).json({
@@ -287,7 +284,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
         
         await client.query('COMMIT');
-        // FIX: Add a success message for the frontend popup
         res.status(200).json({ success: true, newPoints: newPoints, message: `Successfully purchased ${item.name}!` });
     } catch (error) {
         await client.query('ROLLBACK');
@@ -316,8 +312,8 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
         await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryItem.id]);
         
         let boosterColumn;
-        if (itemId === 1) boosterColumn = 'extra_time_active'; // Extra Time
-        else if (itemId === 2) boosterColumn = 'point_booster_active'; // Point Booster
+        if (itemId === 1) boosterColumn = 'extra_time_active';
+        else if (itemId === 2) boosterColumn = 'point_booster_active';
         else throw new Error('Unknown booster item.');
 
         await client.query(`UPDATE users SET ${boosterColumn} = TRUE WHERE telegram_id = $1`, [user.id]);
@@ -340,3 +336,4 @@ const startServer = () => {
 };
 
 setupDatabase().then(startServer);
+
