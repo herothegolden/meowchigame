@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Star, Flame, ChevronRight, LoaderCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-// Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
-// This is our mock user data for testing in a regular browser
 const MOCK_USER_DATA = {
   id: 1,
   telegram_id: 123456789,
@@ -15,34 +14,43 @@ const MOCK_USER_DATA = {
   points: 5000,
   level: 8,
   daily_streak: 4,
+  dailyBonus: { points: 400, streak: 4 } // Mock bonus for browser testing
 };
 
 const HomePage = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
 
-    // If Telegram script isn't loaded or we're not in the Telegram environment, use mock data
+    const showBonusPopup = (bonus) => {
+      if (tg && bonus) {
+        tg.showPopup({
+          title: 'Daily Bonus!',
+          message: `You earned ${bonus.points} points for your ${bonus.streak}-day streak! Keep it up!`,
+          buttons: [{ text: 'Awesome!', type: 'ok' }]
+        });
+      }
+    };
+
     if (!tg || !tg.initData) {
       console.log('Running in browser mode. Using mock data.');
       setUser(MOCK_USER_DATA);
       setLoading(false);
+      showBonusPopup(MOCK_USER_DATA.dailyBonus); // Show mock bonus in browser
       return;
     }
     
-    // --- If we are in Telegram, proceed with fetching real data ---
     const fetchUserData = async () => {
-      tg.ready(); // Inform Telegram that the app is ready
+      tg.ready();
       
       try {
         const res = await fetch(`${BACKEND_URL}/api/validate`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ initData: tg.initData }),
         });
 
@@ -52,6 +60,12 @@ const HomePage = () => {
 
         const userData = await res.json();
         setUser(userData);
+
+        // Check for and display the daily bonus
+        if (userData.dailyBonus) {
+          showBonusPopup(userData.dailyBonus);
+        }
+
       } catch (err) {
         setError(`Failed to fetch user data: ${err.message}`);
       } finally {
@@ -78,11 +92,19 @@ const HomePage = () => {
       </div>
     );
   }
+  
+  // This can happen if the API call finishes but userData is not set
+  if (!user) {
+    return (
+        <div className="flex items-center justify-center h-full">
+            <p className="text-secondary">Could not load user data.</p>
+        </div>
+    )
+  }
 
   return (
     <div className="p-4 space-y-6">
       
-      {/* User Header */}
       <motion.div 
         className="flex items-center space-x-4"
         initial={{ opacity: 0, y: -20 }}
@@ -98,7 +120,6 @@ const HomePage = () => {
         </div>
       </motion.div>
 
-      {/* Points & Streak */}
       <motion.div 
         className="grid grid-cols-2 gap-4"
         initial={{ opacity: 0, scale: 0.9 }}
@@ -121,7 +142,6 @@ const HomePage = () => {
         </div>
       </motion.div>
       
-      {/* Featured Promotion Banner */}
       <motion.div 
         className="bg-accent text-background p-4 rounded-lg text-center"
         initial={{ opacity: 0, y: 20 }}
@@ -132,13 +152,12 @@ const HomePage = () => {
         <p className="text-sm">Get double points on all games this weekend!</p>
       </motion.div>
 
-      {/* Quick Game Launch Button */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.6 }}
       >
-        <button className="w-full bg-accent text-background font-bold py-4 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105">
+        <button onClick={() => navigate('/game')} className="w-full bg-accent text-background font-bold py-4 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105">
           Play Now!
           <ChevronRight className="w-6 h-6 ml-2" />
         </button>
