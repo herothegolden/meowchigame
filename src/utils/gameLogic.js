@@ -10,8 +10,8 @@ export const PIECE_TYPES = [
   '#2A7B88', // Milk Drop (Teal)
 ];
 
-// NEW: The number of points awarded for a standard 3-piece match.
-export const POINTS_PER_MATCH = 10;
+// FIX: Added the 'export' keyword to make this constant available to other files.
+export const POINTS_PER_PIECE = 5;
 
 /**
  * Generates the initial random layout of the game board.
