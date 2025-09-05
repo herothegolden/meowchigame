@@ -1,69 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, PlusCircle } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, LoaderCircle, Badge, ChevronsUp, Clock, AlertTriangle } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
-// --- Helper Components ---
-
-const StatCard = ({ icon, label, value, color }) => (
-  <div className="bg-nav p-4 rounded-lg flex items-center">
-    <div className={`mr-4 text-${color}`}>{icon}</div>
-    <div>
-      <p className="text-sm text-secondary">{label}</p>
-      <p className="text-lg font-bold text-primary">{value}</p>
-    </div>
-  </div>
-);
-
-const InventoryItemCard = ({ item, onActivate, disabled }) => {
-  const [isActivating, setIsActivating] = useState(false);
-
-  const handleActivate = async () => {
-    setIsActivating(true);
-    await onActivate(item.id);
-    setIsActivating(false);
-  };
-
-  const getIcon = () => {
-    switch(item.id) {
-      case 1: return <PlusCircle size={28} />; // Extra Time
-      case 2: return <ChevronsUp size={28} />; // Point Booster
-      default: return <Package size={28} />;
-    }
-  }
-
-  return (
-    <div className="bg-nav p-4 rounded-lg flex items-center justify-between">
-      <div className="flex items-center">
-        <div className="mr-4 text-accent">{getIcon()}</div>
-        <div>
-          <p className="font-bold text-primary">{item.name}</p>
-          <p className="text-sm text-secondary">{item.description}</p>
-        </div>
-      </div>
-      <button 
-        onClick={handleActivate}
-        disabled={disabled}
-        className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
-          disabled || isActivating
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : 'bg-accent text-background hover:scale-105'
-        }`}
-      >
-        {isActivating ? <LoaderCircle className="w-5 h-5 animate-spin" /> : 'Activate'}
-      </button>
-    </div>
-  );
+// A map to dynamically render icons for items
+const iconMap = {
+  Badge,
+  ChevronsUp,
+  Clock,
 };
 
-
-// --- Main Profile Page Component ---
-
 const ProfilePage = () => {
-  const [profileData, setProfileData] = useState({ stats: null, inventory: {}, allItems: [], activeBoosters: {} });
+  const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
   const tg = window.Telegram?.WebApp;
 
   const fetchProfileData = useCallback(async () => {
@@ -72,37 +24,24 @@ const ProfilePage = () => {
       setLoading(false);
       return;
     }
+
     try {
-      // Fetch both user stats and shop/inventory data in parallel
-      const [statsRes, shopDataRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/user-stats`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        }),
-        fetch(`${BACKEND_URL}/api/get-shop-data`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        })
-      ]);
-
-      if (!statsRes.ok || !shopDataRes.ok) {
-        throw new Error('Failed to fetch profile data.');
-      }
-
-      const stats = await statsRes.json();
-      const shopData = await shopDataRes.json();
-      
-      setProfileData({
-        stats,
-        inventory: shopData.inventory,
-        allItems: shopData.items,
-        activeBoosters: shopData.activeBoosters,
+      setLoading(true);
+      const res = await fetch(`${BACKEND_URL}/api/get-profile-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
       });
 
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`);
+      }
+      
+      const data = await res.json();
+      setProfileData(data);
+
     } catch (err) {
-      setError(err.message);
+      setError(`Failed to fetch profile data: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -111,97 +50,149 @@ const ProfilePage = () => {
   useEffect(() => {
     fetchProfileData();
   }, [fetchProfileData]);
-
+  
   const handleActivateItem = async (itemId) => {
+    if(!tg?.initData) return;
+    
+    tg.HapticFeedback.impactOccurred('light');
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, itemId }),
-      });
+        const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData: tg.initData, itemId }),
+        });
+        const result = await res.json();
 
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Activation failed.');
+        if (!res.ok || !result.success) {
+            throw new Error(result.error || 'Failed to activate item.');
+        }
 
-      tg.HapticFeedback.notificationOccurred('success');
-      tg.showPopup({ title: 'Success!', message: result.message, buttons: [{ type: 'ok' }] });
-
-      // Refresh data to show updated state
-      fetchProfileData();
+        tg.showPopup({
+            title: 'Success!',
+            message: `Booster activated for your next game!`,
+            buttons: [{ type: 'ok' }]
+        });
+        
+        // Refresh data to show updated inventory and status
+        fetchProfileData();
 
     } catch (err) {
-      tg.HapticFeedback.notificationOccurred('error');
-      tg.showPopup({ title: 'Error', message: err.message, buttons: [{ type: 'ok' }] });
+        tg.showPopup({
+            title: 'Activation Failed',
+            message: err.message,
+            buttons: [{ type: 'ok' }]
+        });
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><LoaderCircle className="w-12 h-12 text-accent animate-spin" /></div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      </div>
+    );
   }
 
-  if (error || !profileData.stats) {
-    return <div className="p-4 text-center text-red-400"><p>Could not load profile.</p><p className="text-sm text-secondary">{error}</p></div>;
+  if (error || !profileData) {
+    return (
+      <div className="p-4 text-center text-red-400">
+        <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+        <h1 className="text-xl font-bold">Could not load profile.</h1>
+        <p className="text-sm text-secondary">{error}</p>
+      </div>
+    );
   }
   
-  const { stats, inventory, allItems, activeBoosters } = profileData;
-  const ownedConsumables = allItems.filter(item => item.type === 'consumable' && (inventory[item.id] || 0) > 0);
+  const { stats, inventory } = profileData;
+  const consumableItems = inventory.filter(item => item.type === 'consumable');
+  const permanentItems = inventory.filter(item => item.type === 'permanent');
+  const boosterActive = stats.point_booster_active || stats.extra_time_active;
 
   return (
     <div className="p-4 space-y-6">
-      {/* --- User Header --- */}
-      <motion.div className="flex flex-col items-center text-center space-y-2" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col items-center text-center space-y-2"
+      >
         <div className="w-24 h-24 bg-nav rounded-full flex items-center justify-center">
           <User className="w-12 h-12 text-secondary" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-primary">{stats.first_name}</h1>
-          <p className="text-secondary">@{stats.username || 'user'}</p>
+          <h1 className="text-3xl font-bold">{stats.first_name}</h1>
+          {stats.username && <p className="text-secondary">@{stats.username}</p>}
         </div>
       </motion.div>
 
-      {/* --- Stats Grid --- */}
-      <motion.div className="grid grid-cols-2 gap-4" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}>
-        <StatCard icon={<Star size={24} />} label="Total Points" value={stats.points.toLocaleString()} color="accent" />
-        <StatCard icon={<Flame size={24} />} label="Daily Streak" value={`${stats.daily_streak} Days`} color="accent" />
-        <StatCard icon={<Award size={24} />} label="Current Level" value={stats.level} color="primary" />
-        <StatCard icon={<Calendar size={24} />} label="Member Since" value={new Date(stats.created_at).toLocaleDateString()} color="primary" />
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }} className="grid grid-cols-2 gap-4">
+        <StatCard icon={Star} label="Total Points" value={stats.points.toLocaleString()} />
+        <StatCard icon={Flame} label="Daily Streak" value={`${stats.daily_streak} Days`} />
+        <StatCard icon={Award} label="Current Level" value={stats.level} />
+        <StatCard icon={Calendar} label="Member Since" value={new Date(stats.created_at).toLocaleDateString()} />
       </motion.div>
+      
+      {boosterActive && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.4 } }} className="bg-green-500/20 text-green-300 p-4 rounded-lg text-center font-bold">
+              A booster is currently active for your next game!
+          </motion.div>
+      )}
 
-      {/* --- My Boosters Section --- */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-        <h2 className="text-xl font-bold mb-3 flex items-center"><Package className="w-6 h-6 mr-2 text-secondary"/> My Boosters</h2>
-        <div className="space-y-3">
-          {activeBoosters.point_booster && (
-            <div className="bg-green-800/50 border border-green-500 text-green-300 p-3 rounded-lg flex items-center">
-              <Zap className="w-5 h-5 mr-3"/>
-              <span>A Point Booster is active for your next game!</span>
+      <div className="space-y-4">
+        <h2 className="font-bold text-xl text-secondary">My Boosters</h2>
+        {consumableItems.length > 0 ? (
+            <div className="space-y-3">
+                {consumableItems.map(item => {
+                    const Icon = iconMap[item.icon_name];
+                    return (
+                        <motion.div key={item.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.5 } }} className="bg-nav p-4 rounded-lg flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                {Icon && <Icon className="w-8 h-8 text-accent" />}
+                                <span className="font-bold">{item.name}</span>
+                            </div>
+                            <button onClick={() => handleActivateItem(item.id)} disabled={boosterActive} className="bg-accent text-background font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
+                                Activate
+                            </button>
+                        </motion.div>
+                    );
+                })}
             </div>
-          )}
-           {activeBoosters.extra_time && (
-            <div className="bg-blue-800/50 border border-blue-500 text-blue-300 p-3 rounded-lg flex items-center">
-              <Zap className="w-5 h-5 mr-3"/>
-              <span>An Extra Time booster is active for your next game!</span>
-            </div>
-          )}
+        ) : (
+            <p className="text-secondary text-center py-4">No boosters in your inventory. Visit the shop!</p>
+        )}
+      </div>
 
-          {ownedConsumables.length > 0 ? (
-            ownedConsumables.map(item => (
-              <InventoryItemCard 
-                key={item.id} 
-                item={item} 
-                onActivate={handleActivateItem} 
-                disabled={(item.id === 1 && activeBoosters.extra_time) || (item.id === 2 && activeBoosters.point_booster)} 
-              />
-            ))
-          ) : (
-             (!activeBoosters.point_booster && !activeBoosters.extra_time) && 
-             <p className="text-secondary text-center p-4 bg-nav rounded-lg">You have no boosters. Visit the shop to buy some!</p>
-          )}
-        </div>
-      </motion.div>
+       <div className="space-y-4">
+        <h2 className="font-bold text-xl text-secondary">My Items</h2>
+        {permanentItems.length > 0 ? (
+            <div className="space-y-3">
+                {permanentItems.map(item => {
+                     const Icon = iconMap[item.icon_name];
+                     return (
+                        <motion.div key={item.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.6 } }} className="bg-nav p-4 rounded-lg flex items-center space-x-4">
+                            {Icon && <Icon className="w-8 h-8 text-secondary" />}
+                            <span className="font-bold">{item.name}</span>
+                        </motion.div>
+                    );
+                })}
+            </div>
+        ) : (
+             <p className="text-secondary text-center py-4">No permanent items yet.</p>
+        )}
+      </div>
 
     </div>
   );
 };
+
+const StatCard = ({ icon: Icon, label, value }) => (
+  <div className="bg-nav p-4 rounded-lg">
+    <div className="flex items-center text-secondary mb-1">
+      <Icon className="w-4 h-4 mr-2" />
+      <span className="text-sm">{label}</span>
+    </div>
+    <p className="text-2xl font-bold text-primary">{value}</p>
+  </div>
+);
 
 export default ProfilePage;
