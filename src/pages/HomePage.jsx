@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, ChevronRight, LoaderCircle } from 'lucide-react';
+import { User, Star, Flame, ChevronRight, LoaderCircle, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -22,6 +22,27 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  // --- CRITICAL FIX: Environment Variable Check ---
+  // A "black screen" is often caused by the frontend not knowing where the backend is.
+  // This check provides a clear error message if the .env file is missing.
+  if (!BACKEND_URL) {
+    return (
+      <div className="p-4 text-center text-red-400 flex flex-col items-center justify-center h-full">
+        <AlertTriangle className="w-16 h-16 mx-auto mb-4" />
+        <h1 className="text-2xl font-bold">Configuration Error</h1>
+        <p className="mt-2 text-secondary">The backend URL is not configured.</p>
+        <div className="mt-4 text-left text-sm bg-nav p-4 rounded-lg">
+          <p className="font-bold text-primary">To fix this:</p>
+          <p className="mt-1">1. Create a file named <code className="font-mono text-accent">.env</code> in the root of your frontend project.</p>
+          <p className="mt-1">2. Add this line to the file: <br />
+             <code className="font-mono text-accent">VITE_BACKEND_URL=http://localhost:3000</code>
+          </p>
+           <p className="mt-2 text-xs text-secondary">(Adjust the URL if your backend runs on a different port or address).</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -61,7 +82,6 @@ const HomePage = () => {
         const userData = await res.json();
         setUser(userData);
 
-        // Check for and display the daily bonus
         if (userData.dailyBonus) {
           showBonusPopup(userData.dailyBonus);
         }
@@ -93,7 +113,6 @@ const HomePage = () => {
     );
   }
   
-  // This can happen if the API call finishes but userData is not set
   if (!user) {
     return (
         <div className="flex items-center justify-center h-full">
