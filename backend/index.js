@@ -26,7 +26,7 @@ const pool = new Pool({
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    // Users Table
+    // Users Table - NOW WITH A BOOSTER FLAG
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -38,7 +38,8 @@ const setupDatabase = async () => {
           level INT DEFAULT 1 NOT NULL,
           daily_streak INT DEFAULT 0 NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          point_booster_active BOOLEAN DEFAULT FALSE NOT NULL
       );
     `);
 
@@ -49,7 +50,8 @@ const setupDatabase = async () => {
         name VARCHAR(255) NOT NULL,
         description TEXT,
         price INT NOT NULL,
-        icon_name VARCHAR(50) 
+        icon_name VARCHAR(50),
+        type VARCHAR(50) DEFAULT 'consumable' NOT NULL -- Added for future item types
       );
     `);
 
@@ -64,14 +66,15 @@ const setupDatabase = async () => {
       );
     `);
     
-    // Pre-populate shop with some items if it's empty
+    // Pre-populate shop if empty
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
       await client.query(`
-        INSERT INTO shop_items (name, description, price, icon_name) VALUES
-        ('Extra Moves', '+5 moves for your next game.', 500, 'PlusCircle'),
-        ('Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp'),
-        ('Profile Badge', 'A cool badge for your profile.', 5000, 'Badge');
+        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
+        (1, 'Extra Moves', '+5 moves for your next game.', 500, 'PlusCircle', 'consumable'),
+        (2, 'Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp', 'consumable'),
+        (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent')
+        ON CONFLICT (id) DO NOTHING;
       `);
     }
 
@@ -90,34 +93,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---- MIDDLEWARE FOR USER VALIDATION ----
+const validateUser = (req, res, next) => {
+  const { initData } = req.body;
+  if (!initData) {
+    return res.status(400).json({ error: 'initData is required' });
+  }
+
+  if (!validate(initData, BOT_TOKEN)) {
+    return res.status(401).json({ error: 'Invalid data' });
+  }
+
+  const params = new URLSearchParams(initData);
+  const user = JSON.parse(params.get('user'));
+
+  if (!user || !user.id) {
+    return res.status(400).json({ error: 'Invalid user data in initData' });
+  }
+  
+  req.user = user; // Attach user to request object
+  next();
+};
+
+
 // ---- ROUTES ----
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-const isFarFuture = (date) => {
-    const farFutureDate = new Date('2100-01-01');
-    return date > farFutureDate;
-};
-
-app.post('/api/validate', async (req, res) => {
+app.post('/api/validate', validateUser, async (req, res) => {
     try {
-        const { initData } = req.body;
-        if (!initData) {
-            return res.status(400).json({ error: 'initData is required' });
-        }
-
-        if (!validate(initData, BOT_TOKEN)) {
-            return res.status(401).json({ error: 'Invalid data' });
-        }
-
-        const params = new URLSearchParams(initData);
-        const user = JSON.parse(params.get('user'));
-
-        if (!user || !user.id) {
-            return res.status(400).json({ error: 'Invalid user data in initData' });
-        }
-
+        const { user } = req;
         const client = await pool.connect();
         try {
             let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
@@ -133,31 +139,21 @@ app.post('/api/validate', async (req, res) => {
             } else {
                 appUser = dbUserResult.rows[0];
                 const now = new Date();
-                let lastLogin = new Date(appUser.last_login_at);
-
-                if (isFarFuture(lastLogin)) {
-                    lastLogin = new Date();
-                }
+                const lastLogin = new Date(appUser.last_login_at);
 
                 const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
                 const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                const diffTime = Math.abs(nowDate - lastLoginDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                let newStreak = appUser.daily_streak;
-                let newPoints = appUser.points;
-
-                if (diffDays === 1) {
-                    newStreak += 1;
-                    const bonusPoints = 100 * newStreak;
-                    newPoints += bonusPoints;
-                    dailyBonus = { points: bonusPoints, streak: newStreak };
-                } else if (diffDays > 1) {
-                    newStreak = 1; 
-                }
                 
-                if (diffDays >= 1) {
-                     const updateResult = await client.query(
+                if (nowDate > lastLoginDate) {
+                    const diffTime = Math.abs(nowDate - lastLoginDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    let newStreak = (diffDays === 1) ? appUser.daily_streak + 1 : 1;
+                    const bonusPoints = 100 * newStreak;
+                    const newPoints = appUser.points + bonusPoints;
+                    dailyBonus = { points: bonusPoints, streak: newStreak };
+                    
+                    const updateResult = await client.query(
                         'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
                         [user.id, newStreak, newPoints]
                     );
@@ -170,72 +166,59 @@ app.post('/api/validate', async (req, res) => {
         } finally {
             client.release();
         }
-
     } catch (error) {
         console.error('🚨 Error in /api/validate:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-app.post('/api/update-score', async (req, res) => {
+app.post('/api/update-score', validateUser, async (req, res) => {
   try {
-    const { initData, score } = req.body;
-    if (!initData || score === undefined) {
-      return res.status(400).json({ error: 'initData and score are required' });
-    }
-    
-    if (!validate(initData, BOT_TOKEN)) {
-      return res.status(401).json({ error: 'Invalid data' });
-    }
-    
-    const params = new URLSearchParams(initData);
-    const user = JSON.parse(params.get('user'));
-
-    if (!user || !user.id) {
-        return res.status(400).json({ error: 'Invalid user data in initData' });
+    const { user } = req;
+    const { score } = req.body;
+    if (score === undefined) {
+      return res.status(400).json({ error: 'Score is required' });
     }
 
     const client = await pool.connect();
     try {
-      const result = await client.query(
-        'UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points',
-        [score, user.id]
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        'SELECT points, point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE',
+        [user.id]
       );
       
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
+      if (userResult.rowCount === 0) throw new Error('User not found');
 
-      return res.status(200).json({ new_points: result.rows[0].points });
+      const { points, point_booster_active } = userResult.rows[0];
+      const finalScore = point_booster_active ? score * 2 : score;
+      const newPoints = points + finalScore;
 
+      const updateResult = await client.query(
+        'UPDATE users SET points = $1, point_booster_active = FALSE WHERE telegram_id = $2 RETURNING points',
+        [newPoints, user.id]
+      );
+
+      await client.query('COMMIT');
+
+      return res.status(200).json({ new_points: updateResult.rows[0].points, score_awarded: finalScore });
+
+    } catch(e){
+      await client.query('ROLLBACK');
+      throw e;
     } finally {
       client.release();
     }
-
   } catch (error) {
     console.error('🚨 Error in /api/update-score:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/api/user-stats', async (req, res) => {
+app.post('/api/user-stats', validateUser, async (req, res) => {
   try {
-    const { initData } = req.body;
-    if (!initData) {
-      return res.status(400).json({ error: 'initData is required' });
-    }
-
-    if (!validate(initData, BOT_TOKEN)) {
-      return res.status(401).json({ error: 'Invalid data' });
-    }
-    
-    const params = new URLSearchParams(initData);
-    const user = JSON.parse(params.get('user'));
-
-    if (!user || !user.id) {
-        return res.status(400).json({ error: 'Invalid user data in initData' });
-    }
-
+    const { user } = req;
     const client = await pool.connect();
     try {
       const dbUserResult = await client.query(
@@ -247,44 +230,25 @@ app.post('/api/user-stats', async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
       
-      const userStats = dbUserResult.rows[0];
-      return res.status(200).json(userStats);
+      res.status(200).json(dbUserResult.rows[0]);
 
     } finally {
       client.release();
     }
-
   } catch (error) {
     console.error('🚨 Error in /api/user-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// NEW: More efficient endpoint to get all data for the shop page
-app.post('/api/get-shop-data', async (req, res) => {
+app.post('/api/get-shop-data', validateUser, async (req, res) => {
   try {
-    const { initData } = req.body;
-    if (!initData) {
-      return res.status(400).json({ error: 'initData is required' });
-    }
-
-    if (!validate(initData, BOT_TOKEN)) {
-      return res.status(401).json({ error: 'Invalid data' });
-    }
-    
-    const params = new URLSearchParams(initData);
-    const user = JSON.parse(params.get('user'));
-
-    if (!user || !user.id) {
-        return res.status(400).json({ error: 'Invalid user data in initData' });
-    }
-
+    const { user } = req;
     const client = await pool.connect();
     try {
-      // Fetch all required data in parallel for maximum efficiency
       const [itemsResult, userResult, inventoryResult] = await Promise.all([
         client.query('SELECT * FROM shop_items ORDER BY price ASC'),
-        client.query('SELECT points FROM users WHERE telegram_id = $1', [user.id]),
+        client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
         client.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [user.id])
       ]);
       
@@ -295,68 +259,58 @@ app.post('/api/get-shop-data', async (req, res) => {
       const shopData = {
         items: itemsResult.rows,
         userPoints: userResult.rows[0].points,
-        inventory: inventoryResult.rows.map(row => row.item_id)
+        inventory: inventoryResult.rows.map(row => row.item_id),
+        boosterActive: userResult.rows[0].point_booster_active
       };
       
-      return res.status(200).json(shopData);
+      res.status(200).json(shopData);
 
     } finally {
       client.release();
     }
-
   } catch (error) {
     console.error('🚨 Error in /api/get-shop-data:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
-// NEW: Endpoint to handle purchasing an item
-app.post('/api/buy-item', async (req, res) => {
+app.post('/api/buy-item', validateUser, async (req, res) => {
   try {
-    const { initData, itemId } = req.body;
-    if (!initData || !itemId) {
-      return res.status(400).json({ error: 'initData and itemId are required' });
-    }
-
-    if (!validate(initData, BOT_TOKEN)) {
-      return res.status(401).json({ error: 'Invalid data' });
-    }
-
-    const params = new URLSearchParams(initData);
-    const user = JSON.parse(params.get('user'));
-
-    if (!user || !user.id) {
-      return res.status(400).json({ error: 'Invalid user data in initData' });
+    const { user } = req;
+    const { itemId } = req.body;
+    if (!itemId) {
+      return res.status(400).json({ error: 'itemId is required' });
     }
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN'); // Start transaction
+      await client.query('BEGIN');
 
-      const itemResult = await client.query('SELECT price FROM shop_items WHERE id = $1', [itemId]);
+      const itemResult = await client.query('SELECT price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) throw new Error('Item not found.');
-      const itemPrice = itemResult.rows[0].price;
+      const { price, type } = itemResult.rows[0];
 
       const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       const userPoints = userResult.rows[0].points;
       
-      if (userPoints < itemPrice) throw new Error('Insufficient points.');
+      if (userPoints < price) throw new Error('Insufficient points.');
       
-      const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
-      if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+      if(type === 'permanent') {
+        const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
+        if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+      }
 
-      const newPoints = userPoints - itemPrice;
+      const newPoints = userPoints - price;
       await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
       await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
 
-      await client.query('COMMIT'); // Commit transaction
+      await client.query('COMMIT');
 
       res.status(200).json({ success: true, newPoints: newPoints, message: 'Purchase successful!' });
 
     } catch (error) {
-      await client.query('ROLLBACK'); // Rollback on error
+      await client.query('ROLLBACK');
       const knownErrors = ['Insufficient points.', 'Item already owned.', 'Item not found.', 'User not found.'];
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
@@ -366,13 +320,64 @@ app.post('/api/buy-item', async (req, res) => {
     } finally {
       client.release();
     }
-
   } catch (error) {
     console.error('🚨 Error in /api/buy-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+// NEW ENDPOINT: ACTIVATE A CONSUMABLE ITEM
+app.post('/api/activate-item', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    if (!itemId) {
+      return res.status(400).json({ error: 'itemId is required' });
+    }
+
+    // For this example, we'll hardcode the logic for the Point Booster (ID 2)
+    if (itemId !== 2) {
+      return res.status(400).json({ error: 'This item is not an activatable booster.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query('SELECT point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
+      if (userResult.rowCount === 0) throw new Error('User not found.');
+      if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
+
+      const inventoryResult = await client.query(
+        'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2', 
+        [user.id, itemId]
+      );
+      if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
+
+      // Consume the item and activate the booster
+      await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryResult.rows[0].id]);
+      await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
+      
+      await client.query('COMMIT');
+      
+      res.status(200).json({ success: true, message: 'Point Booster activated for your next game!' });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const knownErrors = ['User not found.', 'A booster is already active.', 'You do not own this item.'];
+      if (knownErrors.includes(error.message)) {
+          return res.status(400).json({ success: false, error: error.message });
+      }
+      console.error('🚨 Error in /api/activate-item:', error);
+      res.status(500).json({ success: false, error: 'Internal server error.' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/activate-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 const startServer = () => {
   app.listen(PORT, () => {
