@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Clock, LoaderCircle, Play, RotateCcw } from 'lucide-react';
+import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // Get the backend URL from the environment variables
@@ -9,10 +9,12 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const GamePage = () => {
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30); // 30 seconds
+  const [timeLeft, setTimeLeft] = useState(30);
   const [gameStarted, setGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [gameConfig, setGameConfig] = useState({ startTime: 30, startWithBomb: false });
+  const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const navigate = useNavigate();
 
   // Timer effect
@@ -55,10 +57,12 @@ const GamePage = () => {
             if (response.ok) {
               console.log('Score submitted successfully:', data);
               
+              const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
+              
               // Show success popup
               tg.showPopup({
                 title: 'Game Over!',
-                message: `🎉 You scored ${score.toLocaleString()} points!\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
+                message: `🎉 You scored ${score.toLocaleString()} points!${multiplierText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
                 buttons: [
                   { text: 'Play Again', type: 'default', id: 'play_again' },
                   { text: 'Home', type: 'default', id: 'home' }
@@ -104,7 +108,7 @@ const GamePage = () => {
     // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, score, navigate, isSubmitting]);
+  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier]);
 
   // Disable Telegram swipes during game
   useEffect(() => {
@@ -115,20 +119,75 @@ const GamePage = () => {
     }
   }, []);
 
-  const startGame = () => {
+  // Fetch game configuration and check for active boosters
+  const fetchGameConfig = async () => {
+    const tg = window.Telegram?.WebApp;
+    
+    if (!tg || !tg.initData) {
+      // Browser mode - use defaults
+      setGameConfig({ startTime: 30, startWithBomb: false });
+      return;
+    }
+
+    try {
+      // Get game session configuration (consumes time boosters and bombs)
+      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+
+      if (sessionRes.ok) {
+        const sessionData = await sessionRes.json();
+        setGameConfig(sessionData);
+        
+        // Calculate boosts applied
+        const timeBoost = sessionData.startTime - 30;
+        setActiveBoosts({
+          timeBoost,
+          bomb: sessionData.startWithBomb,
+          pointMultiplier: false // Will be checked later
+        });
+      }
+
+      // Check for active point multiplier
+      const shopRes = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+
+      if (shopRes.ok) {
+        const shopData = await shopRes.json();
+        setActiveBoosts(prev => ({
+          ...prev,
+          pointMultiplier: shopData.boosterActive
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching game config:', error);
+      setGameConfig({ startTime: 30, startWithBomb: false });
+    }
+  };
+
+  const startGame = async () => {
+    await fetchGameConfig();
     setGameStarted(true);
     setScore(0);
-    setTimeLeft(30);
+    setTimeLeft(gameConfig.startTime);
     setIsGameOver(false);
     setIsSubmitting(false);
   };
 
-  const restartGame = () => {
+  const restartGame = async () => {
     setGameStarted(false);
     setScore(0);
-    setTimeLeft(30);
     setIsGameOver(false);
     setIsSubmitting(false);
+    
+    // Fetch new game config for restart
+    await fetchGameConfig();
+    setTimeLeft(gameConfig.startTime);
     
     // Start game after brief delay to allow component reset
     setTimeout(() => setGameStarted(true), 100);
@@ -155,6 +214,9 @@ const GamePage = () => {
             <p className="text-2xl font-bold text-accent mb-2">
               {score.toLocaleString()} Points
             </p>
+            {activeBoosts.pointMultiplier && (
+              <p className="text-sm text-green-400 mb-2">🔥 Double Points Applied!</p>
+            )}
             
             {isSubmitting ? (
               <div className="flex items-center justify-center space-x-2 text-secondary mt-4">
@@ -195,10 +257,33 @@ const GamePage = () => {
             <div className="text-6xl mb-6">🍪</div>
             
             <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
-              <div className="flex items-center justify-center space-x-2 text-accent">
+              <div className="flex items-center justify-center space-x-2 text-accent mb-2">
                 <Clock size={24} />
-                <span className="text-xl font-bold">30 Seconds</span>
+                <span className="text-xl font-bold">{gameConfig.startTime} Seconds</span>
               </div>
+              
+              {/* Show active boosts */}
+              <div className="space-y-2">
+                {activeBoosts.timeBoost > 0 && (
+                  <div className="flex items-center justify-center space-x-2 text-blue-400">
+                    <Clock size={16} />
+                    <span className="text-sm">+{activeBoosts.timeBoost}s Time Boost!</span>
+                  </div>
+                )}
+                {activeBoosts.bomb && (
+                  <div className="flex items-center justify-center space-x-2 text-red-400">
+                    <Bomb size={16} />
+                    <span className="text-sm">Cookie Bomb Ready!</span>
+                  </div>
+                )}
+                {activeBoosts.pointMultiplier && (
+                  <div className="flex items-center justify-center space-x-2 text-green-400">
+                    <ChevronsUp size={16} />
+                    <span className="text-sm">Double Points Active!</span>
+                  </div>
+                )}
+              </div>
+              
               <p className="text-sm text-secondary mt-2">Match 3 or more pieces to score points!</p>
             </div>
             
@@ -223,6 +308,9 @@ const GamePage = () => {
         <div className="flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700">
           <Star className="w-6 h-6 text-accent" />
           <span className="text-xl font-bold text-primary">{score.toLocaleString()}</span>
+          {activeBoosts.pointMultiplier && (
+            <ChevronsUp className="w-5 h-5 text-green-400" />
+          )}
         </div>
         
         <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
@@ -243,6 +331,7 @@ const GamePage = () => {
         <GameBoard 
           setScore={setScore} 
           gameStarted={gameStarted}
+          startWithBomb={gameConfig.startWithBomb}
           onGameEnd={() => setIsGameOver(true)}
         />
       </motion.div>
@@ -256,7 +345,7 @@ const GamePage = () => {
           transition={{ duration: 0.5, delay: 0.6 }}
         >
           <p className="text-sm">
-            Tap two adjacent pieces to swap them and create matches of 3 or more! 🍪✨
+            Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
           </p>
         </motion.div>
       )}
