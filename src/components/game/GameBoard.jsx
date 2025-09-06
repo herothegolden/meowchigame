@@ -13,11 +13,12 @@ import {
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
-const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
+const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
+  const [bombPositions, setBombPositions] = useState(new Set());
   const processingRef = useRef(false);
   const boardRef = useRef(board);
 
@@ -26,10 +27,28 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     boardRef.current = board;
   }, [board]);
 
-  // Reset board when game starts - only once
+  // Reset board when game starts - with optional bomb
   useEffect(() => {
     if (gameStarted) {
       const newBoard = generateInitialBoard();
+      
+      // Add cookie bomb if purchased
+      if (startWithBomb) {
+        const centerRow = Math.floor(BOARD_SIZE / 2);
+        const centerCol = Math.floor(BOARD_SIZE / 2);
+        const bombIndex = centerRow * BOARD_SIZE + centerCol;
+        
+        // Keep the original emoji but mark position as having a bomb
+        setBombPositions(new Set([bombIndex]));
+        
+        // Haptic feedback for bomb placement
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+        }
+      } else {
+        setBombPositions(new Set());
+      }
+      
       setBoard(newBoard);
       boardRef.current = newBoard;
       setDraggedPiece(null);
@@ -37,9 +56,37 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       setIsProcessing(false);
       processingRef.current = false;
     }
-  }, [gameStarted]);
+  }, [gameStarted, startWithBomb]);
 
-  // OPTIMIZED: Much faster match processing
+  // Handle bomb explosion - clears 3x3 area
+  const triggerBombExplosion = useCallback((bombIndex) => {
+    const { row, col } = getPosition(bombIndex);
+    const explosionIndices = new Set();
+    
+    // Add 3x3 area around bomb
+    for (let r = row - 1; r <= row + 1; r++) {
+      for (let c = col - 1; c <= col + 1; c++) {
+        if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+          explosionIndices.add(r * BOARD_SIZE + c);
+        }
+      }
+    }
+    
+    // Award points for exploded pieces
+    const pointsAwarded = explosionIndices.size * POINTS_PER_PIECE * 2; // Double points for bomb
+    setScore(prev => prev + pointsAwarded);
+    
+    // Remove bomb from positions
+    setBombPositions(prev => {
+      const newBombs = new Set(prev);
+      newBombs.delete(bombIndex);
+      return newBombs;
+    });
+    
+    return explosionIndices;
+  }, [setScore]);
+
+  // OPTIMIZED: Much faster match processing with bomb support
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted) return;
     
@@ -56,15 +103,26 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       
       if (matches.length === 0) break;
       
+      // Check if any matches trigger bombs
+      let allMatchedIndices = new Set(matches);
+      
+      // Check for bomb triggers
+      matches.forEach(matchIndex => {
+        if (bombPositions.has(matchIndex)) {
+          const explosionIndices = triggerBombExplosion(matchIndex);
+          explosionIndices.forEach(index => allMatchedIndices.add(index));
+        }
+      });
+      
       // Show matched pieces with faster animation
-      setMatchedPieces(new Set(matches));
-      totalMatches += matches.length;
+      setMatchedPieces(allMatchedIndices);
+      totalMatches += allMatchedIndices.size;
       
       // FASTER: Reduced from 400ms to 100ms
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Remove matches
-      currentBoard = removeMatches(currentBoard, matches);
+      currentBoard = removeMatches(currentBoard, Array.from(allMatchedIndices));
       
       // Apply gravity
       currentBoard = applyGravity(currentBoard);
@@ -99,13 +157,54 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     
     setIsProcessing(false);
     processingRef.current = false;
-  }, [setScore, gameStarted]);
+  }, [setScore, gameStarted, bombPositions, triggerBombExplosion]);
+
+  // Handle direct bomb tap
+  const handleBombTap = useCallback((index) => {
+    if (!bombPositions.has(index) || isProcessing) return;
+    
+    // Trigger bomb explosion
+    const explosionIndices = triggerBombExplosion(index);
+    
+    // Show explosion animation
+    setMatchedPieces(explosionIndices);
+    
+    // Heavy haptic feedback for bomb
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+    
+    setTimeout(async () => {
+      // Remove exploded pieces
+      const currentBoard = removeMatches(boardRef.current, Array.from(explosionIndices));
+      
+      // Apply gravity and refill
+      const gravityBoard = applyGravity(currentBoard);
+      const newBoard = fillEmptySpaces(gravityBoard);
+      
+      setBoard(newBoard);
+      boardRef.current = newBoard;
+      setMatchedPieces(new Set());
+      
+      // Process any new matches
+      setTimeout(() => {
+        processMatches();
+      }, 100);
+    }, 200);
+  }, [bombPositions, isProcessing, triggerBombExplosion, processMatches]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
     if (isProcessing || !gameStarted || processingRef.current) return;
+    
+    // Check if it's a bomb - handle differently
+    if (bombPositions.has(index)) {
+      handleBombTap(index);
+      return;
+    }
+    
     setDraggedPiece({ index });
-  }, [isProcessing, gameStarted]);
+  }, [isProcessing, gameStarted, bombPositions, handleBombTap]);
 
   // Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
@@ -175,7 +274,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
         if (matches.length > 0) {
           processMatches();
         }
-      }, 100); // Much faster initial check
+      }, 100);
       
       return () => clearTimeout(timeoutId);
     }
@@ -204,6 +303,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
           const emoji = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
+          const hasBomb = bombPositions.has(index);
           
           return (
             <div
@@ -216,13 +316,13 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
                 height: cellSize,
               }}
             >
-              {/* REMOVED AnimatePresence - pieces just show/hide instantly for matched state */}
               {emoji && (
                 <GamePiece
                   emoji={emoji}
                   index={index}
                   isSelected={isSelected}
                   isMatched={isMatched}
+                  hasBomb={hasBomb}
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
                 />
