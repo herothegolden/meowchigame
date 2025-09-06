@@ -1,5 +1,5 @@
-// Game configuration
-export const BOARD_SIZE = 8;
+// Game configuration - Changed to 6x6 for better mobile fit
+export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
 
 // Emoji pieces for the game
@@ -187,38 +187,6 @@ export const fillEmptySpaces = (board) => {
   }
   
   return newBoard;
-};
-
-/**
- * Checks if there are any possible moves
- */
-export const hasPossibleMoves = (board) => {
-  // Try swapping each piece with its neighbors
-  for (let row = 0; row < BOARD_SIZE; row++) {
-    for (let col = 0; col < BOARD_SIZE; col++) {
-      const currentPos = { row, col };
-      
-      // Check right neighbor
-      if (col < BOARD_SIZE - 1) {
-        const rightPos = { row, col: col + 1 };
-        const testBoard = swapPieces(board, currentPos, rightPos);
-        if (findMatches(testBoard).length > 0) {
-          return true;
-        }
-      }
-      
-      // Check bottom neighbor
-      if (row < BOARD_SIZE - 1) {
-        const bottomPos = { row: row + 1, col };
-        const testBoard = swapPieces(board, currentPos, bottomPos);
-        if (findMatches(testBoard).length > 0) {
-          return true;
-        }
-      }
-    }
-  }
-  
-  return false;
 };
 
 /**
