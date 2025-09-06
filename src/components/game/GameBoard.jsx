@@ -14,17 +14,27 @@ import {
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
-const GameBoard = ({ setScore, setMoves, gameStarted }) => {
+const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
   const [selectedPiece, setSelectedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
 
+  // Reset board when game starts
+  useEffect(() => {
+    if (gameStarted) {
+      setBoard(generateInitialBoard());
+      setSelectedPiece(null);
+      setMatchedPieces(new Set());
+      setIsProcessing(false);
+    }
+  }, [gameStarted]);
+
   // Auto-resolve matches when board changes
   const processMatches = useCallback(async () => {
-    if (isProcessing) return;
+    if (isProcessing || !gameStarted) return;
     
-    let currentBoard = board;
+    let currentBoard = [...board.map(row => [...row])];
     let totalMatches = 0;
     let cascadeCount = 0;
     
@@ -44,21 +54,21 @@ const GameBoard = ({ setScore, setMoves, gameStarted }) => {
       
       // Remove matches
       currentBoard = removeMatches(currentBoard, matches);
-      setBoard(currentBoard);
+      setBoard([...currentBoard.map(row => [...row])]);
       
       // Wait briefly
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Apply gravity
       currentBoard = applyGravity(currentBoard);
-      setBoard(currentBoard);
+      setBoard([...currentBoard.map(row => [...row])]);
       
       // Wait for fall animation
       await new Promise(resolve => setTimeout(resolve, 200));
       
       // Fill empty spaces
       currentBoard = fillEmptySpaces(currentBoard);
-      setBoard(currentBoard);
+      setBoard([...currentBoard.map(row => [...row])]);
       
       // Wait for new pieces animation
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -82,16 +92,19 @@ const GameBoard = ({ setScore, setMoves, gameStarted }) => {
     }
     
     setIsProcessing(false);
-  }, [board, setScore, isProcessing]);
+  }, [board, setScore, isProcessing, gameStarted]);
 
   // Process matches whenever board changes
   useEffect(() => {
-    if (gameStarted) {
-      processMatches();
+    if (gameStarted && board) {
+      const timeoutId = setTimeout(() => {
+        processMatches();
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
   }, [board, processMatches, gameStarted]);
 
-  const handlePieceClick = (index) => {
+  const handlePieceClick = useCallback((index) => {
     if (isProcessing || !gameStarted) return;
     
     const clickedPosition = getPosition(index);
@@ -115,7 +128,6 @@ const GameBoard = ({ setScore, setMoves, gameStarted }) => {
         // Valid move - perform swap
         const newBoard = swapPieces(board, selectedPosition, clickedPosition);
         setBoard(newBoard);
-        setMoves(prev => prev - 1);
         
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -134,23 +146,23 @@ const GameBoard = ({ setScore, setMoves, gameStarted }) => {
       // Clear selection after a brief delay
       setTimeout(() => setSelectedPiece(null), 200);
     }
-  };
+  }, [isProcessing, gameStarted, selectedPiece, board]);
 
   return (
-    <div className="flex flex-col items-center space-y-4">
+    <div className="flex flex-col items-center">
       <div
-        className="grid gap-1 bg-gray-800/50 rounded-2xl p-3 shadow-2xl"
+        className="grid gap-1 bg-nav rounded-2xl p-3 shadow-2xl"
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
           gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
-          width: 'min(90vw, 400px)',
-          height: 'min(90vw, 400px)',
+          width: 'min(85vw, 350px)',
+          height: 'min(85vw, 350px)',
         }}
       >
         <AnimatePresence mode="popLayout">
           {board.flat().map((emoji, index) => (
             <GamePiece
-              key={`${index}-${emoji}`}
+              key={`${index}-${emoji}-${Date.now()}`}
               emoji={emoji}
               index={index}
               isSelected={selectedPiece === index}
@@ -160,15 +172,6 @@ const GameBoard = ({ setScore, setMoves, gameStarted }) => {
           ))}
         </AnimatePresence>
       </div>
-      
-      {/* Debug info - remove in production */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="text-xs text-gray-400 text-center">
-          <p>Selected: {selectedPiece !== null ? selectedPiece : 'None'}</p>
-          <p>Processing: {isProcessing ? 'Yes' : 'No'}</p>
-          <p>Matched: {matchedPieces.size}</p>
-        </div>
-      )}
     </div>
   );
 };
