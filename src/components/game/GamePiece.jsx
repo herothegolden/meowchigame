@@ -7,7 +7,8 @@ const GamePiece = ({
   isSelected, 
   onDragStart,
   onDragEnd,
-  isMatched = false
+  isMatched = false,
+  hasBomb = false
 }) => {
   const controls = useDragControls();
   
@@ -24,12 +25,15 @@ const GamePiece = ({
   const handlePointerDown = (e) => {
     // Trigger haptic feedback on touch
     if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+      const feedbackType = hasBomb ? 'heavy' : 'light';
+      window.Telegram.WebApp.HapticFeedback.impactOccurred(feedbackType);
     }
     
     // Start drag
     onDragStart(e, { index });
-    controls.start(e, { snapToCursor: false });
+    if (!hasBomb) { // Don't drag bombs, they explode on touch
+      controls.start(e, { snapToCursor: false });
+    }
   };
 
   return (
@@ -52,14 +56,16 @@ const GamePiece = ({
         className={`
           w-full h-full rounded-lg flex items-center justify-center
           text-4xl font-bold cursor-pointer select-none
-          transition-all duration-50 shadow-lg
+          transition-all duration-50 shadow-lg relative
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
-            : 'bg-nav hover:bg-gray-600 shadow-black/20'
+            : hasBomb
+              ? 'bg-red-600 shadow-red-600/50' 
+              : 'bg-nav hover:bg-gray-600 shadow-black/20'
           }
         `}
         // OPTIMIZED: Faster drag animations
-        drag={true}
+        drag={!hasBomb} // Bombs don't drag, they explode
         dragControls={controls}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         dragElasticity={0.6}
@@ -84,8 +90,36 @@ const GamePiece = ({
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent'
         }}
+        // Bomb pulsing animation
+        animate={{
+          scale: hasBomb ? [1, 1.1, 1] : 1,
+          boxShadow: hasBomb 
+            ? [
+                "0 0 10px rgba(239, 68, 68, 0.5)",
+                "0 0 20px rgba(239, 68, 68, 0.8)",
+                "0 0 10px rgba(239, 68, 68, 0.5)"
+              ]
+            : "0 4px 8px rgba(0,0,0,0.2)"
+        }}
+        transition={{
+          duration: hasBomb ? 1.5 : 0.02,
+          repeat: hasBomb ? Infinity : 0,
+          ease: "easeInOut"
+        }}
       >
         {emoji}
+        
+        {/* Bomb overlay indicator */}
+        {hasBomb && (
+          <motion.div
+            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
+            initial={{ scale: 0 }}
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 0.5, repeat: Infinity }}
+          >
+            💥
+          </motion.div>
+        )}
       </motion.div>
     </motion.div>
   );
