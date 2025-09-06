@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Move, Clock, LoaderCircle, Play, RotateCcw } from 'lucide-react';
+import { Star, Clock, LoaderCircle, Play, RotateCcw } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const GamePage = () => {
   const [score, setScore] = useState(0);
-  const [moves, setMoves] = useState(30);
-  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes
+  const [timeLeft, setTimeLeft] = useState(30); // 30 seconds
   const [gameStarted, setGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [gameMode, setGameMode] = useState('moves'); // 'moves' or 'time'
   const navigate = useNavigate();
 
-  // Timer effect for time-based mode
+  // Timer effect
   useEffect(() => {
-    if (!gameStarted || gameMode !== 'time' || isGameOver) return;
+    if (!gameStarted || isGameOver || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
@@ -31,14 +30,7 @@ const GamePage = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameStarted, gameMode, isGameOver]);
-
-  // Game over effect for moves-based mode
-  useEffect(() => {
-    if (gameMode === 'moves' && moves <= 0 && gameStarted && !isGameOver) {
-      setIsGameOver(true);
-    }
-  }, [moves, gameStarted, isGameOver, gameMode]);
+  }, [gameStarted, isGameOver, timeLeft]);
 
   // Handle game over submission
   useEffect(() => {
@@ -109,7 +101,9 @@ const GamePage = () => {
       setIsSubmitting(false);
     };
 
-    submitScore();
+    // Delay submission by 1 second to show final score
+    const timeoutId = setTimeout(submitScore, 1000);
+    return () => clearTimeout(timeoutId);
   }, [isGameOver, score, navigate, isSubmitting]);
 
   // Disable Telegram swipes during game
@@ -124,8 +118,7 @@ const GamePage = () => {
   const startGame = () => {
     setGameStarted(true);
     setScore(0);
-    setMoves(gameMode === 'moves' ? 30 : 999);
-    setTimeLeft(gameMode === 'time' ? 120 : 999);
+    setTimeLeft(30);
     setIsGameOver(false);
     setIsSubmitting(false);
   };
@@ -133,8 +126,7 @@ const GamePage = () => {
   const restartGame = () => {
     setGameStarted(false);
     setScore(0);
-    setMoves(gameMode === 'moves' ? 30 : 999);
-    setTimeLeft(gameMode === 'time' ? 120 : 999);
+    setTimeLeft(30);
     setIsGameOver(false);
     setIsSubmitting(false);
     
@@ -143,26 +135,29 @@ const GamePage = () => {
   };
 
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `0:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-full p-4 space-y-4 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+    <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
       
       {/* Game Over Overlay */}
       {isGameOver && (
-        <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 text-center max-w-sm w-full">
-            <h2 className="text-4xl font-bold text-gray-800 mb-4">Game Over!</h2>
+        <motion.div 
+          className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
+            <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
             <div className="text-6xl mb-4">🎉</div>
-            <p className="text-2xl font-bold text-purple-600 mb-2">
+            <p className="text-2xl font-bold text-accent mb-2">
               {score.toLocaleString()} Points
             </p>
             
             {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2 text-gray-600 mt-4">
+              <div className="flex items-center justify-center space-x-2 text-secondary mt-4">
                 <LoaderCircle className="w-6 h-6 animate-spin" />
                 <span>Saving score...</span>
               </div>
@@ -170,105 +165,100 @@ const GamePage = () => {
               <div className="flex space-x-3 mt-6">
                 <button
                   onClick={restartGame}
-                  className="flex-1 bg-purple-600 text-white py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-purple-700 transition-colors"
+                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
                 >
                   <RotateCcw size={20} />
                   <span>Play Again</span>
                 </button>
                 <button
                   onClick={() => navigate('/')}
-                  className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
+                  className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
                 >
                   Home
                 </button>
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Pre-game Setup */}
       {!gameStarted && !isGameOver && (
-        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-2xl p-8 text-center max-w-sm w-full">
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">Choose Game Mode</h2>
+        <motion.div 
+          className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
+            <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
             <div className="text-6xl mb-6">🍪</div>
             
-            <div className="space-y-3 mb-6">
-              <button
-                onClick={() => setGameMode('moves')}
-                className={`w-full p-4 rounded-xl font-bold transition-all ${
-                  gameMode === 'moves' 
-                    ? 'bg-purple-600 text-white shadow-lg' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-center space-x-2">
-                  <Move size={20} />
-                  <span>30 Moves</span>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => setGameMode('time')}
-                className={`w-full p-4 rounded-xl font-bold transition-all ${
-                  gameMode === 'time' 
-                    ? 'bg-purple-600 text-white shadow-lg' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-center space-x-2">
-                  <Clock size={20} />
-                  <span>2 Minutes</span>
-                </div>
-              </button>
+            <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
+              <div className="flex items-center justify-center space-x-2 text-accent">
+                <Clock size={24} />
+                <span className="text-xl font-bold">30 Seconds</span>
+              </div>
+              <p className="text-sm text-secondary mt-2">Match 3 or more pieces to score points!</p>
             </div>
             
             <button
               onClick={startGame}
-              className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 hover:bg-green-700 transition-colors"
+              className="w-full bg-accent text-background py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
             >
               <Play size={24} />
               <span>Start Game</span>
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Game UI */}
-      <div className="flex justify-between w-full max-w-md">
-        <div className="flex items-center space-x-2 bg-white/90 p-3 rounded-xl shadow-lg">
-          <Star className="w-6 h-6 text-yellow-500" />
-          <span className="text-xl font-bold text-gray-800">{score.toLocaleString()}</span>
+      {/* Game Header */}
+      <motion.div 
+        className="flex justify-between items-center"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700">
+          <Star className="w-6 h-6 text-accent" />
+          <span className="text-xl font-bold text-primary">{score.toLocaleString()}</span>
         </div>
         
-        {gameMode === 'moves' ? (
-          <div className="flex items-center space-x-2 bg-white/90 p-3 rounded-xl shadow-lg">
-            <Move className="w-6 h-6 text-blue-500" />
-            <span className="text-xl font-bold text-gray-800">{moves}</span>
-          </div>
-        ) : (
-          <div className="flex items-center space-x-2 bg-white/90 p-3 rounded-xl shadow-lg">
-            <Clock className="w-6 h-6 text-red-500" />
-            <span className="text-xl font-bold text-gray-800">{formatTime(timeLeft)}</span>
-          </div>
-        )}
-      </div>
+        <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
+          <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
+          <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>
+            {formatTime(timeLeft)}
+          </span>
+        </div>
+      </motion.div>
 
-      {/* Game Board */}
-      <GameBoard 
-        setScore={setScore} 
-        setMoves={setMoves}
-        gameStarted={gameStarted}
-      />
+      {/* Game Board Container */}
+      <motion.div 
+        className="flex-1 flex flex-col items-center justify-center"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <GameBoard 
+          setScore={setScore} 
+          gameStarted={gameStarted}
+          onGameEnd={() => setIsGameOver(true)}
+        />
+      </motion.div>
       
       {/* Instructions */}
-      {gameStarted && (
-        <div className="text-center text-white/80 max-w-md">
+      {gameStarted && !isGameOver && (
+        <motion.div 
+          className="text-center text-secondary max-w-md mx-auto"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
           <p className="text-sm">
             Tap two adjacent pieces to swap them and create matches of 3 or more! 🍪✨
           </p>
-        </div>
+        </motion.div>
       )}
     </div>
   );
