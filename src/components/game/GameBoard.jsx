@@ -20,11 +20,19 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
   const processingRef = useRef(false);
+  const boardRef = useRef(board);
+
+  // Keep board ref updated
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
 
   // Reset board when game starts - only once
   useEffect(() => {
     if (gameStarted) {
-      setBoard(generateInitialBoard());
+      const newBoard = generateInitialBoard();
+      setBoard(newBoard);
+      boardRef.current = newBoard;
       setDraggedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
@@ -32,20 +40,22 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     }
   }, [gameStarted]);
 
-  // Process matches function - fixed to prevent infinite loops
+  // FIXED: Process matches function
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted) return;
     
+    console.log('🎮 Starting match processing...');
     processingRef.current = true;
     setIsProcessing(true);
     
-    let currentBoard = [...board.map(row => [...row])];
+    let currentBoard = boardRef.current.map(row => [...row]);
     let totalMatches = 0;
     let cascadeCount = 0;
-    let maxCascades = 10; // Prevent infinite cascades
+    const maxCascades = 5;
     
     while (cascadeCount < maxCascades) {
       const matches = findMatches(currentBoard);
+      console.log(`🔍 Cascade ${cascadeCount + 1}: Found ${matches.length} matches`);
       
       if (matches.length === 0) break;
       
@@ -54,7 +64,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       totalMatches += matches.length;
       
       // Wait for match animation
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 400));
       
       // Remove matches
       currentBoard = removeMatches(currentBoard, matches);
@@ -65,15 +75,16 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       // Fill empty spaces
       currentBoard = fillEmptySpaces(currentBoard);
       
-      // Wait for animations
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Update board visually
+      setBoard([...currentBoard.map(row => [...row])]);
+      boardRef.current = currentBoard;
+      
+      // Wait for fall animation
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       cascadeCount++;
       setMatchedPieces(new Set());
     }
-    
-    // Update the board only once at the end
-    setBoard([...currentBoard.map(row => [...row])]);
     
     // Award points with cascade bonus
     if (totalMatches > 0) {
@@ -81,6 +92,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       const cascadeBonus = Math.max(0, (cascadeCount - 1) * 50);
       const totalPoints = basePoints + cascadeBonus;
       
+      console.log(`🏆 Scored ${totalPoints} points (${totalMatches} pieces + ${cascadeBonus} cascade bonus)`);
       setScore(prev => prev + totalPoints);
       
       // Haptic feedback for matches
@@ -91,21 +103,25 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     
     setIsProcessing(false);
     processingRef.current = false;
-  }, [board, setScore, gameStarted]);
+    console.log('✅ Match processing complete');
+  }, [setScore, gameStarted]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
     if (isProcessing || !gameStarted || processingRef.current) return;
     setDraggedPiece({ index });
+    console.log(`🖱️ Started dragging piece at index ${index}`);
   }, [isProcessing, gameStarted]);
 
-  // Handle drag end - determine swap direction and execute
+  // FIXED: Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
     if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) return;
 
     const { offset } = info;
     const { index } = draggedPiece;
     const { row, col } = getPosition(index);
+
+    console.log(`🖱️ Drag ended - Index: ${index}, Row: ${row}, Col: ${col}, Offset:`, offset);
 
     let targetIndex;
     const threshold = 30; // Minimum drag distance to trigger swap
@@ -127,15 +143,23 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       }
     }
 
+    console.log(`🎯 Target index: ${targetIndex}`);
+
     // Execute swap if valid target found
     if (targetIndex !== undefined) {
       const draggedPosition = getPosition(index);
       const targetPosition = getPosition(targetIndex);
+      
+      console.log(`🔄 Attempting swap: (${draggedPosition.row},${draggedPosition.col}) <-> (${targetPosition.row},${targetPosition.col})`);
+      console.log(`🔄 Pieces: "${boardRef.current[draggedPosition.row][draggedPosition.col]}" <-> "${boardRef.current[targetPosition.row][targetPosition.col]}"`);
 
-      if (isValidMove(board, draggedPosition, targetPosition)) {
-        // Valid swap - execute it
-        const newBoard = swapPieces(board, draggedPosition, targetPosition);
+      if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
+        console.log('✅ Valid move! Executing swap...');
+        
+        // Execute the swap
+        const newBoard = swapPieces(boardRef.current, draggedPosition, targetPosition);
         setBoard(newBoard);
+        boardRef.current = newBoard;
         
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -145,32 +169,36 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
         // Process matches after swap
         setTimeout(() => {
           processMatches();
-        }, 100);
+        }, 200);
       } else {
+        console.log('❌ Invalid move!');
         // Invalid swap - light haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
         }
       }
+    } else {
+      console.log('❌ No valid target found');
     }
 
     // Clear dragged piece
     setDraggedPiece(null);
-  }, [isProcessing, gameStarted, draggedPiece, board, processMatches]);
+  }, [isProcessing, gameStarted, draggedPiece, processMatches]);
 
   // Check for initial matches only once when game starts
   useEffect(() => {
     if (gameStarted && !processingRef.current) {
       const timeoutId = setTimeout(() => {
-        const matches = findMatches(board);
+        const matches = findMatches(boardRef.current);
         if (matches.length > 0) {
+          console.log('🔄 Initial matches found, processing...');
           processMatches();
         }
       }, 500);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [gameStarted]); // Only depend on gameStarted, not board
+  }, [gameStarted, processMatches]);
 
   return (
     <div className="flex flex-col items-center">
@@ -197,6 +225,15 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
           ))}
         </AnimatePresence>
       </div>
+      
+      {/* Debug info in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-2 text-xs text-gray-400 text-center">
+          <p>Processing: {isProcessing ? 'Yes' : 'No'}</p>
+          <p>Matched: {matchedPieces.size}</p>
+          <p>Dragged: {draggedPiece?.index ?? 'None'}</p>
+        </div>
+      )}
       
       {/* Instructions for drag */}
       {gameStarted && !isProcessing && (
