@@ -16,9 +16,20 @@ const GamePiece = ({
     );
   }
 
+  const handleClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onPieceClick(index);
+  };
+
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    onPieceClick(index);
+  };
+
   return (
     <motion.div
-      className="w-full h-full flex items-center justify-center p-1"
+      className="w-full h-full flex items-center justify-center p-0.5"
       initial={{ scale: 0, opacity: 0 }}
       animate={{ 
         scale: isMatched ? 0 : 1, 
@@ -30,21 +41,24 @@ const GamePiece = ({
     >
       <motion.button
         className={`
-          w-full h-full rounded-xl flex items-center justify-center
-          text-3xl font-bold cursor-pointer select-none
+          w-full h-full rounded-lg flex items-center justify-center
+          text-2xl font-bold cursor-pointer select-none
           transition-all duration-200 shadow-lg
           ${isSelected 
-            ? 'bg-yellow-400 shadow-yellow-400/50 scale-110' 
-            : 'bg-white/90 hover:bg-white shadow-black/20'
+            ? 'bg-accent shadow-accent/50 scale-110' 
+            : 'bg-nav hover:bg-gray-600 shadow-black/20'
           }
         `}
-        onClick={() => onPieceClick(index)}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.05 }}
         style={{ 
           touchAction: 'manipulation',
           userSelect: 'none',
-          WebkitUserSelect: 'none'
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitTapHighlightColor: 'transparent'
         }}
       >
         {emoji}
