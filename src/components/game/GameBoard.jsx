@@ -16,7 +16,7 @@ import GamePiece from './GamePiece';
 
 const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
-  const [selectedPiece, setSelectedPiece] = useState(null);
+  const [draggedPiece, setDraggedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
   const processingRef = useRef(false);
@@ -25,7 +25,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   useEffect(() => {
     if (gameStarted) {
       setBoard(generateInitialBoard());
-      setSelectedPiece(null);
+      setDraggedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
       processingRef.current = false;
@@ -93,54 +93,70 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     processingRef.current = false;
   }, [board, setScore, gameStarted]);
 
-  const handlePieceClick = useCallback((index) => {
+  // Handle drag start
+  const handleDragStart = useCallback((event, { index }) => {
     if (isProcessing || !gameStarted || processingRef.current) return;
-    
-    const clickedPosition = getPosition(index);
-    
-    if (selectedPiece === null) {
-      // First piece selection
-      setSelectedPiece(index);
-      
-      // Light haptic feedback
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    setDraggedPiece({ index });
+  }, [isProcessing, gameStarted]);
+
+  // Handle drag end - determine swap direction and execute
+  const handleDragEnd = useCallback((event, info) => {
+    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) return;
+
+    const { offset } = info;
+    const { index } = draggedPiece;
+    const { row, col } = getPosition(index);
+
+    let targetIndex;
+    const threshold = 30; // Minimum drag distance to trigger swap
+
+    // Determine drag direction and target piece
+    if (Math.abs(offset.x) > Math.abs(offset.y)) {
+      // Horizontal drag
+      if (offset.x > threshold && col < BOARD_SIZE - 1) {
+        targetIndex = index + 1; // Drag right
+      } else if (offset.x < -threshold && col > 0) {
+        targetIndex = index - 1; // Drag left
       }
-    } else if (selectedPiece === index) {
-      // Deselect same piece
-      setSelectedPiece(null);
     } else {
-      // Second piece selection - attempt swap
-      const selectedPosition = getPosition(selectedPiece);
-      
-      if (isValidMove(board, selectedPosition, clickedPosition)) {
-        // Valid move - perform swap
-        const newBoard = swapPieces(board, selectedPosition, clickedPosition);
+      // Vertical drag
+      if (offset.y > threshold && row < BOARD_SIZE - 1) {
+        targetIndex = index + BOARD_SIZE; // Drag down
+      } else if (offset.y < -threshold && row > 0) {
+        targetIndex = index - BOARD_SIZE; // Drag up
+      }
+    }
+
+    // Execute swap if valid target found
+    if (targetIndex !== undefined) {
+      const draggedPosition = getPosition(index);
+      const targetPosition = getPosition(targetIndex);
+
+      if (isValidMove(board, draggedPosition, targetPosition)) {
+        // Valid swap - execute it
+        const newBoard = swapPieces(board, draggedPosition, targetPosition);
         setBoard(newBoard);
-        
-        // Process matches after a delay
-        setTimeout(() => {
-          processMatches();
-        }, 100);
         
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         }
-      } else {
-        // Invalid move - just change selection
-        setSelectedPiece(index);
         
-        // Light haptic feedback
+        // Process matches after swap
+        setTimeout(() => {
+          processMatches();
+        }, 100);
+      } else {
+        // Invalid swap - light haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
         }
       }
-      
-      // Clear selection after a brief delay
-      setTimeout(() => setSelectedPiece(null), 200);
     }
-  }, [isProcessing, gameStarted, selectedPiece, board, processMatches]);
+
+    // Clear dragged piece
+    setDraggedPiece(null);
+  }, [isProcessing, gameStarted, draggedPiece, board, processMatches]);
 
   // Check for initial matches only once when game starts
   useEffect(() => {
@@ -170,16 +186,24 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
         <AnimatePresence mode="popLayout">
           {board.flat().map((emoji, index) => (
             <GamePiece
-              key={`piece-${index}`} // Simplified key
+              key={`piece-${index}`}
               emoji={emoji}
               index={index}
-              isSelected={selectedPiece === index}
+              isSelected={draggedPiece?.index === index}
               isMatched={matchedPieces.has(index)}
-              onPieceClick={handlePieceClick}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
             />
           ))}
         </AnimatePresence>
       </div>
+      
+      {/* Instructions for drag */}
+      {gameStarted && !isProcessing && (
+        <div className="mt-4 text-center text-secondary text-sm max-w-md">
+          <p>🍪 Drag emojis to adjacent spots to create matches! ✨</p>
+        </div>
+      )}
     </div>
   );
 };
