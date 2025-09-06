@@ -40,11 +40,10 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     }
   }, [gameStarted]);
 
-  // FIXED: Process matches function
+  // OPTIMIZED: Much faster match processing
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted) return;
     
-    console.log('🎮 Starting match processing...');
     processingRef.current = true;
     setIsProcessing(true);
     
@@ -55,16 +54,15 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     
     while (cascadeCount < maxCascades) {
       const matches = findMatches(currentBoard);
-      console.log(`🔍 Cascade ${cascadeCount + 1}: Found ${matches.length} matches`);
       
       if (matches.length === 0) break;
       
-      // Show matched pieces with animation
+      // Show matched pieces with faster animation
       setMatchedPieces(new Set(matches));
       totalMatches += matches.length;
       
-      // Wait for match animation
-      await new Promise(resolve => setTimeout(resolve, 400));
+      // FASTER: Reduced from 400ms to 100ms
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Remove matches
       currentBoard = removeMatches(currentBoard, matches);
@@ -79,8 +77,8 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       setBoard([...currentBoard.map(row => [...row])]);
       boardRef.current = currentBoard;
       
-      // Wait for fall animation
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // FASTER: Reduced from 300ms to 60ms
+      await new Promise(resolve => setTimeout(resolve, 60));
       
       cascadeCount++;
       setMatchedPieces(new Set());
@@ -92,7 +90,6 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       const cascadeBonus = Math.max(0, (cascadeCount - 1) * 50);
       const totalPoints = basePoints + cascadeBonus;
       
-      console.log(`🏆 Scored ${totalPoints} points (${totalMatches} pieces + ${cascadeBonus} cascade bonus)`);
       setScore(prev => prev + totalPoints);
       
       // Haptic feedback for matches
@@ -103,25 +100,21 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     
     setIsProcessing(false);
     processingRef.current = false;
-    console.log('✅ Match processing complete');
   }, [setScore, gameStarted]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
     if (isProcessing || !gameStarted || processingRef.current) return;
     setDraggedPiece({ index });
-    console.log(`🖱️ Started dragging piece at index ${index}`);
   }, [isProcessing, gameStarted]);
 
-  // FIXED: Handle drag end - determine swap direction and execute
+  // Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
     if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) return;
 
     const { offset } = info;
     const { index } = draggedPiece;
     const { row, col } = getPosition(index);
-
-    console.log(`🖱️ Drag ended - Index: ${index}, Row: ${row}, Col: ${col}, Offset:`, offset);
 
     let targetIndex;
     const threshold = 30; // Minimum drag distance to trigger swap
@@ -143,19 +136,12 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       }
     }
 
-    console.log(`🎯 Target index: ${targetIndex}`);
-
     // Execute swap if valid target found
     if (targetIndex !== undefined) {
       const draggedPosition = getPosition(index);
       const targetPosition = getPosition(targetIndex);
-      
-      console.log(`🔄 Attempting swap: (${draggedPosition.row},${draggedPosition.col}) <-> (${targetPosition.row},${targetPosition.col})`);
-      console.log(`🔄 Pieces: "${boardRef.current[draggedPosition.row][draggedPosition.col]}" <-> "${boardRef.current[targetPosition.row][targetPosition.col]}"`);
 
       if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
-        console.log('✅ Valid move! Executing swap...');
-        
         // Execute the swap
         const newBoard = swapPieces(boardRef.current, draggedPosition, targetPosition);
         setBoard(newBoard);
@@ -166,19 +152,16 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         }
         
-        // Process matches after swap
+        // FASTER: Reduced delay from 200ms to 30ms
         setTimeout(() => {
           processMatches();
-        }, 200);
+        }, 30);
       } else {
-        console.log('❌ Invalid move!');
         // Invalid swap - light haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
         }
       }
-    } else {
-      console.log('❌ No valid target found');
     }
 
     // Clear dragged piece
@@ -191,10 +174,9 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       const timeoutId = setTimeout(() => {
         const matches = findMatches(boardRef.current);
         if (matches.length > 0) {
-          console.log('🔄 Initial matches found, processing...');
           processMatches();
         }
-      }, 500);
+      }, 100); // Much faster initial check
       
       return () => clearTimeout(timeoutId);
     }
@@ -202,38 +184,63 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
 
   return (
     <div className="flex flex-col items-center">
+      {/* FIXED: Stable container prevents board movement */}
       <div
-        className="grid gap-1 bg-nav rounded-2xl p-3 shadow-2xl"
+        className="bg-nav rounded-2xl p-3 shadow-2xl relative"
         style={{
-          gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
-          gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
           width: 'min(85vw, 350px)',
           height: 'min(85vw, 350px)',
+          minHeight: 'min(85vw, 350px)', // Prevent height changes
+          minWidth: 'min(85vw, 350px)',   // Prevent width changes
         }}
       >
-        <AnimatePresence mode="popLayout">
-          {board.flat().map((emoji, index) => (
-            <GamePiece
-              key={`piece-${index}`}
-              emoji={emoji}
-              index={index}
-              isSelected={draggedPiece?.index === index}
-              isMatched={matchedPieces.has(index)}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            />
+        {/* Grid overlay for positioning */}
+        <div
+          className="grid gap-1 w-full h-full"
+          style={{
+            gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
+            gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
+          }}
+        >
+          {/* Empty grid cells to maintain structure */}
+          {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => (
+            <div key={`cell-${index}`} className="relative" />
           ))}
+        </div>
+        
+        {/* OPTIMIZED: Pieces positioned absolutely to prevent layout shifts */}
+        <AnimatePresence mode="popLayout">
+          {board.flat().map((emoji, index) => {
+            const row = Math.floor(index / BOARD_SIZE);
+            const col = index % BOARD_SIZE;
+            const cellSize = `calc((100% - ${(BOARD_SIZE - 1) * 4}px) / ${BOARD_SIZE})`;
+            const left = `calc(${col} * (${cellSize} + 4px))`;
+            const top = `calc(${row} * (${cellSize} + 4px))`;
+            
+            return (
+              <div
+                key={`piece-${index}`}
+                className="absolute"
+                style={{
+                  left,
+                  top,
+                  width: cellSize,
+                  height: cellSize,
+                }}
+              >
+                <GamePiece
+                  emoji={emoji}
+                  index={index}
+                  isSelected={draggedPiece?.index === index}
+                  isMatched={matchedPieces.has(index)}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                />
+              </div>
+            );
+          })}
         </AnimatePresence>
       </div>
-      
-      {/* Debug info in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-2 text-xs text-gray-400 text-center">
-          <p>Processing: {isProcessing ? 'Yes' : 'No'}</p>
-          <p>Matched: {matchedPieces.size}</p>
-          <p>Dragged: {draggedPiece?.index ?? 'None'}</p>
-        </div>
-      )}
       
       {/* Instructions for drag */}
       {gameStarted && !isProcessing && (
