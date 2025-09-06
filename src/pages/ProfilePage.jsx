@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, ShieldAlert } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, ShieldAlert, Badge, Trophy } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 // --- Helper Components ---
 
 const StatCard = ({ icon, label, value, color }) => (
-  <div className="bg-nav p-4 rounded-lg flex items-center">
+  <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
     <div className={`mr-4 text-${color}`}>{icon}</div>
     <div>
       <p className="text-sm text-secondary">{label}</p>
@@ -15,6 +15,64 @@ const StatCard = ({ icon, label, value, color }) => (
     </div>
   </div>
 );
+
+const BadgeCard = ({ badgeName, isOwned }) => {
+  const badgeConfig = {
+    'Cookie Master Badge': { 
+      icon: '🍪', 
+      title: 'Cookie Master', 
+      description: 'Master of the cookies',
+      color: 'text-yellow-400'
+    },
+    'Speed Demon Badge': { 
+      icon: '⚡', 
+      title: 'Speed Demon', 
+      description: 'Lightning fast reflexes',
+      color: 'text-blue-400'
+    },
+    'Champion Badge': { 
+      icon: '🏆', 
+      title: 'Champion', 
+      description: 'Ultimate game champion',
+      color: 'text-purple-400'
+    }
+  };
+
+  const badge = badgeConfig[badgeName] || {
+    icon: '🏅',
+    title: badgeName,
+    description: 'Special achievement',
+    color: 'text-gray-400'
+  };
+
+  return (
+    <motion.div
+      className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+        isOwned 
+          ? 'bg-nav border-accent shadow-accent/20' 
+          : 'bg-gray-800 border-gray-600 opacity-50'
+      }`}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      whileHover={{ scale: isOwned ? 1.05 : 1 }}
+    >
+      <div className="text-center">
+        <div className="text-3xl mb-2">{badge.icon}</div>
+        <h3 className={`font-bold ${isOwned ? badge.color : 'text-gray-500'}`}>
+          {badge.title}
+        </h3>
+        <p className="text-xs text-secondary mt-1">{badge.description}</p>
+        {isOwned && (
+          <div className="flex items-center justify-center mt-2 text-accent">
+            <Award className="w-4 h-4 mr-1" />
+            <span className="text-xs font-bold">OWNED</span>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
 
 const InventoryItemCard = ({ item, onActivate, disabled }) => {
   const [isActivating, setIsActivating] = useState(false);
@@ -26,7 +84,7 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
   };
 
   return (
-    <div className="bg-nav p-4 rounded-lg flex items-center justify-between">
+    <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
       <div className="flex items-center">
         <div className="mr-4 text-accent"><ChevronsUp size={28} /></div>
         <div>
@@ -49,11 +107,16 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
   );
 };
 
-
 // --- Main Profile Page Component ---
 
 const ProfilePage = () => {
-  const [profileData, setProfileData] = useState({ stats: null, inventory: [], allItems: [], boosterActive: false });
+  const [profileData, setProfileData] = useState({ 
+    stats: null, 
+    inventory: [], 
+    allItems: [], 
+    boosterActive: false,
+    ownedBadges: []
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const tg = window.Telegram?.WebApp;
@@ -91,6 +154,7 @@ const ProfilePage = () => {
         inventory: shopData.inventory,
         allItems: shopData.items,
         boosterActive: shopData.boosterActive,
+        ownedBadges: shopData.ownedBadges || []
       });
 
     } catch (err) {
@@ -118,12 +182,8 @@ const ProfilePage = () => {
       tg.HapticFeedback.notificationOccurred('success');
       tg.showPopup({ title: 'Success!', message: result.message, buttons: [{ type: 'ok' }] });
 
-      // Instantly update UI
-      setProfileData(prev => ({
-        ...prev,
-        inventory: prev.inventory.filter(id => id !== itemId),
-        boosterActive: true,
-      }));
+      // Refresh profile data
+      fetchProfileData();
 
     } catch (err) {
       tg.HapticFeedback.notificationOccurred('error');
@@ -139,14 +199,22 @@ const ProfilePage = () => {
     return <div className="p-4 text-center text-red-400"><p>Could not load profile.</p><p className="text-sm text-secondary">{error}</p></div>;
   }
   
-  const { stats, inventory, allItems, boosterActive } = profileData;
-  const ownedConsumables = allItems.filter(item => item.type === 'consumable' && inventory.includes(item.id));
+  const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
+  
+  // Get activatable items (Double Points only)
+  const activatableItems = allItems.filter(item => 
+    item.id === 4 && // Double Points item
+    inventory.some(inv => inv.item_id === item.id && inv.quantity > 0)
+  );
+
+  // Get all possible badges
+  const allBadges = allItems.filter(item => item.category === 'badge');
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6 bg-background text-primary">
       {/* --- User Header --- */}
       <motion.div className="flex flex-col items-center text-center space-y-2" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="w-24 h-24 bg-nav rounded-full flex items-center justify-center">
+        <div className="w-24 h-24 bg-nav rounded-full flex items-center justify-center border border-gray-700">
           <User className="w-12 h-12 text-secondary" />
         </div>
         <div>
@@ -163,8 +231,32 @@ const ProfilePage = () => {
         <StatCard icon={<Calendar size={24} />} label="Member Since" value={new Date(stats.created_at).toLocaleDateString()} color="primary" />
       </motion.div>
 
-      {/* --- My Boosters Section --- */}
+      {/* --- Badge Collection --- */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+        <h2 className="text-xl font-bold mb-3 flex items-center">
+          <Trophy className="w-6 h-6 mr-2 text-accent"/> 
+          Badge Collection
+        </h2>
+        
+        {allBadges.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {allBadges.map(badge => (
+              <BadgeCard
+                key={badge.id}
+                badgeName={badge.name}
+                isOwned={ownedBadges.includes(badge.name)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-secondary text-center p-4 bg-nav rounded-lg border border-gray-700">
+            No badges available yet. Check back later!
+          </p>
+        )}
+      </motion.div>
+
+      {/* --- My Boosters Section --- */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
         <h2 className="text-xl font-bold mb-3 flex items-center"><Package className="w-6 h-6 mr-2 text-secondary"/> My Boosters</h2>
         <div className="space-y-3">
           {boosterActive && (
@@ -174,16 +266,19 @@ const ProfilePage = () => {
             </div>
           )}
 
-          {ownedConsumables.length > 0 ? (
-            ownedConsumables.map(item => (
+          {activatableItems.length > 0 ? (
+            activatableItems.map(item => (
               <InventoryItemCard key={item.id} item={item} onActivate={handleActivateItem} disabled={boosterActive} />
             ))
           ) : (
-            !boosterActive && <p className="text-secondary text-center p-4 bg-nav rounded-lg">You have no boosters. Visit the shop to buy some!</p>
+            !boosterActive && (
+              <p className="text-secondary text-center p-4 bg-nav rounded-lg border border-gray-700">
+                You have no boosters. Visit the shop to buy some!
+              </p>
+            )
           )}
         </div>
       </motion.div>
-
     </div>
   );
 };
