@@ -1,43 +1,55 @@
 import React from 'react';
-import { motion, useDragControls } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const GamePiece = ({ color, index, onDragStart, onDragEnd }) => {
-  const controls = useDragControls();
-
-  // If there's no color, it's an empty space.
-  // We render a placeholder so the grid doesn't collapse.
-  if (!color) {
-    return <div className="w-full h-full rounded-full" />;
+const GamePiece = ({ 
+  emoji, 
+  index, 
+  isSelected, 
+  onPieceClick,
+  isMatched = false
+}) => {
+  
+  if (!emoji) {
+    // Empty space - render invisible placeholder
+    return (
+      <div className="w-full h-full flex items-center justify-center" />
+    );
   }
 
   return (
-    <div 
+    <motion.div
       className="w-full h-full flex items-center justify-center p-1"
-      // This allows dragging to start immediately on touch/click
-      onPointerDown={(e) => {
-        onDragStart(e, { index });
-        controls.start(e, { snapToCursor: true });
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ 
+        scale: isMatched ? 0 : 1, 
+        opacity: isMatched ? 0 : 1 
       }}
+      exit={{ scale: 0, opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      layout
     >
-      <motion.div
-        // NEW: Animation properties for appearing and disappearing
-        layout // Ensures smooth movement when pieces fall
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        exit={{ scale: 0 }}
-        transition={{ duration: 0.2 }}
-
-        // Drag functionality
-        drag={true}
-        dragControls={controls}
-        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        dragElasticity={0.5}
-        onDragEnd={onDragEnd}
-        whileDrag={{ scale: 1.15, zIndex: 10 }}
-        className="w-full h-full rounded-full shadow-lg cursor-grab"
-        style={{ backgroundColor: color, touchAction: 'none' }}
-      />
-    </div>
+      <motion.button
+        className={`
+          w-full h-full rounded-xl flex items-center justify-center
+          text-3xl font-bold cursor-pointer select-none
+          transition-all duration-200 shadow-lg
+          ${isSelected 
+            ? 'bg-yellow-400 shadow-yellow-400/50 scale-110' 
+            : 'bg-white/90 hover:bg-white shadow-black/20'
+          }
+        `}
+        onClick={() => onPieceClick(index)}
+        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.05 }}
+        style={{ 
+          touchAction: 'manipulation',
+          userSelect: 'none',
+          WebkitUserSelect: 'none'
+        }}
+      >
+        {emoji}
+      </motion.button>
+    </motion.div>
   );
 };
 
