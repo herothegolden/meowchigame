@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
   generateInitialBoard,
@@ -19,28 +19,32 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   const [selectedPiece, setSelectedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
+  const processingRef = useRef(false);
 
-  // Reset board when game starts
+  // Reset board when game starts - only once
   useEffect(() => {
     if (gameStarted) {
       setBoard(generateInitialBoard());
       setSelectedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
+      processingRef.current = false;
     }
   }, [gameStarted]);
 
-  // Auto-resolve matches when board changes
+  // Process matches function - fixed to prevent infinite loops
   const processMatches = useCallback(async () => {
-    if (isProcessing || !gameStarted) return;
+    if (processingRef.current || !gameStarted) return;
+    
+    processingRef.current = true;
+    setIsProcessing(true);
     
     let currentBoard = [...board.map(row => [...row])];
     let totalMatches = 0;
     let cascadeCount = 0;
+    let maxCascades = 10; // Prevent infinite cascades
     
-    setIsProcessing(true);
-    
-    while (true) {
+    while (cascadeCount < maxCascades) {
       const matches = findMatches(currentBoard);
       
       if (matches.length === 0) break;
@@ -54,28 +58,22 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       
       // Remove matches
       currentBoard = removeMatches(currentBoard, matches);
-      setBoard([...currentBoard.map(row => [...row])]);
-      
-      // Wait briefly
-      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Apply gravity
       currentBoard = applyGravity(currentBoard);
-      setBoard([...currentBoard.map(row => [...row])]);
-      
-      // Wait for fall animation
-      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Fill empty spaces
       currentBoard = fillEmptySpaces(currentBoard);
-      setBoard([...currentBoard.map(row => [...row])]);
       
-      // Wait for new pieces animation
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Wait for animations
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       cascadeCount++;
       setMatchedPieces(new Set());
     }
+    
+    // Update the board only once at the end
+    setBoard([...currentBoard.map(row => [...row])]);
     
     // Award points with cascade bonus
     if (totalMatches > 0) {
@@ -92,20 +90,11 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
     }
     
     setIsProcessing(false);
-  }, [board, setScore, isProcessing, gameStarted]);
-
-  // Process matches whenever board changes
-  useEffect(() => {
-    if (gameStarted && board) {
-      const timeoutId = setTimeout(() => {
-        processMatches();
-      }, 100);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [board, processMatches, gameStarted]);
+    processingRef.current = false;
+  }, [board, setScore, gameStarted]);
 
   const handlePieceClick = useCallback((index) => {
-    if (isProcessing || !gameStarted) return;
+    if (isProcessing || !gameStarted || processingRef.current) return;
     
     const clickedPosition = getPosition(index);
     
@@ -129,6 +118,11 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
         const newBoard = swapPieces(board, selectedPosition, clickedPosition);
         setBoard(newBoard);
         
+        // Process matches after a delay
+        setTimeout(() => {
+          processMatches();
+        }, 100);
+        
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
@@ -146,7 +140,21 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
       // Clear selection after a brief delay
       setTimeout(() => setSelectedPiece(null), 200);
     }
-  }, [isProcessing, gameStarted, selectedPiece, board]);
+  }, [isProcessing, gameStarted, selectedPiece, board, processMatches]);
+
+  // Check for initial matches only once when game starts
+  useEffect(() => {
+    if (gameStarted && !processingRef.current) {
+      const timeoutId = setTimeout(() => {
+        const matches = findMatches(board);
+        if (matches.length > 0) {
+          processMatches();
+        }
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [gameStarted]); // Only depend on gameStarted, not board
 
   return (
     <div className="flex flex-col items-center">
@@ -162,7 +170,7 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
         <AnimatePresence mode="popLayout">
           {board.flat().map((emoji, index) => (
             <GamePiece
-              key={`${index}-${emoji}-${Date.now()}`}
+              key={`piece-${index}`} // Simplified key
               emoji={emoji}
               index={index}
               isSelected={selectedPiece === index}
