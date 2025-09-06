@@ -1,17 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Star, LoaderCircle, PlusCircle, ChevronsUp, Badge, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const iconComponents = {
-  PlusCircle: <PlusCircle size={28} />,
+  Clock: <Clock size={28} />,
+  Timer: <Timer size={28} />,
+  Bomb: <Bomb size={28} />,
   ChevronsUp: <ChevronsUp size={28} />,
   Badge: <Badge size={28} />,
+  Zap: <Zap size={28} />,
+  Trophy: <Trophy size={28} />,
   Default: <Star size={28} />
 };
 
-const ShopItemCard = ({ item, userPoints, onPurchase, isOwned }) => {
+const categoryConfig = {
+  time: { name: 'Time Boosters', icon: '⏰', color: 'text-blue-400' },
+  bomb: { name: 'Cookie Bombs', icon: '💣', color: 'text-red-400' },
+  multiplier: { name: 'Point Multipliers', icon: '2️⃣', color: 'text-green-400' },
+  badge: { name: 'Profile Badges', icon: '🏆', color: 'text-yellow-400' }
+};
+
+const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0 }) => {
   const Icon = iconComponents[item.icon_name] || iconComponents.Default;
   const canAfford = userPoints >= item.price;
   const [isBuying, setIsBuying] = useState(false);
@@ -24,7 +35,7 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned }) => {
 
   return (
     <motion.div
-      className="bg-nav p-4 rounded-lg flex items-center justify-between"
+      className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700"
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5 }}
@@ -34,10 +45,13 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned }) => {
         <div>
           <p className="font-bold text-primary">{item.name}</p>
           <p className="text-sm text-secondary">{item.description}</p>
+          {item.type === 'consumable' && ownedQuantity > 0 && (
+            <p className="text-xs text-accent mt-1">Owned: {ownedQuantity}</p>
+          )}
         </div>
       </div>
       
-      {isOwned ? (
+      {isOwned && item.type === 'permanent' ? (
         <div className="flex items-center text-green-400 font-bold py-2 px-4">
           <CheckCircle className="w-5 h-5 mr-2" />
           Owned
@@ -66,8 +80,58 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned }) => {
   );
 };
 
+const CategorySection = ({ category, categoryData, items, userPoints, onPurchase, inventory, ownedBadges }) => {
+  if (items.length === 0) return null;
+
+  return (
+    <motion.div 
+      className="space-y-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="flex items-center space-x-3">
+        <span className="text-2xl">{categoryData.icon}</span>
+        <h2 className={`text-xl font-bold ${categoryData.color}`}>{categoryData.name}</h2>
+      </div>
+      <div className="space-y-3">
+        {items.map(item => {
+          let isOwned = false;
+          let ownedQuantity = 0;
+
+          if (item.category === 'badge') {
+            isOwned = ownedBadges.includes(item.name);
+          } else {
+            const inventoryItem = inventory.find(inv => inv.item_id === item.id);
+            if (inventoryItem) {
+              ownedQuantity = inventoryItem.quantity;
+              isOwned = item.type === 'permanent';
+            }
+          }
+
+          return (
+            <ShopItemCard 
+              key={item.id} 
+              item={item} 
+              userPoints={userPoints}
+              onPurchase={onPurchase}
+              isOwned={isOwned}
+              ownedQuantity={ownedQuantity}
+            />
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+};
+
 const ShopPage = () => {
-  const [shopData, setShopData] = useState({ items: [], userPoints: 0, inventory: [] });
+  const [shopData, setShopData] = useState({ 
+    items: [], 
+    userPoints: 0, 
+    inventory: [], 
+    ownedBadges: [] 
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const tg = window.Telegram?.WebApp;
@@ -121,12 +185,8 @@ const ShopPage = () => {
         buttons: [{ type: 'ok' }]
       });
       
-      // Update state instantly without a full reload
-      setShopData(prevData => ({
-        ...prevData,
-        userPoints: result.newPoints,
-        inventory: [...prevData.inventory, itemId],
-      }));
+      // Refresh shop data
+      fetchShopData();
 
     } catch (err) {
       // Haptic feedback for error
@@ -149,27 +209,42 @@ const ShopPage = () => {
     return <div className="p-4 text-center text-red-400"><p>Could not load the shop.</p><p className="text-sm text-secondary">{error}</p></div>;
   }
 
+  // Group items by category
+  const itemsByCategory = shopData.items.reduce((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = [];
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+
   return (
-    <div className="p-4 space-y-6">
-      <motion.div className="flex items-center justify-between" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+    <div className="p-4 space-y-6 bg-background text-primary">
+      <motion.div 
+        className="flex items-center justify-between" 
+        initial={{ opacity: 0, y: -20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.5 }}
+      >
         <div className="flex items-center">
           <ShoppingCart className="w-8 h-8 mr-3 text-secondary" />
           <h1 className="text-3xl font-bold">Shop</h1>
         </div>
-        <div className="bg-nav p-2 px-4 rounded-lg flex items-center">
+        <div className="bg-nav p-2 px-4 rounded-lg flex items-center border border-gray-700">
           <Star className="w-5 h-5 mr-2 text-accent" />
           <span className="text-xl font-bold">{shopData.userPoints.toLocaleString()}</span>
         </div>
       </motion.div>
 
-      <div className="space-y-4">
-        {shopData.items.map(item => (
-          <ShopItemCard 
-            key={item.id} 
-            item={item} 
+      <div className="space-y-8">
+        {Object.entries(categoryConfig).map(([category, categoryData]) => (
+          <CategorySection
+            key={category}
+            category={category}
+            categoryData={categoryData}
+            items={itemsByCategory[category] || []}
             userPoints={shopData.userPoints}
             onPurchase={handlePurchase}
-            isOwned={shopData.inventory.includes(item.id)}
+            inventory={shopData.inventory}
+            ownedBadges={shopData.ownedBadges}
           />
         ))}
       </div>
