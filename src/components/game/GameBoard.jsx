@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -183,71 +182,55 @@ const GameBoard = ({ setScore, gameStarted, onGameEnd }) => {
   }, [gameStarted, processMatches]);
 
   return (
-    <div className="flex flex-col items-center">
-      {/* FIXED: Stable container prevents board movement */}
+    <div className="w-full flex justify-center">
+      {/* COMPLETELY STATIC: Fixed size container that NEVER moves */}
       <div
         className="bg-nav rounded-2xl p-3 shadow-2xl relative"
         style={{
           width: 'min(85vw, 350px)',
           height: 'min(85vw, 350px)',
-          minHeight: 'min(85vw, 350px)', // Prevent height changes
-          minWidth: 'min(85vw, 350px)',   // Prevent width changes
+          flexShrink: 0, // Never shrink
+          flexGrow: 0,   // Never grow
         }}
       >
-        {/* Grid overlay for positioning */}
-        <div
-          className="grid gap-1 w-full h-full"
-          style={{
-            gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
-            gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
-          }}
-        >
-          {/* Empty grid cells to maintain structure */}
-          {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => (
-            <div key={`cell-${index}`} className="relative" />
-          ))}
-        </div>
-        
-        {/* OPTIMIZED: Pieces positioned absolutely to prevent layout shifts */}
-        <AnimatePresence mode="popLayout">
-          {board.flat().map((emoji, index) => {
-            const row = Math.floor(index / BOARD_SIZE);
-            const col = index % BOARD_SIZE;
-            const cellSize = `calc((100% - ${(BOARD_SIZE - 1) * 4}px) / ${BOARD_SIZE})`;
-            const left = `calc(${col} * (${cellSize} + 4px))`;
-            const top = `calc(${row} * (${cellSize} + 4px))`;
-            
-            return (
-              <div
-                key={`piece-${index}`}
-                className="absolute"
-                style={{
-                  left,
-                  top,
-                  width: cellSize,
-                  height: cellSize,
-                }}
-              >
+        {/* Static grid structure - always present */}
+        {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => {
+          const row = Math.floor(index / BOARD_SIZE);
+          const col = index % BOARD_SIZE;
+          const cellSize = `calc((100% - ${(BOARD_SIZE - 1) * 4}px) / ${BOARD_SIZE})`;
+          const left = `calc(${col} * (${cellSize} + 4px))`;
+          const top = `calc(${row} * (${cellSize} + 4px))`;
+          
+          const emoji = board[row] ? board[row][col] : null;
+          const isSelected = draggedPiece?.index === index;
+          const isMatched = matchedPieces.has(index);
+          
+          return (
+            <div
+              key={`cell-${index}`}
+              className="absolute"
+              style={{
+                left,
+                top,
+                width: cellSize,
+                height: cellSize,
+              }}
+            >
+              {/* REMOVED AnimatePresence - pieces just show/hide instantly for matched state */}
+              {emoji && (
                 <GamePiece
                   emoji={emoji}
                   index={index}
-                  isSelected={draggedPiece?.index === index}
-                  isMatched={matchedPieces.has(index)}
+                  isSelected={isSelected}
+                  isMatched={isMatched}
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
                 />
-              </div>
-            );
-          })}
-        </AnimatePresence>
+              )}
+            </div>
+          );
+        })}
       </div>
-      
-      {/* Instructions for drag */}
-      {gameStarted && !isProcessing && (
-        <div className="mt-4 text-center text-secondary text-sm max-w-md">
-          <p>🍪 Drag emojis to adjacent spots to create matches! ✨</p>
-        </div>
-      )}
     </div>
   );
 };
