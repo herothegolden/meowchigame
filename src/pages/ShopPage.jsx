@@ -22,6 +22,23 @@ const categoryConfig = {
   badge: { name: 'Profile Badges', icon: '🏆', color: 'text-yellow-400' }
 };
 
+// Mock data for browser testing
+const MOCK_SHOP_DATA = {
+  items: [
+    { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
+    { id: 2, name: 'Extra Time +20s', description: '+20 seconds to your next game', price: 1500, icon_name: 'Timer', type: 'consumable', category: 'time' },
+    { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
+    { id: 4, name: 'Double Points', description: '2x points for your next game', price: 1500, icon_name: 'ChevronsUp', type: 'consumable', category: 'multiplier' },
+    { id: 5, name: 'Cookie Master Badge', description: 'Golden cookie profile badge', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
+    { id: 6, name: 'Speed Demon Badge', description: 'Lightning bolt profile badge', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
+    { id: 7, name: 'Champion Badge', description: 'Trophy profile badge', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
+  ],
+  userPoints: 5000,
+  inventory: [],
+  boosterActive: false,
+  ownedBadges: []
+};
+
 const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0 }) => {
   const Icon = iconComponents[item.icon_name] || iconComponents.Default;
   const canAfford = userPoints >= item.price;
@@ -134,22 +151,51 @@ const ShopPage = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState('');
   const tg = window.Telegram?.WebApp;
 
   const fetchShopData = useCallback(async () => {
     try {
+      // Check if we have Telegram WebApp
+      if (!tg || !tg.initData) {
+        console.log('No Telegram initData available, using mock data for browser testing');
+        setDebugInfo('Running in browser mode with mock data');
+        setShopData(MOCK_SHOP_DATA);
+        setLoading(false);
+        return;
+      }
+
+      setDebugInfo('Fetching from backend API...');
+      console.log('Backend URL:', BACKEND_URL);
+      console.log('Telegram initData available:', !!tg.initData);
+
       const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg?.initData }),
+        body: JSON.stringify({ initData: tg.initData }),
       });
 
-      if (!res.ok) throw new Error('Failed to fetch shop data.');
+      console.log('Response status:', res.status);
+      console.log('Response ok:', res.ok);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`API Error: ${res.status} - ${errorText}`);
+      }
       
       const data = await res.json();
+      console.log('Shop data received:', data);
       setShopData(data);
+      setDebugInfo('Data loaded successfully from API');
     } catch (err) {
+      console.error('Shop data fetch error:', err);
       setError(err.message);
+      setDebugInfo(`Error: ${err.message}`);
+      
+      // Fallback to mock data on error
+      console.log('Falling back to mock data due to error');
+      setShopData(MOCK_SHOP_DATA);
     } finally {
       setLoading(false);
     }
@@ -160,7 +206,11 @@ const ShopPage = () => {
   }, [fetchShopData]);
 
   const handlePurchase = async (itemId) => {
-    if (!tg) return;
+    if (!tg || !tg.initData) {
+      console.log('Browser mode: simulating purchase for item', itemId);
+      alert(`Browser Mode: Would purchase item ${itemId}`);
+      return;
+    }
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
@@ -202,11 +252,28 @@ const ShopPage = () => {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><LoaderCircle className="w-12 h-12 text-accent animate-spin" /></div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-4">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin mb-4" />
+        <p className="text-secondary">{debugInfo}</p>
+      </div>
+    );
   }
 
-  if (error) {
-    return <div className="p-4 text-center text-red-400"><p>Could not load the shop.</p><p className="text-sm text-secondary">{error}</p></div>;
+  if (error && shopData.items.length === 0) {
+    return (
+      <div className="p-4 text-center">
+        <h2 className="text-xl font-bold text-red-400 mb-2">Shop Error</h2>
+        <p className="text-red-400 mb-2">{error}</p>
+        <p className="text-sm text-secondary mb-4">{debugInfo}</p>
+        <button 
+          onClick={fetchShopData}
+          className="bg-accent text-background py-2 px-4 rounded-lg font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   // Group items by category
@@ -234,20 +301,42 @@ const ShopPage = () => {
         </div>
       </motion.div>
 
-      <div className="space-y-8">
-        {Object.entries(categoryConfig).map(([category, categoryData]) => (
-          <CategorySection
-            key={category}
-            category={category}
-            categoryData={categoryData}
-            items={itemsByCategory[category] || []}
-            userPoints={shopData.userPoints}
-            onPurchase={handlePurchase}
-            inventory={shopData.inventory}
-            ownedBadges={shopData.ownedBadges}
-          />
-        ))}
-      </div>
+      {/* Debug info in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-gray-800 p-2 rounded text-xs text-gray-400">
+          <p>Debug: {debugInfo}</p>
+          <p>Items count: {shopData.items.length}</p>
+          <p>Backend URL: {BACKEND_URL || 'Not set'}</p>
+          <p>Telegram available: {!!tg ? 'Yes' : 'No'}</p>
+        </div>
+      )}
+
+      {shopData.items.length === 0 ? (
+        <div className="text-center p-8">
+          <p className="text-secondary mb-4">No items available in the shop.</p>
+          <button 
+            onClick={fetchShopData}
+            className="bg-accent text-background py-2 px-4 rounded-lg font-bold"
+          >
+            Refresh Shop
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {Object.entries(categoryConfig).map(([category, categoryData]) => (
+            <CategorySection
+              key={category}
+              category={category}
+              categoryData={categoryData}
+              items={itemsByCategory[category] || []}
+              userPoints={shopData.userPoints}
+              onPurchase={handlePurchase}
+              inventory={shopData.inventory}
+              ownedBadges={shopData.ownedBadges}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
