@@ -1,13 +1,15 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useDragControls } from 'framer-motion';
 
 const GamePiece = ({ 
   emoji, 
   index, 
   isSelected, 
-  onPieceClick,
+  onDragStart,
+  onDragEnd,
   isMatched = false
 }) => {
+  const controls = useDragControls();
   
   if (!emoji) {
     // Empty space - render invisible placeholder
@@ -16,15 +18,15 @@ const GamePiece = ({
     );
   }
 
-  const handleClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onPieceClick(index);
-  };
-
-  const handleTouchStart = (e) => {
-    e.preventDefault();
-    onPieceClick(index);
+  const handlePointerDown = (e) => {
+    // Trigger haptic feedback on touch
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+    
+    // Start drag
+    onDragStart(e, { index });
+    controls.start(e, { snapToCursor: false });
   };
 
   return (
@@ -39,22 +41,32 @@ const GamePiece = ({
       transition={{ duration: 0.2 }}
       layout
     >
-      <motion.button
+      <motion.div
         className={`
           w-full h-full rounded-lg flex items-center justify-center
-          text-2xl font-bold cursor-pointer select-none
+          text-4xl font-bold cursor-pointer select-none
           transition-all duration-200 shadow-lg
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
             : 'bg-nav hover:bg-gray-600 shadow-black/20'
           }
         `}
-        onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.05 }}
+        // Drag functionality
+        drag={true}
+        dragControls={controls}
+        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+        dragElasticity={0.6}
+        dragMomentum={false}
+        whileDrag={{ 
+          scale: 1.2, 
+          zIndex: 1000,
+          rotate: 5,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
+        }}
+        onDragEnd={onDragEnd}
+        onPointerDown={handlePointerDown}
         style={{ 
-          touchAction: 'manipulation',
+          touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           WebkitTouchCallout: 'none',
@@ -62,7 +74,7 @@ const GamePiece = ({
         }}
       >
         {emoji}
-      </motion.button>
+      </motion.div>
     </motion.div>
   );
 };
