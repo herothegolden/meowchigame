@@ -39,7 +39,6 @@ const GamePiece = ({
   return (
     <motion.div
       className="w-full h-full flex items-center justify-center p-0.5"
-      // FASTER: Reduced animation duration from 0.2s to 0.08s
       initial={{ scale: 0, opacity: 0 }}
       animate={{ 
         scale: isMatched ? 0 : 1, 
@@ -47,10 +46,9 @@ const GamePiece = ({
       }}
       exit={{ scale: 0, opacity: 0 }}
       transition={{ 
-        duration: 0.08, // Even faster
+        duration: 0.08,
         ease: "easeOut"
       }}
-      // REMOVED: layout prop that was causing board movement
     >
       <motion.div
         className={`
@@ -64,22 +62,17 @@ const GamePiece = ({
               : 'bg-nav hover:bg-gray-600 shadow-black/20'
           }
         `}
-        // OPTIMIZED: Faster drag animations
+        // Drag functionality
         drag={!hasBomb} // Bombs don't drag, they explode
         dragControls={controls}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         dragElasticity={0.6}
         dragMomentum={false}
         whileDrag={{ 
-          scale: 1.15, // Slightly smaller scale change
+          scale: 1.15,
           zIndex: 1000,
-          rotate: 3, // Less rotation
+          rotate: 3,
           boxShadow: "0 8px 25px rgba(0,0,0,0.4)"
-        }}
-        // FASTER: Quicker drag transition
-        transition={{ 
-          duration: 0.02, // Super fast transitions
-          ease: "easeOut"
         }}
         onDragEnd={onDragEnd}
         onPointerDown={handlePointerDown}
@@ -90,16 +83,17 @@ const GamePiece = ({
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent'
         }}
-        // Bomb pulsing animation
-        animate={{
-          scale: hasBomb ? [1, 1.1, 1] : 1,
-          boxShadow: hasBomb 
-            ? [
-                "0 0 10px rgba(239, 68, 68, 0.5)",
-                "0 0 20px rgba(239, 68, 68, 0.8)",
-                "0 0 10px rgba(239, 68, 68, 0.5)"
-              ]
-            : "0 4px 8px rgba(0,0,0,0.2)"
+        // FIXED: Single transition with bomb animation
+        animate={hasBomb ? {
+          scale: [1, 1.1, 1],
+          boxShadow: [
+            "0 0 10px rgba(239, 68, 68, 0.5)",
+            "0 0 20px rgba(239, 68, 68, 0.8)",
+            "0 0 10px rgba(239, 68, 68, 0.5)"
+          ]
+        } : {
+          scale: 1,
+          boxShadow: "0 4px 8px rgba(0,0,0,0.2)"
         }}
         transition={{
           duration: hasBomb ? 1.5 : 0.02,
