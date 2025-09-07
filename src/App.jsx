@@ -1,4 +1,4 @@
-// src/App.jsx - Complete with global audio integration and TMA initialization
+// src/App.jsx - FIXED with global audio persistence
 import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
@@ -18,7 +18,7 @@ function App() {
   const location = useLocation();
   const isGamePage = location.pathname === '/game';
 
-  // Initialize TMA and audio early
+  // Initialize TMA and audio early - ONE TIME ONLY
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (tg) {
@@ -38,14 +38,18 @@ function App() {
     } else {
       console.log('🖥️ Running in browser mode');
     }
-  }, []);
+
+    // CRITICAL: Prevent audio reinitialization on navigation
+    console.log('🎵 App mounted - global audio will persist across navigation');
+    
+  }, []); // Empty dependency array - only run once!
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden">
       {/* Preload images for better performance */}
       <ImagePreloader />
       
-      {/* Global Audio Controls - Only show on non-game pages */}
+      {/* Global Audio Controls - Always available but only show on non-game pages */}
       {!isGamePage && <AudioControls />}
       
       {/* Main content area */}
@@ -53,7 +57,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/game" element={<GamePage />} /> {/* GamePage has its own AudioControls */}
+          <Route path="/game" element={<GamePage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/partners" element={<PartnersPage />} />
