@@ -1,3 +1,4 @@
+// src/components/game/GameBoard.jsx - Complete with custom images support
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -38,7 +39,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
         const centerCol = Math.floor(BOARD_SIZE / 2);
         const bombIndex = centerRow * BOARD_SIZE + centerCol;
         
-        // Keep the original emoji but mark position as having a bomb
+        // Keep the original piece but mark position as having a bomb
         setBombPositions(new Set([bombIndex]));
         
         // Haptic feedback for bomb placement
@@ -282,7 +283,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
   return (
     <div className="w-full flex justify-center">
-      {/* COMPLETELY STATIC: Fixed size container that NEVER moves */}
+      {/* STATIC: Fixed size container that NEVER moves */}
       <div
         className="bg-nav rounded-2xl p-3 shadow-2xl relative"
         style={{
@@ -300,7 +301,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           const left = `calc(${col} * (${cellSize} + 4px))`;
           const top = `calc(${row} * (${cellSize} + 4px))`;
           
-          const emoji = board[row] ? board[row][col] : null;
+          // UPDATED: piece is now an index (0-5) instead of emoji
+          const piece = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
           const hasBomb = bombPositions.has(index);
@@ -316,9 +318,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
                 height: cellSize,
               }}
             >
-              {emoji && (
+              {piece !== null && (
                 <GamePiece
-                  emoji={emoji}
+                  piece={piece} // Now passes index (0-5) for your custom images
                   index={index}
                   isSelected={isSelected}
                   isMatched={isMatched}
