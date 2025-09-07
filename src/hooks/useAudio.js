@@ -1,4 +1,4 @@
-// src/hooks/useAudio.js - TMA-optimized audio system
+// src/hooks/useAudio.js - Enhanced version with better error handling
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // YOUR IMAGEKIT.IO SOUND FILES - All 12 sounds ready!
@@ -26,20 +26,29 @@ const SOUND_URLS = {
 
 export const useAudio = () => {
   const [isEnabled, setIsEnabled] = useState(true);
-  const [isMusicEnabled, setIsMusicEnabled] = useState(false); // Music off by default
+  const [isMusicEnabled, setIsMusicEnabled] = useState(false);
   const [volume, setVolume] = useState(0.7);
   const [isLoading, setIsLoading] = useState(true);
   const [audioContext, setAudioContext] = useState(null);
+  const [initializationError, setInitializationError] = useState(null);
   
   const audioBuffers = useRef(new Map());
   const musicRef = useRef(null);
   const gainNodeRef = useRef(null);
-  const lastPlayedRef = useRef(new Map()); // Prevent spam
+  const lastPlayedRef = useRef(new Map());
+  const isInitializedRef = useRef(false);
 
   // Initialize Web Audio API (better performance than HTML5 audio)
   const initializeAudio = useCallback(async () => {
+    if (isInitializedRef.current) return audioContext;
+    
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      
+      if (!AudioContextClass) {
+        throw new Error('Web Audio API not supported');
+      }
+      
       const context = new AudioContextClass();
       
       // Create master gain node for volume control
@@ -49,47 +58,86 @@ export const useAudio = () => {
       
       setAudioContext(context);
       gainNodeRef.current = gainNode;
+      isInitializedRef.current = true;
+      setInitializationError(null);
       
-      console.log('🔊 Audio context initialized');
+      console.log('🔊 Audio context initialized successfully');
       return context;
     } catch (error) {
-      console.warn('⚠️ Audio not supported:', error);
+      console.warn('⚠️ Audio initialization failed:', error);
+      setInitializationError(error.message);
+      setIsLoading(false);
       return null;
     }
-  }, [volume]);
+  }, [volume, audioContext]);
 
-  // Preload audio buffers for instant playback
+  // Preload audio buffers for instant playback with better error handling
   const preloadSounds = useCallback(async (context) => {
-    if (!context) return;
+    if (!context) {
+      setIsLoading(false);
+      return;
+    }
     
     console.log('🎵 Preloading sounds...');
+    let successCount = 0;
+    let errorCount = 0;
+    
     const loadPromises = Object.entries(SOUND_URLS).map(async ([key, url]) => {
       if (key === 'bgMusic') return; // Skip background music in preload
       
       try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        
+        const response = await fetch(url, { 
+          signal: controller.signal,
+          cache: 'force-cache' // Use browser cache if available
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await context.decodeAudioData(arrayBuffer);
         audioBuffers.current.set(key, audioBuffer);
+        successCount++;
         console.log(`✅ Loaded: ${key}`);
       } catch (error) {
-        console.warn(`❌ Failed to load ${key}:`, error);
+        errorCount++;
+        console.warn(`❌ Failed to load ${key}:`, error.message);
       }
     });
 
     await Promise.allSettled(loadPromises);
     setIsLoading(false);
-    console.log(`🎉 Loaded ${audioBuffers.current.size} sounds`);
+    
+    console.log(`🎉 Audio loading complete: ${successCount} success, ${errorCount} errors`);
+    
+    // Show warning if too many sounds failed to load
+    if (errorCount > successCount) {
+      console.warn('⚠️ Most sounds failed to load. Audio experience may be degraded.');
+    }
   }, []);
 
-  // Initialize audio system
+  // Initialize audio system with improved error handling
   useEffect(() => {
+    let isUnmounted = false;
+    
     const init = async () => {
-      const context = await initializeAudio();
-      if (context) {
-        await preloadSounds(context);
-      } else {
-        setIsLoading(false);
+      try {
+        const context = await initializeAudio();
+        if (!isUnmounted && context) {
+          await preloadSounds(context);
+        }
+      } catch (error) {
+        if (!isUnmounted) {
+          console.error('🚨 Audio initialization failed:', error);
+          setInitializationError(error.message);
+          setIsLoading(false);
+        }
       }
     };
 
@@ -100,35 +148,43 @@ export const useAudio = () => {
       document.removeEventListener('click', handleFirstInteraction);
     };
 
-    document.addEventListener('touchstart', handleFirstInteraction);
+    document.addEventListener('touchstart', handleFirstInteraction, { passive: true });
     document.addEventListener('click', handleFirstInteraction);
 
     return () => {
+      isUnmounted = true;
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
   }, [initializeAudio, preloadSounds]);
 
-  // Update volume
+  // Update volume with error handling
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = isEnabled ? volume : 0;
-    }
-    if (musicRef.current) {
-      musicRef.current.volume = isMusicEnabled ? volume * 0.3 : 0; // Music quieter
+    try {
+      if (gainNodeRef.current && isEnabled) {
+        gainNodeRef.current.gain.value = volume;
+      }
+      if (musicRef.current) {
+        musicRef.current.volume = isMusicEnabled ? volume * 0.3 : 0;
+      }
+    } catch (error) {
+      console.warn('⚠️ Volume update failed:', error);
     }
   }, [volume, isEnabled, isMusicEnabled]);
 
-  // Play sound effect with spam protection
+  // Play sound effect with enhanced spam protection and error handling
   const playSound = useCallback((soundKey, options = {}) => {
-    if (!isEnabled || !audioContext || isLoading) return;
+    // Early returns for better performance
+    if (!isEnabled || !audioContext || isLoading || initializationError) {
+      return;
+    }
     
     const { 
       volume: soundVolume = 1, 
       playbackRate = 1,
       delay = 0,
       preventSpam = true,
-      spamDelay = 100 // ms
+      spamDelay = 50 // Reduced from 100ms to 50ms for better responsiveness
     } = options;
 
     // Spam protection
@@ -148,65 +204,91 @@ export const useAudio = () => {
     try {
       // Resume audio context if suspended (mobile requirement)
       if (audioContext.state === 'suspended') {
-        audioContext.resume();
+        audioContext.resume().catch(err => {
+          console.warn('⚠️ Failed to resume audio context:', err);
+        });
       }
 
       const source = audioContext.createBufferSource();
       const gainNode = audioContext.createGain();
       
       source.buffer = buffer;
-      source.playbackRate.value = playbackRate;
+      source.playbackRate.value = Math.max(0.25, Math.min(4, playbackRate)); // Clamp playback rate
       source.connect(gainNode);
       gainNode.connect(gainNodeRef.current);
-      gainNode.gain.value = soundVolume;
+      gainNode.gain.value = Math.max(0, Math.min(1, soundVolume)); // Clamp volume
       
-      source.start(audioContext.currentTime + delay);
+      source.start(audioContext.currentTime + Math.max(0, delay));
       
-      // Clean up after playback
-      source.onended = () => {
-        source.disconnect();
-        gainNode.disconnect();
+      // Clean up after playback with timeout fallback
+      const cleanup = () => {
+        try {
+          source.disconnect();
+          gainNode.disconnect();
+        } catch (err) {
+          // Node might already be disconnected
+        }
       };
       
+      source.onended = cleanup;
+      setTimeout(cleanup, 5000); // Fallback cleanup after 5 seconds
+      
     } catch (error) {
-      console.warn(`⚠️ Failed to play ${soundKey}:`, error);
+      console.warn(`⚠️ Failed to play ${soundKey}:`, error.message);
     }
-  }, [isEnabled, audioContext, isLoading]);
+  }, [isEnabled, audioContext, isLoading, initializationError]);
 
-  // Background music management
+  // Background music management with better error handling
   const playBackgroundMusic = useCallback(async () => {
     if (!isMusicEnabled || musicRef.current) return;
 
     try {
       const audio = new Audio(SOUND_URLS.bgMusic);
       audio.loop = true;
-      audio.volume = volume * 0.3; // Background music should be quiet
+      audio.volume = volume * 0.3;
       audio.preload = 'auto';
+      
+      // Better error handling for audio loading
+      audio.addEventListener('error', (e) => {
+        console.warn('⚠️ Background music error:', e);
+        musicRef.current = null;
+      });
+      
+      audio.addEventListener('canplaythrough', () => {
+        console.log('🎶 Background music ready');
+      });
       
       await audio.play();
       musicRef.current = audio;
       console.log('🎶 Background music started');
     } catch (error) {
-      console.warn('⚠️ Background music failed:', error);
+      console.warn('⚠️ Background music failed:', error.message);
+      musicRef.current = null;
     }
   }, [isMusicEnabled, volume]);
 
   const stopBackgroundMusic = useCallback(() => {
     if (musicRef.current) {
-      musicRef.current.pause();
-      musicRef.current = null;
-      console.log('🔇 Background music stopped');
+      try {
+        musicRef.current.pause();
+        musicRef.current.currentTime = 0;
+        musicRef.current = null;
+        console.log('🔇 Background music stopped');
+      } catch (error) {
+        console.warn('⚠️ Error stopping background music:', error);
+        musicRef.current = null;
+      }
     }
   }, []);
 
   // Background music control
   useEffect(() => {
-    if (isMusicEnabled) {
+    if (isMusicEnabled && !initializationError) {
       playBackgroundMusic();
     } else {
       stopBackgroundMusic();
     }
-  }, [isMusicEnabled, playBackgroundMusic, stopBackgroundMusic]);
+  }, [isMusicEnabled, playBackgroundMusic, stopBackgroundMusic, initializationError]);
 
   // Game-specific sound functions
   const gameSounds = {
@@ -214,7 +296,7 @@ export const useAudio = () => {
     playMatch: (cascadeLevel = 0) => {
       if (cascadeLevel > 0) {
         playSound('cascade', { 
-          playbackRate: 1 + (cascadeLevel * 0.1), // Higher pitch for combos
+          playbackRate: 1 + (cascadeLevel * 0.1),
           volume: Math.min(1, 0.8 + (cascadeLevel * 0.1))
         });
       } else {
@@ -230,7 +312,7 @@ export const useAudio = () => {
     playBomb: () => playSound('bomb', { volume: 1.0, playbackRate: 0.9 }),
     
     // UI SOUNDS
-    playButtonClick: () => playSound('buttonClick', { volume: 0.5 }),
+    playButtonClick: () => playSound('buttonClick', { volume: 0.5, spamDelay: 100 }),
     playItemActivate: () => playSound('itemActivate', { volume: 0.8 }),
     playScoreUpdate: () => playSound('scoreUpdate', { volume: 0.6 }),
     
@@ -240,12 +322,14 @@ export const useAudio = () => {
     playGameOver: () => playSound('gameOver', { volume: 1.0 }),
   };
 
-  // Cleanup on unmount
+  // Enhanced cleanup on unmount
   useEffect(() => {
     return () => {
       stopBackgroundMusic();
-      if (audioContext) {
-        audioContext.close();
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close().catch(err => {
+          console.warn('⚠️ Error closing audio context:', err);
+        });
       }
     };
   }, [audioContext, stopBackgroundMusic]);
@@ -256,6 +340,7 @@ export const useAudio = () => {
     isMusicEnabled,
     volume,
     isLoading,
+    initializationError, // New: expose initialization errors
     
     // Controls
     setIsEnabled,
@@ -269,5 +354,8 @@ export const useAudio = () => {
     // Background music
     playBackgroundMusic,
     stopBackgroundMusic,
+    
+    // Utility
+    reinitialize: initializeAudio, // New: allow manual reinitialization
   };
 };
