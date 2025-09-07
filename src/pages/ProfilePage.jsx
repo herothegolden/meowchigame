@@ -135,6 +135,11 @@ const ProfilePage = () => {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState('global');
   
+  // Friends system state
+  const [friendUsername, setFriendUsername] = useState('');
+  const [isAddingFriend, setIsAddingFriend] = useState(false);
+  const [friendsList, setFriendsList] = useState([]);
+  
   const tg = window.Telegram?.WebApp;
 
   // Mock data for demo mode
@@ -207,6 +212,90 @@ const ProfilePage = () => {
       setLeaderboardData(MOCK_LEADERBOARD);
     } finally {
       setLeaderboardLoading(false);
+    }
+  };
+
+  const handleAddFriend = async () => {
+    if (!friendUsername.trim()) {
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: 'Please enter a username',
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert('Please enter a username');
+      }
+      return;
+    }
+
+    setIsAddingFriend(true);
+
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        console.log('Demo: Adding friend:', friendUsername);
+        const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({
+            title: 'Demo Mode',
+            message: message,
+            buttons: [{ type: 'ok' }]
+          });
+        } else {
+          alert(message);
+        }
+        setFriendUsername('');
+        setIsAddingFriend(false);
+        return;
+      }
+
+      console.log('Adding friend:', friendUsername);
+
+      const res = await fetch(`${BACKEND_URL}/api/add-friend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          friendUsername: friendUsername.trim() 
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to add friend');
+      }
+
+      console.log('Friend added successfully:', result);
+
+      // Success feedback
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+      // Clear input and refresh leaderboard
+      setFriendUsername('');
+      fetchLeaderboard('friends');
+
+    } catch (error) {
+      console.error('Add friend error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: error.message,
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert(error.message);
+      }
+    } finally {
+      setIsAddingFriend(false);
     }
   };
 
@@ -499,6 +588,42 @@ const ProfilePage = () => {
               })}
             </div>
 
+            {/* Add Friend Section - Only show in Friends tab */}
+            {leaderboardTab === 'friends' && (
+              <div className="bg-background rounded-lg border border-gray-600 p-3 mb-4">
+                <h4 className="text-sm font-bold text-primary mb-2">Add Friend</h4>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={friendUsername}
+                    onChange={(e) => setFriendUsername(e.target.value)}
+                    placeholder="Enter username (without @)"
+                    className="flex-1 bg-nav border border-gray-500 rounded-lg px-3 py-2 text-sm text-primary placeholder-secondary focus:border-accent focus:outline-none"
+                    disabled={isAddingFriend}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddFriend();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAddFriend}
+                    disabled={isAddingFriend || !friendUsername.trim()}
+                    className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAddingFriend ? (
+                      <LoaderCircle className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Add'
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-secondary mt-2">
+                  Add friends by their Telegram username to compete together
+                </p>
+              </div>
+            )}
+
             {/* Leaderboard Content */}
             {leaderboardLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -508,8 +633,15 @@ const ProfilePage = () => {
             ) : leaderboardData.length === 0 ? (
               <div className="text-center py-8">
                 <Trophy className="w-12 h-12 text-secondary mx-auto mb-3" />
-                <h3 className="text-lg font-bold text-primary mb-2">No Players Yet</h3>
-                <p className="text-secondary text-sm">Be the first to climb the leaderboard!</p>
+                <h3 className="text-lg font-bold text-primary mb-2">
+                  {leaderboardTab === 'friends' ? 'No Friends Yet' : 'No Players Yet'}
+                </h3>
+                <p className="text-secondary text-sm">
+                  {leaderboardTab === 'friends' 
+                    ? 'Add friends to see your private leaderboard!' 
+                    : 'Be the first to climb the leaderboard!'
+                  }
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -541,6 +673,11 @@ const ProfilePage = () => {
                             YOU
                           </span>
                         )}
+                        {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                          <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">
+                            FRIEND
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2 mt-1">
                         <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
@@ -570,7 +707,12 @@ const ProfilePage = () => {
                 <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
                   <div className="flex items-center">
                     <Users className="w-3 h-3 mr-1" />
-                    <span>{leaderboardData.length} Players</span>
+                    <span>
+                      {leaderboardTab === 'friends' 
+                        ? `${leaderboardData.length} Friends` 
+                        : `${leaderboardData.length} Players`
+                      }
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <Clock className="w-3 h-3 mr-1" />
