@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History } from 'lucide-react';
+import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Get the backend URL from the environment variables
@@ -17,23 +17,16 @@ const GamePage = () => {
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   
-  // Phase 1 & 2: Inventory state
+  // PHASE 1: Inventory state
   const [inventory, setInventory] = useState([]);
   const [isActivatingItem, setIsActivatingItem] = useState(null);
   const [showInventory, setShowInventory] = useState(false);
+  
+  // PHASE 2: NEW Pre-game item selection state
   const [availableItems, setAvailableItems] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [showItemSelection, setShowItemSelection] = useState(false);
   const [isConfiguringGame, setIsConfiguringGame] = useState(false);
-  
-  // PHASE 3: Simplified inventory management
-  const [inventoryStats, setInventoryStats] = useState({
-    totalItems: 0,
-    totalValue: 0,
-    mostUsedItem: 'None',
-    efficiency: 0
-  });
-  const [showInventoryStats, setShowInventoryStats] = useState(false);
   
   const navigate = useNavigate();
 
@@ -143,29 +136,19 @@ const GamePage = () => {
     }
   }, []);
 
-  // PHASE 3: Simplified loadInventory with basic statistics
+  // PHASE 2: ENHANCED loadInventory - Gets available items for selection
   const loadInventory = async () => {
     const tg = window.Telegram?.WebApp;
     
     try {
       if (!tg || !tg.initData || !BACKEND_URL) {
         // Browser mode - use mock data
-        console.log('Browser mode: Using mock inventory with stats');
-        const mockItems = [
+        console.log('Browser mode: Using mock inventory');
+        setAvailableItems([
           { item_id: 1, quantity: 2 },
-          { item_id: 4, quantity: 1 },
-          { item_id: 3, quantity: 1 }
-        ];
-        setAvailableItems(mockItems);
-        setInventory(mockItems.filter(item => item.item_id === 4));
-        
-        // Calculate mock stats
-        setInventoryStats({
-          totalItems: 4,
-          totalValue: 3750,
-          mostUsedItem: 'Extra Time +10s',
-          efficiency: 85
-        });
+          { item_id: 4, quantity: 1 }
+        ]);
+        setInventory([]);
         return;
       }
 
@@ -183,30 +166,21 @@ const GamePage = () => {
         
         console.log('Inventory loaded:', userInventory);
         
+        // Set available items (for pre-game selection)
         setAvailableItems(userInventory);
         
+        // Set active inventory (consumables like Double Points)
         const consumableItems = userInventory.filter(item => 
-          item.item_id === 4 && item.quantity > 0
+          item.item_id === 4 && item.quantity > 0 // Only Double Points for in-game use
         );
         setInventory(consumableItems);
         
+        // Check if point multiplier is already active
         const pointMultiplier = shopData.boosterActive || false;
         if (pointMultiplier) {
           setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         }
-
-        // Calculate basic inventory stats
-        const totalItems = userInventory.reduce((sum, item) => sum + item.quantity, 0);
-        const itemValues = { 1: 750, 2: 1500, 3: 1000, 4: 1500 }; // Hard-coded for simplicity
-        const totalValue = userInventory.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
         
-        setInventoryStats({
-          totalItems,
-          totalValue,
-          mostUsedItem: 'Double Points', // Simplified
-          efficiency: Math.min(95, Math.max(50, totalItems * 10))
-        });
-
       } else {
         console.error('Failed to fetch inventory:', res.status);
         setAvailableItems([]);
@@ -220,6 +194,7 @@ const GamePage = () => {
     }
   };
 
+  // PHASE 2: NEW configureGameWithSelectedItems
   const configureGameWithSelectedItems = async () => {
     const tg = window.Telegram?.WebApp;
     setIsConfiguringGame(true);
@@ -232,10 +207,12 @@ const GamePage = () => {
         let totalTimeBonus = 0;
         let hasBomb = false;
         
+        // Calculate effects based on selected items
         selectedItems.forEach(itemId => {
-          if (itemId === 1) totalTimeBonus += 10;
-          if (itemId === 2) totalTimeBonus += 20;
-          if (itemId === 3) hasBomb = true;
+          if (itemId === 1) totalTimeBonus += 10; // +10s Time
+          if (itemId === 2) totalTimeBonus += 20; // +20s Time  
+          if (itemId === 3) hasBomb = true;       // Cookie Bomb
+          // Double Points (4) is handled separately in-game
         });
         
         setGameConfig({ 
@@ -246,7 +223,7 @@ const GamePage = () => {
         setActiveBoosts({
           timeBoost: totalTimeBonus,
           bomb: hasBomb,
-          pointMultiplier: selectedItems.has(4)
+          pointMultiplier: selectedItems.has(4) // If Double Points selected
         });
         
         return;
@@ -254,26 +231,23 @@ const GamePage = () => {
 
       console.log('Configuring game with selected items:', Array.from(selectedItems));
 
-      // Try new endpoint first, fallback to old one
+      // Send selected items to backend for consumption
+      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          selectedItems: Array.from(selectedItems)
+        }),
+      });
+
       let sessionData = { startTime: 30, startWithBomb: false };
       
-      try {
-        const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            initData: tg.initData, 
-            selectedItems: Array.from(selectedItems)
-          }),
-        });
-        
-        if (sessionRes.ok) {
-          sessionData = await sessionRes.json();
-          console.log('Game configured with items:', sessionData);
-        } else {
-          throw new Error('New endpoint not available');
-        }
-      } catch (newEndpointError) {
+      if (sessionRes.ok) {
+        sessionData = await sessionRes.json();
+        console.log('Game configured with items:', sessionData);
+      } else {
+        // Fallback to old endpoint if new one doesn't exist
         console.log('Using fallback game session endpoint');
         const fallbackRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
           method: 'POST',
@@ -288,12 +262,13 @@ const GamePage = () => {
       
       setGameConfig(sessionData);
       
+      // Calculate applied boosts
       const timeBoost = sessionData.startTime - 30;
       
       setActiveBoosts({
         timeBoost,
         bomb: sessionData.startWithBomb,
-        pointMultiplier: selectedItems.has(4)
+        pointMultiplier: selectedItems.has(4) // Double Points selected
       });
 
     } catch (error) {
@@ -305,6 +280,7 @@ const GamePage = () => {
     }
   };
 
+  // PHASE 1: Activate item handler (for in-game Double Points)
   const handleActivateItem = async (itemId) => {
     const tg = window.Telegram?.WebApp;
     
@@ -332,9 +308,11 @@ const GamePage = () => {
 
       console.log('Item activated successfully:', result);
 
-      if (itemId === 4) {
+      // Update local state immediately
+      if (itemId === 4) { // Double Points
         setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         
+        // Remove from inventory
         setInventory(prev => {
           return prev.map(item => 
             item.item_id === itemId && item.quantity > 1
@@ -344,6 +322,7 @@ const GamePage = () => {
         });
       }
 
+      // Success feedback
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
         title: 'Success!',
@@ -364,6 +343,7 @@ const GamePage = () => {
     }
   };
 
+  // PHASE 2: NEW handleItemSelection
   const handleItemSelection = (itemId) => {
     setSelectedItems(prev => {
       const newSet = new Set(prev);
@@ -376,10 +356,12 @@ const GamePage = () => {
     });
   };
 
+  // PHASE 2: NEW startGameWithConfiguration
   const startGameWithConfiguration = async () => {
     if (availableItems.length > 0) {
       setShowItemSelection(true);
     } else {
+      // No items to configure, start normally
       await configureGameWithSelectedItems();
       setGameStarted(true);
       setScore(0);
@@ -390,6 +372,7 @@ const GamePage = () => {
     }
   };
 
+  // PHASE 2: NEW confirmGameStart
   const confirmGameStart = async () => {
     setShowItemSelection(false);
     await configureGameWithSelectedItems();
@@ -410,9 +393,9 @@ const GamePage = () => {
     setIsSubmitting(false);
     setShowInventory(false);
     setShowItemSelection(false);
-    setShowInventoryStats(false);
     setSelectedItems(new Set());
     
+    // Reload inventory for new game
     await loadInventory();
   };
 
@@ -428,13 +411,16 @@ const GamePage = () => {
   // Get item details helper
   const getItemDetails = (itemId) => {
     const itemMap = {
-      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds', value: 750 },
-      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400', description: '+20 seconds', value: 1500 },
-      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb', value: 1000 },
-      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier', value: 1500 }
+      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds' },
+      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400', description: '+20 seconds' },
+      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb' },
+      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier' }
     };
-    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect', value: 0 };
+    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect' };
   };
+
+  // ENHANCEMENT 1: Calculate total item count for badge
+  const totalItemCount = inventory.reduce((total, item) => total + item.quantity, 0);
 
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
@@ -483,7 +469,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Item Selection Overlay */}
+      {/* PHASE 2: NEW Item Selection Overlay */}
       <AnimatePresence>
         {showItemSelection && (
           <motion.div 
@@ -611,18 +597,25 @@ const GamePage = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* PHASE 3: Enhanced inventory button */}
-          {gameStarted && !isGameOver && availableItems.length > 0 && (
+          {/* ENHANCEMENT 1: Package button with item count badge */}
+          {gameStarted && !isGameOver && inventory.length > 0 && (
             <motion.button
               onClick={() => setShowInventory(!showInventory)}
-              className="bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors relative"
+              className="relative bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors"
               whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }}
             >
               <Package className="w-6 h-6 text-accent" />
-              {availableItems.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-accent text-background text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {availableItems.reduce((sum, item) => sum + item.quantity, 0)}
-                </span>
+              {/* Item count badge */}
+              {totalItemCount > 0 && (
+                <motion.div
+                  className="absolute -top-1 -right-1 bg-accent text-background rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  {totalItemCount > 9 ? '9+' : totalItemCount}
+                </motion.div>
               )}
             </motion.button>
           )}
@@ -636,7 +629,7 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* Visual Boost Indicators */}
+      {/* PHASE 2: NEW Visual Boost Indicators */}
       <AnimatePresence>
         {gameStarted && !isGameOver && (activeBoosts.timeBoost > 0 || activeBoosts.bomb || activeBoosts.pointMultiplier) && (
           <motion.div
@@ -674,121 +667,113 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      {/* PHASE 3: Simplified Floating Inventory Panel */}
+      {/* ENHANCEMENT 2 & 3: Improved Floating Inventory Panel */}
       <AnimatePresence>
         {showInventory && gameStarted && !isGameOver && (
           <motion.div
-            className="absolute top-20 right-4 bg-nav rounded-xl p-4 shadow-2xl border border-gray-700 z-30 w-80 max-h-96 overflow-hidden"
-            initial={{ opacity: 0, x: 100, scale: 0.8 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 100, scale: 0.8 }}
-            transition={{ duration: 0.3 }}
+            className="absolute top-20 right-4 bg-nav/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700 z-30 min-w-72 max-w-80"
+            initial={{ opacity: 0, x: 100, scale: 0.8, rotateY: -15 }}
+            animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0 }}
+            exit={{ opacity: 0, x: 100, scale: 0.8, rotateY: 15 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-primary flex items-center">
-                <Package className="w-5 h-5 mr-2 text-accent" />
-                Inventory
-              </h3>
+            {/* ENHANCEMENT 3: Better header with close button */}
+            <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-600">
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setShowInventoryStats(!showInventoryStats)}
-                  className="p-1 hover:bg-gray-600 rounded"
-                  title="Statistics"
-                >
-                  <BarChart3 className="w-4 h-4 text-secondary hover:text-primary" />
-                </button>
-                <button
-                  onClick={() => setShowInventory(false)}
-                  className="text-secondary hover:text-primary"
-                >
-                  ✕
-                </button>
+                <Package className="w-5 h-5 text-accent" />
+                <h3 className="font-bold text-primary">Inventory</h3>
+                <div className="bg-accent/20 text-accent px-2 py-0.5 rounded-full text-xs font-bold">
+                  {totalItemCount}
+                </div>
               </div>
+              <motion.button
+                onClick={() => setShowInventory(false)}
+                className="text-secondary hover:text-primary p-1 rounded-md hover:bg-gray-600 transition-colors"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <X className="w-4 h-4" />
+              </motion.button>
             </div>
-
-            {/* Inventory content */}
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {/* Statistics panel */}
-              <AnimatePresence>
-                {showInventoryStats && (
-                  <motion.div
-                    className="bg-background/50 p-3 rounded-lg border border-gray-600"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    <h4 className="text-sm font-bold text-accent mb-2">Inventory Stats</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <p className="text-secondary">Total Items:</p>
-                        <p className="text-primary font-bold">{inventoryStats.totalItems}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Total Value:</p>
-                        <p className="text-primary font-bold">{inventoryStats.totalValue.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Most Used:</p>
-                        <p className="text-primary font-bold text-xs">{inventoryStats.mostUsedItem}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Efficiency:</p>
-                        <p className="text-primary font-bold">{inventoryStats.efficiency}%</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Inventory items */}
-              {availableItems.map((item) => {
+            
+            {/* ENHANCEMENT 3: Improved item list with better hierarchy */}
+            <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
+              {inventory.map((item, index) => {
                 const details = getItemDetails(item.item_id);
                 const ItemIcon = details.icon;
                 const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier;
                 
                 return (
-                  <div
+                  <motion.div
                     key={item.item_id}
-                    className="flex items-center justify-between p-3 bg-background/50 rounded-lg border border-gray-600"
+                    className="bg-background/70 rounded-lg border border-gray-600 overflow-hidden"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    whileHover={{ scale: 1.02, borderColor: "#6B7280" }}
                   >
-                    <div className="flex items-center space-x-3">
-                      <ItemIcon className={`w-5 h-5 ${details.color}`} />
-                      <div>
-                        <p className="text-sm font-medium text-primary">{details.name}</p>
-                        <div className="flex items-center space-x-2 text-xs">
-                          <span className="text-secondary">Qty: {item.quantity}</span>
-                          <span className="text-accent">Value: {(details.value * item.quantity).toLocaleString()}</span>
+                    <div className="flex items-center justify-between p-3">
+                      {/* ENHANCEMENT 3: Better item display */}
+                      <div className="flex items-center space-x-3 flex-1">
+                        <div className={`p-2 rounded-lg bg-gray-700 ${details.color}`}>
+                          <ItemIcon className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-primary truncate">{details.name}</p>
+                          <p className="text-xs text-secondary">{details.description}</p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className="text-xs text-accent font-medium">
+                              Qty: {item.quantity}
+                            </span>
+                            {item.item_id === 4 && activeBoosts.pointMultiplier && (
+                              <span className="text-xs text-green-400 font-bold bg-green-400/20 px-2 py-0.5 rounded-full">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      
+                      {/* ENHANCEMENT 3: Better action button */}
+                      {canActivate && (
+                        <motion.button
+                          onClick={() => handleActivateItem(item.item_id)}
+                          disabled={isActivatingItem === item.item_id}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all duration-200 disabled:opacity-50 flex items-center space-x-1"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          {isActivatingItem === item.item_id ? (
+                            <LoaderCircle className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Zap className="w-3 h-3" />
+                              <span>USE</span>
+                            </>
+                          )}
+                        </motion.button>
+                      )}
                     </div>
-                    
-                    {canActivate && (
-                      <motion.button
-                        onClick={() => handleActivateItem(item.item_id)}
-                        disabled={isActivatingItem === item.item_id}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {isActivatingItem === item.item_id ? (
-                          <LoaderCircle className="w-4 h-4 animate-spin" />
-                        ) : (
-                          'USE'
-                        )}
-                      </motion.button>
-                    )}
-                    
-                    {item.item_id === 4 && activeBoosts.pointMultiplier && (
-                      <span className="text-xs text-green-400 font-bold">ACTIVE</span>
-                    )}
-                  </div>
+                  </motion.div>
                 );
               })}
               
-              {availableItems.length === 0 && (
-                <p className="text-center text-secondary text-sm py-4">
-                  No items available
-                </p>
+              {inventory.length === 0 && (
+                <motion.div
+                  className="text-center py-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <Package className="w-12 h-12 text-secondary mx-auto mb-2 opacity-50" />
+                  <p className="text-secondary text-sm">No items available</p>
+                  <p className="text-xs text-secondary/70 mt-1">Visit the shop to buy items!</p>
+                </motion.div>
               )}
             </div>
           </motion.div>
@@ -821,9 +806,9 @@ const GamePage = () => {
           <p className="text-sm">
             Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
           </p>
-          {availableItems.length > 0 && (
+          {inventory.length > 0 && (
             <p className="text-xs mt-1 text-accent">
-              Tap 📦 to access your items and statistics
+              Tap 📦 to access your items
             </p>
           )}
         </motion.div>
