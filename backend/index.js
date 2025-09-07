@@ -23,7 +23,7 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// PHASE 3: COMPREHENSIVE DATABASE SETUP
+// PHASE 3: COMPREHENSIVE DATABASE SETUP WITH FRIENDS SYSTEM
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -172,8 +172,20 @@ const setupDatabase = async () => {
         cached_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // 10. FRIENDS SYSTEM: User Friends Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_friends (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        friend_username VARCHAR(255) NOT NULL,
+        friend_telegram_id BIGINT,
+        added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, friend_username)
+      );
+    `);
     
-    // 10. Populate shop items
+    // 11. Populate shop items
     console.log('🛍️ Setting up shop items...');
     await client.query('DELETE FROM shop_items');
     await client.query(`
@@ -189,7 +201,7 @@ const setupDatabase = async () => {
 
     await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
 
-    console.log('✅ Enhanced database setup complete!');
+    console.log('✅ Enhanced database setup complete with friends system!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
     process.exit(1);
@@ -754,6 +766,121 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
   }
 });
 
+// FRIENDS SYSTEM: Add Friend by Username
+app.post('/api/add-friend', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { friendUsername } = req.body;
+    
+    if (!friendUsername) {
+      return res.status(400).json({ error: 'Friend username is required' });
+    }
+
+    const cleanUsername = friendUsername.replace('@', '').toLowerCase().trim();
+    
+    if (cleanUsername === (user.username || '').toLowerCase()) {
+      return res.status(400).json({ error: 'Cannot add yourself as a friend' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check if friend exists by username
+      const friendResult = await client.query(
+        'SELECT telegram_id, first_name, username FROM users WHERE LOWER(username) = $1',
+        [cleanUsername]
+      );
+      
+      if (friendResult.rowCount === 0) {
+        throw new Error('User not found. Make sure they have played the game at least once.');
+      }
+
+      const friend = friendResult.rows[0];
+      
+      // Check if already friends
+      const existingFriend = await client.query(
+        'SELECT id FROM user_friends WHERE user_id = $1 AND friend_username = $2',
+        [user.id, cleanUsername]
+      );
+      
+      if (existingFriend.rowCount > 0) {
+        throw new Error('Already friends with this user');
+      }
+
+      // Add friend
+      await client.query(
+        'INSERT INTO user_friends (user_id, friend_username, friend_telegram_id) VALUES ($1, $2, $3)',
+        [user.id, cleanUsername, friend.telegram_id]
+      );
+
+      await client.query('COMMIT');
+      
+      res.status(200).json({ 
+        success: true, 
+        message: `Added ${friend.first_name} (@${friend.username}) as friend!`,
+        friend: {
+          username: friend.username,
+          name: friend.first_name
+        }
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const knownErrors = [
+        'User not found. Make sure they have played the game at least once.',
+        'Already friends with this user',
+        'Cannot add yourself as a friend'
+      ];
+      
+      if (knownErrors.includes(error.message)) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      
+      console.error('🚨 Error in /api/add-friend:', error);
+      res.status(500).json({ success: false, error: 'Failed to add friend' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/add-friend:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// FRIENDS SYSTEM: Get Friends List
+app.post('/api/get-friends', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const friendsResult = await client.query(`
+        SELECT 
+          uf.friend_username,
+          u.first_name,
+          u.username,
+          u.points,
+          u.level
+        FROM user_friends uf
+        LEFT JOIN users u ON uf.friend_telegram_id = u.telegram_id
+        WHERE uf.user_id = $1
+        ORDER BY u.points DESC
+      `, [user.id]);
+      
+      res.status(200).json({ 
+        friends: friendsResult.rows,
+        count: friendsResult.rowCount 
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-friends:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PHASE 3: NEW ENDPOINTS
 
 app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
@@ -905,14 +1032,21 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
           break;
           
         case 'friends':
-          // For now, return global leaderboard as friends feature needs more complex implementation
           query = `
             SELECT u.first_name as name, u.points as score, u.level,
                    ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
                    CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
             FROM users u 
-            ORDER BY u.points DESC 
-            LIMIT 20
+            JOIN user_friends uf ON u.telegram_id = uf.friend_telegram_id
+            WHERE uf.user_id = $1
+            UNION
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            WHERE u.telegram_id = $1
+            ORDER BY score DESC 
+            LIMIT 50
           `;
           params = [user.id];
           break;
