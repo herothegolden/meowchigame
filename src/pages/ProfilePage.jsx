@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, ShieldAlert, Badge, Trophy } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -74,7 +74,7 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   );
 };
 
-const InventoryItemCard = ({ item, onActivate, disabled }) => {
+const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
   const [isActivating, setIsActivating] = useState(false);
 
   const handleActivate = async () => {
@@ -83,13 +83,21 @@ const InventoryItemCard = ({ item, onActivate, disabled }) => {
     setIsActivating(false);
   };
 
+  const getItemIcon = (itemId) => {
+    switch(itemId) {
+      case 4: return <ChevronsUp size={28} />; // Double Points
+      default: return <Star size={28} />;
+    }
+  };
+
   return (
     <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
       <div className="flex items-center">
-        <div className="mr-4 text-accent"><ChevronsUp size={28} /></div>
+        <div className="mr-4 text-accent">{getItemIcon(item.id)}</div>
         <div>
           <p className="font-bold text-primary">{item.name}</p>
           <p className="text-sm text-secondary">{item.description}</p>
+          <p className="text-xs text-accent mt-1">Quantity: {quantity}</p>
         </div>
       </div>
       <button 
@@ -119,15 +127,41 @@ const ProfilePage = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
   const tg = window.Telegram?.WebApp;
 
+  // Mock data for demo mode
+  const MOCK_STATS = {
+    first_name: 'Demo User',
+    username: 'demouser',
+    points: 4735,
+    level: 1,
+    daily_streak: 1,
+    created_at: new Date().toISOString()
+  };
+
+  const MOCK_ITEMS = [
+    { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
+  ];
+
   const fetchProfileData = useCallback(async () => {
-    if (!tg?.initData) {
-      setError("Telegram data not available.");
-      setLoading(false);
-      return;
-    }
     try {
+      if (!tg?.initData || !BACKEND_URL) {
+        console.log('Demo mode: Using mock profile data');
+        setProfileData({
+          stats: MOCK_STATS,
+          inventory: [],
+          allItems: MOCK_ITEMS,
+          boosterActive: false,
+          ownedBadges: []
+        });
+        setIsConnected(false);
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching real profile data...');
+
       // Fetch both user stats and shop/inventory data in parallel
       const [statsRes, shopDataRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/user-stats`, {
@@ -149,6 +183,8 @@ const ProfilePage = () => {
       const stats = await statsRes.json();
       const shopData = await shopDataRes.json();
       
+      console.log('Profile data loaded:', { stats, shopData });
+      
       setProfileData({
         stats,
         inventory: shopData.inventory,
@@ -156,9 +192,22 @@ const ProfilePage = () => {
         boosterActive: shopData.boosterActive,
         ownedBadges: shopData.ownedBadges || []
       });
+      
+      setIsConnected(true);
 
     } catch (err) {
+      console.error('Profile fetch error:', err);
       setError(err.message);
+      
+      // Fallback to demo data
+      setProfileData({
+        stats: MOCK_STATS,
+        inventory: [],
+        allItems: MOCK_ITEMS,
+        boosterActive: false,
+        ownedBadges: []
+      });
+      setIsConnected(false);
     } finally {
       setLoading(false);
     }
@@ -170,6 +219,25 @@ const ProfilePage = () => {
 
   const handleActivateItem = async (itemId) => {
     try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        console.log('Demo: Activating item', itemId);
+        
+        const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
+        if (tg && tg.showPopup) {
+          tg.showPopup({ 
+            title: 'Demo Activation', 
+            message: message, 
+            buttons: [{ type: 'ok' }] 
+          });
+        } else {
+          alert(message);
+        }
+        return;
+      }
+
+      console.log('Activating item:', itemId);
+      
       const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,24 +247,50 @@ const ProfilePage = () => {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Activation failed.');
 
-      tg.HapticFeedback.notificationOccurred('success');
-      tg.showPopup({ title: 'Success!', message: result.message, buttons: [{ type: 'ok' }] });
+      console.log('Item activated successfully:', result);
+
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({ 
+        title: 'Success!', 
+        message: result.message, 
+        buttons: [{ type: 'ok' }] 
+      });
 
       // Refresh profile data
       fetchProfileData();
 
     } catch (err) {
-      tg.HapticFeedback.notificationOccurred('error');
-      tg.showPopup({ title: 'Error', message: err.message, buttons: [{ type: 'ok' }] });
+      console.error('Activation error:', err);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({ 
+        title: 'Error', 
+        message: err.message, 
+        buttons: [{ type: 'ok' }] 
+      });
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><LoaderCircle className="w-12 h-12 text-accent animate-spin" /></div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      </div>
+    );
   }
 
-  if (error || !profileData.stats) {
-    return <div className="p-4 text-center text-red-400"><p>Could not load profile.</p><p className="text-sm text-secondary">{error}</p></div>;
+  if (error && !profileData.stats) {
+    return (
+      <div className="p-4 text-center text-red-400">
+        <p>Could not load profile.</p>
+        <p className="text-sm text-secondary">{error}</p>
+        <button 
+          onClick={fetchProfileData}
+          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
   
   const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
@@ -208,12 +302,25 @@ const ProfilePage = () => {
   );
 
   // Get all possible badges
-  const allBadges = allItems.filter(item => item.category === 'badge');
+  const allBadges = [
+    'Cookie Master Badge',
+    'Speed Demon Badge', 
+    'Champion Badge'
+  ];
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
+      {/* Connection status */}
+      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+        {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
+      </div>
+
       {/* --- User Header --- */}
-      <motion.div className="flex flex-col items-center text-center space-y-2" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div 
+        className="flex flex-col items-center text-center space-y-2" 
+        initial={{ opacity: 0, y: -20 }} 
+        animate={{ opacity: 1, y: 0 }}
+      >
         <div className="w-24 h-24 bg-nav rounded-full flex items-center justify-center border border-gray-700">
           <User className="w-12 h-12 text-secondary" />
         </div>
@@ -224,7 +331,12 @@ const ProfilePage = () => {
       </motion.div>
 
       {/* --- Stats Grid --- */}
-      <motion.div className="grid grid-cols-2 gap-4" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}>
+      <motion.div 
+        className="grid grid-cols-2 gap-4" 
+        initial={{ opacity: 0, scale: 0.95 }} 
+        animate={{ opacity: 1, scale: 1 }} 
+        transition={{ delay: 0.2 }}
+      >
         <StatCard icon={<Star size={24} />} label="Total Points" value={stats.points.toLocaleString()} color="accent" />
         <StatCard icon={<Flame size={24} />} label="Daily Streak" value={`${stats.daily_streak} Days`} color="accent" />
         <StatCard icon={<Award size={24} />} label="Current Level" value={stats.level} color="primary" />
@@ -238,26 +350,22 @@ const ProfilePage = () => {
           Badge Collection
         </h2>
         
-        {allBadges.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3">
-            {allBadges.map(badge => (
-              <BadgeCard
-                key={badge.id}
-                badgeName={badge.name}
-                isOwned={ownedBadges.includes(badge.name)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-secondary text-center p-4 bg-nav rounded-lg border border-gray-700">
-            No badges available yet. Check back later!
-          </p>
-        )}
+        <div className="grid grid-cols-2 gap-3">
+          {allBadges.map(badgeName => (
+            <BadgeCard
+              key={badgeName}
+              badgeName={badgeName}
+              isOwned={ownedBadges.includes(badgeName)}
+            />
+          ))}
+        </div>
       </motion.div>
 
       {/* --- My Boosters Section --- */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-        <h2 className="text-xl font-bold mb-3 flex items-center"><Package className="w-6 h-6 mr-2 text-secondary"/> My Boosters</h2>
+        <h2 className="text-xl font-bold mb-3 flex items-center">
+          <Package className="w-6 h-6 mr-2 text-secondary"/> My Boosters
+        </h2>
         <div className="space-y-3">
           {boosterActive && (
             <div className="bg-green-800/50 border border-green-500 text-green-300 p-3 rounded-lg flex items-center">
@@ -267,9 +375,20 @@ const ProfilePage = () => {
           )}
 
           {activatableItems.length > 0 ? (
-            activatableItems.map(item => (
-              <InventoryItemCard key={item.id} item={item} onActivate={handleActivateItem} disabled={boosterActive} />
-            ))
+            activatableItems.map(item => {
+              const inventoryItem = inventory.find(inv => inv.item_id === item.id);
+              const quantity = inventoryItem ? inventoryItem.quantity : 0;
+              
+              return (
+                <InventoryItemCard 
+                  key={item.id} 
+                  item={item} 
+                  quantity={quantity}
+                  onActivate={handleActivateItem} 
+                  disabled={boosterActive} 
+                />
+              );
+            })
           ) : (
             !boosterActive && (
               <p className="text-secondary text-center p-4 bg-nav rounded-lg border border-gray-700">
