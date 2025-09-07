@@ -1,4 +1,4 @@
-// src/components/game/GameBoard.jsx - With Audio Integration
+// src/components/game/GameBoard.jsx - FIXED infinite loop issue
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -21,21 +21,28 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
   const [bombPositions, setBombPositions] = useState(new Set());
+  
+  // CRITICAL: Use refs to prevent infinite loops
   const processingRef = useRef(false);
   const boardRef = useRef(board);
-  const cascadeLevelRef = useRef(0);
+  const gameStartedRef = useRef(gameStarted);
 
   // AUDIO INTEGRATION
   const { playMatch, playSwap, playInvalidMove, playBomb, playScoreUpdate } = useAudio();
 
-  // Keep board ref updated
+  // Keep refs updated
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
 
+  useEffect(() => {
+    gameStartedRef.current = gameStarted;
+  }, [gameStarted]);
+
   // Reset board when game starts - with optional bomb
   useEffect(() => {
     if (gameStarted) {
+      console.log('🎮 Starting new game...');
       const newBoard = generateInitialBoard();
       
       // Add cookie bomb if purchased
@@ -44,11 +51,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
         const centerCol = Math.floor(BOARD_SIZE / 2);
         const bombIndex = centerRow * BOARD_SIZE + centerCol;
         
-        // Keep the original piece but mark position as having a bomb
         setBombPositions(new Set([bombIndex]));
         
         // AUDIO: Bomb placement sound
-        setTimeout(() => playBomb(), 500); // Delayed for dramatic effect
+        setTimeout(() => playBomb(), 500);
         
         // Haptic feedback for bomb placement
         if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -59,12 +65,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       }
       
       setBoard(newBoard);
-      boardRef.current = newBoard;
       setDraggedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
       processingRef.current = false;
-      cascadeLevelRef.current = 0;
     }
   }, [gameStarted, startWithBomb, playBomb]);
 
@@ -89,7 +93,6 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     const pointsAwarded = explosionIndices.size * POINTS_PER_PIECE * 2; // Double points for bomb
     setScore(prev => {
       const newScore = prev + pointsAwarded;
-      // AUDIO: Score update sound
       setTimeout(() => playScoreUpdate(), 200);
       return newScore;
     });
@@ -104,99 +107,120 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     return explosionIndices;
   }, [setScore, playBomb, playScoreUpdate]);
 
-  // OPTIMIZED: Much faster match processing with bomb support and audio
+  // FIXED: Match processing with proper loop prevention
   const processMatches = useCallback(async () => {
-    if (processingRef.current || !gameStarted) return;
+    // CRITICAL: Prevent multiple simultaneous processing
+    if (processingRef.current || !gameStartedRef.current) {
+      console.log('🚫 Skipping processMatches - already processing or game not started');
+      return;
+    }
     
+    console.log('🔄 Starting match processing...');
     processingRef.current = true;
     setIsProcessing(true);
     
-    let currentBoard = boardRef.current.map(row => [...row]);
-    let totalMatches = 0;
-    let cascadeCount = 0;
-    const maxCascades = 5;
-    
-    while (cascadeCount < maxCascades) {
-      const matches = findMatches(currentBoard);
+    try {
+      let currentBoard = boardRef.current.map(row => [...row]);
+      let totalMatches = 0;
+      let cascadeCount = 0;
+      const MAX_CASCADES = 3; // CRITICAL: Limit cascades to prevent infinite loops
       
-      if (matches.length === 0) break;
-      
-      // Check if any matches trigger bombs
-      let allMatchedIndices = new Set(matches);
-      let bombTriggered = false;
-      
-      // Check for bomb triggers
-      matches.forEach(matchIndex => {
-        if (bombPositions.has(matchIndex)) {
-          const explosionIndices = triggerBombExplosion(matchIndex);
-          explosionIndices.forEach(index => allMatchedIndices.add(index));
-          bombTriggered = true;
+      while (cascadeCount < MAX_CASCADES) {
+        const matches = findMatches(currentBoard);
+        
+        // CRITICAL: Break if no matches found
+        if (matches.length === 0) {
+          console.log(`✅ No more matches found after ${cascadeCount} cascades`);
+          break;
         }
-      });
-      
-      // AUDIO: Match sound with cascade progression
-      if (!bombTriggered) { // Don't play match sound if bomb exploded
-        playMatch(cascadeCount);
+        
+        console.log(`🎯 Found ${matches.length} matches in cascade ${cascadeCount + 1}`);
+        
+        // Check if any matches trigger bombs
+        let allMatchedIndices = new Set(matches);
+        let bombTriggered = false;
+        
+        // Check for bomb triggers
+        for (const matchIndex of matches) {
+          if (bombPositions.has(matchIndex)) {
+            const explosionIndices = triggerBombExplosion(matchIndex);
+            explosionIndices.forEach(index => allMatchedIndices.add(index));
+            bombTriggered = true;
+            break; // Only one bomb per cascade
+          }
+        }
+        
+        // AUDIO: Match sound with cascade progression
+        if (!bombTriggered) {
+          playMatch(cascadeCount);
+        }
+        
+        // Show matched pieces briefly
+        setMatchedPieces(allMatchedIndices);
+        totalMatches += allMatchedIndices.size;
+        
+        // Wait for animation
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Remove matches
+        currentBoard = removeMatches(currentBoard, Array.from(allMatchedIndices));
+        
+        // Apply gravity
+        currentBoard = applyGravity(currentBoard);
+        
+        // Fill empty spaces
+        currentBoard = fillEmptySpaces(currentBoard);
+        
+        // Update board
+        setBoard(currentBoard.map(row => [...row]));
+        boardRef.current = currentBoard;
+        
+        // Clear matched pieces animation
+        setMatchedPieces(new Set());
+        
+        // Wait before next cascade check
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        cascadeCount++;
       }
       
-      // Show matched pieces with faster animation
-      setMatchedPieces(allMatchedIndices);
-      totalMatches += allMatchedIndices.size;
-      
-      // FASTER: Reduced from 400ms to 100ms
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Remove matches
-      currentBoard = removeMatches(currentBoard, Array.from(allMatchedIndices));
-      
-      // Apply gravity
-      currentBoard = applyGravity(currentBoard);
-      
-      // Fill empty spaces
-      currentBoard = fillEmptySpaces(currentBoard);
-      
-      // Update board visually
-      setBoard([...currentBoard.map(row => [...row])]);
-      boardRef.current = currentBoard;
-      
-      // FASTER: Reduced from 300ms to 60ms
-      await new Promise(resolve => setTimeout(resolve, 60));
-      
-      cascadeCount++;
-      cascadeLevelRef.current = cascadeCount;
-      setMatchedPieces(new Set());
-    }
-    
-    // Award points with cascade bonus
-    if (totalMatches > 0) {
-      const basePoints = totalMatches * POINTS_PER_PIECE;
-      const cascadeBonus = Math.max(0, (cascadeCount - 1) * 50);
-      const totalPoints = basePoints + cascadeBonus;
-      
-      setScore(prev => {
-        const newScore = prev + totalPoints;
-        // AUDIO: Score update sound for big combos
-        if (cascadeCount > 1) {
-          setTimeout(() => playScoreUpdate(), 300);
+      // Award points with cascade bonus
+      if (totalMatches > 0) {
+        const basePoints = totalMatches * POINTS_PER_PIECE;
+        const cascadeBonus = Math.max(0, (cascadeCount - 1) * 50);
+        const totalPoints = basePoints + cascadeBonus;
+        
+        console.log(`💰 Awarding ${totalPoints} points (${totalMatches} matches, ${cascadeCount} cascades)`);
+        
+        setScore(prev => {
+          const newScore = prev + totalPoints;
+          if (cascadeCount > 1) {
+            setTimeout(() => playScoreUpdate(), 300);
+          }
+          return newScore;
+        });
+        
+        // Haptic feedback for matches
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          const intensity = cascadeCount > 2 ? 'heavy' : 'medium';
+          window.Telegram.WebApp.HapticFeedback.impactOccurred(intensity);
         }
-        return newScore;
-      });
-      
-      // Haptic feedback for matches
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        const intensity = cascadeCount > 2 ? 'heavy' : 'medium';
-        window.Telegram.WebApp.HapticFeedback.impactOccurred(intensity);
       }
+      
+    } catch (error) {
+      console.error('🚨 Error in processMatches:', error);
+    } finally {
+      setIsProcessing(false);
+      processingRef.current = false;
+      console.log('✅ Match processing complete');
     }
-    
-    setIsProcessing(false);
-    processingRef.current = false;
-    cascadeLevelRef.current = 0;
-  }, [setScore, gameStarted, bombPositions, triggerBombExplosion, playMatch, playScoreUpdate]);
+  }, [setScore, bombPositions, triggerBombExplosion, playMatch, playScoreUpdate]);
 
   // Handle direct bomb tap
   const handleBombTap = useCallback((index) => {
-    if (!bombPositions.has(index) || isProcessing) return;
+    if (!bombPositions.has(index) || isProcessing || processingRef.current) return;
+    
+    console.log('💥 Bomb tapped at index:', index);
     
     // Trigger bomb explosion
     const explosionIndices = triggerBombExplosion(index);
@@ -210,6 +234,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     }
     
     setTimeout(async () => {
+      if (!gameStartedRef.current) return;
+      
       // Remove exploded pieces
       const currentBoard = removeMatches(boardRef.current, Array.from(explosionIndices));
       
@@ -221,16 +247,21 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       boardRef.current = newBoard;
       setMatchedPieces(new Set());
       
-      // Process any new matches
+      // Process any new matches after a delay
       setTimeout(() => {
-        processMatches();
-      }, 100);
-    }, 200);
+        if (gameStartedRef.current && !processingRef.current) {
+          processMatches();
+        }
+      }, 200);
+    }, 300);
   }, [bombPositions, isProcessing, triggerBombExplosion, processMatches]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
-    if (isProcessing || !gameStarted || processingRef.current) return;
+    if (isProcessing || !gameStarted || processingRef.current) {
+      console.log('🚫 Drag prevented - processing or game not started');
+      return;
+    }
     
     // Check if it's a bomb - handle differently
     if (bombPositions.has(index)) {
@@ -243,7 +274,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
   // Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
-    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) return;
+    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) {
+      setDraggedPiece(null);
+      return;
+    }
 
     const { offset } = info;
     const { index } = draggedPiece;
@@ -275,6 +309,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       const targetPosition = getPosition(targetIndex);
 
       if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
+        console.log(`✅ Valid move: ${index} -> ${targetIndex}`);
+        
         // AUDIO: Successful swap sound
         playSwap();
         
@@ -288,11 +324,15 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         }
         
-        // FASTER: Reduced delay from 200ms to 30ms
+        // Process matches after swap with delay
         setTimeout(() => {
-          processMatches();
-        }, 30);
+          if (gameStartedRef.current && !processingRef.current) {
+            processMatches();
+          }
+        }, 100);
       } else {
+        console.log(`❌ Invalid move: ${index} -> ${targetIndex}`);
+        
         // AUDIO: Invalid move sound
         playInvalidMove();
         
@@ -307,19 +347,23 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     setDraggedPiece(null);
   }, [isProcessing, gameStarted, draggedPiece, processMatches, playSwap, playInvalidMove]);
 
-  // Check for initial matches only once when game starts
+  // FIXED: Only check for initial matches once when game starts
   useEffect(() => {
     if (gameStarted && !processingRef.current) {
+      // Small delay to ensure board is set
       const timeoutId = setTimeout(() => {
-        const matches = findMatches(boardRef.current);
-        if (matches.length > 0) {
-          processMatches();
+        if (gameStartedRef.current && !processingRef.current) {
+          const matches = findMatches(boardRef.current);
+          if (matches.length > 0) {
+            console.log('🎯 Processing initial matches:', matches.length);
+            processMatches();
+          }
         }
-      }, 100);
+      }, 300);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [gameStarted, processMatches]);
+  }, [gameStarted]); // Remove processMatches from dependencies to prevent loops
 
   return (
     <div className="w-full flex justify-center">
@@ -341,7 +385,6 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           const left = `calc(${col} * (${cellSize} + 4px))`;
           const top = `calc(${row} * (${cellSize} + 4px))`;
           
-          // UPDATED: piece is now an index (0-5) instead of emoji
           const piece = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
@@ -360,7 +403,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
             >
               {piece !== null && (
                 <GamePiece
-                  piece={piece} // Now passes index (0-5) for your custom images
+                  piece={piece}
                   index={index}
                   isSelected={isSelected}
                   isMatched={isMatched}
