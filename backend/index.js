@@ -439,8 +439,13 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
   }
 });
 
-app.post('/api/start-game-session', validateUser, async (req, res) => {
+// PHASE 2: NEW ENDPOINT - Start game session with selected items
+app.post('/api/start-game-session-with-items', validateUser, async (req, res) => {
   const { user } = req;
+  const { selectedItems = [] } = req.body;
+  
+  console.log(`🎮 Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -448,7 +453,85 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     let totalTimeBonus = 0;
     let hasBomb = false;
 
-    // Consume +10s time booster (ID 1)
+    // Process each selected item
+    for (const itemId of selectedItems) {
+      console.log(`🔄 Processing selected item: ${itemId}`);
+      
+      // Consume the item from inventory
+      const consumeResult = await client.query(
+        `DELETE FROM user_inventory 
+         WHERE id = (
+           SELECT id FROM user_inventory 
+           WHERE user_id = $1 AND item_id = $2 
+           LIMIT 1
+         ) RETURNING item_id`,
+        [user.id, itemId]
+      );
+
+      if (consumeResult.rowCount > 0) {
+        console.log(`✅ Consumed item ${itemId}`);
+        
+        // Apply item effects
+        switch (itemId) {
+          case 1: // Extra Time +10s
+            totalTimeBonus += 10;
+            break;
+          case 2: // Extra Time +20s
+            totalTimeBonus += 20;
+            break;
+          case 3: // Cookie Bomb
+            hasBomb = true;
+            break;
+          case 4: // Double Points - handled separately via activation
+            console.log(`⚠️ Double Points (${itemId}) should be activated manually, not consumed at game start`);
+            break;
+          default:
+            console.log(`⚠️ Unknown item type: ${itemId}`);
+            break;
+        }
+      } else {
+        console.log(`⚠️ Item ${itemId} not found in user inventory or already consumed`);
+      }
+    }
+
+    await client.query('COMMIT');
+    
+    const finalStartTime = 30 + totalTimeBonus;
+    
+    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}, timeBonus=+${totalTimeBonus}s`);
+    
+    res.status(200).json({
+      startTime: finalStartTime,
+      startWithBomb: hasBomb,
+      appliedEffects: {
+        timeBonus: totalTimeBonus,
+        bomb: hasBomb,
+        itemsConsumed: selectedItems.filter(id => id !== 4) // Exclude Double Points
+      }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('🚨 Error in /api/start-game-session-with-items:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// LEGACY ENDPOINT - Keep for backward compatibility
+app.post('/api/start-game-session', validateUser, async (req, res) => {
+  const { user } = req;
+  console.log(`🎮 Starting legacy game session - User: ${user.id}`);
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let totalTimeBonus = 0;
+    let hasBomb = false;
+
+    // Auto-consume time boosters and bombs (legacy behavior)
     const timeBooster10Result = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
@@ -459,7 +542,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    // Consume +20s time booster (ID 2)
     const timeBooster20Result = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
@@ -470,7 +552,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    // Consume Cookie Bomb (ID 3)
     const bombBoosterResult = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
@@ -488,7 +569,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
     hasBomb = bombBoosterResult.rowCount > 0;
     
-    console.log(`🎮 Game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
+    console.log(`🎯 Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
     
     res.status(200).json({
       startTime: 30 + totalTimeBonus,
