@@ -1,7 +1,7 @@
-// src/hooks/useAudio.js - Complete TMA-optimized audio system with enhanced error handling
+// src/hooks/useAudio.js - FIXED global audio system with persistent background music
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// YOUR IMAGEKIT.IO SOUND FILES - All 12 sounds ready!
+// YOUR IMAGEKIT.IO SOUND FILES
 const SOUND_URLS = {
   // GAME SOUNDS (short, punchy, viral)
   match: 'https://ik.imagekit.io/59r2kpz8r/Sounds/pop-sound.mp3?updatedAt=1757264187792',
@@ -24,126 +24,176 @@ const SOUND_URLS = {
   bgMusic: 'https://ik.imagekit.io/59r2kpz8r/Sounds/background-loop.mp3?updatedAt=1757264188456',
 };
 
-export const useAudio = () => {
-  const [isEnabled, setIsEnabled] = useState(true);
-  const [isMusicEnabled, setIsMusicEnabled] = useState(false); // Music off by default
-  const [volume, setVolume] = useState(0.7);
-  const [isLoading, setIsLoading] = useState(true);
-  const [audioContext, setAudioContext] = useState(null);
-  const [initializationError, setInitializationError] = useState(null);
-  
-  const audioBuffers = useRef(new Map());
-  const musicRef = useRef(null);
-  const gainNodeRef = useRef(null);
-  const lastPlayedRef = useRef(new Map()); // Prevent spam
-  const isInitializedRef = useRef(false);
+// GLOBAL AUDIO STATE - Persistent across page navigation
+let globalAudioContext = null;
+let globalAudioBuffers = new Map();
+let globalGainNode = null;
+let globalMusicElement = null;
+let globalInitialized = false;
+let globalIsEnabled = true;
+let globalIsMusicEnabled = false;
+let globalVolume = 0.7;
+let globalLastPlayed = new Map();
 
-  // Initialize Web Audio API (better performance than HTML5 audio)
-  const initializeAudio = useCallback(async () => {
-    if (isInitializedRef.current) return audioContext;
+// GLOBAL INITIALIZATION - Only happens once
+const initializeGlobalAudio = async () => {
+  if (globalInitialized) {
+    console.log('🎵 Using existing global audio context');
+    return globalAudioContext;
+  }
+
+  try {
+    console.log('🚀 Initializing global audio context...');
+    
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error('Web Audio API not supported');
+    }
+    
+    globalAudioContext = new AudioContextClass();
+    
+    // Create master gain node
+    globalGainNode = globalAudioContext.createGain();
+    globalGainNode.connect(globalAudioContext.destination);
+    globalGainNode.gain.value = globalVolume;
+    
+    globalInitialized = true;
+    console.log('✅ Global audio context ready');
+    
+    return globalAudioContext;
+  } catch (error) {
+    console.warn('⚠️ Global audio initialization failed:', error);
+    return null;
+  }
+};
+
+// GLOBAL SOUND PRELOADING - Only happens once
+const preloadGlobalSounds = async () => {
+  if (globalAudioBuffers.size > 0) {
+    console.log('🎵 Using cached audio buffers');
+    return;
+  }
+
+  if (!globalAudioContext) return;
+  
+  console.log('🎵 Preloading sounds globally...');
+  let successCount = 0;
+  
+  const loadPromises = Object.entries(SOUND_URLS).map(async ([key, url]) => {
+    if (key === 'bgMusic') return; // Skip background music in preload
     
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const response = await fetch(url, { cache: 'force-cache' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
-      if (!AudioContextClass) {
-        throw new Error('Web Audio API not supported');
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await globalAudioContext.decodeAudioData(arrayBuffer);
+      globalAudioBuffers.set(key, audioBuffer);
+      successCount++;
+      console.log(`✅ Cached: ${key}`);
+    } catch (error) {
+      console.warn(`❌ Failed to cache ${key}:`, error.message);
+    }
+  });
+
+  await Promise.allSettled(loadPromises);
+  console.log(`🎉 Cached ${successCount} sounds globally`);
+};
+
+// GLOBAL BACKGROUND MUSIC - Persistent across pages
+const startGlobalBackgroundMusic = async () => {
+  if (globalMusicElement || !globalIsMusicEnabled) return;
+
+  try {
+    console.log('🎶 Starting global background music...');
+    
+    const audio = new Audio(SOUND_URLS.bgMusic);
+    audio.loop = true;
+    audio.volume = globalVolume * 0.2; // Quieter background music
+    audio.preload = 'auto';
+    
+    // Add event listeners
+    audio.addEventListener('error', (e) => {
+      console.warn('⚠️ Background music error:', e);
+      globalMusicElement = null;
+    });
+    
+    audio.addEventListener('canplaythrough', () => {
+      console.log('🎶 Background music ready');
+    });
+    
+    await audio.play();
+    globalMusicElement = audio;
+    console.log('✅ Global background music started');
+  } catch (error) {
+    console.warn('⚠️ Background music failed:', error);
+    globalMusicElement = null;
+  }
+};
+
+const stopGlobalBackgroundMusic = () => {
+  if (globalMusicElement) {
+    try {
+      globalMusicElement.pause();
+      globalMusicElement.currentTime = 0;
+      globalMusicElement = null;
+      console.log('🔇 Global background music stopped');
+    } catch (error) {
+      console.warn('⚠️ Error stopping background music:', error);
+      globalMusicElement = null;
+    }
+  }
+};
+
+// REACT HOOK - Uses global state
+export const useAudio = () => {
+  const [isEnabled, setIsEnabled] = useState(globalIsEnabled);
+  const [isMusicEnabled, setIsMusicEnabled] = useState(globalIsMusicEnabled);
+  const [volume, setVolume] = useState(globalVolume);
+  const [isLoading, setIsLoading] = useState(!globalInitialized);
+  const [initializationError, setInitializationError] = useState(null);
+  
+  const initCallbackRef = useRef(null);
+
+  // Initialize global audio on first user interaction
+  const initializeAudio = useCallback(async () => {
+    if (globalInitialized) {
+      setIsLoading(false);
+      return globalAudioContext;
+    }
+    
+    try {
+      const context = await initializeGlobalAudio();
+      if (context) {
+        await preloadGlobalSounds();
+        setInitializationError(null);
       }
-      
-      const context = new AudioContextClass();
-      
-      // Create master gain node for volume control
-      const gainNode = context.createGain();
-      gainNode.connect(context.destination);
-      gainNode.gain.value = volume;
-      
-      setAudioContext(context);
-      gainNodeRef.current = gainNode;
-      isInitializedRef.current = true;
-      setInitializationError(null);
-      
-      console.log('🔊 Audio context initialized successfully');
+      setIsLoading(false);
       return context;
     } catch (error) {
-      console.warn('⚠️ Audio initialization failed:', error);
+      console.error('🚨 Audio initialization error:', error);
       setInitializationError(error.message);
       setIsLoading(false);
       return null;
     }
-  }, [volume, audioContext]);
+  }, []);
 
-  // Preload audio buffers for instant playback with better error handling
-  const preloadSounds = useCallback(async (context) => {
-    if (!context) {
+  // Setup initialization on first user interaction
+  useEffect(() => {
+    if (globalInitialized) {
       setIsLoading(false);
       return;
     }
-    
-    console.log('🎵 Preloading sounds...');
-    let successCount = 0;
-    let errorCount = 0;
-    
-    const loadPromises = Object.entries(SOUND_URLS).map(async ([key, url]) => {
-      if (key === 'bgMusic') return; // Skip background music in preload
-      
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-        
-        const response = await fetch(url, { 
-          signal: controller.signal,
-          cache: 'force-cache' // Use browser cache if available
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await context.decodeAudioData(arrayBuffer);
-        audioBuffers.current.set(key, audioBuffer);
-        successCount++;
-        console.log(`✅ Loaded: ${key}`);
-      } catch (error) {
-        errorCount++;
-        console.warn(`❌ Failed to load ${key}:`, error.message);
-      }
-    });
 
-    await Promise.allSettled(loadPromises);
-    setIsLoading(false);
-    
-    console.log(`🎉 Audio loading complete: ${successCount} success, ${errorCount} errors`);
-    
-    // Show warning if too many sounds failed to load
-    if (errorCount > successCount) {
-      console.warn('⚠️ Most sounds failed to load. Audio experience may be degraded.');
-    }
-  }, []);
-
-  // Initialize audio system with improved error handling
-  useEffect(() => {
-    let isUnmounted = false;
-    
-    const init = async () => {
-      try {
-        const context = await initializeAudio();
-        if (!isUnmounted && context) {
-          await preloadSounds(context);
-        }
-      } catch (error) {
-        if (!isUnmounted) {
-          console.error('🚨 Audio initialization failed:', error);
-          setInitializationError(error.message);
-          setIsLoading(false);
-        }
-      }
-    };
-
-    // Wait for user interaction (TMA requirement)
     const handleFirstInteraction = () => {
-      init();
+      if (initCallbackRef.current) {
+        clearTimeout(initCallbackRef.current);
+      }
+      
+      initCallbackRef.current = setTimeout(() => {
+        initializeAudio();
+      }, 100);
+      
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
@@ -152,143 +202,99 @@ export const useAudio = () => {
     document.addEventListener('click', handleFirstInteraction);
 
     return () => {
-      isUnmounted = true;
+      if (initCallbackRef.current) {
+        clearTimeout(initCallbackRef.current);
+      }
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
-  }, [initializeAudio, preloadSounds]);
+  }, [initializeAudio]);
 
-  // Update volume with error handling
+  // Update global state when local state changes
   useEffect(() => {
-    try {
-      if (gainNodeRef.current && isEnabled) {
-        gainNodeRef.current.gain.value = volume;
-      }
-      if (musicRef.current) {
-        musicRef.current.volume = isMusicEnabled ? volume * 0.3 : 0; // Music quieter
-      }
-    } catch (error) {
-      console.warn('⚠️ Volume update failed:', error);
+    globalIsEnabled = isEnabled;
+    if (globalGainNode) {
+      globalGainNode.gain.value = isEnabled ? volume : 0;
     }
-  }, [volume, isEnabled, isMusicEnabled]);
+  }, [isEnabled, volume]);
 
-  // Play sound effect with enhanced spam protection and error handling
-  const playSound = useCallback((soundKey, options = {}) => {
-    // Early returns for better performance
-    if (!isEnabled || !audioContext || isLoading || initializationError) {
-      return;
+  useEffect(() => {
+    globalIsMusicEnabled = isMusicEnabled;
+    globalVolume = volume;
+    
+    if (globalMusicElement) {
+      globalMusicElement.volume = isMusicEnabled ? volume * 0.2 : 0;
     }
+    
+    if (isMusicEnabled && !globalMusicElement) {
+      startGlobalBackgroundMusic();
+    } else if (!isMusicEnabled && globalMusicElement) {
+      stopGlobalBackgroundMusic();
+    }
+  }, [isMusicEnabled, volume]);
+
+  // FAST SOUND PLAYING - Uses global buffers
+  const playSound = useCallback((soundKey, options = {}) => {
+    if (!globalIsEnabled || !globalAudioContext || !globalInitialized) return;
     
     const { 
       volume: soundVolume = 1, 
       playbackRate = 1,
       delay = 0,
       preventSpam = true,
-      spamDelay = 50 // Reduced from 100ms to 50ms for better responsiveness
+      spamDelay = 50
     } = options;
 
     // Spam protection
     if (preventSpam) {
       const now = Date.now();
-      const lastPlayed = lastPlayedRef.current.get(soundKey) || 0;
+      const lastPlayed = globalLastPlayed.get(soundKey) || 0;
       if (now - lastPlayed < spamDelay) return;
-      lastPlayedRef.current.set(soundKey, now);
+      globalLastPlayed.set(soundKey, now);
     }
 
-    const buffer = audioBuffers.current.get(soundKey);
+    const buffer = globalAudioBuffers.get(soundKey);
     if (!buffer) {
       console.warn(`🔇 Sound not found: ${soundKey}`);
       return;
     }
 
     try {
-      // Resume audio context if suspended (mobile requirement)
-      if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(err => {
+      // Resume audio context if suspended
+      if (globalAudioContext.state === 'suspended') {
+        globalAudioContext.resume().catch(err => {
           console.warn('⚠️ Failed to resume audio context:', err);
         });
       }
 
-      const source = audioContext.createBufferSource();
-      const gainNode = audioContext.createGain();
+      const source = globalAudioContext.createBufferSource();
+      const gainNode = globalAudioContext.createGain();
       
       source.buffer = buffer;
-      source.playbackRate.value = Math.max(0.25, Math.min(4, playbackRate)); // Clamp playback rate
+      source.playbackRate.value = Math.max(0.25, Math.min(4, playbackRate));
       source.connect(gainNode);
-      gainNode.connect(gainNodeRef.current);
-      gainNode.gain.value = Math.max(0, Math.min(1, soundVolume)); // Clamp volume
+      gainNode.connect(globalGainNode);
+      gainNode.gain.value = Math.max(0, Math.min(1, soundVolume));
       
-      source.start(audioContext.currentTime + Math.max(0, delay));
+      source.start(globalAudioContext.currentTime + Math.max(0, delay));
       
-      // Clean up after playback with timeout fallback
+      // Cleanup
       const cleanup = () => {
         try {
           source.disconnect();
           gainNode.disconnect();
         } catch (err) {
-          // Node might already be disconnected
+          // Already disconnected
         }
       };
       
       source.onended = cleanup;
-      setTimeout(cleanup, 5000); // Fallback cleanup after 5 seconds
+      setTimeout(cleanup, 3000); // Fallback cleanup
       
     } catch (error) {
       console.warn(`⚠️ Failed to play ${soundKey}:`, error.message);
     }
-  }, [isEnabled, audioContext, isLoading, initializationError]);
-
-  // Background music management with better error handling
-  const playBackgroundMusic = useCallback(async () => {
-    if (!isMusicEnabled || musicRef.current) return;
-
-    try {
-      const audio = new Audio(SOUND_URLS.bgMusic);
-      audio.loop = true;
-      audio.volume = volume * 0.3; // Background music should be quiet
-      audio.preload = 'auto';
-      
-      // Better error handling for audio loading
-      audio.addEventListener('error', (e) => {
-        console.warn('⚠️ Background music error:', e);
-        musicRef.current = null;
-      });
-      
-      audio.addEventListener('canplaythrough', () => {
-        console.log('🎶 Background music ready');
-      });
-      
-      await audio.play();
-      musicRef.current = audio;
-      console.log('🎶 Background music started');
-    } catch (error) {
-      console.warn('⚠️ Background music failed:', error.message);
-      musicRef.current = null;
-    }
-  }, [isMusicEnabled, volume]);
-
-  const stopBackgroundMusic = useCallback(() => {
-    if (musicRef.current) {
-      try {
-        musicRef.current.pause();
-        musicRef.current.currentTime = 0;
-        musicRef.current = null;
-        console.log('🔇 Background music stopped');
-      } catch (error) {
-        console.warn('⚠️ Error stopping background music:', error);
-        musicRef.current = null;
-      }
-    }
   }, []);
-
-  // Background music control
-  useEffect(() => {
-    if (isMusicEnabled && !initializationError) {
-      playBackgroundMusic();
-    } else {
-      stopBackgroundMusic();
-    }
-  }, [isMusicEnabled, playBackgroundMusic, stopBackgroundMusic, initializationError]);
 
   // Game-specific sound functions
   const gameSounds = {
@@ -296,7 +302,7 @@ export const useAudio = () => {
     playMatch: (cascadeLevel = 0) => {
       if (cascadeLevel > 0) {
         playSound('cascade', { 
-          playbackRate: 1 + (cascadeLevel * 0.1), // Higher pitch for combos
+          playbackRate: 1 + (cascadeLevel * 0.1),
           volume: Math.min(1, 0.8 + (cascadeLevel * 0.1))
         });
       } else {
@@ -322,17 +328,22 @@ export const useAudio = () => {
     playGameOver: () => playSound('gameOver', { volume: 1.0 }),
   };
 
-  // Enhanced cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopBackgroundMusic();
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close().catch(err => {
-          console.warn('⚠️ Error closing audio context:', err);
-        });
-      }
-    };
-  }, [audioContext, stopBackgroundMusic]);
+  // Manual controls
+  const playBackgroundMusic = useCallback(() => {
+    if (!globalIsMusicEnabled) {
+      globalIsMusicEnabled = true;
+      setIsMusicEnabled(true);
+      startGlobalBackgroundMusic();
+    }
+  }, []);
+
+  const stopBackgroundMusic = useCallback(() => {
+    if (globalIsMusicEnabled) {
+      globalIsMusicEnabled = false;
+      setIsMusicEnabled(false);
+      stopGlobalBackgroundMusic();
+    }
+  }, []);
 
   return {
     // State
@@ -340,7 +351,7 @@ export const useAudio = () => {
     isMusicEnabled,
     volume,
     isLoading,
-    initializationError, // New: expose initialization errors
+    initializationError,
     
     // Controls
     setIsEnabled,
@@ -356,6 +367,6 @@ export const useAudio = () => {
     stopBackgroundMusic,
     
     // Utility
-    reinitialize: initializeAudio, // New: allow manual reinitialization
+    reinitialize: initializeAudio,
   };
 };
