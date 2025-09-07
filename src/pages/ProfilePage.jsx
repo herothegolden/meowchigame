@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, X } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Wifi } from 'lucide-react';
 import { PerformanceMonitor } from '../utils/performance';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+import { OptimizedAPIService } from '../utils/apiService';
 
 // --- Helper Components ---
 
@@ -122,9 +121,9 @@ const ProfilePage = () => {
   const [profileData, setProfileData] = useState({ 
     stats: null, 
     inventory: [], 
-    allItems: [], 
+    shop_items: [], 
     boosterActive: false,
-    ownedBadges: []
+    owned_badges: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -139,7 +138,6 @@ const ProfilePage = () => {
   // Friends system state
   const [friendUsername, setFriendUsername] = useState('');
   const [isAddingFriend, setIsAddingFriend] = useState(false);
-  const [friendsList, setFriendsList] = useState([]);
   
   const tg = window.Telegram?.WebApp;
 
@@ -150,7 +148,10 @@ const ProfilePage = () => {
     points: 4735,
     level: 1,
     daily_streak: 1,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    games_played: 4,
+    high_score: 1455,
+    total_play_time: 0
   };
 
   const MOCK_ITEMS = [
@@ -187,41 +188,135 @@ const ProfilePage = () => {
     }
   };
 
+  // OPTIMIZATION: Single API call instead of parallel calls
+  const fetchProfileData = useCallback(async () => {
+    try {
+      PerformanceMonitor.startTimer('ProfilePage_SingleAPICall');
+      
+      if (!tg?.initData) {
+        console.log('Demo mode: Using mock profile data');
+        setProfileData({
+          stats: MOCK_STATS,
+          inventory: [],
+          shop_items: MOCK_ITEMS,
+          boosterActive: false,
+          owned_badges: []
+        });
+        setIsConnected(false);
+        setLoading(false);
+        PerformanceMonitor.endTimer('ProfilePage_SingleAPICall');
+        return;
+      }
+
+      console.log('🚀 Fetching complete profile data...');
+
+      // Try new optimized endpoint first, fallback to old endpoints
+      let completeProfile;
+      try {
+        completeProfile = await OptimizedAPIService.getProfileData(tg.initData);
+      } catch (error) {
+        console.log('⚠️ New endpoint failed, using fallback...');
+        // Fallback to existing endpoints
+        const [statsRes, shopDataRes] = await Promise.all([
+          OptimizedAPIService.request('/api/user-stats', {
+            body: JSON.stringify({ initData: tg.initData })
+          }),
+          OptimizedAPIService.request('/api/get-shop-data', {
+            body: JSON.stringify({ initData: tg.initData })
+          })
+        ]);
+        
+        completeProfile = {
+          stats: statsRes,
+          inventory: shopDataRes.inventory || [],
+          shop_items: shopDataRes.items || [],
+          boosterActive: shopDataRes.boosterActive || false,
+          owned_badges: shopDataRes.ownedBadges || []
+        };
+      }
+      
+      PerformanceMonitor.endTimer('ProfilePage_SingleAPICall');
+      
+      console.log('✅ Complete profile loaded:', completeProfile);
+      
+      setProfileData({
+        stats: completeProfile.stats,
+        inventory: completeProfile.inventory || [],
+        shop_items: completeProfile.shop_items || completeProfile.items || [],
+        boosterActive: completeProfile.boosterActive || false,
+        owned_badges: completeProfile.owned_badges || completeProfile.ownedBadges || []
+      });
+      
+      setIsConnected(true);
+
+      // Success haptic feedback
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
+    } catch (err) {
+      console.error('ProfilePage fetch error:', err);
+      setError(err.message);
+      
+      // Fallback to demo data
+      setProfileData({
+        stats: MOCK_STATS,
+        inventory: [],
+        shop_items: MOCK_ITEMS,
+        boosterActive: false,
+        owned_badges: []
+      });
+      setIsConnected(false);
+      
+      // Error haptic feedback
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+    } finally {
+      setLoading(false);
+      
+      // Performance report
+      setTimeout(() => {
+        const report = PerformanceMonitor.getReport();
+        console.log('📊 ProfilePage Performance Report:', report);
+        
+        // Alert if still slow
+        if (report.averageLoadTime > 300 && tg?.showAlert) {
+          tg.showAlert(`Profile Load: ${report.averageLoadTime}ms`);
+        }
+      }, 1000);
+    }
+  }, [tg]);
+
+  // OPTIMIZATION: Cached leaderboard fetch
   const fetchLeaderboard = async (type = 'global') => {
     setLeaderboardLoading(true);
     
     try {
-      PerformanceMonitor.startTimer(`ProfilePage_Leaderboard_${type}`);
-      
-      if (!tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData) {
         setLeaderboardData(MOCK_LEADERBOARD);
         setLeaderboardLoading(false);
-        PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
         return;
       }
 
-      const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, type }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboardData(data.leaderboard || []);
-      } else {
-        setLeaderboardData(MOCK_LEADERBOARD);
-      }
+      console.log(`🚀 Fetching ${type} leaderboard...`);
+      const start = performance.now();
       
-      PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
+      const data = await OptimizedAPIService.getLeaderboard(tg.initData, type);
+      
+      const duration = Math.round(performance.now() - start);
+      console.log(`✅ Leaderboard ${type}: ${duration}ms`);
+      
+      setLeaderboardData(data.leaderboard || []);
     } catch (err) {
+      console.error('Leaderboard error:', err);
       setLeaderboardData(MOCK_LEADERBOARD);
-      PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
     } finally {
       setLeaderboardLoading(false);
     }
   };
 
+  // OPTIMIZATION: Debounced friend add with retry
   const handleAddFriend = async () => {
     if (!friendUsername.trim()) {
       if (tg && tg.showPopup) {
@@ -239,9 +334,7 @@ const ProfilePage = () => {
     setIsAddingFriend(true);
 
     try {
-      PerformanceMonitor.startTimer('ProfilePage_AddFriend');
-      
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!isConnected || !tg?.initData) {
         // Demo mode
         console.log('Demo: Adding friend:', friendUsername);
         const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
@@ -256,26 +349,17 @@ const ProfilePage = () => {
         }
         setFriendUsername('');
         setIsAddingFriend(false);
-        PerformanceMonitor.endTimer('ProfilePage_AddFriend');
         return;
       }
 
       console.log('Adding friend:', friendUsername);
 
-      const res = await fetch(`${BACKEND_URL}/api/add-friend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const result = await OptimizedAPIService.request('/api/add-friend', {
         body: JSON.stringify({ 
           initData: tg.initData, 
           friendUsername: friendUsername.trim() 
-        }),
+        })
       });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to add friend');
-      }
 
       console.log('Friend added successfully:', result);
 
@@ -290,8 +374,6 @@ const ProfilePage = () => {
       // Clear input and refresh leaderboard
       setFriendUsername('');
       fetchLeaderboard('friends');
-      
-      PerformanceMonitor.endTimer('ProfilePage_AddFriend');
 
     } catch (error) {
       console.error('Add friend error:', error);
@@ -306,119 +388,15 @@ const ProfilePage = () => {
       } else {
         alert(error.message);
       }
-      
-      PerformanceMonitor.endTimer('ProfilePage_AddFriend');
     } finally {
       setIsAddingFriend(false);
     }
   };
 
-  const fetchProfileData = useCallback(async () => {
-    try {
-      PerformanceMonitor.startTimer('ProfilePage_TotalLoad');
-      
-      if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using mock profile data');
-        PerformanceMonitor.startTimer('ProfilePage_MockData');
-        setProfileData({
-          stats: MOCK_STATS,
-          inventory: [],
-          allItems: MOCK_ITEMS,
-          boosterActive: false,
-          ownedBadges: []
-        });
-        setIsConnected(false);
-        setLoading(false);
-        PerformanceMonitor.endTimer('ProfilePage_MockData');
-        PerformanceMonitor.endTimer('ProfilePage_TotalLoad');
-        return;
-      }
-
-      console.log('Fetching real profile data...');
-      
-      // Test network latency
-      await PerformanceMonitor.testNetworkLatency();
-
-      PerformanceMonitor.startTimer('ProfilePage_ParallelAPICalls');
-      
-      // Fetch both user stats and shop/inventory data in parallel
-      const [statsRes, shopDataRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/user-stats`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        }),
-        fetch(`${BACKEND_URL}/api/get-shop-data`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        })
-      ]);
-      
-      PerformanceMonitor.endTimer('ProfilePage_ParallelAPICalls');
-
-      if (!statsRes.ok || !shopDataRes.ok) {
-        throw new Error('Failed to fetch profile data.');
-      }
-
-      PerformanceMonitor.startTimer('ProfilePage_DataProcessing');
-      const stats = await statsRes.json();
-      const shopData = await shopDataRes.json();
-      
-      console.log('Profile data loaded:', { stats, shopData });
-      
-      setProfileData({
-        stats,
-        inventory: shopData.inventory,
-        allItems: shopData.items,
-        boosterActive: shopData.boosterActive,
-        ownedBadges: shopData.ownedBadges || []
-      });
-      
-      setIsConnected(true);
-      PerformanceMonitor.endTimer('ProfilePage_DataProcessing');
-
-    } catch (err) {
-      console.error('Profile fetch error:', err);
-      setError(err.message);
-      
-      // Fallback to demo data
-      setProfileData({
-        stats: MOCK_STATS,
-        inventory: [],
-        allItems: MOCK_ITEMS,
-        boosterActive: false,
-        ownedBadges: []
-      });
-      setIsConnected(false);
-    } finally {
-      setLoading(false);
-      PerformanceMonitor.endTimer('ProfilePage_TotalLoad');
-      
-      // Show performance report
-      setTimeout(() => {
-        const report = PerformanceMonitor.getReport();
-        console.log('📊 ProfilePage Performance Report:', report);
-      }, 1000);
-    }
-  }, [tg]);
-
-  useEffect(() => {
-    fetchProfileData();
-  }, [fetchProfileData]);
-
-  // Load leaderboard when leaderboard tab is accessed
-  useEffect(() => {
-    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
-      fetchLeaderboard(leaderboardTab);
-    }
-  }, [activeTab]);
-
+  // OPTIMIZATION: Fast item activation
   const handleActivateItem = async (itemId) => {
     try {
-      PerformanceMonitor.startTimer('ProfilePage_ActivateItem');
-      
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!isConnected || !tg?.initData) {
         // Demo mode
         console.log('Demo: Activating item', itemId);
         
@@ -432,20 +410,14 @@ const ProfilePage = () => {
         } else {
           alert(message);
         }
-        PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
         return;
       }
 
       console.log('Activating item:', itemId);
       
-      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, itemId }),
+      const result = await OptimizedAPIService.request('/api/activate-item', {
+        body: JSON.stringify({ initData: tg.initData, itemId })
       });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Activation failed.');
 
       console.log('Item activated successfully:', result);
 
@@ -458,8 +430,6 @@ const ProfilePage = () => {
 
       // Refresh profile data
       fetchProfileData();
-      
-      PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
 
     } catch (err) {
       console.error('Activation error:', err);
@@ -469,47 +439,20 @@ const ProfilePage = () => {
         message: err.message, 
         buttons: [{ type: 'ok' }] 
       });
-      PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
-      </div>
-    );
-  }
+  // Initial load
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
 
-  if (error && !profileData.stats) {
-    return (
-      <div className="p-4 text-center text-red-400">
-        <p>Could not load profile.</p>
-        <p className="text-sm text-secondary">{error}</p>
-        <button 
-          onClick={fetchProfileData}
-          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-  
-  const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
-  
-  // Get activatable items (Double Points only)
-  const activatableItems = allItems.filter(item => 
-    item.id === 4 && // Double Points item
-    inventory.some(inv => inv.item_id === item.id && inv.quantity > 0)
-  );
-
-  // Get all possible badges
-  const allBadges = [
-    'Cookie Master Badge',
-    'Speed Demon Badge', 
-    'Champion Badge'
-  ];
+  // Load leaderboard when tab is accessed
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
+      fetchLeaderboard(leaderboardTab);
+    }
+  }, [activeTab]);
 
   const renderTabContent = () => {
     switch(activeTab) {
@@ -807,25 +750,71 @@ const ProfilePage = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="mb-4"
+        >
+          <LoaderCircle className="w-12 h-12 text-accent" />
+        </motion.div>
+        <p className="text-secondary">Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (error && !profileData.stats) {
+    return (
+      <div className="p-4 text-center text-red-400">
+        <p>Could not load profile.</p>
+        <p className="text-sm text-secondary">{error}</p>
+        <button 
+          onClick={fetchProfileData}
+          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  
+  const { stats, inventory, shop_items, boosterActive, owned_badges: ownedBadges } = profileData;
+  
+  // Get activatable items (Double Points only)
+  const activatableItems = shop_items.filter(item => 
+    item.id === 4 && // Double Points item
+    inventory.some(inv => inv.item_id === item.id && inv.quantity > 0)
+  );
+
+  // Get all possible badges
+  const allBadges = [
+    'Cookie Master Badge',
+    'Speed Demon Badge', 
+    'Champion Badge'
+  ];
+
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
-      {/* Connection status */}
-      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-        {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
+      {/* Connection status with performance indicator */}
+      <div className={`text-xs text-center p-2 rounded flex items-center justify-center space-x-2 ${
+        isConnected ? 'text-green-400 bg-green-900/20' : 'text-yellow-400 bg-yellow-900/20'
+      }`}>
+        <Wifi className="w-3 h-3" />
+        <span>{isConnected ? '🟢 Connected - Optimized API' : '🔴 Demo mode - data won\'t persist'}</span>
       </div>
 
-      {/* --- FIXED: Horizontal User Header Layout --- */}
+      {/* User Header */}
       <motion.div 
         className="flex items-center space-x-4 p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Profile Photo - LEFT */}
         <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 flex-shrink-0">
           <User className="w-8 h-8 text-secondary" />
         </div>
         
-        {/* User Info - RIGHT */}
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
           <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
@@ -836,7 +825,7 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* --- FIXED: Compact Tab Navigation --- */}
+      {/* Tab Navigation */}
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -867,7 +856,7 @@ const ProfilePage = () => {
         })}
       </motion.div>
 
-      {/* --- Tab Content --- */}
+      {/* Tab Content */}
       <div className="min-h-[400px]">
         {renderTabContent()}
       </div>
