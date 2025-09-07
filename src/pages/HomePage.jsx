@@ -1,8 +1,9 @@
-// src/pages/HomePage.jsx - OPTIMIZED for TMA performance
+// src/pages/HomePage.jsx - Complete with audio integration and TMA optimization
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Star, Flame, ChevronRight, LoaderCircle, Wifi, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAudio } from '../hooks/useAudio';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -24,6 +25,9 @@ const HomePage = () => {
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const navigate = useNavigate();
+
+  // AUDIO INTEGRATION
+  const { playButtonClick } = useAudio();
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -97,9 +101,22 @@ const HomePage = () => {
     fetchUserData();
   }, []);
 
-  // SIMPLIFIED: Manual retry function
+  // AUDIO-ENHANCED: Manual retry function
   const handleRetry = () => {
+    playButtonClick(); // Audio feedback
     window.location.reload();
+  };
+
+  // AUDIO-ENHANCED: Play Now navigation
+  const handlePlayNow = () => {
+    playButtonClick(); // Audio feedback for main game button
+    
+    // Haptic feedback for main action
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    }
+    
+    navigate('/game');
   };
 
   if (loading) {
@@ -138,7 +155,7 @@ const HomePage = () => {
   return (
     <div className="p-4 space-y-6">
       
-      {/* SIMPLIFIED: Connection status */}
+      {/* Connection status */}
       <div className={`text-xs text-center p-2 rounded flex items-center justify-center space-x-2 ${
         isConnected ? 'text-green-400 bg-green-900/20' : 'text-yellow-400 bg-yellow-900/20'
       }`}>
@@ -196,14 +213,14 @@ const HomePage = () => {
         <p className="text-sm">Get double points on all games this weekend!</p>
       </motion.div>
 
-      {/* Play button */}
+      {/* Play button with audio feedback */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.3 }}
       >
         <button 
-          onClick={() => navigate('/game')} 
+          onClick={handlePlayNow}
           className="w-full bg-accent text-background font-bold py-4 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105 active:scale-95"
         >
           Play Now!
