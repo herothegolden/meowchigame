@@ -8,19 +8,21 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const MOCK_USER_DATA = {
   id: 1,
   telegram_id: 123456789,
-  first_name: 'Dev User',
+  first_name: 'Demo User',
   last_name: '',
-  username: 'devuser',
-  points: 5000,
-  level: 8,
-  daily_streak: 4,
-  dailyBonus: { points: 400, streak: 4 } // Mock bonus for browser testing
+  username: 'demouser',
+  points: 4735,
+  level: 1,
+  daily_streak: 1,
+  dailyBonus: null
 };
 
 const HomePage = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [isConnected, setIsConnected] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -36,18 +38,23 @@ const HomePage = () => {
       }
     };
 
-    if (!tg || !tg.initData) {
-      console.log('Running in browser mode. Using mock data.');
-      setUser(MOCK_USER_DATA);
-      setLoading(false);
-      showBonusPopup(MOCK_USER_DATA.dailyBonus); // Show mock bonus in browser
-      return;
-    }
-    
     const fetchUserData = async () => {
-      tg.ready();
-      
       try {
+        if (!tg || !tg.initData || !BACKEND_URL) {
+          console.log('Running in browser mode. Using mock data.');
+          setConnectionStatus('Demo mode - using mock data');
+          setUser(MOCK_USER_DATA);
+          setIsConnected(false);
+          setLoading(false);
+          showBonusPopup(MOCK_USER_DATA.dailyBonus);
+          return;
+        }
+        
+        console.log('Fetching user data from backend...');
+        setConnectionStatus('Fetching user data...');
+        
+        tg.ready();
+        
         const res = await fetch(`${BACKEND_URL}/api/validate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -59,7 +66,11 @@ const HomePage = () => {
         }
 
         const userData = await res.json();
+        console.log('User data received:', userData);
+        
         setUser(userData);
+        setConnectionStatus('Connected to server');
+        setIsConnected(true);
 
         // Check for and display the daily bonus
         if (userData.dailyBonus) {
@@ -67,7 +78,13 @@ const HomePage = () => {
         }
 
       } catch (err) {
+        console.error('Error fetching user data:', err);
         setError(`Failed to fetch user data: ${err.message}`);
+        setConnectionStatus(`Error: ${err.message} - Using demo mode`);
+        
+        // Fallback to mock data
+        setUser(MOCK_USER_DATA);
+        setIsConnected(false);
       } finally {
         setLoading(false);
       }
@@ -78,17 +95,24 @@ const HomePage = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      <div className="flex flex-col items-center justify-center h-full">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin mb-4" />
+        <p className="text-secondary">{connectionStatus}</p>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !user) {
     return (
       <div className="p-4 text-center text-red-400">
         <p>Oops! Something went wrong.</p>
         <p className="text-sm text-secondary">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -105,13 +129,18 @@ const HomePage = () => {
   return (
     <div className="p-4 space-y-6">
       
+      {/* Connection status */}
+      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+        {connectionStatus}
+      </div>
+
       <motion.div 
         className="flex items-center space-x-4"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="w-16 h-16 bg-nav rounded-full flex items-center justify-center">
+        <div className="w-16 h-16 bg-nav rounded-full flex items-center justify-center border border-gray-700">
           <User className="w-8 h-8 text-secondary" />
         </div>
         <div>
@@ -126,14 +155,14 @@ const HomePage = () => {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
-        <div className="bg-nav p-4 rounded-lg">
+        <div className="bg-nav p-4 rounded-lg border border-gray-700">
           <div className="flex items-center text-secondary mb-1">
             <Star className="w-4 h-4 mr-2" />
             <span className="text-sm">My Points</span>
           </div>
           <p className="text-2xl font-bold text-accent">{user.points.toLocaleString()}</p>
         </div>
-        <div className="bg-nav p-4 rounded-lg">
+        <div className="bg-nav p-4 rounded-lg border border-gray-700">
           <div className="flex items-center text-secondary mb-1">
             <Flame className="w-4 h-4 mr-2" />
             <span className="text-sm">Daily Streak</span>
@@ -157,7 +186,10 @@ const HomePage = () => {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.6 }}
       >
-        <button onClick={() => navigate('/game')} className="w-full bg-accent text-background font-bold py-4 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105">
+        <button 
+          onClick={() => navigate('/game')} 
+          className="w-full bg-accent text-background font-bold py-4 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-105"
+        >
           Play Now!
           <ChevronRight className="w-6 h-6 ml-2" />
         </button>
