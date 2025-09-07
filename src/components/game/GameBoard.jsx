@@ -1,4 +1,4 @@
-// src/components/game/GameBoard.jsx - Complete with custom images support
+// src/components/game/GameBoard.jsx - With Audio Integration
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -13,6 +13,7 @@ import {
   POINTS_PER_PIECE,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
+import { useAudio } from '../../hooks/useAudio';
 
 const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
@@ -22,6 +23,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const [bombPositions, setBombPositions] = useState(new Set());
   const processingRef = useRef(false);
   const boardRef = useRef(board);
+  const cascadeLevelRef = useRef(0);
+
+  // AUDIO INTEGRATION
+  const { playMatch, playSwap, playInvalidMove, playBomb, playScoreUpdate } = useAudio();
 
   // Keep board ref updated
   useEffect(() => {
@@ -42,6 +47,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
         // Keep the original piece but mark position as having a bomb
         setBombPositions(new Set([bombIndex]));
         
+        // AUDIO: Bomb placement sound
+        setTimeout(() => playBomb(), 500); // Delayed for dramatic effect
+        
         // Haptic feedback for bomb placement
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
@@ -56,8 +64,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       setMatchedPieces(new Set());
       setIsProcessing(false);
       processingRef.current = false;
+      cascadeLevelRef.current = 0;
     }
-  }, [gameStarted, startWithBomb]);
+  }, [gameStarted, startWithBomb, playBomb]);
 
   // Handle bomb explosion - clears 3x3 area
   const triggerBombExplosion = useCallback((bombIndex) => {
@@ -73,9 +82,17 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       }
     }
     
+    // AUDIO: Explosive bomb sound
+    playBomb();
+    
     // Award points for exploded pieces
     const pointsAwarded = explosionIndices.size * POINTS_PER_PIECE * 2; // Double points for bomb
-    setScore(prev => prev + pointsAwarded);
+    setScore(prev => {
+      const newScore = prev + pointsAwarded;
+      // AUDIO: Score update sound
+      setTimeout(() => playScoreUpdate(), 200);
+      return newScore;
+    });
     
     // Remove bomb from positions
     setBombPositions(prev => {
@@ -85,9 +102,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     });
     
     return explosionIndices;
-  }, [setScore]);
+  }, [setScore, playBomb, playScoreUpdate]);
 
-  // OPTIMIZED: Much faster match processing with bomb support
+  // OPTIMIZED: Much faster match processing with bomb support and audio
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted) return;
     
@@ -106,14 +123,21 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       
       // Check if any matches trigger bombs
       let allMatchedIndices = new Set(matches);
+      let bombTriggered = false;
       
       // Check for bomb triggers
       matches.forEach(matchIndex => {
         if (bombPositions.has(matchIndex)) {
           const explosionIndices = triggerBombExplosion(matchIndex);
           explosionIndices.forEach(index => allMatchedIndices.add(index));
+          bombTriggered = true;
         }
       });
+      
+      // AUDIO: Match sound with cascade progression
+      if (!bombTriggered) { // Don't play match sound if bomb exploded
+        playMatch(cascadeCount);
+      }
       
       // Show matched pieces with faster animation
       setMatchedPieces(allMatchedIndices);
@@ -139,6 +163,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       await new Promise(resolve => setTimeout(resolve, 60));
       
       cascadeCount++;
+      cascadeLevelRef.current = cascadeCount;
       setMatchedPieces(new Set());
     }
     
@@ -148,17 +173,26 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       const cascadeBonus = Math.max(0, (cascadeCount - 1) * 50);
       const totalPoints = basePoints + cascadeBonus;
       
-      setScore(prev => prev + totalPoints);
+      setScore(prev => {
+        const newScore = prev + totalPoints;
+        // AUDIO: Score update sound for big combos
+        if (cascadeCount > 1) {
+          setTimeout(() => playScoreUpdate(), 300);
+        }
+        return newScore;
+      });
       
       // Haptic feedback for matches
       if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        const intensity = cascadeCount > 2 ? 'heavy' : 'medium';
+        window.Telegram.WebApp.HapticFeedback.impactOccurred(intensity);
       }
     }
     
     setIsProcessing(false);
     processingRef.current = false;
-  }, [setScore, gameStarted, bombPositions, triggerBombExplosion]);
+    cascadeLevelRef.current = 0;
+  }, [setScore, gameStarted, bombPositions, triggerBombExplosion, playMatch, playScoreUpdate]);
 
   // Handle direct bomb tap
   const handleBombTap = useCallback((index) => {
@@ -241,6 +275,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       const targetPosition = getPosition(targetIndex);
 
       if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
+        // AUDIO: Successful swap sound
+        playSwap();
+        
         // Execute the swap
         const newBoard = swapPieces(boardRef.current, draggedPosition, targetPosition);
         setBoard(newBoard);
@@ -256,6 +293,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           processMatches();
         }, 30);
       } else {
+        // AUDIO: Invalid move sound
+        playInvalidMove();
+        
         // Invalid swap - light haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
@@ -265,7 +305,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
     // Clear dragged piece
     setDraggedPiece(null);
-  }, [isProcessing, gameStarted, draggedPiece, processMatches]);
+  }, [isProcessing, gameStarted, draggedPiece, processMatches, playSwap, playInvalidMove]);
 
   // Check for initial matches only once when game starts
   useEffect(() => {
