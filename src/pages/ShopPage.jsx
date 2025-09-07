@@ -33,16 +33,9 @@ const categoryConfig = {
   badge: { name: 'Profile Badges', icon: '🏆', color: 'text-yellow-400' }
 };
 
-const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0 }) => {
+const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0, isPurchasing }) => {
   const Icon = iconComponents[item.icon_name] || iconComponents.Default;
   const canAfford = userPoints >= item.price;
-  const [isBuying, setIsBuying] = useState(false);
-
-  const handleBuyClick = async () => {
-    setIsBuying(true);
-    await onPurchase(item.id);
-    setIsBuying(false);
-  };
 
   return (
     <motion.div
@@ -69,15 +62,15 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
         </div>
       ) : (
         <button 
-          onClick={handleBuyClick}
-          disabled={!canAfford || isBuying}
+          onClick={() => onPurchase(item.id)}
+          disabled={!canAfford || isPurchasing}
           className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
             canAfford 
               ? 'bg-accent text-background hover:scale-105' 
               : 'bg-gray-600 text-gray-400 cursor-not-allowed'
           }`}
         >
-          {isBuying ? (
+          {isPurchasing ? (
             <LoaderCircle className="w-5 h-5 animate-spin" />
           ) : (
             <>
@@ -91,7 +84,7 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
   );
 };
 
-const CategorySection = ({ category, categoryData, items, userPoints, onPurchase, inventory, ownedBadges }) => {
+const CategorySection = ({ category, categoryData, items, userPoints, onPurchase, inventory, ownedBadges, purchasingId }) => {
   if (items.length === 0) return null;
 
   return (
@@ -128,6 +121,7 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
               onPurchase={onPurchase}
               isOwned={isOwned}
               ownedQuantity={ownedQuantity}
+              isPurchasing={purchasingId === item.id}
             />
           );
         })}
@@ -137,12 +131,19 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
 };
 
 const ShopPage = () => {
-  const [userPoints, setUserPoints] = useState(4735); // Use the points shown in your screenshot
+  const [userPoints, setUserPoints] = useState(4735);
   const [inventory, setInventory] = useState([]);
   const [ownedBadges, setOwnedBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [purchasingId, setPurchasingId] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   const tg = window.Telegram?.WebApp;
+
+  // Demo state for offline mode
+  const [demoPoints, setDemoPoints] = useState(4735);
+  const [demoInventory, setDemoInventory] = useState([]);
+  const [demoBadges, setDemoBadges] = useState([]);
 
   useEffect(() => {
     const loadShopData = async () => {
@@ -150,6 +151,7 @@ const ShopPage = () => {
         // Try to fetch real data first
         if (tg && tg.initData && BACKEND_URL) {
           setConnectionStatus('Fetching shop data...');
+          console.log('Connecting to backend:', BACKEND_URL);
           
           const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
             method: 'POST',
@@ -159,33 +161,46 @@ const ShopPage = () => {
 
           if (res.ok) {
             const data = await res.json();
+            console.log('Shop data loaded:', data);
+            
             setUserPoints(data.userPoints);
             setInventory(data.inventory || []);
             setOwnedBadges(data.ownedBadges || []);
             setConnectionStatus('Connected to server');
+            setIsConnected(true);
           } else {
             throw new Error(`API Error: ${res.status}`);
           }
         } else {
-          setConnectionStatus('Using offline mode');
+          throw new Error('No Telegram data or backend URL');
         }
       } catch (error) {
         console.error('Failed to load shop data:', error);
-        setConnectionStatus(`Offline mode: ${error.message}`);
+        setConnectionStatus('Demo mode - purchases won\'t persist');
+        setIsConnected(false);
+        
+        // Use demo state
+        setUserPoints(demoPoints);
+        setInventory(demoInventory);
+        setOwnedBadges(demoBadges);
       } finally {
         setLoading(false);
       }
     };
 
     loadShopData();
-  }, [tg]);
+  }, [tg, demoPoints, demoInventory, demoBadges]);
 
   const handlePurchase = async (itemId) => {
     const item = SHOP_ITEMS.find(i => i.id === itemId);
     if (!item) return;
 
+    setPurchasingId(itemId);
+
     try {
-      if (tg && tg.initData && BACKEND_URL) {
+      if (isConnected && tg && tg.initData && BACKEND_URL) {
+        console.log('Making real purchase for item:', itemId);
+        
         // Try real purchase
         const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
           method: 'POST',
@@ -195,6 +210,8 @@ const ShopPage = () => {
 
         const result = await res.json();
         if (!res.ok) throw new Error(result.error);
+
+        console.log('Purchase successful:', result);
 
         // Success
         tg.HapticFeedback?.notificationOccurred('success');
@@ -207,13 +224,44 @@ const ShopPage = () => {
         // Update local state
         setUserPoints(result.newPoints);
         
+        // Refresh inventory
+        setTimeout(() => {
+          window.location.reload(); // Simple refresh to get updated data
+        }, 1000);
+        
       } else {
+        console.log('Demo purchase for item:', itemId);
+        
         // Demo mode
         if (userPoints >= item.price) {
-          setUserPoints(prev => prev - item.price);
+          const newPoints = userPoints - item.price;
+          setUserPoints(newPoints);
+          setDemoPoints(newPoints);
+          
+          // Add to inventory
+          if (item.category === 'badge') {
+            const newBadges = [...demoBadges, item.name];
+            setOwnedBadges(newBadges);
+            setDemoBadges(newBadges);
+          } else {
+            const existingItem = demoInventory.find(inv => inv.item_id === itemId);
+            if (existingItem) {
+              const newInventory = demoInventory.map(inv => 
+                inv.item_id === itemId 
+                  ? { ...inv, quantity: inv.quantity + 1 }
+                  : inv
+              );
+              setInventory(newInventory);
+              setDemoInventory(newInventory);
+            } else {
+              const newInventory = [...demoInventory, { item_id: itemId, quantity: 1 }];
+              setInventory(newInventory);
+              setDemoInventory(newInventory);
+            }
+          }
           
           // Show success message
-          const message = `Demo: Purchased ${item.name} for ${item.price} points!`;
+          const message = `Demo: Purchased ${item.name} for ${item.price} points!\n\n⚠️ This purchase is for demo only and won't persist.`;
           if (tg && tg.showPopup) {
             tg.showPopup({
               title: 'Demo Purchase',
@@ -250,6 +298,8 @@ const ShopPage = () => {
       } else {
         alert(message);
       }
+    } finally {
+      setPurchasingId(null);
     }
   };
 
@@ -279,7 +329,7 @@ const ShopPage = () => {
       </motion.div>
 
       {/* Connection status */}
-      <div className="text-xs text-center text-secondary">
+      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
         {loading ? (
           <div className="flex items-center justify-center space-x-2">
             <LoaderCircle className="w-4 h-4 animate-spin" />
@@ -302,6 +352,7 @@ const ShopPage = () => {
             onPurchase={handlePurchase}
             inventory={inventory}
             ownedBadges={ownedBadges}
+            purchasingId={purchasingId}
           />
         ))}
       </div>
