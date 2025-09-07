@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings } from 'lucide-react';
+import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Get the backend URL from the environment variables
@@ -17,16 +17,23 @@ const GamePage = () => {
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   
-  // PHASE 1: Inventory state
+  // Phase 1 & 2: Inventory state
   const [inventory, setInventory] = useState([]);
   const [isActivatingItem, setIsActivatingItem] = useState(null);
   const [showInventory, setShowInventory] = useState(false);
-  
-  // PHASE 2: NEW Pre-game item selection state
   const [availableItems, setAvailableItems] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [showItemSelection, setShowItemSelection] = useState(false);
   const [isConfiguringGame, setIsConfiguringGame] = useState(false);
+  
+  // PHASE 3: Simplified inventory management
+  const [inventoryStats, setInventoryStats] = useState({
+    totalItems: 0,
+    totalValue: 0,
+    mostUsedItem: 'None',
+    efficiency: 0
+  });
+  const [showInventoryStats, setShowInventoryStats] = useState(false);
   
   const navigate = useNavigate();
 
@@ -136,19 +143,29 @@ const GamePage = () => {
     }
   }, []);
 
-  // PHASE 2: ENHANCED loadInventory - Gets available items for selection
+  // PHASE 3: Simplified loadInventory with basic statistics
   const loadInventory = async () => {
     const tg = window.Telegram?.WebApp;
     
     try {
       if (!tg || !tg.initData || !BACKEND_URL) {
         // Browser mode - use mock data
-        console.log('Browser mode: Using mock inventory');
-        setAvailableItems([
+        console.log('Browser mode: Using mock inventory with stats');
+        const mockItems = [
           { item_id: 1, quantity: 2 },
-          { item_id: 4, quantity: 1 }
-        ]);
-        setInventory([]);
+          { item_id: 4, quantity: 1 },
+          { item_id: 3, quantity: 1 }
+        ];
+        setAvailableItems(mockItems);
+        setInventory(mockItems.filter(item => item.item_id === 4));
+        
+        // Calculate mock stats
+        setInventoryStats({
+          totalItems: 4,
+          totalValue: 3750,
+          mostUsedItem: 'Extra Time +10s',
+          efficiency: 85
+        });
         return;
       }
 
@@ -166,21 +183,30 @@ const GamePage = () => {
         
         console.log('Inventory loaded:', userInventory);
         
-        // Set available items (for pre-game selection)
         setAvailableItems(userInventory);
         
-        // Set active inventory (consumables like Double Points)
         const consumableItems = userInventory.filter(item => 
-          item.item_id === 4 && item.quantity > 0 // Only Double Points for in-game use
+          item.item_id === 4 && item.quantity > 0
         );
         setInventory(consumableItems);
         
-        // Check if point multiplier is already active
         const pointMultiplier = shopData.boosterActive || false;
         if (pointMultiplier) {
           setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         }
+
+        // Calculate basic inventory stats
+        const totalItems = userInventory.reduce((sum, item) => sum + item.quantity, 0);
+        const itemValues = { 1: 750, 2: 1500, 3: 1000, 4: 1500 }; // Hard-coded for simplicity
+        const totalValue = userInventory.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
         
+        setInventoryStats({
+          totalItems,
+          totalValue,
+          mostUsedItem: 'Double Points', // Simplified
+          efficiency: Math.min(95, Math.max(50, totalItems * 10))
+        });
+
       } else {
         console.error('Failed to fetch inventory:', res.status);
         setAvailableItems([]);
@@ -194,7 +220,6 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 2: NEW configureGameWithSelectedItems
   const configureGameWithSelectedItems = async () => {
     const tg = window.Telegram?.WebApp;
     setIsConfiguringGame(true);
@@ -207,12 +232,10 @@ const GamePage = () => {
         let totalTimeBonus = 0;
         let hasBomb = false;
         
-        // Calculate effects based on selected items
         selectedItems.forEach(itemId => {
-          if (itemId === 1) totalTimeBonus += 10; // +10s Time
-          if (itemId === 2) totalTimeBonus += 20; // +20s Time  
-          if (itemId === 3) hasBomb = true;       // Cookie Bomb
-          // Double Points (4) is handled separately in-game
+          if (itemId === 1) totalTimeBonus += 10;
+          if (itemId === 2) totalTimeBonus += 20;
+          if (itemId === 3) hasBomb = true;
         });
         
         setGameConfig({ 
@@ -223,7 +246,7 @@ const GamePage = () => {
         setActiveBoosts({
           timeBoost: totalTimeBonus,
           bomb: hasBomb,
-          pointMultiplier: selectedItems.has(4) // If Double Points selected
+          pointMultiplier: selectedItems.has(4)
         });
         
         return;
@@ -231,23 +254,26 @@ const GamePage = () => {
 
       console.log('Configuring game with selected items:', Array.from(selectedItems));
 
-      // Send selected items to backend for consumption
-      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg.initData, 
-          selectedItems: Array.from(selectedItems)
-        }),
-      });
-
+      // Try new endpoint first, fallback to old one
       let sessionData = { startTime: 30, startWithBomb: false };
       
-      if (sessionRes.ok) {
-        sessionData = await sessionRes.json();
-        console.log('Game configured with items:', sessionData);
-      } else {
-        // Fallback to old endpoint if new one doesn't exist
+      try {
+        const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            initData: tg.initData, 
+            selectedItems: Array.from(selectedItems)
+          }),
+        });
+        
+        if (sessionRes.ok) {
+          sessionData = await sessionRes.json();
+          console.log('Game configured with items:', sessionData);
+        } else {
+          throw new Error('New endpoint not available');
+        }
+      } catch (newEndpointError) {
         console.log('Using fallback game session endpoint');
         const fallbackRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
           method: 'POST',
@@ -262,13 +288,12 @@ const GamePage = () => {
       
       setGameConfig(sessionData);
       
-      // Calculate applied boosts
       const timeBoost = sessionData.startTime - 30;
       
       setActiveBoosts({
         timeBoost,
         bomb: sessionData.startWithBomb,
-        pointMultiplier: selectedItems.has(4) // Double Points selected
+        pointMultiplier: selectedItems.has(4)
       });
 
     } catch (error) {
@@ -280,7 +305,6 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 1: Activate item handler (for in-game Double Points)
   const handleActivateItem = async (itemId) => {
     const tg = window.Telegram?.WebApp;
     
@@ -308,11 +332,9 @@ const GamePage = () => {
 
       console.log('Item activated successfully:', result);
 
-      // Update local state immediately
-      if (itemId === 4) { // Double Points
+      if (itemId === 4) {
         setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         
-        // Remove from inventory
         setInventory(prev => {
           return prev.map(item => 
             item.item_id === itemId && item.quantity > 1
@@ -322,7 +344,6 @@ const GamePage = () => {
         });
       }
 
-      // Success feedback
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
         title: 'Success!',
@@ -343,7 +364,6 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 2: NEW handleItemSelection
   const handleItemSelection = (itemId) => {
     setSelectedItems(prev => {
       const newSet = new Set(prev);
@@ -356,12 +376,10 @@ const GamePage = () => {
     });
   };
 
-  // PHASE 2: NEW startGameWithConfiguration
   const startGameWithConfiguration = async () => {
     if (availableItems.length > 0) {
       setShowItemSelection(true);
     } else {
-      // No items to configure, start normally
       await configureGameWithSelectedItems();
       setGameStarted(true);
       setScore(0);
@@ -372,7 +390,6 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 2: NEW confirmGameStart
   const confirmGameStart = async () => {
     setShowItemSelection(false);
     await configureGameWithSelectedItems();
@@ -393,9 +410,9 @@ const GamePage = () => {
     setIsSubmitting(false);
     setShowInventory(false);
     setShowItemSelection(false);
+    setShowInventoryStats(false);
     setSelectedItems(new Set());
     
-    // Reload inventory for new game
     await loadInventory();
   };
 
@@ -411,12 +428,12 @@ const GamePage = () => {
   // Get item details helper
   const getItemDetails = (itemId) => {
     const itemMap = {
-      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds' },
-      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400', description: '+20 seconds' },
-      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb' },
-      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier' }
+      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds', value: 750 },
+      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400', description: '+20 seconds', value: 1500 },
+      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb', value: 1000 },
+      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier', value: 1500 }
     };
-    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect' };
+    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect', value: 0 };
   };
 
   return (
@@ -466,7 +483,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* PHASE 2: NEW Item Selection Overlay */}
+      {/* Item Selection Overlay */}
       <AnimatePresence>
         {showItemSelection && (
           <motion.div 
@@ -594,14 +611,19 @@ const GamePage = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* Inventory toggle button */}
-          {gameStarted && !isGameOver && inventory.length > 0 && (
+          {/* PHASE 3: Enhanced inventory button */}
+          {gameStarted && !isGameOver && availableItems.length > 0 && (
             <motion.button
               onClick={() => setShowInventory(!showInventory)}
-              className="bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors"
+              className="bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors relative"
               whileTap={{ scale: 0.95 }}
             >
               <Package className="w-6 h-6 text-accent" />
+              {availableItems.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-accent text-background text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {availableItems.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
             </motion.button>
           )}
           
@@ -614,7 +636,7 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* PHASE 2: NEW Visual Boost Indicators */}
+      {/* Visual Boost Indicators */}
       <AnimatePresence>
         {gameStarted && !isGameOver && (activeBoosts.timeBoost > 0 || activeBoosts.bomb || activeBoosts.pointMultiplier) && (
           <motion.div
@@ -652,34 +674,78 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      {/* Floating Inventory Panel */}
+      {/* PHASE 3: Simplified Floating Inventory Panel */}
       <AnimatePresence>
         {showInventory && gameStarted && !isGameOver && (
           <motion.div
-            className="absolute top-20 right-4 bg-nav rounded-xl p-4 shadow-2xl border border-gray-700 z-30 min-w-64"
+            className="absolute top-20 right-4 bg-nav rounded-xl p-4 shadow-2xl border border-gray-700 z-30 w-80 max-h-96 overflow-hidden"
             initial={{ opacity: 0, x: 100, scale: 0.8 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.8 }}
             transition={{ duration: 0.3 }}
           >
+            {/* Header */}
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-primary flex items-center">
                 <Package className="w-5 h-5 mr-2 text-accent" />
                 Inventory
               </h3>
-              <button
-                onClick={() => setShowInventory(false)}
-                className="text-secondary hover:text-primary"
-              >
-                ✕
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowInventoryStats(!showInventoryStats)}
+                  className="p-1 hover:bg-gray-600 rounded"
+                  title="Statistics"
+                >
+                  <BarChart3 className="w-4 h-4 text-secondary hover:text-primary" />
+                </button>
+                <button
+                  onClick={() => setShowInventory(false)}
+                  className="text-secondary hover:text-primary"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            
+
+            {/* Inventory content */}
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {inventory.map((item) => {
+              {/* Statistics panel */}
+              <AnimatePresence>
+                {showInventoryStats && (
+                  <motion.div
+                    className="bg-background/50 p-3 rounded-lg border border-gray-600"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <h4 className="text-sm font-bold text-accent mb-2">Inventory Stats</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-secondary">Total Items:</p>
+                        <p className="text-primary font-bold">{inventoryStats.totalItems}</p>
+                      </div>
+                      <div>
+                        <p className="text-secondary">Total Value:</p>
+                        <p className="text-primary font-bold">{inventoryStats.totalValue.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-secondary">Most Used:</p>
+                        <p className="text-primary font-bold text-xs">{inventoryStats.mostUsedItem}</p>
+                      </div>
+                      <div>
+                        <p className="text-secondary">Efficiency:</p>
+                        <p className="text-primary font-bold">{inventoryStats.efficiency}%</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Inventory items */}
+              {availableItems.map((item) => {
                 const details = getItemDetails(item.item_id);
                 const ItemIcon = details.icon;
-                const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier; // Only Double Points can be activated
+                const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier;
                 
                 return (
                   <div
@@ -690,7 +756,10 @@ const GamePage = () => {
                       <ItemIcon className={`w-5 h-5 ${details.color}`} />
                       <div>
                         <p className="text-sm font-medium text-primary">{details.name}</p>
-                        <p className="text-xs text-secondary">Qty: {item.quantity}</p>
+                        <div className="flex items-center space-x-2 text-xs">
+                          <span className="text-secondary">Qty: {item.quantity}</span>
+                          <span className="text-accent">Value: {(details.value * item.quantity).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
                     
@@ -716,7 +785,7 @@ const GamePage = () => {
                 );
               })}
               
-              {inventory.length === 0 && (
+              {availableItems.length === 0 && (
                 <p className="text-center text-secondary text-sm py-4">
                   No items available
                 </p>
@@ -752,9 +821,9 @@ const GamePage = () => {
           <p className="text-sm">
             Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
           </p>
-          {inventory.length > 0 && (
+          {availableItems.length > 0 && (
             <p className="text-xs mt-1 text-accent">
-              Tap 📦 to access your items
+              Tap 📦 to access your items and statistics
             </p>
           )}
         </motion.div>
