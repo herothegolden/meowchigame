@@ -15,6 +15,7 @@ const GamePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [gameConfig, setGameConfig] = useState({ startTime: 30, startWithBomb: false });
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const navigate = useNavigate();
 
   // Timer effect
@@ -44,8 +45,10 @@ const GamePage = () => {
       if (score > 0) {
         const tg = window.Telegram?.WebApp;
         
-        if (tg && tg.initData) {
+        if (tg && tg.initData && BACKEND_URL) {
           try {
+            console.log('Submitting score:', score);
+            
             const response = await fetch(`${BACKEND_URL}/api/update-score`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -58,11 +61,12 @@ const GamePage = () => {
               console.log('Score submitted successfully:', data);
               
               const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
+              const finalScore = data.score_awarded || score;
               
               // Show success popup
               tg.showPopup({
                 title: 'Game Over!',
-                message: `🎉 You scored ${score.toLocaleString()} points!${multiplierText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
+                message: `🎉 You scored ${finalScore.toLocaleString()} points!${multiplierText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
                 buttons: [
                   { text: 'Play Again', type: 'default', id: 'play_again' },
                   { text: 'Home', type: 'default', id: 'home' }
@@ -90,7 +94,8 @@ const GamePage = () => {
           // Browser mode - just show score
           console.log(`Game Over! Final Score: ${score}`);
           setTimeout(() => {
-            if (confirm(`Game Over!\n\nFinal Score: ${score.toLocaleString()}\n\nPlay again?`)) {
+            const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}\n\nPlay again?`;
+            if (confirm(message)) {
               restartGame();
             } else {
               navigate('/');
@@ -121,15 +126,20 @@ const GamePage = () => {
 
   // Fetch game configuration and check for active boosters
   const fetchGameConfig = async () => {
+    setIsLoadingConfig(true);
     const tg = window.Telegram?.WebApp;
     
-    if (!tg || !tg.initData) {
-      // Browser mode - use defaults
-      setGameConfig({ startTime: 30, startWithBomb: false });
-      return;
-    }
-
     try {
+      if (!tg || !tg.initData || !BACKEND_URL) {
+        // Browser mode - use defaults
+        console.log('Browser mode: Using default game config');
+        setGameConfig({ startTime: 30, startWithBomb: false });
+        setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
+        return;
+      }
+
+      console.log('Fetching game configuration from backend...');
+
       // Get game session configuration (consumes time boosters and bombs)
       const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
         method: 'POST',
@@ -137,19 +147,20 @@ const GamePage = () => {
         body: JSON.stringify({ initData: tg.initData }),
       });
 
+      let sessionData = { startTime: 30, startWithBomb: false };
+      
       if (sessionRes.ok) {
-        const sessionData = await sessionRes.json();
-        setGameConfig(sessionData);
-        
-        // Calculate boosts applied
-        const timeBoost = sessionData.startTime - 30;
-        setActiveBoosts({
-          timeBoost,
-          bomb: sessionData.startWithBomb,
-          pointMultiplier: false // Will be checked later
-        });
+        sessionData = await sessionRes.json();
+        console.log('Game session data:', sessionData);
+      } else {
+        console.error('Failed to fetch game session:', sessionRes.status);
       }
-
+      
+      setGameConfig(sessionData);
+      
+      // Calculate boosts applied
+      const timeBoost = sessionData.startTime - 30;
+      
       // Check for active point multiplier
       const shopRes = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
         method: 'POST',
@@ -157,20 +168,30 @@ const GamePage = () => {
         body: JSON.stringify({ initData: tg.initData }),
       });
 
+      let pointMultiplier = false;
       if (shopRes.ok) {
         const shopData = await shopRes.json();
-        setActiveBoosts(prev => ({
-          ...prev,
-          pointMultiplier: shopData.boosterActive
-        }));
+        pointMultiplier = shopData.boosterActive || false;
+        console.log('Point multiplier active:', pointMultiplier);
       }
+
+      setActiveBoosts({
+        timeBoost,
+        bomb: sessionData.startWithBomb,
+        pointMultiplier
+      });
+
     } catch (error) {
       console.error('Error fetching game config:', error);
       setGameConfig({ startTime: 30, startWithBomb: false });
+      setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
+    } finally {
+      setIsLoadingConfig(false);
     }
   };
 
   const startGame = async () => {
+    console.log('Starting game...');
     await fetchGameConfig();
     setGameStarted(true);
     setScore(0);
@@ -180,6 +201,7 @@ const GamePage = () => {
   };
 
   const restartGame = async () => {
+    console.log('Restarting game...');
     setGameStarted(false);
     setScore(0);
     setIsGameOver(false);
@@ -256,43 +278,59 @@ const GamePage = () => {
             <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
             <div className="text-6xl mb-6">🍪</div>
             
-            <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
-              <div className="flex items-center justify-center space-x-2 text-accent mb-2">
-                <Clock size={24} />
-                <span className="text-xl font-bold">{gameConfig.startTime} Seconds</span>
+            {isLoadingConfig ? (
+              <div className="flex items-center justify-center space-x-2 text-secondary mb-6">
+                <LoaderCircle className="w-6 h-6 animate-spin" />
+                <span>Loading game configuration...</span>
               </div>
-              
-              {/* Show active boosts */}
-              <div className="space-y-2">
-                {activeBoosts.timeBoost > 0 && (
-                  <div className="flex items-center justify-center space-x-2 text-blue-400">
-                    <Clock size={16} />
-                    <span className="text-sm">+{activeBoosts.timeBoost}s Time Boost!</span>
-                  </div>
-                )}
-                {activeBoosts.bomb && (
-                  <div className="flex items-center justify-center space-x-2 text-red-400">
-                    <Bomb size={16} />
-                    <span className="text-sm">Cookie Bomb Ready!</span>
-                  </div>
-                )}
-                {activeBoosts.pointMultiplier && (
-                  <div className="flex items-center justify-center space-x-2 text-green-400">
-                    <ChevronsUp size={16} />
-                    <span className="text-sm">Double Points Active!</span>
-                  </div>
-                )}
+            ) : (
+              <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
+                <div className="flex items-center justify-center space-x-2 text-accent mb-2">
+                  <Clock size={24} />
+                  <span className="text-xl font-bold">{gameConfig.startTime} Seconds</span>
+                </div>
+                
+                {/* Show active boosts */}
+                <div className="space-y-2">
+                  {activeBoosts.timeBoost > 0 && (
+                    <div className="flex items-center justify-center space-x-2 text-blue-400">
+                      <Clock size={16} />
+                      <span className="text-sm">+{activeBoosts.timeBoost}s Time Boost!</span>
+                    </div>
+                  )}
+                  {activeBoosts.bomb && (
+                    <div className="flex items-center justify-center space-x-2 text-red-400">
+                      <Bomb size={16} />
+                      <span className="text-sm">Cookie Bomb Ready!</span>
+                    </div>
+                  )}
+                  {activeBoosts.pointMultiplier && (
+                    <div className="flex items-center justify-center space-x-2 text-green-400">
+                      <ChevronsUp size={16} />
+                      <span className="text-sm">Double Points Active!</span>
+                    </div>
+                  )}
+                  
+                  {!activeBoosts.timeBoost && !activeBoosts.bomb && !activeBoosts.pointMultiplier && (
+                    <p className="text-sm text-secondary">No boosts active</p>
+                  )}
+                </div>
+                
+                <p className="text-sm text-secondary mt-2">Match 3 or more pieces to score points!</p>
               </div>
-              
-              <p className="text-sm text-secondary mt-2">Match 3 or more pieces to score points!</p>
-            </div>
+            )}
             
             <button
               onClick={startGame}
-              className="w-full bg-accent text-background py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
+              disabled={isLoadingConfig}
+              className={`w-full py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 transition-colors ${
+                isLoadingConfig 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-accent text-background hover:bg-accent/90'
+              }`}
             >
               <Play size={24} />
-              <span>Start Game</span>
+              <span>{isLoadingConfig ? 'Loading...' : 'Start Game'}</span>
             </button>
           </div>
         </motion.div>
