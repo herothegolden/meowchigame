@@ -69,26 +69,40 @@ const setupDatabase = async () => {
         type VARCHAR(50) DEFAULT 'consumable' NOT NULL
       );
     `);
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(telegram_id),
         item_id INT REFERENCES shop_items(id),
         acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        -- UPDATED: Removed unique constraint to allow multiple consumable purchases
+      );
+    `);
+
+    // 4. Create Badges table for permanent badges
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_badges (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        badge_name VARCHAR(255) NOT NULL,
+        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, badge_name)
       );
     `);
     
-    // 4. Pre-populate shop if empty
+    // 5. Pre-populate shop if empty - MATCHES FRONTEND EXACTLY
     const items = await client.query('SELECT * FROM shop_items');
     if (items.rowCount === 0) {
-      // UPDATED: Changed shop items for time-based gameplay
+      console.log('Setting up shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra 10 Seconds', '+10s for your next game.', 750, 'Clock', 'consumable'),
-        (2, 'Point Booster', 'Doubles points from your next game.', 1500, 'ChevronsUp', 'consumable'),
-        (3, 'Profile Badge', 'A cool badge for your profile.', 5000, 'Badge', 'permanent'),
-        (4, 'Starter Bomb', 'Start your next game with a bomb.', 1000, 'Bomb', 'consumable')
+        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
+        (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
+        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
+        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
+        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
+        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
+        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
         ON CONFLICT (id) DO NOTHING;
       `);
     }
@@ -101,7 +115,6 @@ const setupDatabase = async () => {
     client.release();
   }
 };
-
 
 // ---- EXPRESS APP ----
 const app = express();
@@ -129,7 +142,6 @@ const validateUser = (req, res, next) => {
   req.user = user;
   next();
 };
-
 
 // ---- ROUTES ----
 app.get('/health', (req, res) => {
@@ -217,7 +229,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
 
       await client.query('COMMIT');
 
-      // UPDATED: Return the new total points and the actual score awarded
       return res.status(200).json({ new_points: updateResult.rows[0].points, score_awarded: finalScore });
 
     } catch(e){
@@ -237,16 +248,22 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const dbUserResult = await client.query(
-        'SELECT first_name, username, points, level, daily_streak, created_at FROM users WHERE telegram_id = $1', 
-        [user.id]
-      );
+      const [userResult, badgesResult] = await Promise.all([
+        client.query(
+          'SELECT first_name, username, points, level, daily_streak, created_at FROM users WHERE telegram_id = $1', 
+          [user.id]
+        ),
+        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
+      ]);
       
-      if (dbUserResult.rowCount === 0) {
+      if (userResult.rowCount === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
       
-      res.status(200).json(dbUserResult.rows[0]);
+      const userData = userResult.rows[0];
+      userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
+      
+      res.status(200).json(userData);
 
     } finally {
       client.release();
@@ -262,16 +279,16 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const [itemsResult, userResult, inventoryResult] = await Promise.all([
+      const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
         client.query('SELECT * FROM shop_items ORDER BY price ASC'),
         client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
-        // UPDATED: Count consumable items instead of just listing them
         client.query(`
           SELECT item_id, COUNT(item_id) as quantity 
           FROM user_inventory 
           WHERE user_id = $1 
           GROUP BY item_id
-        `, [user.id])
+        `, [user.id]),
+        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -281,8 +298,9 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       const shopData = {
         items: itemsResult.rows,
         userPoints: userResult.rows[0].points,
-        inventory: inventoryResult.rows, // Now returns { item_id, quantity }
-        boosterActive: userResult.rows[0].point_booster_active
+        inventory: inventoryResult.rows,
+        boosterActive: userResult.rows[0].point_booster_active,
+        ownedBadges: badgesResult.rows.map(row => row.badge_name)
       };
       
       res.status(200).json(shopData);
@@ -308,9 +326,9 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const itemResult = await client.query('SELECT price, type FROM shop_items WHERE id = $1', [itemId]);
+      const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) throw new Error('Item not found.');
-      const { price, type } = itemResult.rows[0];
+      const { name, price, type } = itemResult.rows[0];
 
       const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
@@ -318,15 +336,23 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       
       if (userPoints < price) throw new Error('Insufficient points.');
       
-      // UPDATED: Allow buying multiple consumables but only one permanent item.
-      if(type === 'permanent') {
-        const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
-        if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+      // Handle badges (items 5, 6, 7) differently
+      if (name.includes('Badge')) {
+        const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
+        if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
+        
+        await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
+      } else {
+        // Handle regular consumable items (1, 2, 3, 4)
+        if(type === 'permanent') {
+          const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
+          if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+        }
+        await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
       }
 
       const newPoints = userPoints - price;
       await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
-      await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
 
       await client.query('COMMIT');
 
@@ -334,7 +360,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 
     } catch (error) {
       await client.query('ROLLBACK');
-      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Item not found.', 'User not found.'];
+      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.'];
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
@@ -349,15 +375,17 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Endpoint to get game start configuration based on inventory
 app.post('/api/start-game-session', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Consume +10s item (ID 1)
-    const timeBoosterResult = await client.query(
+    let totalTimeBonus = 0;
+    let hasBomb = false;
+
+    // Consume +10s time booster (ID 1)
+    const timeBooster10Result = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
          SELECT id FROM user_inventory 
@@ -367,12 +395,23 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    // Consume Starter Bomb item (ID 4)
+    // Consume +20s time booster (ID 2)
+    const timeBooster20Result = await client.query(
+      `DELETE FROM user_inventory 
+       WHERE id = (
+         SELECT id FROM user_inventory 
+         WHERE user_id = $1 AND item_id = 2 
+         LIMIT 1
+       ) RETURNING item_id`,
+      [user.id]
+    );
+
+    // Consume Cookie Bomb (ID 3)
     const bombBoosterResult = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
          SELECT id FROM user_inventory 
-         WHERE user_id = $1 AND item_id = 4
+         WHERE user_id = $1 AND item_id = 3
          LIMIT 1
        ) RETURNING item_id`,
       [user.id]
@@ -380,9 +419,14 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
 
     await client.query('COMMIT');
     
+    // Calculate total time bonus
+    if (timeBooster10Result.rowCount > 0) totalTimeBonus += 10;
+    if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
+    hasBomb = bombBoosterResult.rowCount > 0;
+    
     res.status(200).json({
-      startTime: 30 + (timeBoosterResult.rowCount > 0 ? 10 : 0),
-      startWithBomb: bombBoosterResult.rowCount > 0,
+      startTime: 30 + totalTimeBonus,
+      startWithBomb: hasBomb,
     });
 
   } catch (error) {
@@ -394,7 +438,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
   }
 });
 
-
 app.post('/api/activate-item', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -403,7 +446,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'itemId is required' });
     }
     
-    if (itemId !== 2) { // Logic specific to Point Booster (ID 2)
+    if (itemId !== 4) { // Logic specific to Point Booster (ID 4)
       return res.status(400).json({ error: 'This item is not an activatable booster.' });
     }
 
@@ -415,7 +458,6 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) throw new Error('User not found.');
       if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
 
-      // UPDATED: Consume one item from inventory instead of just checking for existence
       const inventoryResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
