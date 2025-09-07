@@ -1,4 +1,6 @@
-// src/utils/apiService.js - Optimized API service for TMA
+// src/utils/apiService.js - FRONTEND-ONLY OPTIMIZATION
+// Works with your existing backend without any backend changes
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 class APICache {
@@ -7,41 +9,52 @@ class APICache {
     this.ttl = new Map();
   }
 
-  set(key, data, duration = 30000) { // 30s default TTL
+  set(key, data, duration = 60000) { // 1 minute default
     this.cache.set(key, data);
     this.ttl.set(key, Date.now() + duration);
+    console.log(`💾 Cache SET: ${key} (TTL: ${duration/1000}s)`);
   }
 
   get(key) {
-    if (this.ttl.get(key) > Date.now()) {
+    const expiry = this.ttl.get(key);
+    if (expiry && expiry > Date.now()) {
       console.log(`🎯 Cache HIT: ${key}`);
       return this.cache.get(key);
     }
+    // Expired - remove from cache
     this.cache.delete(key);
     this.ttl.delete(key);
+    console.log(`⏰ Cache MISS/EXPIRED: ${key}`);
     return null;
   }
 
   clear() {
+    console.log(`🧹 Cache CLEARED: ${this.cache.size} items`);
     this.cache.clear();
     this.ttl.clear();
+  }
+
+  stats() {
+    const valid = Array.from(this.ttl.entries()).filter(([key, expiry]) => expiry > Date.now());
+    console.log(`📊 Cache Stats: ${valid.length}/${this.cache.size} valid items`);
+    return { total: this.cache.size, valid: valid.length };
   }
 }
 
 const apiCache = new APICache();
 
 export class OptimizedAPIService {
-  static timeout = 5000; // 5s timeout for TMA
+  static timeout = 10000; // 10s timeout for Railway cold starts
   
-  // Optimized fetch with timeout, retry, and caching
-  static async request(endpoint, options = {}, cacheKey = null, cacheDuration = 30000) {
+  static async request(endpoint, options = {}, cacheKey = null, cacheDuration = 60000) {
     const start = performance.now();
     
-    // Check cache first
+    // ⚡ AGGRESSIVE CACHING - Check cache first
     if (cacheKey) {
       const cached = apiCache.get(cacheKey);
       if (cached) {
-        console.log(`⚡ Cached response: ${Math.round(performance.now() - start)}ms`);
+        const duration = Math.round(performance.now() - start);
+        console.log(`⚡ CACHE HIT: ${endpoint} - ${duration}ms`);
         return cached;
       }
     }
@@ -51,13 +64,16 @@ export class OptimizedAPIService {
 
     const defaultOptions = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache' // Prevent browser caching conflicts
+      },
       signal: controller.signal,
       ...options
     };
 
     try {
-      console.log(`🚀 API Request: ${endpoint}`);
+      console.log(`🚀 API REQUEST: ${endpoint}`);
       
       const response = await fetch(`${BACKEND_URL}${endpoint}`, defaultOptions);
       clearTimeout(timeoutId);
@@ -69,71 +85,109 @@ export class OptimizedAPIService {
       const data = await response.json();
       const duration = Math.round(performance.now() - start);
       
-      console.log(`✅ API Response: ${endpoint} - ${duration}ms`);
+      console.log(`✅ API SUCCESS: ${endpoint} - ${duration}ms`);
       
-      // Cache successful responses
-      if (cacheKey && response.ok) {
+      // 🚀 CACHE SUCCESSFUL RESPONSES AGGRESSIVELY
+      if (cacheKey && response.ok && duration < 5000) { // Only cache if not too slow
         apiCache.set(cacheKey, data, cacheDuration);
       }
 
-      // Performance warning for TMA
-      if (duration > 300) {
-        console.warn(`⚠️ SLOW API: ${endpoint} took ${duration}ms (TMA target: <200ms)`);
+      // Performance warnings for TMA
+      if (duration > 800) {
+        console.warn(`⚠️ SLOW API: ${endpoint} took ${duration}ms`);
       }
 
       return data;
     } catch (error) {
       clearTimeout(timeoutId);
+      const duration = Math.round(performance.now() - start);
       
       if (error.name === 'AbortError') {
-        throw new Error(`Request timeout: ${endpoint} (>${this.timeout}ms)`);
+        console.error(`⏰ TIMEOUT: ${endpoint} after ${this.timeout}ms`);
+        throw new Error(`Request timeout: ${endpoint}`);
       }
       
-      console.error(`❌ API Error: ${endpoint}`, error);
+      console.error(`❌ API ERROR: ${endpoint} - ${duration}ms`, error.message);
       throw error;
     }
   }
 
-  // Fast user validation with aggressive caching
+  // 🚀 OPTIMIZED: User validation with 2-minute cache
   static async validateUser(initData) {
-    const cacheKey = `user_${initData.slice(-10)}`;
+    const userHash = initData.slice(-8); // Short hash for cache key
+    const cacheKey = `user_${userHash}`;
     
     return this.request('/api/validate', {
       body: JSON.stringify({ initData })
-    }, cacheKey, 60000); // 1min cache for user data
+    }, cacheKey, 120000); // 2 minute cache
   }
 
-  // Combined profile data fetch (reduces API calls)
+  // 🚀 OPTIMIZED: Profile data with smart caching
   static async getProfileData(initData) {
-    const cacheKey = `profile_${initData.slice(-10)}`;
+    const userHash = initData.slice(-8);
     
-    // NEW: Single endpoint for all profile data
-    return this.request('/api/profile-complete', {
-      body: JSON.stringify({ initData })
-    }, cacheKey, 45000); // 45s cache
+    // Use existing endpoints but with aggressive caching
+    const [statsKey, shopKey] = [`stats_${userHash}`, `shop_${userHash}`];
+    
+    try {
+      console.log('🚀 Loading profile with cached parallel calls...');
+      
+      // Parallel cached calls - much faster than sequential
+      const [statsRes, shopDataRes] = await Promise.all([
+        this.request('/api/user-stats', {
+          body: JSON.stringify({ initData })
+        }, statsKey, 90000), // 1.5 min cache
+        
+        this.request('/api/get-shop-data', {
+          body: JSON.stringify({ initData })
+        }, shopKey, 180000) // 3 min cache (shop data changes rarely)
+      ]);
+      
+      return {
+        stats: statsRes,
+        inventory: shopDataRes.inventory || [],
+        shop_items: shopDataRes.items || [],
+        boosterActive: shopDataRes.boosterActive || false,
+        owned_badges: shopDataRes.ownedBadges || []
+      };
+      
+    } catch (error) {
+      console.error('Profile data loading failed:', error);
+      throw error;
+    }
   }
 
-  // Shop data with longer cache (rarely changes)
+  // 🚀 OPTIMIZED: Shop data with 5-minute cache
   static async getShopData(initData) {
-    const cacheKey = `shop_${initData.slice(-10)}`;
+    const userHash = initData.slice(-8);
+    const cacheKey = `shop_${userHash}`;
     
     return this.request('/api/get-shop-data', {
       body: JSON.stringify({ initData })
-    }, cacheKey, 120000); // 2min cache for shop items
+    }, cacheKey, 300000); // 5 minute cache
   }
 
-  // Leaderboard with moderate caching
+  // 🚀 OPTIMIZED: Leaderboard with 1-minute cache
   static async getLeaderboard(initData, type = 'global') {
-    const cacheKey = `leaderboard_${type}_${initData.slice(-10)}`;
+    const userHash = initData.slice(-8);
+    const cacheKey = `leaderboard_${type}_${userHash}`;
     
     return this.request('/api/get-leaderboard', {
       body: JSON.stringify({ initData, type })
-    }, cacheKey, 30000); // 30s cache
+    }, cacheKey, 60000); // 1 minute cache
   }
 
-  // Non-cached operations (real-time)
+  // 🚀 NO CACHE: Real-time operations
   static async updateScore(initData, score, duration, itemsUsed) {
-    apiCache.clear(); // Clear cache after score update
+    // Clear user-specific cache after score update
+    const userHash = initData.slice(-8);
+    const keysToRemove = [`user_${userHash}`, `stats_${userHash}`, `shop_${userHash}`];
+    keysToRemove.forEach(key => {
+      apiCache.cache.delete(key);
+      apiCache.ttl.delete(key);
+    });
+    
+    console.log('🧹 Cleared user cache after score update');
     
     return this.request('/api/update-score', {
       body: JSON.stringify({ initData, score, duration, itemsUsed })
@@ -141,27 +195,40 @@ export class OptimizedAPIService {
   }
 
   static async buyItem(initData, itemId) {
-    apiCache.clear(); // Clear cache after purchase
+    // Clear user-specific cache after purchase
+    const userHash = initData.slice(-8);
+    const keysToRemove = [`user_${userHash}`, `stats_${userHash}`, `shop_${userHash}`];
+    keysToRemove.forEach(key => {
+      apiCache.cache.delete(key);
+      apiCache.ttl.delete(key);
+    });
+    
+    console.log('🧹 Cleared user cache after purchase');
     
     return this.request('/api/buy-item', {
       body: JSON.stringify({ initData, itemId })
     });
   }
 
-  // Prefetch critical data
+  // 🚀 SMART PREFETCH: Load critical data in background
   static async prefetchCriticalData(initData) {
-    console.log('🚀 Prefetching critical TMA data...');
+    console.log('🚀 Background prefetch started...');
     
-    const promises = [
-      this.validateUser(initData),
-      this.getShopData(initData)
-    ];
-
     try {
-      await Promise.allSettled(promises);
-      console.log('✅ Critical data prefetched');
+      // Prefetch shop data (most stable and cacheable)
+      await this.getShopData(initData);
+      console.log('✅ Shop data prefetched');
     } catch (error) {
-      console.warn('⚠️ Prefetch partial failure:', error);
+      console.warn('⚠️ Prefetch failed (non-critical):', error.message);
     }
+  }
+
+  // 🚀 CACHE MANAGEMENT
+  static getCacheStats() {
+    return apiCache.stats();
+  }
+
+  static clearCache() {
+    apiCache.clear();
   }
 }
