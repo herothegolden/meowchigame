@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Star, Flame, ChevronRight, LoaderCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { PerformanceMonitor } from '../utils/performance';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -40,12 +41,15 @@ const HomePage = () => {
 
     const fetchUserData = async () => {
       try {
+        PerformanceMonitor.startTimer('HomePage_TotalLoad');
+        
         if (!tg || !tg.initData || !BACKEND_URL) {
           console.log('Running in browser mode. Using mock data.');
           setConnectionStatus('Demo mode - using mock data');
           setUser(MOCK_USER_DATA);
           setIsConnected(false);
           setLoading(false);
+          PerformanceMonitor.endTimer('HomePage_TotalLoad');
           showBonusPopup(MOCK_USER_DATA.dailyBonus);
           return;
         }
@@ -53,6 +57,10 @@ const HomePage = () => {
         console.log('Fetching user data from backend...');
         setConnectionStatus('Fetching user data...');
         
+        // Test network latency first
+        await PerformanceMonitor.testNetworkLatency();
+        
+        PerformanceMonitor.startTimer('HomePage_APICall');
         tg.ready();
         
         const res = await fetch(`${BACKEND_URL}/api/validate`, {
@@ -60,17 +68,21 @@ const HomePage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ initData: tg.initData }),
         });
+        
+        PerformanceMonitor.endTimer('HomePage_APICall');
 
         if (!res.ok) {
           throw new Error(`Server responded with status: ${res.status}`);
         }
 
+        PerformanceMonitor.startTimer('HomePage_DataProcessing');
         const userData = await res.json();
         console.log('User data received:', userData);
         
         setUser(userData);
         setConnectionStatus('Connected to server');
         setIsConnected(true);
+        PerformanceMonitor.endTimer('HomePage_DataProcessing');
 
         // Check for and display the daily bonus
         if (userData.dailyBonus) {
@@ -87,6 +99,13 @@ const HomePage = () => {
         setIsConnected(false);
       } finally {
         setLoading(false);
+        PerformanceMonitor.endTimer('HomePage_TotalLoad');
+        
+        // Show performance report in console
+        setTimeout(() => {
+          const report = PerformanceMonitor.getReport();
+          console.log('📊 HomePage Performance Report:', report);
+        }, 1000);
       }
     };
 
