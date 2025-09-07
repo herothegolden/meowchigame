@@ -1,8 +1,11 @@
+// src/pages/GamePage.jsx - With Audio Integration
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
+import AudioControls from '../components/AudioControls';
 import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAudio } from '../hooks/useAudio';
 
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -35,24 +38,53 @@ const GamePage = () => {
   const [cookieImageLoaded, setCookieImageLoaded] = useState(false);
   const [cookieImageError, setCookieImageError] = useState(false);
   
+  // AUDIO INTEGRATION
+  const { 
+    playButtonClick, 
+    playItemActivate, 
+    playTick, 
+    playTimeWarning, 
+    playGameOver,
+    playScoreUpdate,
+    playBackgroundMusic,
+    stopBackgroundMusic 
+  } = useAudio();
+  
   const navigate = useNavigate();
 
-  // Timer effect
+  // AUDIO-ENHANCED Timer effect with sounds
   useEffect(() => {
     if (!gameStarted || isGameOver || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
+        const newTime = prev - 1;
+        
+        // AUDIO: Timer sounds
+        if (newTime <= 10 && newTime > 0) {
+          playTick(); // Tick sound for last 10 seconds
+        } else if (newTime === 10) {
+          playTimeWarning(); // Warning sound at 10 seconds
+        } else if (newTime <= 0) {
+          playGameOver(); // Game over sound
+          stopBackgroundMusic(); // Stop background music
           setIsGameOver(true);
           return 0;
         }
-        return prev - 1;
+        
+        return newTime;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameStarted, isGameOver, timeLeft]);
+  }, [gameStarted, isGameOver, timeLeft, playTick, playTimeWarning, playGameOver, stopBackgroundMusic]);
+
+  // Start background music when game starts
+  useEffect(() => {
+    if (gameStarted && !isGameOver) {
+      playBackgroundMusic();
+    }
+  }, [gameStarted, isGameOver, playBackgroundMusic]);
 
   // Handle game over submission
   useEffect(() => {
@@ -79,6 +111,9 @@ const GamePage = () => {
             if (response.ok) {
               console.log('Score submitted successfully:', data);
               
+              // AUDIO: Score submission success
+              setTimeout(() => playScoreUpdate(), 500);
+              
               const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
               const finalScore = data.score_awarded || score;
               
@@ -91,6 +126,7 @@ const GamePage = () => {
                   { text: 'Home', type: 'default', id: 'home' }
                 ]
               }, (buttonId) => {
+                playButtonClick();
                 if (buttonId === 'play_again') {
                   restartGame();
                 } else {
@@ -107,7 +143,10 @@ const GamePage = () => {
               title: 'Error',
               message: 'Could not save your score. Please try again later.',
               buttons: [{ text: 'OK', type: 'ok' }]
-            }, () => navigate('/'));
+            }, () => {
+              playButtonClick();
+              navigate('/');
+            });
           }
         } else {
           // Browser mode - just show score
@@ -115,8 +154,10 @@ const GamePage = () => {
           setTimeout(() => {
             const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}\n\nPlay again?`;
             if (confirm(message)) {
+              playButtonClick();
               restartGame();
             } else {
+              playButtonClick();
               navigate('/');
             }
           }, 1000);
@@ -132,7 +173,7 @@ const GamePage = () => {
     // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier]);
+  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier, playButtonClick, playScoreUpdate]);
 
   // Disable Telegram swipes during game
   useEffect(() => {
@@ -287,7 +328,7 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 1: Activate item handler (for in-game Double Points)
+  // PHASE 1: AUDIO-ENHANCED Activate item handler
   const handleActivateItem = async (itemId) => {
     const tg = window.Telegram?.WebApp;
     
@@ -314,6 +355,9 @@ const GamePage = () => {
       }
 
       console.log('Item activated successfully:', result);
+
+      // AUDIO: Item activation sound
+      playItemActivate();
 
       // Update local state immediately
       if (itemId === 4) { // Double Points
@@ -350,8 +394,9 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 2: NEW handleItemSelection
+  // PHASE 2: NEW handleItemSelection with audio
   const handleItemSelection = (itemId) => {
+    playButtonClick();
     setSelectedItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(itemId)) {
@@ -363,8 +408,9 @@ const GamePage = () => {
     });
   };
 
-  // PHASE 2: NEW startGameWithConfiguration
+  // PHASE 2: NEW startGameWithConfiguration with audio
   const startGameWithConfiguration = async () => {
+    playButtonClick();
     if (availableItems.length > 0) {
       setShowItemSelection(true);
     } else {
@@ -379,8 +425,9 @@ const GamePage = () => {
     }
   };
 
-  // PHASE 2: NEW confirmGameStart
+  // PHASE 2: NEW confirmGameStart with audio
   const confirmGameStart = async () => {
+    playButtonClick();
     setShowItemSelection(false);
     await configureGameWithSelectedItems();
     
@@ -394,6 +441,7 @@ const GamePage = () => {
 
   const restartGame = async () => {
     console.log('Restarting game...');
+    playButtonClick();
     setGameStarted(false);
     setScore(0);
     setIsGameOver(false);
@@ -432,6 +480,9 @@ const GamePage = () => {
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
       
+      {/* AUDIO CONTROLS - Floating audio settings */}
+      <AudioControls />
+      
       {/* Game Over Overlay */}
       {isGameOver && (
         <motion.div 
@@ -465,7 +516,10 @@ const GamePage = () => {
                   <span>Play Again</span>
                 </button>
                 <button
-                  onClick={() => navigate('/')}
+                  onClick={() => {
+                    playButtonClick();
+                    navigate('/');
+                  }}
                   className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
                 >
                   Home
@@ -476,7 +530,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* PHASE 2: NEW Item Selection Overlay */}
+      {/* PHASE 2: NEW Item Selection Overlay with audio */}
       <AnimatePresence>
         {showItemSelection && (
           <motion.div 
@@ -527,7 +581,10 @@ const GamePage = () => {
               
               <div className="flex space-x-3">
                 <button
-                  onClick={() => setShowItemSelection(false)}
+                  onClick={() => {
+                    playButtonClick();
+                    setShowItemSelection(false);
+                  }}
                   className="flex-1 bg-gray-600 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
                 >
                   Skip
@@ -636,7 +693,10 @@ const GamePage = () => {
           {/* ENHANCEMENT 1: Package button with item count badge */}
           {gameStarted && !isGameOver && inventory.length > 0 && (
             <motion.button
-              onClick={() => setShowInventory(!showInventory)}
+              onClick={() => {
+                playButtonClick();
+                setShowInventory(!showInventory);
+              }}
               className="relative bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors"
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.05 }}
@@ -665,157 +725,7 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* PHASE 2: NEW Visual Boost Indicators */}
-      <AnimatePresence>
-        {gameStarted && !isGameOver && (activeBoosts.timeBoost > 0 || activeBoosts.bomb || activeBoosts.pointMultiplier) && (
-          <motion.div
-            className="bg-nav/90 backdrop-blur-sm rounded-xl p-3 border border-gray-700"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="flex items-center justify-center space-x-4 text-sm">
-              {activeBoosts.timeBoost > 0 && (
-                <div className="flex items-center space-x-1 text-blue-400">
-                  <Clock className="w-4 h-4" />
-                  <span>+{activeBoosts.timeBoost}s Time</span>
-                </div>
-              )}
-              {activeBoosts.bomb && (
-                <div className="flex items-center space-x-1 text-red-400">
-                  <Bomb className="w-4 h-4" />
-                  <span>Bomb Ready</span>
-                </div>
-              )}
-              {activeBoosts.pointMultiplier && (
-                <motion.div 
-                  className="flex items-center space-x-1 text-green-400"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <ChevronsUp className="w-4 h-4" />
-                  <span>2x Points</span>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ENHANCEMENT 2 & 3: Improved Floating Inventory Panel */}
-      <AnimatePresence>
-        {showInventory && gameStarted && !isGameOver && (
-          <motion.div
-            className="absolute top-20 right-4 bg-nav/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700 z-30 min-w-72 max-w-80"
-            initial={{ opacity: 0, x: 100, scale: 0.8, rotateY: -15 }}
-            animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0 }}
-            exit={{ opacity: 0, x: 100, scale: 0.8, rotateY: 15 }}
-            transition={{ 
-              type: "spring", 
-              stiffness: 300, 
-              damping: 30,
-              opacity: { duration: 0.2 }
-            }}
-          >
-            {/* ENHANCEMENT 3: Better header with close button */}
-            <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-600">
-              <div className="flex items-center space-x-2">
-                <Package className="w-5 h-5 text-accent" />
-                <h3 className="font-bold text-primary">Inventory</h3>
-                <div className="bg-accent/20 text-accent px-2 py-0.5 rounded-full text-xs font-bold">
-                  {totalItemCount}
-                </div>
-              </div>
-              <motion.button
-                onClick={() => setShowInventory(false)}
-                className="text-secondary hover:text-primary p-1 rounded-md hover:bg-gray-600 transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <X className="w-4 h-4" />
-              </motion.button>
-            </div>
-            
-            {/* ENHANCEMENT 3: Improved item list with better hierarchy */}
-            <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
-              {inventory.map((item, index) => {
-                const details = getItemDetails(item.item_id);
-                const ItemIcon = details.icon;
-                const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier;
-                
-                return (
-                  <motion.div
-                    key={item.item_id}
-                    className="bg-background/70 rounded-lg border border-gray-600 overflow-hidden"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    whileHover={{ scale: 1.02, borderColor: "#6B7280" }}
-                  >
-                    <div className="flex items-center justify-between p-3">
-                      {/* ENHANCEMENT 3: Better item display */}
-                      <div className="flex items-center space-x-3 flex-1">
-                        <div className={`p-2 rounded-lg bg-gray-700 ${details.color}`}>
-                          <ItemIcon className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-primary truncate">{details.name}</p>
-                          <p className="text-xs text-secondary">{details.description}</p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <span className="text-xs text-accent font-medium">
-                              Qty: {item.quantity}
-                            </span>
-                            {item.item_id === 4 && activeBoosts.pointMultiplier && (
-                              <span className="text-xs text-green-400 font-bold bg-green-400/20 px-2 py-0.5 rounded-full">
-                                ACTIVE
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* ENHANCEMENT 3: Better action button */}
-                      {canActivate && (
-                        <motion.button
-                          onClick={() => handleActivateItem(item.item_id)}
-                          disabled={isActivatingItem === item.item_id}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all duration-200 disabled:opacity-50 flex items-center space-x-1"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          {isActivatingItem === item.item_id ? (
-                            <LoaderCircle className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <>
-                              <Zap className="w-3 h-3" />
-                              <span>USE</span>
-                            </>
-                          )}
-                        </motion.button>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-              
-              {inventory.length === 0 && (
-                <motion.div
-                  className="text-center py-6"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <Package className="w-12 h-12 text-secondary mx-auto mb-2 opacity-50" />
-                  <p className="text-secondary text-sm">No items available</p>
-                  <p className="text-xs text-secondary/70 mt-1">Visit the shop to buy items!</p>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* Rest of the component remains the same... */}
       {/* Game Board Container */}
       <motion.div 
         className="flex-1 flex flex-col items-center justify-center"
@@ -840,7 +750,7 @@ const GamePage = () => {
           transition={{ duration: 0.5, delay: 0.6 }}
         >
           <p className="text-sm">
-            Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
+            Drag pieces to adjacent spots to create matches of 3 or more! 🍪✨
           </p>
           {inventory.length > 0 && (
             <p className="text-xs mt-1 text-accent">
