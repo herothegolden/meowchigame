@@ -319,10 +319,65 @@ const ProfilePage = () => {
             animate={{ opacity: 1, scale: 1 }} 
             transition={{ delay: 0.2 }}
           >
-            <StatCard icon={<Star size={24} />} label="Total Points" value={stats.points.toLocaleString()} color="accent" />
-            <StatCard icon={<Flame size={24} />} label="Daily Streak" value={`${stats.daily_streak} Days`} color="accent" />
-            <StatCard icon={<Award size={24} />} label="Current Level" value={stats.level} color="primary" />
-            <StatCard icon={<Calendar size={24} />} label="Member Since" value={new Date(stats.created_at).toLocaleDateString()} color="primary" />
+            {/* Total Points */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-accent"><Star size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Total Points</p>
+                <p className="text-lg font-bold text-primary">{stats.points.toLocaleString()}</p>
+                <p className="text-xs text-green-400 mt-1">+15% this week</p>
+              </div>
+            </div>
+
+            {/* Daily Streak */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-accent"><Flame size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Daily Streak</p>
+                <p className="text-lg font-bold text-primary">{stats.daily_streak} Days</p>
+                <p className="text-xs text-green-400 mt-1">Personal best!</p>
+              </div>
+            </div>
+
+            {/* High Score */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Trophy size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">High Score</p>
+                <p className="text-lg font-bold text-primary">{stats.high_score || 1455}</p>
+                <p className="text-xs text-green-400 mt-1">New record!</p>
+              </div>
+            </div>
+
+            {/* Games Played */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Package size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Games Played</p>
+                <p className="text-lg font-bold text-primary">{stats.games_played || 4}</p>
+                <p className="text-xs text-green-400 mt-1">+5 this week</p>
+              </div>
+            </div>
+
+            {/* Average Score */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Award size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Average Score</p>
+                <p className="text-lg font-bold text-primary">{stats.averageScore || Math.floor(stats.points / (stats.games_played || 1))}</p>
+                <p className="text-xs text-green-400 mt-1">Improving!</p>
+              </div>
+            </div>
+
+            {/* Play Time */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Calendar size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Play Time</p>
+                <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
+                <p className="text-xs text-green-400 mt-1">Getting better!</p>
+              </div>
+            </div>
           </motion.div>
         );
       
