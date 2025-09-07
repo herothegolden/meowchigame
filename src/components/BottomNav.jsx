@@ -1,4 +1,4 @@
-// src/components/BottomNav.jsx - Updated with audio feedback
+// src/components/BottomNav.jsx - Complete with audio integration
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, User, Swords, ShoppingCart } from 'lucide-react';
@@ -14,13 +14,23 @@ const navItems = [
 const BottomNav = () => {
   const { playButtonClick } = useAudio();
 
+  const handleNavClick = () => {
+    // Play audio feedback for navigation
+    playButtonClick();
+    
+    // Trigger haptic feedback if available
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+  };
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 h-16 bg-nav border-t border-gray-700 flex justify-around items-center">
       {navItems.map((item) => (
         <NavLink
           key={item.path}
           to={item.path}
-          onClick={() => playButtonClick()} // Add audio feedback to navigation
+          onClick={handleNavClick}
           className={({ isActive }) =>
             `flex flex-col items-center justify-center w-full transition-colors duration-200 ${
               isActive ? 'text-accent' : 'text-secondary hover:text-primary'
