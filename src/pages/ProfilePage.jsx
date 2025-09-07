@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, X } from 'lucide-react';
+import { PerformanceMonitor } from '../utils/performance';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -190,9 +191,12 @@ const ProfilePage = () => {
     setLeaderboardLoading(true);
     
     try {
+      PerformanceMonitor.startTimer(`ProfilePage_Leaderboard_${type}`);
+      
       if (!tg?.initData || !BACKEND_URL) {
         setLeaderboardData(MOCK_LEADERBOARD);
         setLeaderboardLoading(false);
+        PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
         return;
       }
 
@@ -208,8 +212,11 @@ const ProfilePage = () => {
       } else {
         setLeaderboardData(MOCK_LEADERBOARD);
       }
+      
+      PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
     } catch (err) {
       setLeaderboardData(MOCK_LEADERBOARD);
+      PerformanceMonitor.endTimer(`ProfilePage_Leaderboard_${type}`);
     } finally {
       setLeaderboardLoading(false);
     }
@@ -232,6 +239,8 @@ const ProfilePage = () => {
     setIsAddingFriend(true);
 
     try {
+      PerformanceMonitor.startTimer('ProfilePage_AddFriend');
+      
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
         console.log('Demo: Adding friend:', friendUsername);
@@ -247,6 +256,7 @@ const ProfilePage = () => {
         }
         setFriendUsername('');
         setIsAddingFriend(false);
+        PerformanceMonitor.endTimer('ProfilePage_AddFriend');
         return;
       }
 
@@ -280,6 +290,8 @@ const ProfilePage = () => {
       // Clear input and refresh leaderboard
       setFriendUsername('');
       fetchLeaderboard('friends');
+      
+      PerformanceMonitor.endTimer('ProfilePage_AddFriend');
 
     } catch (error) {
       console.error('Add friend error:', error);
@@ -294,6 +306,8 @@ const ProfilePage = () => {
       } else {
         alert(error.message);
       }
+      
+      PerformanceMonitor.endTimer('ProfilePage_AddFriend');
     } finally {
       setIsAddingFriend(false);
     }
@@ -301,8 +315,11 @@ const ProfilePage = () => {
 
   const fetchProfileData = useCallback(async () => {
     try {
+      PerformanceMonitor.startTimer('ProfilePage_TotalLoad');
+      
       if (!tg?.initData || !BACKEND_URL) {
         console.log('Demo mode: Using mock profile data');
+        PerformanceMonitor.startTimer('ProfilePage_MockData');
         setProfileData({
           stats: MOCK_STATS,
           inventory: [],
@@ -312,11 +329,18 @@ const ProfilePage = () => {
         });
         setIsConnected(false);
         setLoading(false);
+        PerformanceMonitor.endTimer('ProfilePage_MockData');
+        PerformanceMonitor.endTimer('ProfilePage_TotalLoad');
         return;
       }
 
       console.log('Fetching real profile data...');
+      
+      // Test network latency
+      await PerformanceMonitor.testNetworkLatency();
 
+      PerformanceMonitor.startTimer('ProfilePage_ParallelAPICalls');
+      
       // Fetch both user stats and shop/inventory data in parallel
       const [statsRes, shopDataRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/user-stats`, {
@@ -330,11 +354,14 @@ const ProfilePage = () => {
           body: JSON.stringify({ initData: tg.initData }),
         })
       ]);
+      
+      PerformanceMonitor.endTimer('ProfilePage_ParallelAPICalls');
 
       if (!statsRes.ok || !shopDataRes.ok) {
         throw new Error('Failed to fetch profile data.');
       }
 
+      PerformanceMonitor.startTimer('ProfilePage_DataProcessing');
       const stats = await statsRes.json();
       const shopData = await shopDataRes.json();
       
@@ -349,6 +376,7 @@ const ProfilePage = () => {
       });
       
       setIsConnected(true);
+      PerformanceMonitor.endTimer('ProfilePage_DataProcessing');
 
     } catch (err) {
       console.error('Profile fetch error:', err);
@@ -365,6 +393,13 @@ const ProfilePage = () => {
       setIsConnected(false);
     } finally {
       setLoading(false);
+      PerformanceMonitor.endTimer('ProfilePage_TotalLoad');
+      
+      // Show performance report
+      setTimeout(() => {
+        const report = PerformanceMonitor.getReport();
+        console.log('📊 ProfilePage Performance Report:', report);
+      }, 1000);
     }
   }, [tg]);
 
@@ -381,6 +416,8 @@ const ProfilePage = () => {
 
   const handleActivateItem = async (itemId) => {
     try {
+      PerformanceMonitor.startTimer('ProfilePage_ActivateItem');
+      
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
         console.log('Demo: Activating item', itemId);
@@ -395,6 +432,7 @@ const ProfilePage = () => {
         } else {
           alert(message);
         }
+        PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
         return;
       }
 
@@ -420,6 +458,8 @@ const ProfilePage = () => {
 
       // Refresh profile data
       fetchProfileData();
+      
+      PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
 
     } catch (err) {
       console.error('Activation error:', err);
@@ -429,6 +469,7 @@ const ProfilePage = () => {
         message: err.message, 
         buttons: [{ type: 'ok' }] 
       });
+      PerformanceMonitor.endTimer('ProfilePage_ActivateItem');
     }
   };
 
