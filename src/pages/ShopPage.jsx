@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle, Sparkles } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -15,7 +15,6 @@ const iconComponents = {
   Default: <Star size={28} />
 };
 
-// FIXED: Syntax error - added missing "price:" and organized properly
 const FALLBACK_SHOP_ITEMS = [
   { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
   { id: 2, name: 'Extra Time +20s', description: '+20 seconds to your next game', price: 1500, icon_name: 'Timer', type: 'consumable', category: 'time' },
@@ -33,35 +32,78 @@ const categoryConfig = {
   badge: { name: 'Profile Badges', icon: '🏆', color: 'text-yellow-400' }
 };
 
-const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0, isPurchasing }) => {
+const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0, isPurchasing, justPurchased }) => {
   const Icon = iconComponents[item.icon_name] || iconComponents.Default;
   const canAfford = userPoints >= item.price;
 
   return (
     <motion.div
-      className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700"
+      className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700 relative overflow-hidden"
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5 }}
+      layout
     >
+      {/* Purchase success animation */}
+      <AnimatePresence>
+        {justPurchased && (
+          <motion.div
+            className="absolute inset-0 bg-green-500/20 flex items-center justify-center z-10"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.2 }}
+            transition={{ duration: 0.6 }}
+          >
+            <motion.div
+              className="flex items-center text-green-400 font-bold"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
+              Purchased!
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center">
-        <div className="mr-4 text-accent">{Icon}</div>
+        <motion.div 
+          className="mr-4 text-accent"
+          animate={isPurchasing ? { rotate: [0, 10, -10, 0] } : {}}
+          transition={{ duration: 0.5, repeat: isPurchasing ? Infinity : 0 }}
+        >
+          {Icon}
+        </motion.div>
         <div>
           <p className="font-bold text-primary">{item.name}</p>
           <p className="text-sm text-secondary">{item.description}</p>
           {item.type === 'consumable' && ownedQuantity > 0 && (
-            <p className="text-xs text-accent mt-1">Owned: {ownedQuantity}</p>
+            <motion.p 
+              className="text-xs text-accent mt-1"
+              key={ownedQuantity} // Re-animate when quantity changes
+              initial={{ scale: 1.2, color: '#10B981' }}
+              animate={{ scale: 1, color: '#EAB308' }}
+              transition={{ duration: 0.3 }}
+            >
+              Owned: {ownedQuantity}
+            </motion.p>
           )}
         </div>
       </div>
       
       {isOwned && item.type === 'permanent' ? (
-        <div className="flex items-center text-green-400 font-bold py-2 px-4">
+        <motion.div 
+          className="flex items-center text-green-400 font-bold py-2 px-4"
+          initial={{ scale: 0.8 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
           <CheckCircle className="w-5 h-5 mr-2" />
           Owned
-        </div>
+        </motion.div>
       ) : (
-        <button 
+        <motion.button 
           onClick={() => onPurchase(item.id)}
           disabled={!canAfford || isPurchasing}
           className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
@@ -69,6 +111,8 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
               ? 'bg-accent text-background hover:scale-105' 
               : 'bg-gray-600 text-gray-400 cursor-not-allowed'
           }`}
+          whileTap={canAfford ? { scale: 0.95 } : {}}
+          whileHover={canAfford ? { scale: 1.05 } : {}}
         >
           {isPurchasing ? (
             <LoaderCircle className="w-5 h-5 animate-spin" />
@@ -78,13 +122,13 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
               {item.price.toLocaleString()}
             </>
           )}
-        </button>
+        </motion.button>
       )}
     </motion.div>
   );
 };
 
-const CategorySection = ({ category, categoryData, items, userPoints, onPurchase, inventory, ownedBadges, purchasingId }) => {
+const CategorySection = ({ category, categoryData, items, userPoints, onPurchase, inventory, ownedBadges, purchasingId, justPurchasedId }) => {
   if (items.length === 0) return null;
 
   return (
@@ -93,6 +137,7 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      layout
     >
       <div className="flex items-center space-x-3">
         <span className="text-2xl">{categoryData.icon}</span>
@@ -122,6 +167,7 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
               isOwned={isOwned}
               ownedQuantity={ownedQuantity}
               isPurchasing={purchasingId === item.id}
+              justPurchased={justPurchasedId === item.id}
             />
           );
         })}
@@ -131,13 +177,14 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
 };
 
 const ShopPage = () => {
-  const [shopItems, setShopItems] = useState(FALLBACK_SHOP_ITEMS); // FIXED: Use backend items when available
+  const [shopItems, setShopItems] = useState(FALLBACK_SHOP_ITEMS);
   const [userPoints, setUserPoints] = useState(4735);
   const [inventory, setInventory] = useState([]);
   const [ownedBadges, setOwnedBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
   const [purchasingId, setPurchasingId] = useState(null);
+  const [justPurchasedId, setJustPurchasedId] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const tg = window.Telegram?.WebApp;
 
@@ -163,9 +210,7 @@ const ShopPage = () => {
             const data = await res.json();
             console.log('Shop data loaded:', data);
             
-            // FIXED: Use backend items if available, otherwise fallback
             if (data.items && data.items.length > 0) {
-              // Map backend items to frontend format with categories
               const mappedItems = data.items.map(item => ({
                 ...item,
                 category: getCategoryFromItem(item)
@@ -189,7 +234,6 @@ const ShopPage = () => {
         setConnectionStatus('Demo mode - purchases won\'t persist');
         setIsConnected(false);
         
-        // Use demo state with fallback items
         setShopItems(FALLBACK_SHOP_ITEMS);
         setUserPoints(demoPoints);
         setInventory(demoInventory);
@@ -202,7 +246,6 @@ const ShopPage = () => {
     loadShopData();
   }, [tg, demoPoints, demoInventory, demoBadges]);
 
-  // FIXED: Helper function to categorize backend items
   const getCategoryFromItem = (item) => {
     if (item.name.includes('Time') || item.name.includes('time')) return 'time';
     if (item.name.includes('Bomb') || item.name.includes('bomb')) return 'bomb';
@@ -211,6 +254,7 @@ const ShopPage = () => {
     return 'other';
   };
 
+  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS!
   const handlePurchase = async (itemId) => {
     const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
@@ -230,39 +274,59 @@ const ShopPage = () => {
         const result = await res.json();
         
         if (!res.ok) {
-          // Show specific error message from backend
           const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
           throw new Error(errorMessage);
         }
 
         console.log('Purchase successful:', result);
 
-        // Success
+        // INSTANT UI UPDATES - NO RELOAD!
+        
+        // 1. Update points immediately
+        setUserPoints(result.newPoints);
+        
+        // 2. Update inventory/badges state locally
+        if (item.category === 'badge') {
+          setOwnedBadges(prev => [...prev, item.name]);
+        } else {
+          setInventory(prev => {
+            const existingItem = prev.find(inv => inv.item_id === itemId);
+            if (existingItem) {
+              return prev.map(inv => 
+                inv.item_id === itemId 
+                  ? { ...inv, quantity: inv.quantity + 1 }
+                  : inv
+              );
+            } else {
+              return [...prev, { item_id: itemId, quantity: 1 }];
+            }
+          });
+        }
+
+        // 3. Show success animation
+        setJustPurchasedId(itemId);
+        setTimeout(() => setJustPurchasedId(null), 1500);
+
+        // 4. Haptic feedback
         tg.HapticFeedback?.notificationOccurred('success');
+        
+        // 5. Show success popup (optional - can be removed for even smoother experience)
         tg.showPopup({
           title: 'Success!',
           message: result.message,
           buttons: [{ type: 'ok' }]
         });
-
-        // Update local state
-        setUserPoints(result.newPoints);
-        
-        // Refresh shop data after purchase
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
         
       } else {
         console.log('Demo purchase for item:', itemId);
         
-        // Demo mode
+        // Demo mode - instant updates
         if (userPoints >= item.price) {
           const newPoints = userPoints - item.price;
           setUserPoints(newPoints);
           setDemoPoints(newPoints);
           
-          // Add to inventory
+          // Update demo state instantly
           if (item.category === 'badge') {
             const newBadges = [...demoBadges, item.name];
             setOwnedBadges(newBadges);
@@ -284,7 +348,10 @@ const ShopPage = () => {
             }
           }
           
-          // Show success message
+          // Show success animation
+          setJustPurchasedId(itemId);
+          setTimeout(() => setJustPurchasedId(null), 1500);
+          
           const message = `Demo: Purchased ${item.name} for ${item.price} points!\n\n⚠️ This purchase is for demo only and won't persist.`;
           if (tg && tg.showPopup) {
             tg.showPopup({
@@ -346,10 +413,16 @@ const ShopPage = () => {
           <ShoppingCart className="w-8 h-8 mr-3 text-secondary" />
           <h1 className="text-3xl font-bold">Shop</h1>
         </div>
-        <div className="bg-nav p-2 px-4 rounded-lg flex items-center border border-gray-700">
+        <motion.div 
+          className="bg-nav p-2 px-4 rounded-lg flex items-center border border-gray-700"
+          key={userPoints} // Re-animate when points change
+          initial={{ scale: 1.1, backgroundColor: '#10B981' }}
+          animate={{ scale: 1, backgroundColor: '#212426' }}
+          transition={{ duration: 0.4 }}
+        >
           <Star className="w-5 h-5 mr-2 text-accent" />
           <span className="text-xl font-bold">{userPoints.toLocaleString()}</span>
-        </div>
+        </motion.div>
       </motion.div>
 
       {/* Connection status */}
@@ -365,7 +438,7 @@ const ShopPage = () => {
       </div>
 
       {/* Shop Categories */}
-      <div className="space-y-8">
+      <motion.div className="space-y-8" layout>
         {Object.entries(categoryConfig).map(([category, categoryData]) => (
           <CategorySection
             key={category}
@@ -377,9 +450,10 @@ const ShopPage = () => {
             inventory={inventory}
             ownedBadges={ownedBadges}
             purchasingId={purchasingId}
+            justPurchasedId={justPurchasedId}
           />
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 };
