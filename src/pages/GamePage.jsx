@@ -7,6 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+// Your custom cookie image for the Ready screen
+const COOKIE_IMAGE_URL = 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Cookie.webp?updatedAt=1757261428707&tr=w-64,h-64,f-auto,q-85';
+
 const GamePage = () => {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(30);
@@ -27,6 +30,10 @@ const GamePage = () => {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [showItemSelection, setShowItemSelection] = useState(false);
   const [isConfiguringGame, setIsConfiguringGame] = useState(false);
+  
+  // Cookie image loading state
+  const [cookieImageLoaded, setCookieImageLoaded] = useState(false);
+  const [cookieImageError, setCookieImageError] = useState(false);
   
   const navigate = useNavigate();
 
@@ -545,7 +552,7 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      {/* Pre-game Setup */}
+      {/* Pre-game Setup - UPDATED WITH CUSTOM COOKIE IMAGE */}
       {!gameStarted && !isGameOver && !showItemSelection && (
         <motion.div 
           className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4"
@@ -555,7 +562,36 @@ const GamePage = () => {
         >
           <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
             <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
-            <div className="text-6xl mb-6">🍪</div>
+            
+            {/* CUSTOM COOKIE IMAGE with fallback */}
+            <div className="w-16 h-16 mx-auto mb-6 relative">
+              {!cookieImageError ? (
+                <>
+                  <img
+                    src={COOKIE_IMAGE_URL}
+                    alt="Meowchi Cookie"
+                    className={`w-full h-full object-contain transition-opacity duration-300 ${
+                      cookieImageLoaded ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    onLoad={() => setCookieImageLoaded(true)}
+                    onError={() => setCookieImageError(true)}
+                    style={{
+                      filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
+                      imageRendering: 'auto'
+                    }}
+                  />
+                  {/* Fallback emoji while loading */}
+                  {!cookieImageLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center text-6xl">
+                      🍪
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Fallback emoji on error */
+                <div className="text-6xl">🍪</div>
+              )}
+            </div>
             
             <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
               <p className="text-lg font-bold text-accent mb-2">Cookie Match Game</p>
