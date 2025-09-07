@@ -1,12 +1,31 @@
-// Game configuration - Changed to 6x6 for better mobile fit
+// src/utils/gameLogic.js - Updated with your custom images
+// Game configuration - 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
 
-// Emoji pieces for the game
+// YOUR CUSTOM IMAGES with optimization parameters for smooth TMA performance
+export const PIECE_IMAGES = [
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1757261428641&tr=w-64,h-64,f-auto,q-85',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Cookie.webp?updatedAt=1757261428707&tr=w-64,h-64,f-auto,q-85',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Jar.webp?updatedAt=1757261428553&tr=w-64,h-64,f-auto,q-85',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1757261428445&tr=w-64,h-64,f-auto,q-85',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Meowchi.webp?updatedAt=1757261428534&tr=w-64,h-64,f-auto,q-85',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1757261428281&tr=w-64,h-64,f-auto,q-85'
+];
+
+// Emoji fallbacks for loading states and errors
 export const PIECE_EMOJIS = ['🍪', '🍭', '🧁', '🍰', '🎂', '🍩'];
 
 /**
+ * Gets a random piece index (0-5)
+ */
+const getRandomPiece = () => {
+  return Math.floor(Math.random() * PIECE_IMAGES.length);
+};
+
+/**
  * Generates initial board ensuring no matches exist
+ * Now returns piece indices instead of emojis
  */
 export const generateInitialBoard = () => {
   let board;
@@ -18,7 +37,7 @@ export const generateInitialBoard = () => {
     for (let row = 0; row < BOARD_SIZE; row++) {
       const boardRow = [];
       for (let col = 0; col < BOARD_SIZE; col++) {
-        boardRow.push(getRandomEmoji());
+        boardRow.push(getRandomPiece()); // Returns index (0-5)
       }
       board.push(boardRow);
     }
@@ -26,13 +45,6 @@ export const generateInitialBoard = () => {
   } while (findMatches(board).length > 0 && attempts < maxAttempts);
 
   return board;
-};
-
-/**
- * Gets a random emoji from available pieces
- */
-const getRandomEmoji = () => {
-  return PIECE_EMOJIS[Math.floor(Math.random() * PIECE_EMOJIS.length)];
 };
 
 /**
@@ -69,7 +81,8 @@ export const swapPieces = (board, pos1, pos2) => {
 };
 
 /**
- * FIXED: Finds all matches on the board (3+ in a row/column)
+ * Finds all matches on the board (3+ in a row/column)
+ * Works with piece indices (0-5)
  */
 export const findMatches = (board) => {
   const matches = [];
@@ -178,7 +191,7 @@ export const fillEmptySpaces = (board) => {
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
       if (newBoard[row][col] === null) {
-        newBoard[row][col] = getRandomEmoji();
+        newBoard[row][col] = getRandomPiece(); // Returns index (0-5)
       }
     }
   }
@@ -187,7 +200,7 @@ export const fillEmptySpaces = (board) => {
 };
 
 /**
- * FIXED: Validates if a move is legal (creates a match)
+ * Validates if a move is legal (creates a match)
  */
 export const isValidMove = (board, pos1, pos2) => {
   // Check if positions are adjacent
