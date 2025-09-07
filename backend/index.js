@@ -47,7 +47,7 @@ const monitoredQuery = async (client, query, params = []) => {
   }
 };
 
-// COMPREHENSIVE DATABASE SETUP WITH FRIENDS SYSTEM
+// COMPREHENSIVE DATABASE SETUP WITH FRIENDS SYSTEM - FIXED FOREIGN KEY ISSUE
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -159,9 +159,10 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 9. Populate shop items
+    // 9. FIXED: Populate shop items using UPSERT instead of DELETE + INSERT
     console.log('🛍️ Setting up shop items...');
-    await client.query('DELETE FROM shop_items');
+    
+    // Use INSERT ... ON CONFLICT DO UPDATE to avoid foreign key constraint issues
     await client.query(`
       INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
       (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -171,8 +172,15 @@ const setupDatabase = async () => {
       (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
       (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
       (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        price = EXCLUDED.price,
+        icon_name = EXCLUDED.icon_name,
+        type = EXCLUDED.type
     `);
 
+    // Ensure the sequence is properly set
     await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
 
     console.log('✅ Enhanced database setup complete!');
