@@ -1,7 +1,8 @@
-// src/pages/ProfilePage.jsx - OPTIMIZED for TMA performance
+// src/pages/ProfilePage.jsx - Complete with audio integration and TMA optimization
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Wifi, CheckCircle, X } from 'lucide-react';
+import { useAudio } from '../hooks/useAudio';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -100,6 +101,9 @@ const ProfilePage = () => {
   
   const tg = window.Telegram?.WebApp;
 
+  // AUDIO INTEGRATION
+  const { playButtonClick, playItemActivate } = useAudio();
+
   // Mock data for demo mode
   const MOCK_PROFILE = {
     stats: {
@@ -144,7 +148,7 @@ const ProfilePage = () => {
 
       console.log('🚀 Fetching profile data...');
 
-      // SINGLE API CALL: Try optimized endpoint first
+      // Try new optimized endpoint first
       let profileRes;
       try {
         profileRes = await fetch(`${BACKEND_URL}/api/profile-complete`, {
@@ -155,7 +159,7 @@ const ProfilePage = () => {
         });
       } catch (error) {
         // Fallback to parallel calls only if new endpoint doesn't exist
-        console.log('Fallback to parallel calls...');
+        console.log('Using fallback profile loading...');
         const [statsRes, shopDataRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/user-stats`, {
             method: 'POST',
@@ -258,19 +262,26 @@ const ProfilePage = () => {
     }
   };
 
-  // OPTIMIZED: Friend add with minimal state updates
+  // AUDIO-ENHANCED: Friend add with minimal state updates
   const handleAddFriend = async () => {
     if (!friendUsername.trim()) {
+      // AUDIO: Error sound for invalid input
+      playButtonClick();
       const message = 'Please enter a username';
       tg?.showPopup?.({ title: 'Error', message, buttons: [{ type: 'ok' }] }) || alert(message);
       return;
     }
 
+    // AUDIO: Button click for friend add attempt
+    playButtonClick();
+    
     setIsAddingFriend(true);
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
+        // AUDIO: Success sound for demo mode
+        setTimeout(() => playItemActivate(), 100);
+        
         const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
         tg?.showPopup?.({ title: 'Demo Mode', message, buttons: [{ type: 'ok' }] }) || alert(message);
         setFriendUsername('');
@@ -290,6 +301,9 @@ const ProfilePage = () => {
       }
 
       const result = await res.json();
+
+      // AUDIO: Success sound for successful friend add!
+      playItemActivate();
 
       // Success feedback
       tg.HapticFeedback?.notificationOccurred('success');
@@ -317,10 +331,16 @@ const ProfilePage = () => {
     }
   };
 
-  // OPTIMIZED: Item activation with minimal API calls
+  // AUDIO-ENHANCED: Item activation with minimal API calls
   const handleActivateItem = async (itemId) => {
+    // AUDIO: Button click for activation attempt
+    playButtonClick();
+    
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // AUDIO: Success sound for demo mode
+        setTimeout(() => playItemActivate(), 100);
+        
         const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
         tg?.showPopup?.({ title: 'Demo Activation', message, buttons: [{ type: 'ok' }] }) || alert(message);
         return;
@@ -339,6 +359,9 @@ const ProfilePage = () => {
       }
 
       const result = await res.json();
+
+      // AUDIO: Success sound for successful activation!
+      playItemActivate();
 
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({ 
@@ -390,6 +413,20 @@ const ProfilePage = () => {
     }
   };
 
+  // AUDIO-ENHANCED Tab navigation
+  const handleTabChange = (tabId) => {
+    playButtonClick(); // Audio feedback for tab changes
+    setActiveTab(tabId);
+  };
+
+  // AUDIO-ENHANCED Leaderboard tab changes
+  const handleLeaderboardTabChange = (tabId) => {
+    playButtonClick(); // Audio feedback
+    setLeaderboardTab(tabId);
+    setLeaderboardLoaded(false);
+    fetchLeaderboard(tabId);
+  };
+
   const renderTabContent = () => {
     switch(activeTab) {
       case 'overview':
@@ -439,11 +476,7 @@ const ProfilePage = () => {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => {
-                      setLeaderboardTab(tab.id);
-                      setLeaderboardLoaded(false);
-                      fetchLeaderboard(tab.id);
-                    }}
+                    onClick={() => handleLeaderboardTabChange(tab.id)}
                     className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
                       leaderboardTab === tab.id 
                         ? 'bg-accent text-background' 
@@ -646,7 +679,10 @@ const ProfilePage = () => {
         <p>Could not load profile.</p>
         <p className="text-sm text-secondary">{error}</p>
         <button 
-          onClick={fetchProfileData}
+          onClick={() => {
+            playButtonClick();
+            fetchProfileData();
+          }}
           className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
         >
           Retry
@@ -705,7 +741,7 @@ const ProfilePage = () => {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-md transition-all duration-200 ${
                 activeTab === tab.id 
                   ? 'bg-accent text-background' 
