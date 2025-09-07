@@ -1,4 +1,4 @@
-// src/hooks/useAudio.js - Enhanced version with better error handling
+// src/hooks/useAudio.js - Complete TMA-optimized audio system with enhanced error handling
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // YOUR IMAGEKIT.IO SOUND FILES - All 12 sounds ready!
@@ -26,7 +26,7 @@ const SOUND_URLS = {
 
 export const useAudio = () => {
   const [isEnabled, setIsEnabled] = useState(true);
-  const [isMusicEnabled, setIsMusicEnabled] = useState(false);
+  const [isMusicEnabled, setIsMusicEnabled] = useState(false); // Music off by default
   const [volume, setVolume] = useState(0.7);
   const [isLoading, setIsLoading] = useState(true);
   const [audioContext, setAudioContext] = useState(null);
@@ -35,7 +35,7 @@ export const useAudio = () => {
   const audioBuffers = useRef(new Map());
   const musicRef = useRef(null);
   const gainNodeRef = useRef(null);
-  const lastPlayedRef = useRef(new Map());
+  const lastPlayedRef = useRef(new Map()); // Prevent spam
   const isInitializedRef = useRef(false);
 
   // Initialize Web Audio API (better performance than HTML5 audio)
@@ -165,7 +165,7 @@ export const useAudio = () => {
         gainNodeRef.current.gain.value = volume;
       }
       if (musicRef.current) {
-        musicRef.current.volume = isMusicEnabled ? volume * 0.3 : 0;
+        musicRef.current.volume = isMusicEnabled ? volume * 0.3 : 0; // Music quieter
       }
     } catch (error) {
       console.warn('⚠️ Volume update failed:', error);
@@ -245,7 +245,7 @@ export const useAudio = () => {
     try {
       const audio = new Audio(SOUND_URLS.bgMusic);
       audio.loop = true;
-      audio.volume = volume * 0.3;
+      audio.volume = volume * 0.3; // Background music should be quiet
       audio.preload = 'auto';
       
       // Better error handling for audio loading
@@ -296,7 +296,7 @@ export const useAudio = () => {
     playMatch: (cascadeLevel = 0) => {
       if (cascadeLevel > 0) {
         playSound('cascade', { 
-          playbackRate: 1 + (cascadeLevel * 0.1),
+          playbackRate: 1 + (cascadeLevel * 0.1), // Higher pitch for combos
           volume: Math.min(1, 0.8 + (cascadeLevel * 0.1))
         });
       } else {
