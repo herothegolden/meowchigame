@@ -1,4 +1,4 @@
-// src/pages/GamePage.jsx - With Audio Integration
+// src/pages/GamePage.jsx - Complete with Audio Integration
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
@@ -38,7 +38,7 @@ const GamePage = () => {
   const [cookieImageLoaded, setCookieImageLoaded] = useState(false);
   const [cookieImageError, setCookieImageError] = useState(false);
   
-  // AUDIO INTEGRATION
+  // AUDIO INTEGRATION - All your uploaded sounds!
   const { 
     playButtonClick, 
     playItemActivate, 
@@ -52,7 +52,7 @@ const GamePage = () => {
   
   const navigate = useNavigate();
 
-  // AUDIO-ENHANCED Timer effect with sounds
+  // AUDIO-ENHANCED Timer effect with your sounds
   useEffect(() => {
     if (!gameStarted || isGameOver || timeLeft <= 0) return;
 
@@ -60,14 +60,14 @@ const GamePage = () => {
       setTimeLeft(prev => {
         const newTime = prev - 1;
         
-        // AUDIO: Timer sounds
+        // AUDIO: Timer sounds using your uploaded files!
         if (newTime <= 10 && newTime > 0) {
-          playTick(); // Tick sound for last 10 seconds
+          playTick(); // Your tick.mp3 sound for urgency!
         } else if (newTime === 10) {
-          playTimeWarning(); // Warning sound at 10 seconds
+          playTimeWarning(); // Your warning.mp3 sound at 10 seconds!
         } else if (newTime <= 0) {
-          playGameOver(); // Game over sound
-          stopBackgroundMusic(); // Stop background music
+          playGameOver(); // Your game-over.mp3 sound!
+          stopBackgroundMusic(); // Stop your background-loop.mp3
           setIsGameOver(true);
           return 0;
         }
@@ -79,14 +79,14 @@ const GamePage = () => {
     return () => clearInterval(timer);
   }, [gameStarted, isGameOver, timeLeft, playTick, playTimeWarning, playGameOver, stopBackgroundMusic]);
 
-  // Start background music when game starts
+  // Start your background music when game starts
   useEffect(() => {
     if (gameStarted && !isGameOver) {
-      playBackgroundMusic();
+      playBackgroundMusic(); // Your background-loop.mp3!
     }
   }, [gameStarted, isGameOver, playBackgroundMusic]);
 
-  // Handle game over submission
+  // Handle game over submission with audio feedback
   useEffect(() => {
     if (!isGameOver || isSubmitting) return;
 
@@ -111,7 +111,7 @@ const GamePage = () => {
             if (response.ok) {
               console.log('Score submitted successfully:', data);
               
-              // AUDIO: Score submission success
+              // AUDIO: Score submission success - your coin.mp3!
               setTimeout(() => playScoreUpdate(), 500);
               
               const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
@@ -126,7 +126,7 @@ const GamePage = () => {
                   { text: 'Home', type: 'default', id: 'home' }
                 ]
               }, (buttonId) => {
-                playButtonClick();
+                playButtonClick(); // Your click.mp3!
                 if (buttonId === 'play_again') {
                   restartGame();
                 } else {
@@ -144,7 +144,7 @@ const GamePage = () => {
               message: 'Could not save your score. Please try again later.',
               buttons: [{ text: 'OK', type: 'ok' }]
             }, () => {
-              playButtonClick();
+              playButtonClick(); // Your click.mp3!
               navigate('/');
             });
           }
@@ -154,10 +154,10 @@ const GamePage = () => {
           setTimeout(() => {
             const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}\n\nPlay again?`;
             if (confirm(message)) {
-              playButtonClick();
+              playButtonClick(); // Your click.mp3!
               restartGame();
             } else {
-              playButtonClick();
+              playButtonClick(); // Your click.mp3!
               navigate('/');
             }
           }, 1000);
@@ -356,7 +356,7 @@ const GamePage = () => {
 
       console.log('Item activated successfully:', result);
 
-      // AUDIO: Item activation sound
+      // AUDIO: Item activation sound - your powerup.mp3!
       playItemActivate();
 
       // Update local state immediately
@@ -396,7 +396,7 @@ const GamePage = () => {
 
   // PHASE 2: NEW handleItemSelection with audio
   const handleItemSelection = (itemId) => {
-    playButtonClick();
+    playButtonClick(); // Your click.mp3!
     setSelectedItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(itemId)) {
@@ -410,7 +410,7 @@ const GamePage = () => {
 
   // PHASE 2: NEW startGameWithConfiguration with audio
   const startGameWithConfiguration = async () => {
-    playButtonClick();
+    playButtonClick(); // Your click.mp3!
     if (availableItems.length > 0) {
       setShowItemSelection(true);
     } else {
@@ -427,7 +427,7 @@ const GamePage = () => {
 
   // PHASE 2: NEW confirmGameStart with audio
   const confirmGameStart = async () => {
-    playButtonClick();
+    playButtonClick(); // Your click.mp3!
     setShowItemSelection(false);
     await configureGameWithSelectedItems();
     
@@ -441,7 +441,7 @@ const GamePage = () => {
 
   const restartGame = async () => {
     console.log('Restarting game...');
-    playButtonClick();
+    playButtonClick(); // Your click.mp3!
     setGameStarted(false);
     setScore(0);
     setIsGameOver(false);
@@ -480,7 +480,7 @@ const GamePage = () => {
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
       
-      {/* AUDIO CONTROLS - Floating audio settings */}
+      {/* AUDIO CONTROLS - Floating audio settings with your sounds! */}
       <AudioControls />
       
       {/* Game Over Overlay */}
@@ -517,7 +517,7 @@ const GamePage = () => {
                 </button>
                 <button
                   onClick={() => {
-                    playButtonClick();
+                    playButtonClick(); // Your click.mp3!
                     navigate('/');
                   }}
                   className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
@@ -582,7 +582,7 @@ const GamePage = () => {
               <div className="flex space-x-3">
                 <button
                   onClick={() => {
-                    playButtonClick();
+                    playButtonClick(); // Your click.mp3!
                     setShowItemSelection(false);
                   }}
                   className="flex-1 bg-gray-600 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
@@ -694,7 +694,7 @@ const GamePage = () => {
           {gameStarted && !isGameOver && inventory.length > 0 && (
             <motion.button
               onClick={() => {
-                playButtonClick();
+                playButtonClick(); // Your click.mp3!
                 setShowInventory(!showInventory);
               }}
               className="relative bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors"
@@ -725,7 +725,44 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* Rest of the component remains the same... */}
+      {/* PHASE 2: NEW Visual Boost Indicators */}
+      <AnimatePresence>
+        {gameStarted && !isGameOver && (activeBoosts.timeBoost > 0 || activeBoosts.bomb || activeBoosts.pointMultiplier) && (
+          <motion.div
+            className="bg-nav/90 backdrop-blur-sm rounded-xl p-3 border border-gray-700"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-center justify-center space-x-4 text-sm">
+              {activeBoosts.timeBoost > 0 && (
+                <div className="flex items-center space-x-1 text-blue-400">
+                  <Clock className="w-4 h-4" />
+                  <span>+{activeBoosts.timeBoost}s Time</span>
+                </div>
+              )}
+              {activeBoosts.bomb && (
+                <div className="flex items-center space-x-1 text-red-400">
+                  <Bomb className="w-4 h-4" />
+                  <span>Bomb Ready</span>
+                </div>
+              )}
+              {activeBoosts.pointMultiplier && (
+                <motion.div 
+                  className="flex items-center space-x-1 text-green-400"
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  <ChevronsUp className="w-4 h-4" />
+                  <span>2x Points</span>
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Game Board Container */}
       <motion.div 
         className="flex-1 flex flex-col items-center justify-center"
