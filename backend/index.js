@@ -23,13 +23,13 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// FIXED DATABASE SETUP - HANDLES EXISTING TABLES PROPERLY
+// PHASE 3: COMPREHENSIVE DATABASE SETUP
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    console.log('🔧 Setting up database tables...');
+    console.log('🔧 Setting up enhanced database tables...');
 
-    // 1. Create Users Table
+    // 1. Create Users Table with enhanced fields
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -41,29 +41,37 @@ const setupDatabase = async () => {
           level INT DEFAULT 1 NOT NULL,
           daily_streak INT DEFAULT 0 NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          games_played INT DEFAULT 0 NOT NULL,
+          high_score INT DEFAULT 0 NOT NULL,
+          total_play_time INT DEFAULT 0 NOT NULL
       );
     `);
 
-    // 2. Add point_booster_active column if it doesn't exist
-    const columnCheck = await client.query(`
+    // 2. Add new columns if they don't exist
+    const userColumns = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name='users' AND column_name='point_booster_active'
+      WHERE table_name='users'
     `);
+    
+    const existingColumns = userColumns.rows.map(row => row.column_name);
+    
+    const columnsToAdd = [
+      { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
+      { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' }
+    ];
 
-    if (columnCheck.rowCount === 0) {
-      console.log('📊 Adding point_booster_active column...');
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN point_booster_active BOOLEAN DEFAULT FALSE NOT NULL
-      `);
+    for (const column of columnsToAdd) {
+      if (!existingColumns.includes(column.name)) {
+        console.log(`📊 Adding ${column.name} column...`);
+        await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
+      }
     }
 
-    // 3. HANDLE SHOP_ITEMS TABLE MIGRATION
-    console.log('🛍️ Setting up shop_items table...');
-    
-    // Check if shop_items table exists and what columns it has
+    // 3. Shop Items Table
     const tableCheck = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -71,7 +79,6 @@ const setupDatabase = async () => {
     `);
 
     if (tableCheck.rowCount === 0) {
-      // Table doesn't exist - create it fresh
       console.log('Creating new shop_items table...');
       await client.query(`
         CREATE TABLE shop_items (
@@ -84,19 +91,14 @@ const setupDatabase = async () => {
         );
       `);
     } else {
-      // Table exists - check if it has the type column
       const hasTypeColumn = tableCheck.rows.some(row => row.column_name === 'type');
-      
       if (!hasTypeColumn) {
         console.log('Adding type column to existing shop_items table...');
-        await client.query(`
-          ALTER TABLE shop_items 
-          ADD COLUMN type VARCHAR(50) DEFAULT 'consumable' NOT NULL
-        `);
+        await client.query(`ALTER TABLE shop_items ADD COLUMN type VARCHAR(50) DEFAULT 'consumable' NOT NULL`);
       }
     }
     
-    // 4. Create User Inventory Table
+    // 4. User Inventory Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
@@ -106,7 +108,7 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 5. Create User Badges Table (for permanent badges)
+    // 5. User Badges Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_badges (
         id SERIAL PRIMARY KEY,
@@ -116,14 +118,64 @@ const setupDatabase = async () => {
         UNIQUE(user_id, badge_name)
       );
     `);
+
+    // 6. PHASE 3: Game Sessions Table for detailed tracking
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS game_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        score INT NOT NULL,
+        duration INT NOT NULL,
+        items_used JSONB,
+        boost_multiplier DECIMAL(3,2) DEFAULT 1.0,
+        started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 7. PHASE 3: Item Usage History Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_usage_history (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        item_id INT REFERENCES shop_items(id),
+        item_name VARCHAR(255) NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        game_session_id INT REFERENCES game_sessions(id),
+        game_score INT DEFAULT 0
+      );
+    `);
+
+    // 8. PHASE 3: Badge Progress Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS badge_progress (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        badge_name VARCHAR(255) NOT NULL,
+        current_progress INT DEFAULT 0,
+        target_progress INT NOT NULL,
+        progress_data JSONB,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, badge_name)
+      );
+    `);
+
+    // 9. PHASE 3: Leaderboard Cache Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS leaderboard_cache (
+        id SERIAL PRIMARY KEY,
+        leaderboard_type VARCHAR(50) NOT NULL,
+        user_id BIGINT REFERENCES users(telegram_id),
+        rank INT NOT NULL,
+        score INT NOT NULL,
+        additional_data JSONB,
+        cached_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     
-    // 6. POPULATE SHOP ITEMS SAFELY
+    // 10. Populate shop items
     console.log('🛍️ Setting up shop items...');
-    
-    // Clear and repopulate shop items
     await client.query('DELETE FROM shop_items');
-    
-    // Insert items with all required columns
     await client.query(`
       INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
       (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -135,10 +187,9 @@ const setupDatabase = async () => {
       (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
     `);
 
-    // Reset sequence to ensure proper ID generation
     await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
 
-    console.log('✅ Database setup complete!');
+    console.log('✅ Enhanced database setup complete!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
     process.exit(1);
@@ -230,10 +281,11 @@ app.post('/api/validate', validateUser, async (req, res) => {
     }
 });
 
+// PHASE 3: Enhanced update-score with session tracking
 app.post('/api/update-score', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const { score } = req.body;
+    const { score, duration = 30, itemsUsed = [] } = req.body;
     if (score === undefined) {
       return res.status(400).json({ error: 'Score is required' });
     }
@@ -243,24 +295,49 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       await client.query('BEGIN');
 
       const userResult = await client.query(
-        'SELECT points, point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE',
+        'SELECT points, point_booster_active, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
       );
       
       if (userResult.rowCount === 0) throw new Error('User not found');
 
-      const { points, point_booster_active } = userResult.rows[0];
+      const { points, point_booster_active, high_score, games_played } = userResult.rows[0];
       const finalScore = point_booster_active ? score * 2 : score;
       const newPoints = points + finalScore;
+      const newHighScore = Math.max(high_score || 0, finalScore);
+      const newGamesPlayed = (games_played || 0) + 1;
 
-      const updateResult = await client.query(
-        'UPDATE users SET points = $1, point_booster_active = FALSE WHERE telegram_id = $2 RETURNING points',
-        [newPoints, user.id]
+      // Create game session record
+      const sessionResult = await client.query(
+        `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [user.id, finalScore, duration, JSON.stringify(itemsUsed), point_booster_active ? 2.0 : 1.0]
       );
+      
+      const sessionId = sessionResult.rows[0].id;
+
+      // Update user stats
+      const updateResult = await client.query(
+        `UPDATE users SET 
+         points = $1, 
+         point_booster_active = FALSE, 
+         high_score = $3, 
+         games_played = $4,
+         total_play_time = total_play_time + $5
+         WHERE telegram_id = $2 RETURNING points`,
+        [newPoints, user.id, newHighScore, newGamesPlayed, duration]
+      );
+
+      // Update badge progress
+      await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
 
       await client.query('COMMIT');
 
-      return res.status(200).json({ new_points: updateResult.rows[0].points, score_awarded: finalScore });
+      return res.status(200).json({ 
+        new_points: updateResult.rows[0].points, 
+        score_awarded: finalScore,
+        session_id: sessionId
+      });
 
     } catch(e){
       await client.query('ROLLBACK');
@@ -274,6 +351,48 @@ app.post('/api/update-score', validateUser, async (req, res) => {
   }
 });
 
+// Helper function to update badge progress
+const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
+  const badgeUpdates = [
+    {
+      name: 'Cookie Master Badge',
+      current: score,
+      target: 5000,
+      condition: score >= 5000
+    },
+    {
+      name: 'Speed Demon Badge', 
+      current: gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5,
+      target: 100,
+      condition: false // Requires specific game duration tracking
+    },
+    {
+      name: 'Champion Badge',
+      current: highScore >= 3000 ? 25 : Math.floor(highScore / 120),
+      target: 100,
+      condition: false // Requires leaderboard position
+    }
+  ];
+
+  for (const badge of badgeUpdates) {
+    await client.query(
+      `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, badge_name) 
+       DO UPDATE SET current_progress = GREATEST(badge_progress.current_progress, $3), updated_at = CURRENT_TIMESTAMP`,
+      [userId, badge.name, badge.current, badge.target]
+    );
+
+    // Award badge if condition met
+    if (badge.condition) {
+      await client.query(
+        `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, badge.name]
+      );
+    }
+  }
+};
+
 app.post('/api/user-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -281,7 +400,8 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
     try {
       const [userResult, badgesResult] = await Promise.all([
         client.query(
-          'SELECT first_name, username, points, level, daily_streak, created_at FROM users WHERE telegram_id = $1', 
+          `SELECT first_name, username, points, level, daily_streak, created_at,
+           games_played, high_score, total_play_time FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
@@ -293,6 +413,10 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
       
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
+      
+      // Calculate additional stats
+      userData.averageScore = userData.games_played > 0 ? Math.floor(userData.points / userData.games_played) : 0;
+      userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       
       res.status(200).json(userData);
 
@@ -360,7 +484,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Get item details
       const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) {
         console.log(`❌ Item ${itemId} not found in shop_items table`);
@@ -370,7 +493,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       const { name, price, type } = itemResult.rows[0];
       console.log(`📦 Item found: ${name} - $${price} (${type})`);
 
-      // Get user points
       const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       
@@ -379,33 +501,27 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       
       if (userPoints < price) throw new Error('Insufficient points.');
       
-      // Handle badges vs regular items
       if (name.includes('Badge')) {
         console.log(`🏆 Processing badge purchase: ${name}`);
         
-        // Check if badge already owned
         const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
         if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
         
-        // Add badge
         await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
         console.log(`✅ Badge added to user_badges table`);
         
       } else {
         console.log(`🎮 Processing consumable item: ${name}`);
         
-        // For permanent non-badge items
         if(type === 'permanent') {
           const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
           if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
         }
         
-        // Add to inventory
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
         console.log(`✅ Item added to user_inventory table`);
       }
 
-      // Deduct points
       const newPoints = userPoints - price;
       await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
       console.log(`💸 Points updated: ${userPoints} → ${newPoints}`);
@@ -439,7 +555,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
   }
 });
 
-// PHASE 2: NEW ENDPOINT - Start game session with selected items
 app.post('/api/start-game-session-with-items', validateUser, async (req, res) => {
   const { user } = req;
   const { selectedItems = [] } = req.body;
@@ -452,12 +567,11 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
     let totalTimeBonus = 0;
     let hasBomb = false;
+    const usedItems = [];
 
-    // Process each selected item
     for (const itemId of selectedItems) {
       console.log(`🔄 Processing selected item: ${itemId}`);
       
-      // Consume the item from inventory
       const consumeResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
@@ -470,27 +584,27 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
       if (consumeResult.rowCount > 0) {
         console.log(`✅ Consumed item ${itemId}`);
+        usedItems.push(itemId);
         
-        // Apply item effects
         switch (itemId) {
-          case 1: // Extra Time +10s
-            totalTimeBonus += 10;
-            break;
-          case 2: // Extra Time +20s
-            totalTimeBonus += 20;
-            break;
-          case 3: // Cookie Bomb
-            hasBomb = true;
-            break;
-          case 4: // Double Points - handled separately via activation
-            console.log(`⚠️ Double Points (${itemId}) should be activated manually, not consumed at game start`);
-            break;
-          default:
-            console.log(`⚠️ Unknown item type: ${itemId}`);
+          case 1: totalTimeBonus += 10; break;
+          case 2: totalTimeBonus += 20; break;
+          case 3: hasBomb = true; break;
+          case 4: 
+            console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
             break;
         }
-      } else {
-        console.log(`⚠️ Item ${itemId} not found in user inventory or already consumed`);
+      }
+    }
+
+    // Record item usage
+    for (const itemId of usedItems) {
+      const itemName = await client.query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
+      if (itemName.rowCount > 0) {
+        await client.query(
+          `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, $3)`,
+          [user.id, itemId, itemName.rows[0].name]
+        );
       }
     }
 
@@ -498,7 +612,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     
     const finalStartTime = 30 + totalTimeBonus;
     
-    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}, timeBonus=+${totalTimeBonus}s`);
+    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
     
     res.status(200).json({
       startTime: finalStartTime,
@@ -506,7 +620,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
       appliedEffects: {
         timeBonus: totalTimeBonus,
         bomb: hasBomb,
-        itemsConsumed: selectedItems.filter(id => id !== 4) // Exclude Double Points
+        itemsConsumed: usedItems
       }
     });
 
@@ -519,7 +633,6 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
   }
 });
 
-// LEGACY ENDPOINT - Keep for backward compatibility
 app.post('/api/start-game-session', validateUser, async (req, res) => {
   const { user } = req;
   console.log(`🎮 Starting legacy game session - User: ${user.id}`);
@@ -531,7 +644,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     let totalTimeBonus = 0;
     let hasBomb = false;
 
-    // Auto-consume time boosters and bombs (legacy behavior)
     const timeBooster10Result = await client.query(
       `DELETE FROM user_inventory 
        WHERE id = (
@@ -564,7 +676,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
 
     await client.query('COMMIT');
     
-    // Calculate effects
     if (timeBooster10Result.rowCount > 0) totalTimeBonus += 10;
     if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
     hasBomb = bombBoosterResult.rowCount > 0;
@@ -589,12 +700,8 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { itemId } = req.body;
-    if (!itemId) {
-      return res.status(400).json({ error: 'itemId is required' });
-    }
-    
-    if (itemId !== 4) { // Point Booster (ID 4)
-      return res.status(400).json({ error: 'This item is not an activatable booster.' });
+    if (!itemId || itemId !== 4) {
+      return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
     }
 
     const client = await pool.connect();
@@ -605,7 +712,6 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) throw new Error('User not found.');
       if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
 
-      // Consume one point booster
       const inventoryResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
@@ -618,6 +724,12 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
 
       await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
+      
+      // Record usage
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
+        [user.id, itemId]
+      );
       
       await client.query('COMMIT');
       
@@ -638,6 +750,202 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/activate-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PHASE 3: NEW ENDPOINTS
+
+app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const [inventoryResult, usageResult, itemsResult] = await Promise.all([
+        client.query(`
+          SELECT item_id, COUNT(*) as quantity 
+          FROM user_inventory 
+          WHERE user_id = $1 
+          GROUP BY item_id
+        `, [user.id]),
+        client.query(`
+          SELECT item_name, COUNT(*) as usage_count 
+          FROM item_usage_history 
+          WHERE user_id = $1 
+          GROUP BY item_name 
+          ORDER BY usage_count DESC 
+          LIMIT 1
+        `, [user.id]),
+        client.query('SELECT id, price FROM shop_items')
+      ]);
+      
+      const inventory = inventoryResult.rows;
+      const items = itemsResult.rows.reduce((acc, item) => {
+        acc[item.id] = item.price;
+        return acc;
+      }, {});
+      
+      const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
+      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (items[item.item_id] || 0)), 0);
+      const mostUsedItem = usageResult.rows[0]?.item_name || 'None';
+      
+      // Simple efficiency calculation
+      const efficiency = Math.min(95, Math.max(50, totalItems * 10 + Math.random() * 20));
+      
+      res.status(200).json({
+        totalItems,
+        totalValue,
+        mostUsedItem,
+        efficiency: Math.round(efficiency)
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-inventory-stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const historyResult = await client.query(`
+        SELECT item_name, used_at, game_score
+        FROM item_usage_history 
+        WHERE user_id = $1 
+        ORDER BY used_at DESC 
+        LIMIT 20
+      `, [user.id]);
+      
+      res.status(200).json(historyResult.rows);
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-item-usage-history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/get-badge-progress', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const [progressResult, badgesResult] = await Promise.all([
+        client.query(`
+          SELECT badge_name, current_progress, target_progress
+          FROM badge_progress 
+          WHERE user_id = $1
+        `, [user.id]),
+        client.query(`
+          SELECT badge_name, acquired_at
+          FROM user_badges 
+          WHERE user_id = $1
+        `, [user.id])
+      ]);
+      
+      const progress = {};
+      progressResult.rows.forEach(row => {
+        progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
+      });
+      
+      const ownedBadges = badgesResult.rows;
+      
+      res.status(200).json({
+        progress,
+        stats: {
+          totalBadges: 5,
+          unlockedBadges: ownedBadges.length,
+          rarityBreakdown: {
+            common: 0,
+            uncommon: ownedBadges.filter(b => b.badge_name.includes('Bomb')).length,
+            rare: ownedBadges.filter(b => b.badge_name.includes('Cookie Master') || b.badge_name.includes('Streak')).length,
+            epic: ownedBadges.filter(b => b.badge_name.includes('Speed')).length,
+            legendary: ownedBadges.filter(b => b.badge_name.includes('Champion')).length
+          }
+        }
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-badge-progress:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/get-leaderboard', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { type = 'global' } = req.body;
+    const client = await pool.connect();
+    try {
+      let query;
+      let params = [];
+      
+      switch (type) {
+        case 'weekly':
+          query = `
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            WHERE u.last_login_at >= NOW() - INTERVAL '7 days'
+            ORDER BY u.points DESC 
+            LIMIT 50
+          `;
+          params = [user.id];
+          break;
+          
+        case 'friends':
+          // For now, return global leaderboard as friends feature needs more complex implementation
+          query = `
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            ORDER BY u.points DESC 
+            LIMIT 20
+          `;
+          params = [user.id];
+          break;
+          
+        default: // global
+          query = `
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            ORDER BY u.points DESC 
+            LIMIT 50
+          `;
+          params = [user.id];
+      }
+      
+      const leaderboardResult = await client.query(query, params);
+      
+      const leaderboard = leaderboardResult.rows.map(row => ({
+        rank: parseInt(row.rank),
+        player: { name: row.name, level: row.level },
+        score: row.score,
+        isCurrentUser: row.is_current_user,
+        badge: row.score > 5000 ? 'Legend' : row.score > 3000 ? 'Epic' : row.score > 1000 ? 'Rare' : null
+      }));
+      
+      res.status(200).json({ leaderboard });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-leaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
