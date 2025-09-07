@@ -1,27 +1,27 @@
 // src/hooks/useAudio.js - TMA-optimized audio system
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// VIRAL SOUND RECOMMENDATIONS - Replace with your uploaded URLs
+// YOUR IMAGEKIT.IO SOUND FILES - All 12 sounds ready!
 const SOUND_URLS = {
   // GAME SOUNDS (short, punchy, viral)
-  match: 'https://ik.imagekit.io/your-id/sounds/pop-sound.mp3', // Classic "pop" sound
-  swap: 'https://ik.imagekit.io/your-id/sounds/swoosh.mp3', // Quick swipe sound
-  invalidMove: 'https://ik.imagekit.io/your-id/sounds/denied.mp3', // "Nope" sound
-  bomb: 'https://ik.imagekit.io/your-id/sounds/explosion.mp3', // Satisfying boom
-  cascade: 'https://ik.imagekit.io/your-id/sounds/combo.mp3', // Chain reaction sound
+  match: 'https://ik.imagekit.io/59r2kpz8r/Sounds/pop-sound.mp3?updatedAt=1757264187792',
+  swap: 'https://ik.imagekit.io/59r2kpz8r/Sounds/swoosh.mp3?updatedAt=1757264187563',
+  invalidMove: 'https://ik.imagekit.io/59r2kpz8r/Sounds/denied.mp3?updatedAt=1757264187566',
+  bomb: 'https://ik.imagekit.io/59r2kpz8r/Sounds/explosion.mp3?updatedAt=1757264187729',
+  cascade: 'https://ik.imagekit.io/59r2kpz8r/Sounds/combo.mp3?updatedAt=1757264187729',
   
   // UI SOUNDS (minimal, clean)
-  buttonClick: 'https://ik.imagekit.io/your-id/sounds/click.mp3', // Clean click
-  itemActivate: 'https://ik.imagekit.io/your-id/sounds/powerup.mp3', // Item activation
-  scoreUpdate: 'https://ik.imagekit.io/your-id/sounds/coin.mp3', // Points earned
+  buttonClick: 'https://ik.imagekit.io/59r2kpz8r/Sounds/click.mp3?updatedAt=1757264187586',
+  itemActivate: 'https://ik.imagekit.io/59r2kpz8r/Sounds/powerup.mp3?updatedAt=1757264187592',
+  scoreUpdate: 'https://ik.imagekit.io/59r2kpz8r/Sounds/coin.mp3?updatedAt=1757264187557',
   
   // TIMER SOUNDS (attention-grabbing)
-  tick: 'https://ik.imagekit.io/your-id/sounds/tick.mp3', // Last 10 seconds
-  timeWarning: 'https://ik.imagekit.io/your-id/sounds/warning.mp3', // 10 seconds left
-  gameOver: 'https://ik.imagekit.io/your-id/sounds/game-over.mp3', // Game end
+  tick: 'https://ik.imagekit.io/59r2kpz8r/Sounds/tick.mp3?updatedAt=1757264191209',
+  timeWarning: 'https://ik.imagekit.io/59r2kpz8r/Sounds/warning.mp3?updatedAt=1757264191395',
+  gameOver: 'https://ik.imagekit.io/59r2kpz8r/Sounds/game-over.mp3?updatedAt=1757264187701',
   
   // BACKGROUND MUSIC (looping, chill)
-  bgMusic: 'https://ik.imagekit.io/your-id/sounds/background-loop.mp3', // Ambient loop
+  bgMusic: 'https://ik.imagekit.io/59r2kpz8r/Sounds/background-loop.mp3?updatedAt=1757264188456',
 };
 
 export const useAudio = () => {
