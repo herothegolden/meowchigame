@@ -1,8 +1,10 @@
-import React from 'react';
+// src/components/game/GamePiece.jsx - Complete with your custom images
+import React, { useState } from 'react';
 import { motion, useDragControls } from 'framer-motion';
+import { PIECE_IMAGES, PIECE_EMOJIS } from '../../utils/gameLogic';
 
 const GamePiece = ({ 
-  emoji, 
+  piece, // Now receives index (0-5) instead of emoji
   index, 
   isSelected, 
   onDragStart,
@@ -11,9 +13,11 @@ const GamePiece = ({
   hasBomb = false
 }) => {
   const controls = useDragControls();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   
-  if (!emoji) {
-    // Empty space - render invisible placeholder that maintains layout
+  // Handle empty pieces
+  if (piece === null || piece === undefined) {
     return (
       <div 
         className="w-full h-full flex items-center justify-center"
@@ -36,6 +40,10 @@ const GamePiece = ({
     }
   };
 
+  // Get the image URL and fallback emoji based on piece index
+  const imageUrl = PIECE_IMAGES[piece];
+  const fallbackEmoji = PIECE_EMOJIS[piece];
+
   return (
     <motion.div
       className="w-full h-full flex items-center justify-center p-0.5"
@@ -53,8 +61,8 @@ const GamePiece = ({
       <motion.div
         className={`
           w-full h-full rounded-lg flex items-center justify-center
-          text-4xl font-bold cursor-pointer select-none
-          transition-all duration-50 shadow-lg relative
+          cursor-pointer select-none relative overflow-hidden
+          transition-all duration-50 shadow-lg
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
             : hasBomb
@@ -83,7 +91,7 @@ const GamePiece = ({
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent'
         }}
-        // FIXED: Single transition with bomb animation
+        // Bomb animation
         animate={hasBomb ? {
           scale: [1, 1.1, 1],
           boxShadow: [
@@ -101,18 +109,93 @@ const GamePiece = ({
           ease: "easeInOut"
         }}
       >
-        {emoji}
+        {/* MAIN CONTENT: Custom Image with Emoji Fallback */}
+        <div className="w-full h-full flex items-center justify-center relative">
+          {!imageError && imageUrl ? (
+            <>
+              {/* Your Custom Image */}
+              <motion.img
+                src={imageUrl}
+                alt={`Meowchi piece ${piece}`}
+                className="w-full h-full object-contain"
+                style={{
+                  maxWidth: '90%',
+                  maxHeight: '90%',
+                  imageRendering: 'auto',
+                  filter: isMatched ? 'blur(2px) brightness(0.7)' : 'none'
+                }}
+                onLoad={() => {
+                  setImageLoaded(true);
+                  console.log(`✅ Loaded: ${imageUrl.split('/').pop()?.split('?')[0]}`);
+                }}
+                onError={(e) => {
+                  setImageError(true);
+                  console.warn(`❌ Failed to load: ${imageUrl}`);
+                }}
+                draggable={false}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ 
+                  opacity: imageLoaded ? 1 : 0,
+                  scale: imageLoaded ? 1 : 0.8
+                }}
+                transition={{ duration: 0.2 }}
+              />
+              
+              {/* Loading state - show emoji while image loads */}
+              {!imageLoaded && !imageError && (
+                <motion.div 
+                  className="absolute inset-0 flex items-center justify-center text-3xl"
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: imageLoaded ? 0 : 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {fallbackEmoji}
+                </motion.div>
+              )}
+            </>
+          ) : (
+            /* Fallback Emoji - shown on error or as immediate fallback */
+            <motion.div 
+              className="text-4xl font-bold"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            >
+              {fallbackEmoji}
+            </motion.div>
+          )}
+        </div>
         
         {/* Bomb overlay indicator */}
         {hasBomb && (
           <motion.div
-            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
+            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold z-10"
             initial={{ scale: 0 }}
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 0.5, repeat: Infinity }}
           >
             💥
           </motion.div>
+        )}
+
+        {/* Selection glow effect */}
+        {isSelected && (
+          <motion.div
+            className="absolute inset-0 bg-accent/20 rounded-lg pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.1 }}
+          />
+        )}
+
+        {/* Match animation overlay */}
+        {isMatched && (
+          <motion.div
+            className="absolute inset-0 bg-white/30 rounded-lg pointer-events-none"
+            initial={{ scale: 1, opacity: 1 }}
+            animate={{ scale: 1.2, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          />
         )}
       </motion.div>
     </motion.div>
