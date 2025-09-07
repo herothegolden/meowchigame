@@ -1,9 +1,9 @@
-// src/App.jsx - Updated with proper audio initialization
+// src/App.jsx - Complete with global audio integration and TMA initialization
 import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
 import AudioControls from './components/AudioControls';
-import ImagePreloader from './components/ImagePreloader'; // Add this
+import ImagePreloader from './components/ImagePreloader';
 
 // Import all page components
 import HomePage from './pages/HomePage';
@@ -25,10 +25,18 @@ function App() {
       tg.ready();
       tg.expand();
       
-      // Enable haptic feedback
+      // Enable haptic feedback and closing confirmation
       tg.enableClosingConfirmation();
       
+      // Configure TMA settings for better UX
+      tg.headerColor = '#181A1B';
+      tg.backgroundColor = '#181A1B';
+      
       console.log('🎮 TMA initialized for Meowchi Cookie Club');
+      console.log('🎮 TMA Version:', tg.version);
+      console.log('🎮 Platform:', tg.platform);
+    } else {
+      console.log('🖥️ Running in browser mode');
     }
   }, []);
 
