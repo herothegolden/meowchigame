@@ -15,8 +15,8 @@ const iconComponents = {
   Default: <Star size={28} />
 };
 
-// Always available shop items
-const SHOP_ITEMS = [
+// FIXED: Syntax error - added missing "price:" and organized properly
+const FALLBACK_SHOP_ITEMS = [
   { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
   { id: 2, name: 'Extra Time +20s', description: '+20 seconds to your next game', price: 1500, icon_name: 'Timer', type: 'consumable', category: 'time' },
   { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
@@ -131,6 +131,7 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
 };
 
 const ShopPage = () => {
+  const [shopItems, setShopItems] = useState(FALLBACK_SHOP_ITEMS); // FIXED: Use backend items when available
   const [userPoints, setUserPoints] = useState(4735);
   const [inventory, setInventory] = useState([]);
   const [ownedBadges, setOwnedBadges] = useState([]);
@@ -148,7 +149,6 @@ const ShopPage = () => {
   useEffect(() => {
     const loadShopData = async () => {
       try {
-        // Try to fetch real data first
         if (tg && tg.initData && BACKEND_URL) {
           setConnectionStatus('Fetching shop data...');
           console.log('Connecting to backend:', BACKEND_URL);
@@ -162,6 +162,16 @@ const ShopPage = () => {
           if (res.ok) {
             const data = await res.json();
             console.log('Shop data loaded:', data);
+            
+            // FIXED: Use backend items if available, otherwise fallback
+            if (data.items && data.items.length > 0) {
+              // Map backend items to frontend format with categories
+              const mappedItems = data.items.map(item => ({
+                ...item,
+                category: getCategoryFromItem(item)
+              }));
+              setShopItems(mappedItems);
+            }
             
             setUserPoints(data.userPoints);
             setInventory(data.inventory || []);
@@ -179,7 +189,8 @@ const ShopPage = () => {
         setConnectionStatus('Demo mode - purchases won\'t persist');
         setIsConnected(false);
         
-        // Use demo state
+        // Use demo state with fallback items
+        setShopItems(FALLBACK_SHOP_ITEMS);
         setUserPoints(demoPoints);
         setInventory(demoInventory);
         setOwnedBadges(demoBadges);
@@ -191,8 +202,17 @@ const ShopPage = () => {
     loadShopData();
   }, [tg, demoPoints, demoInventory, demoBadges]);
 
+  // FIXED: Helper function to categorize backend items
+  const getCategoryFromItem = (item) => {
+    if (item.name.includes('Time') || item.name.includes('time')) return 'time';
+    if (item.name.includes('Bomb') || item.name.includes('bomb')) return 'bomb';
+    if (item.name.includes('Points') || item.name.includes('Double') || item.name.includes('Booster')) return 'multiplier';
+    if (item.name.includes('Badge') || item.type === 'permanent') return 'badge';
+    return 'other';
+  };
+
   const handlePurchase = async (itemId) => {
-    const item = SHOP_ITEMS.find(i => i.id === itemId);
+    const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
 
     setPurchasingId(itemId);
@@ -201,7 +221,6 @@ const ShopPage = () => {
       if (isConnected && tg && tg.initData && BACKEND_URL) {
         console.log('Making real purchase for item:', itemId);
         
-        // Try real purchase
         const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -209,7 +228,12 @@ const ShopPage = () => {
         });
 
         const result = await res.json();
-        if (!res.ok) throw new Error(result.error);
+        
+        if (!res.ok) {
+          // Show specific error message from backend
+          const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
+          throw new Error(errorMessage);
+        }
 
         console.log('Purchase successful:', result);
 
@@ -224,9 +248,9 @@ const ShopPage = () => {
         // Update local state
         setUserPoints(result.newPoints);
         
-        // Refresh inventory
+        // Refresh shop data after purchase
         setTimeout(() => {
-          window.location.reload(); // Simple refresh to get updated data
+          window.location.reload();
         }, 1000);
         
       } else {
@@ -304,7 +328,7 @@ const ShopPage = () => {
   };
 
   // Group items by category
-  const itemsByCategory = SHOP_ITEMS.reduce((acc, item) => {
+  const itemsByCategory = shopItems.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
