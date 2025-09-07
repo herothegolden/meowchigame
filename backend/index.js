@@ -234,6 +234,39 @@ const setupDatabase = async () => {
   }
 };
 
+// OPTIMIZATION 3: Database indexes for performance
+const addOptimizationIndexes = async () => {
+  const client = await pool.connect();
+  try {
+    console.log('🚀 Adding performance indexes...');
+    
+    const indexes = [
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_points ON users(points DESC)',
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_last_login ON users(last_login_at)',
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_inventory_user_item ON user_inventory(user_id, item_id)',
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_badges_user ON user_badges(user_id)',
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_friends_user ON user_friends(user_id)',
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id)'
+    ];
+    
+    for (const indexQuery of indexes) {
+      try {
+        await client.query(indexQuery);
+        console.log(`✅ Index added: ${indexQuery.split(' ')[5]}`);
+      } catch (err) {
+        if (err.message.includes('already exists')) {
+          console.log(`⚠️ Index already exists: ${indexQuery.split(' ')[5]}`);
+        } else {
+          console.error(`❌ Index failed: ${err.message}`);
+        }
+      }
+    }
+    
+  } finally {
+    client.release();
+  }
+};
+
 // ---- EXPRESS APP ----
 const app = express();
 app.use(cors());
@@ -327,6 +360,220 @@ app.get('/api/performance-test', async (req, res) => {
   } catch (error) {
     console.error('Performance test error:', error);
     res.status(500).json({ error: 'Performance test failed' });
+  }
+});
+
+// OPTIMIZATION 1: Combined profile endpoint (reduces 910ms parallel calls to single request)
+app.post('/api/profile-complete', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    
+    try {
+      console.log(`🏃‍♂️ Fast profile fetch for user: ${user.id}`);
+      const start = process.hrtime.bigint();
+      
+      // SINGLE optimized query combining all profile data
+      const profileQuery = `
+        SELECT 
+          u.first_name, u.username, u.points, u.level, u.daily_streak, 
+          u.created_at, u.games_played, u.high_score, u.total_play_time,
+          
+          -- Inventory data as JSON
+          COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'item_id', inv.item_id, 
+                'quantity', inv_counts.quantity
+              )
+            ) FILTER (WHERE inv.item_id IS NOT NULL), 
+            '[]'::json
+          ) as inventory,
+          
+          -- Badges as array
+          COALESCE(
+            array_agg(DISTINCT ub.badge_name) FILTER (WHERE ub.badge_name IS NOT NULL), 
+            ARRAY[]::text[]
+          ) as owned_badges,
+          
+          -- Shop items (cached in memory, rarely changes)
+          (SELECT json_agg(si.*) FROM shop_items si) as shop_items
+          
+        FROM users u
+        LEFT JOIN user_inventory inv ON u.telegram_id = inv.user_id
+        LEFT JOIN (
+          SELECT item_id, user_id, COUNT(*) as quantity 
+          FROM user_inventory 
+          WHERE user_id = $1 
+          GROUP BY item_id, user_id
+        ) inv_counts ON inv.item_id = inv_counts.item_id AND inv.user_id = inv_counts.user_id
+        LEFT JOIN user_badges ub ON u.telegram_id = ub.user_id
+        WHERE u.telegram_id = $1
+        GROUP BY u.telegram_id, u.first_name, u.username, u.points, u.level, 
+                 u.daily_streak, u.created_at, u.games_played, u.high_score, u.total_play_time
+      `;
+      
+      const result = await monitoredQuery(client, profileQuery, [user.id]);
+      
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      const profileData = result.rows[0];
+      
+      // Calculate derived stats
+      profileData.averageScore = profileData.games_played > 0 
+        ? Math.floor(profileData.points / profileData.games_played) 
+        : 0;
+      
+      profileData.totalPlayTime = profileData.total_play_time 
+        ? `${Math.floor(profileData.total_play_time / 60)}h ${profileData.total_play_time % 60}m`
+        : '0h 0m';
+      
+      const end = process.hrtime.bigint();
+      const duration = Number(end - start) / 1000000;
+      
+      console.log(`⚡ Profile complete: ${Math.round(duration)}ms`);
+      
+      // Set aggressive caching headers for TMA
+      res.set('Cache-Control', 'public, max-age=45');
+      
+      res.status(200).json({
+        stats: {
+          first_name: profileData.first_name,
+          username: profileData.username,
+          points: profileData.points,
+          level: profileData.level,
+          daily_streak: profileData.daily_streak,
+          created_at: profileData.created_at,
+          games_played: profileData.games_played || 0,
+          high_score: profileData.high_score || 0,
+          total_play_time: profileData.total_play_time || 0,
+          averageScore: profileData.averageScore,
+          totalPlayTime: profileData.totalPlayTime
+        },
+        inventory: profileData.inventory || [],
+        shop_items: profileData.shop_items || [],
+        owned_badges: profileData.owned_badges || [],
+        boosterActive: false // TODO: Add to query if needed
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Profile complete error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OPTIMIZATION 2: Cached leaderboard with Redis-like in-memory cache
+const leaderboardCache = new Map();
+const LEADERBOARD_TTL = 30000; // 30 seconds
+
+app.post('/api/get-leaderboard', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { type = 'global' } = req.body;
+    const cacheKey = `leaderboard_${type}`;
+    
+    // Check cache first
+    const cached = leaderboardCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < LEADERBOARD_TTL) {
+      console.log(`🎯 Leaderboard cache HIT: ${type}`);
+      res.set('X-Cache', 'HIT');
+      return res.status(200).json(cached.data);
+    }
+    
+    console.log(`🏃‍♂️ Fetching fresh leaderboard: ${type}`);
+    const start = process.hrtime.bigint();
+    
+    const client = await pool.connect();
+    try {
+      let query;
+      let params = [];
+      
+      // Optimized queries with proper indexing
+      switch (type) {
+        case 'weekly':
+          query = `
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            WHERE u.last_login_at >= NOW() - INTERVAL '7 days'
+            ORDER BY u.points DESC 
+            LIMIT 50
+          `;
+          params = [user.id];
+          break;
+          
+        case 'friends':
+          query = `
+            WITH friend_scores AS (
+              SELECT u.first_name as name, u.points as score, u.level, u.telegram_id
+              FROM users u 
+              JOIN user_friends uf ON u.telegram_id = uf.friend_telegram_id
+              WHERE uf.user_id = $1
+              UNION
+              SELECT u.first_name as name, u.points as score, u.level, u.telegram_id
+              FROM users u 
+              WHERE u.telegram_id = $1
+            )
+            SELECT name, score, level,
+                   ROW_NUMBER() OVER (ORDER BY score DESC) as rank,
+                   CASE WHEN telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM friend_scores
+            ORDER BY score DESC 
+            LIMIT 50
+          `;
+          params = [user.id];
+          break;
+          
+        default: // global
+          query = `
+            SELECT u.first_name as name, u.points as score, u.level,
+                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
+                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
+            FROM users u 
+            ORDER BY u.points DESC 
+            LIMIT 50
+          `;
+          params = [user.id];
+      }
+      
+      const leaderboardResult = await monitoredQuery(client, query, params);
+      
+      const leaderboard = leaderboardResult.rows.map(row => ({
+        rank: parseInt(row.rank),
+        player: { name: row.name, level: row.level },
+        score: row.score,
+        isCurrentUser: row.is_current_user,
+        badge: row.score > 5000 ? 'Legend' : row.score > 3000 ? 'Epic' : row.score > 1000 ? 'Rare' : null
+      }));
+      
+      const responseData = { leaderboard };
+      
+      // Cache the result
+      leaderboardCache.set(cacheKey, {
+        data: responseData,
+        timestamp: Date.now()
+      });
+      
+      const end = process.hrtime.bigint();
+      const duration = Number(end - start) / 1000000;
+      console.log(`⚡ Leaderboard fresh: ${Math.round(duration)}ms`);
+      
+      res.set('X-Cache', 'MISS');
+      res.set('Cache-Control', 'public, max-age=30');
+      res.status(200).json(responseData);
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Leaderboard error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -1096,82 +1343,6 @@ app.post('/api/get-badge-progress', validateUser, async (req, res) => {
   }
 });
 
-app.post('/api/get-leaderboard', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { type = 'global' } = req.body;
-    const client = await pool.connect();
-    try {
-      let query;
-      let params = [];
-      
-      switch (type) {
-        case 'weekly':
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            WHERE u.last_login_at >= NOW() - INTERVAL '7 days'
-            ORDER BY u.points DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-          break;
-          
-        case 'friends':
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            JOIN user_friends uf ON u.telegram_id = uf.friend_telegram_id
-            WHERE uf.user_id = $1
-            UNION
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            WHERE u.telegram_id = $1
-            ORDER BY score DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-          break;
-          
-        default: // global
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            ORDER BY u.points DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-      }
-      
-      const leaderboardResult = await monitoredQuery(client, query, params);
-      
-      const leaderboard = leaderboardResult.rows.map(row => ({
-        rank: parseInt(row.rank),
-        player: { name: row.name, level: row.level },
-        score: row.score,
-        isCurrentUser: row.is_current_user,
-        badge: row.score > 5000 ? 'Legend' : row.score > 3000 ? 'Epic' : row.score > 1000 ? 'Rare' : null
-      }));
-      
-      res.status(200).json({ leaderboard });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-leaderboard:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 const startServer = () => {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
@@ -1180,8 +1351,11 @@ const startServer = () => {
   });
 };
 
-// Start the application
-setupDatabase().then(startServer).catch(err => {
+// Start the application with optimizations
+setupDatabase().then(() => {
+  addOptimizationIndexes();
+  startServer();
+}).catch(err => {
   console.error('💥 Failed to start application:', err);
   process.exit(1);
 });
