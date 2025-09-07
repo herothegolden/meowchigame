@@ -1,8 +1,9 @@
-// src/App.jsx - Updated with global audio integration
-import React from 'react';
+// src/App.jsx - Updated with proper audio initialization
+import React, { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
 import AudioControls from './components/AudioControls';
+import ImagePreloader from './components/ImagePreloader'; // Add this
 
 // Import all page components
 import HomePage from './pages/HomePage';
@@ -17,8 +18,25 @@ function App() {
   const location = useLocation();
   const isGamePage = location.pathname === '/game';
 
+  // Initialize TMA and audio early
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      
+      // Enable haptic feedback
+      tg.enableClosingConfirmation();
+      
+      console.log('🎮 TMA initialized for Meowchi Cookie Club');
+    }
+  }, []);
+
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden">
+      {/* Preload images for better performance */}
+      <ImagePreloader />
+      
       {/* Global Audio Controls - Only show on non-game pages */}
       {!isGamePage && <AudioControls />}
       
