@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -129,6 +129,12 @@ const ProfilePage = () => {
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Leaderboard state
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardTab, setLeaderboardTab] = useState('global');
+  
   const tg = window.Telegram?.WebApp;
 
   // Mock data for demo mode
@@ -144,6 +150,65 @@ const ProfilePage = () => {
   const MOCK_ITEMS = [
     { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
   ];
+
+  const MOCK_LEADERBOARD = [
+    { rank: 1, player: { name: 'Alex', level: 3 }, score: 12450, isCurrentUser: true, badge: 'Legend' },
+    { rank: 2, player: { name: 'Maria', level: 4 }, score: 11200, isCurrentUser: false, badge: 'Epic' },
+    { rank: 3, player: { name: 'John', level: 2 }, score: 9800, isCurrentUser: false, badge: 'Epic' },
+    { rank: 4, player: { name: 'Sarah', level: 3 }, score: 8500, isCurrentUser: false, badge: 'Rare' },
+    { rank: 5, player: { name: 'Mike', level: 2 }, score: 7200, isCurrentUser: false, badge: 'Rare' },
+    { rank: 6, player: { name: 'Emma', level: 1 }, score: 6100, isCurrentUser: false, badge: null },
+    { rank: 7, player: { name: 'David', level: 2 }, score: 5800, isCurrentUser: false, badge: null },
+    { rank: 8, player: { name: 'Lisa', level: 1 }, score: 4900, isCurrentUser: false, badge: null }
+  ];
+
+  // Leaderboard helper functions
+  const getRankIcon = (rank) => {
+    switch(rank) {
+      case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
+      case 2: return <Medal className="w-5 h-5 text-gray-300" />;
+      case 3: return <Medal className="w-5 h-5 text-amber-600" />;
+      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
+    }
+  };
+
+  const getBadgeColor = (badge) => {
+    switch(badge) {
+      case 'Legend': return 'text-purple-400 bg-purple-400/20';
+      case 'Epic': return 'text-blue-400 bg-blue-400/20';
+      case 'Rare': return 'text-green-400 bg-green-400/20';
+      default: return 'text-gray-400 bg-gray-400/20';
+    }
+  };
+
+  const fetchLeaderboard = async (type = 'global') => {
+    setLeaderboardLoading(true);
+    
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        setLeaderboardData(MOCK_LEADERBOARD);
+        setLeaderboardLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, type }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data.leaderboard || []);
+      } else {
+        setLeaderboardData(MOCK_LEADERBOARD);
+      }
+    } catch (err) {
+      setLeaderboardData(MOCK_LEADERBOARD);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -217,6 +282,13 @@ const ProfilePage = () => {
   useEffect(() => {
     fetchProfileData();
   }, [fetchProfileData]);
+
+  // Load leaderboard when leaderboard tab is accessed
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
+      fetchLeaderboard(leaderboardTab);
+    }
+  }, [activeTab]);
 
   const handleActivateItem = async (itemId) => {
     try {
@@ -399,11 +471,114 @@ const ProfilePage = () => {
       case 'leaderboard':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <div className="text-center py-8">
-              <Trophy className="w-16 h-16 text-accent mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-primary mb-2">Leaderboard</h3>
-              <p className="text-secondary">Coming soon! Compete with other players.</p>
+            {/* Leaderboard Tabs */}
+            <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
+              {[
+                { id: 'global', label: 'Global', icon: Users },
+                { id: 'weekly', label: 'Weekly', icon: Calendar },
+                { id: 'friends', label: 'Friends', icon: Star }
+              ].map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setLeaderboardTab(tab.id);
+                      fetchLeaderboard(tab.id);
+                    }}
+                    className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
+                      leaderboardTab === tab.id 
+                        ? 'bg-accent text-background' 
+                        : 'text-secondary hover:text-primary'
+                    }`}
+                  >
+                    <TabIcon className="w-4 h-4 mr-1" />
+                    <span className="text-xs font-medium">{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Leaderboard Content */}
+            {leaderboardLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading...</span>
+              </div>
+            ) : leaderboardData.length === 0 ? (
+              <div className="text-center py-8">
+                <Trophy className="w-12 h-12 text-secondary mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-primary mb-2">No Players Yet</h3>
+                <p className="text-secondary text-sm">Be the first to climb the leaderboard!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {leaderboardData.slice(0, 10).map((entry, index) => (
+                  <motion.div
+                    key={`${leaderboardTab}-${entry.rank}`}
+                    className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
+                      entry.isCurrentUser 
+                        ? 'bg-accent/20 border-accent' 
+                        : 'bg-background border-gray-600'
+                    }`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    {/* Rank */}
+                    <div className="flex items-center justify-center w-8 h-8 mr-3">
+                      {getRankIcon(entry.rank)}
+                    </div>
+
+                    {/* Player Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                          {entry.player.name}
+                        </p>
+                        {entry.isCurrentUser && (
+                          <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">
+                            YOU
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
+                        {entry.badge && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
+                            {entry.badge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className="text-right">
+                      <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                        {entry.score.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-secondary">pts</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* Stats Footer */}
+            {!leaderboardLoading && leaderboardData.length > 0 && (
+              <div className="bg-background rounded-lg p-3 border border-gray-600 text-center mt-4">
+                <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
+                  <div className="flex items-center">
+                    <Users className="w-3 h-3 mr-1" />
+                    <span>{leaderboardData.length} Players</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="w-3 h-3 mr-1" />
+                    <span>Updates hourly</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         );
       
