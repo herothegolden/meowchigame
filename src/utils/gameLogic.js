@@ -1,4 +1,4 @@
-// src/utils/gameLogic.js - Updated with your custom images
+// src/utils/gameLogic.js - FIXED with safety checks to prevent infinite loops
 // Game configuration - 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
@@ -24,13 +24,12 @@ const getRandomPiece = () => {
 };
 
 /**
- * Generates initial board ensuring no matches exist
- * Now returns piece indices instead of emojis
+ * SAFE: Generates initial board ensuring no matches exist with safety limit
  */
 export const generateInitialBoard = () => {
   let board;
   let attempts = 0;
-  const maxAttempts = 50;
+  const MAX_ATTEMPTS = 100; // CRITICAL: Prevent infinite loops
 
   do {
     board = [];
@@ -42,8 +41,14 @@ export const generateInitialBoard = () => {
       board.push(boardRow);
     }
     attempts++;
-  } while (findMatches(board).length > 0 && attempts < maxAttempts);
+    
+    if (attempts >= MAX_ATTEMPTS) {
+      console.warn('⚠️ Max attempts reached generating board, using current board');
+      break;
+    }
+  } while (findMatches(board).length > 0);
 
+  console.log(`✅ Generated board in ${attempts} attempts`);
   return board;
 };
 
@@ -81,14 +86,20 @@ export const swapPieces = (board, pos1, pos2) => {
 };
 
 /**
- * Finds all matches on the board (3+ in a row/column)
- * Works with piece indices (0-5)
+ * OPTIMIZED: Finds all matches on the board (3+ in a row/column) with safety checks
  */
 export const findMatches = (board) => {
-  const matches = [];
+  if (!board || board.length === 0) {
+    console.warn('⚠️ Invalid board passed to findMatches');
+    return [];
+  }
+
+  const matches = new Set(); // Use Set to prevent duplicates
   
   // Check horizontal matches
   for (let row = 0; row < BOARD_SIZE; row++) {
+    if (!board[row]) continue; // Safety check
+    
     let count = 1;
     let currentPiece = board[row][0];
     let startCol = 0;
@@ -100,7 +111,7 @@ export const findMatches = (board) => {
         // Check if we have a match of 3 or more
         if (count >= 3 && currentPiece !== null) {
           for (let i = startCol; i < startCol + count; i++) {
-            matches.push(getIndex(row, i));
+            matches.add(getIndex(row, i));
           }
         }
         // Reset for next sequence
@@ -116,21 +127,21 @@ export const findMatches = (board) => {
   // Check vertical matches
   for (let col = 0; col < BOARD_SIZE; col++) {
     let count = 1;
-    let currentPiece = board[0][col];
+    let currentPiece = board[0] ? board[0][col] : null;
     let startRow = 0;
     
     for (let row = 1; row <= BOARD_SIZE; row++) {
-      if (row < BOARD_SIZE && board[row][col] === currentPiece && currentPiece !== null) {
+      if (row < BOARD_SIZE && board[row] && board[row][col] === currentPiece && currentPiece !== null) {
         count++;
       } else {
         // Check if we have a match of 3 or more
         if (count >= 3 && currentPiece !== null) {
           for (let i = startRow; i < startRow + count; i++) {
-            matches.push(getIndex(i, col));
+            matches.add(getIndex(i, col));
           }
         }
         // Reset for next sequence
-        if (row < BOARD_SIZE) {
+        if (row < BOARD_SIZE && board[row]) {
           currentPiece = board[row][col];
           startRow = row;
           count = 1;
@@ -139,19 +150,26 @@ export const findMatches = (board) => {
     }
   }
 
-  // Remove duplicates and return
-  return [...new Set(matches)];
+  const matchArray = Array.from(matches);
+  console.log(`🎯 Found ${matchArray.length} matches:`, matchArray);
+  return matchArray;
 };
 
 /**
  * Removes matched pieces from the board
  */
 export const removeMatches = (board, matches) => {
+  if (!board || !matches || matches.length === 0) {
+    return board;
+  }
+
   const newBoard = board.map(row => [...row]);
   
   matches.forEach(index => {
     const { row, col } = getPosition(index);
-    newBoard[row][col] = null;
+    if (newBoard[row] && newBoard[row][col] !== undefined) {
+      newBoard[row][col] = null;
+    }
   });
   
   return newBoard;
@@ -161,21 +179,30 @@ export const removeMatches = (board, matches) => {
  * Applies gravity to make pieces fall down
  */
 export const applyGravity = (board) => {
+  if (!board || board.length === 0) {
+    return board;
+  }
+
   const newBoard = board.map(row => [...row]);
   
   for (let col = 0; col < BOARD_SIZE; col++) {
     // Collect all non-null pieces in this column from bottom to top
     const pieces = [];
     for (let row = BOARD_SIZE - 1; row >= 0; row--) {
-      if (newBoard[row][col] !== null) {
+      if (newBoard[row] && newBoard[row][col] !== null) {
         pieces.push(newBoard[row][col]);
       }
-      newBoard[row][col] = null;
+      if (newBoard[row]) {
+        newBoard[row][col] = null;
+      }
     }
     
     // Place pieces back from bottom
     for (let i = 0; i < pieces.length; i++) {
-      newBoard[BOARD_SIZE - 1 - i][col] = pieces[i];
+      const targetRow = BOARD_SIZE - 1 - i;
+      if (newBoard[targetRow]) {
+        newBoard[targetRow][col] = pieces[i];
+      }
     }
   }
   
@@ -183,14 +210,21 @@ export const applyGravity = (board) => {
 };
 
 /**
- * Fills empty spaces with new random pieces
+ * SAFE: Fills empty spaces with new random pieces
  */
 export const fillEmptySpaces = (board) => {
+  if (!board || board.length === 0) {
+    return board;
+  }
+
   const newBoard = board.map(row => [...row]);
   
   for (let row = 0; row < BOARD_SIZE; row++) {
+    if (!newBoard[row]) {
+      newBoard[row] = new Array(BOARD_SIZE).fill(null);
+    }
     for (let col = 0; col < BOARD_SIZE; col++) {
-      if (newBoard[row][col] === null) {
+      if (newBoard[row][col] === null || newBoard[row][col] === undefined) {
         newBoard[row][col] = getRandomPiece(); // Returns index (0-5)
       }
     }
@@ -200,19 +234,35 @@ export const fillEmptySpaces = (board) => {
 };
 
 /**
- * Validates if a move is legal (creates a match)
+ * SAFE: Validates if a move is legal (creates a match) with safety checks
  */
 export const isValidMove = (board, pos1, pos2) => {
+  if (!board || !pos1 || !pos2) {
+    console.warn('⚠️ Invalid parameters passed to isValidMove');
+    return false;
+  }
+
   // Check if positions are adjacent
   if (!areAdjacent(pos1, pos2)) {
     return false;
   }
   
+  // Check bounds
+  if (pos1.row < 0 || pos1.row >= BOARD_SIZE || pos1.col < 0 || pos1.col >= BOARD_SIZE ||
+      pos2.row < 0 || pos2.row >= BOARD_SIZE || pos2.col < 0 || pos2.col >= BOARD_SIZE) {
+    return false;
+  }
+  
   // Create test board with swapped pieces
-  const testBoard = swapPieces(board, pos1, pos2);
-  
-  // Check if swap creates any matches
-  const matches = findMatches(testBoard);
-  
-  return matches.length > 0;
+  try {
+    const testBoard = swapPieces(board, pos1, pos2);
+    
+    // Check if swap creates any matches
+    const matches = findMatches(testBoard);
+    
+    return matches.length > 0;
+  } catch (error) {
+    console.warn('⚠️ Error in isValidMove:', error);
+    return false;
+  }
 };
