@@ -23,7 +23,7 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// DATABASE SETUP FUNCTION - MATCHES FRONTEND EXACTLY
+// FIXED DATABASE SETUP - HANDLES EXISTING TABLES PROPERLY
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -60,17 +60,41 @@ const setupDatabase = async () => {
       `);
     }
 
-    // 3. Create Shop Items Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS shop_items (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        price INT NOT NULL,
-        icon_name VARCHAR(50),
-        type VARCHAR(50) DEFAULT 'consumable' NOT NULL
-      );
+    // 3. HANDLE SHOP_ITEMS TABLE MIGRATION
+    console.log('🛍️ Setting up shop_items table...');
+    
+    // Check if shop_items table exists and what columns it has
+    const tableCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='shop_items'
     `);
+
+    if (tableCheck.rowCount === 0) {
+      // Table doesn't exist - create it fresh
+      console.log('Creating new shop_items table...');
+      await client.query(`
+        CREATE TABLE shop_items (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          price INT NOT NULL,
+          icon_name VARCHAR(50),
+          type VARCHAR(50) DEFAULT 'consumable' NOT NULL
+        );
+      `);
+    } else {
+      // Table exists - check if it has the type column
+      const hasTypeColumn = tableCheck.rows.some(row => row.column_name === 'type');
+      
+      if (!hasTypeColumn) {
+        console.log('Adding type column to existing shop_items table...');
+        await client.query(`
+          ALTER TABLE shop_items 
+          ADD COLUMN type VARCHAR(50) DEFAULT 'consumable' NOT NULL
+        `);
+      }
+    }
     
     // 4. Create User Inventory Table
     await client.query(`
@@ -93,13 +117,13 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 6. CLEAR AND POPULATE SHOP ITEMS - EXACT MATCH WITH FRONTEND
+    // 6. POPULATE SHOP ITEMS SAFELY
     console.log('🛍️ Setting up shop items...');
     
-    // Clear existing items to avoid conflicts
+    // Clear and repopulate shop items
     await client.query('DELETE FROM shop_items');
     
-    // Insert items that EXACTLY match frontend ShopPage.jsx
+    // Insert items with all required columns
     await client.query(`
       INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
       (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -108,10 +132,10 @@ const setupDatabase = async () => {
       (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
       (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
       (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-      (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent');
+      (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
     `);
 
-    // Reset the sequence to ensure proper ID generation
+    // Reset sequence to ensure proper ID generation
     await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
 
     console.log('✅ Database setup complete!');
