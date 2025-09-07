@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -16,6 +16,12 @@ const GamePage = () => {
   const [gameConfig, setGameConfig] = useState({ startTime: 30, startWithBomb: false });
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  
+  // PHASE 1: NEW INVENTORY STATE
+  const [inventory, setInventory] = useState([]);
+  const [isActivatingItem, setIsActivatingItem] = useState(null);
+  const [showInventory, setShowInventory] = useState(false);
+  
   const navigate = useNavigate();
 
   // Timer effect
@@ -124,7 +130,7 @@ const GamePage = () => {
     }
   }, []);
 
-  // Fetch game configuration and check for active boosters
+  // PHASE 1: ENHANCED fetchGameConfig with INVENTORY FETCHING
   const fetchGameConfig = async () => {
     setIsLoadingConfig(true);
     const tg = window.Telegram?.WebApp;
@@ -135,20 +141,28 @@ const GamePage = () => {
         console.log('Browser mode: Using default game config');
         setGameConfig({ startTime: 30, startWithBomb: false });
         setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
+        setInventory([]);
         return;
       }
 
-      console.log('Fetching game configuration from backend...');
+      console.log('Fetching game configuration and inventory from backend...');
 
-      // Get game session configuration (consumes time boosters and bombs)
-      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData }),
-      });
+      // FETCH GAME SESSION + INVENTORY IN PARALLEL
+      const [sessionRes, shopRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/start-game-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        }),
+        fetch(`${BACKEND_URL}/api/get-shop-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        })
+      ]);
 
+      // Process game session data
       let sessionData = { startTime: 30, startWithBomb: false };
-      
       if (sessionRes.ok) {
         sessionData = await sessionRes.json();
         console.log('Game session data:', sessionData);
@@ -158,23 +172,25 @@ const GamePage = () => {
       
       setGameConfig(sessionData);
       
-      // Calculate boosts applied
-      const timeBoost = sessionData.startTime - 30;
-      
-      // Check for active point multiplier
-      const shopRes = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData }),
-      });
-
+      // Process shop/inventory data
       let pointMultiplier = false;
+      let userInventory = [];
+      
       if (shopRes.ok) {
         const shopData = await shopRes.json();
         pointMultiplier = shopData.boosterActive || false;
+        userInventory = shopData.inventory || [];
+        console.log('Inventory loaded:', userInventory);
         console.log('Point multiplier active:', pointMultiplier);
+      } else {
+        console.error('Failed to fetch inventory:', shopRes.status);
       }
 
+      setInventory(userInventory);
+      
+      // Calculate boosts applied
+      const timeBoost = sessionData.startTime - 30;
+      
       setActiveBoosts({
         timeBoost,
         bomb: sessionData.startWithBomb,
@@ -185,8 +201,72 @@ const GamePage = () => {
       console.error('Error fetching game config:', error);
       setGameConfig({ startTime: 30, startWithBomb: false });
       setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
+      setInventory([]);
     } finally {
       setIsLoadingConfig(false);
+    }
+  };
+
+  // PHASE 1: ACTIVATE ITEM HANDLER (for Double Points)
+  const handleActivateItem = async (itemId) => {
+    const tg = window.Telegram?.WebApp;
+    
+    if (!tg || !tg.initData || !BACKEND_URL) {
+      alert('Demo mode: Item activation not available');
+      return;
+    }
+
+    setIsActivatingItem(itemId);
+
+    try {
+      console.log('Activating item:', itemId);
+      
+      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, itemId }),
+      });
+
+      const result = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(result.error || 'Activation failed');
+      }
+
+      console.log('Item activated successfully:', result);
+
+      // Update local state immediately
+      if (itemId === 4) { // Double Points
+        setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+        
+        // Remove from inventory
+        setInventory(prev => {
+          return prev.map(item => 
+            item.item_id === itemId && item.quantity > 1
+              ? { ...item, quantity: item.quantity - 1 }
+              : item
+          ).filter(item => !(item.item_id === itemId && item.quantity <= 1));
+        });
+      }
+
+      // Success feedback
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+    } catch (error) {
+      console.error('Activation error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
+    } finally {
+      setIsActivatingItem(null);
     }
   };
 
@@ -198,6 +278,7 @@ const GamePage = () => {
     setTimeLeft(gameConfig.startTime);
     setIsGameOver(false);
     setIsSubmitting(false);
+    setShowInventory(false); // Hide inventory when game starts
   };
 
   const restartGame = async () => {
@@ -206,6 +287,7 @@ const GamePage = () => {
     setScore(0);
     setIsGameOver(false);
     setIsSubmitting(false);
+    setShowInventory(false);
     
     // Fetch new game config for restart
     await fetchGameConfig();
@@ -217,6 +299,17 @@ const GamePage = () => {
 
   const formatTime = (seconds) => {
     return `0:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // PHASE 1: GET ITEM DETAILS HELPER
+  const getItemDetails = (itemId) => {
+    const itemMap = {
+      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400' },
+      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400' },
+      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400' },
+      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400' }
+    };
+    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400' };
   };
 
   return (
@@ -351,13 +444,100 @@ const GamePage = () => {
           )}
         </div>
         
-        <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
-          <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
-          <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>
-            {formatTime(timeLeft)}
-          </span>
+        <div className="flex items-center space-x-2">
+          {/* PHASE 1: INVENTORY TOGGLE BUTTON */}
+          {gameStarted && !isGameOver && inventory.length > 0 && (
+            <motion.button
+              onClick={() => setShowInventory(!showInventory)}
+              className="bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors"
+              whileTap={{ scale: 0.95 }}
+            >
+              <Package className="w-6 h-6 text-accent" />
+            </motion.button>
+          )}
+          
+          <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
+            <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
+            <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>
+              {formatTime(timeLeft)}
+            </span>
+          </div>
         </div>
       </motion.div>
+
+      {/* PHASE 1: FLOATING INVENTORY PANEL */}
+      <AnimatePresence>
+        {showInventory && gameStarted && !isGameOver && (
+          <motion.div
+            className="absolute top-20 right-4 bg-nav rounded-xl p-4 shadow-2xl border border-gray-700 z-30 min-w-64"
+            initial={{ opacity: 0, x: 100, scale: 0.8 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 100, scale: 0.8 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-primary flex items-center">
+                <Package className="w-5 h-5 mr-2 text-accent" />
+                Inventory
+              </h3>
+              <button
+                onClick={() => setShowInventory(false)}
+                className="text-secondary hover:text-primary"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {inventory.map((item) => {
+                const details = getItemDetails(item.item_id);
+                const ItemIcon = details.icon;
+                const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier; // Only Double Points can be activated
+                
+                return (
+                  <div
+                    key={item.item_id}
+                    className="flex items-center justify-between p-3 bg-background/50 rounded-lg border border-gray-600"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ItemIcon className={`w-5 h-5 ${details.color}`} />
+                      <div>
+                        <p className="text-sm font-medium text-primary">{details.name}</p>
+                        <p className="text-xs text-secondary">Qty: {item.quantity}</p>
+                      </div>
+                    </div>
+                    
+                    {canActivate && (
+                      <motion.button
+                        onClick={() => handleActivateItem(item.item_id)}
+                        disabled={isActivatingItem === item.item_id}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {isActivatingItem === item.item_id ? (
+                          <LoaderCircle className="w-4 h-4 animate-spin" />
+                        ) : (
+                          'USE'
+                        )}
+                      </motion.button>
+                    )}
+                    
+                    {item.item_id === 4 && activeBoosts.pointMultiplier && (
+                      <span className="text-xs text-green-400 font-bold">ACTIVE</span>
+                    )}
+                  </div>
+                );
+              })}
+              
+              {inventory.length === 0 && (
+                <p className="text-center text-secondary text-sm py-4">
+                  No items available
+                </p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Game Board Container */}
       <motion.div 
@@ -385,6 +565,11 @@ const GamePage = () => {
           <p className="text-sm">
             Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
           </p>
+          {inventory.length > 0 && (
+            <p className="text-xs mt-1 text-accent">
+              Tap 📦 to access your items
+            </p>
+          )}
         </motion.div>
       )}
     </div>
