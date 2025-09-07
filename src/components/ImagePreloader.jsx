@@ -1,4 +1,4 @@
-// src/components/ImagePreloader.jsx - Optional: Preload images for better performance
+// src/components/ImagePreloader.jsx - Fixed syntax error
 import { useEffect } from 'react';
 import { PIECE_IMAGES } from '../utils/gameLogic';
 
@@ -44,17 +44,3 @@ const ImagePreloader = () => {
 };
 
 export default ImagePreloader;
-
-// USAGE: Add this to your main App.jsx or HomePage.jsx:
-/*
-import ImagePreloader from './components/ImagePreloader';
-
-function App() {
-  return (
-    <div className="App">
-      <ImagePreloader />
-      {/* Your existing app content */}
-    </div>
-  );
-}
-*/
