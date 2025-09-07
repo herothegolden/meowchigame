@@ -23,6 +23,30 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
+// PERFORMANCE MONITORING: Database query wrapper
+const monitoredQuery = async (client, query, params = []) => {
+  const start = process.hrtime.bigint();
+  
+  try {
+    const result = await client.query(query, params);
+    const end = process.hrtime.bigint();
+    const duration = Number(end - start) / 1000000;
+    
+    console.log(`🗄️ DB Query: ${Math.round(duration)}ms - ${query.substring(0, 50)}...`);
+    
+    if (duration > 1000) {
+      console.warn(`⚠️ SLOW QUERY (${Math.round(duration)}ms): ${query}`);
+    }
+    
+    return result;
+  } catch (error) {
+    const end = process.hrtime.bigint();
+    const duration = Number(end - start) / 1000000;
+    console.error(`❌ DB Query failed (${Math.round(duration)}ms): ${error.message}`);
+    throw error;
+  }
+};
+
 // PHASE 3: COMPREHENSIVE DATABASE SETUP WITH FRIENDS SYSTEM
 const setupDatabase = async () => {
   const client = await pool.connect();
@@ -215,6 +239,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// PERFORMANCE MONITORING: Response time middleware
+const performanceMiddleware = (req, res, next) => {
+  const start = process.hrtime.bigint();
+  const originalJson = res.json;
+  
+  res.json = function(data) {
+    const end = process.hrtime.bigint();
+    const duration = Number(end - start) / 1000000; // Convert to milliseconds
+    
+    console.log(`⏱️ ${req.method} ${req.path}: ${Math.round(duration)}ms`);
+    
+    // Add performance header
+    res.set('X-Response-Time', `${Math.round(duration)}ms`);
+    
+    return originalJson.call(this, data);
+  };
+  
+  next();
+};
+
+// Apply performance monitoring to all routes
+app.use(performanceMiddleware);
+
 // ---- MIDDLEWARE ----
 const validateUser = (req, res, next) => {
   const { initData } = req.body;
@@ -242,17 +289,58 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// PERFORMANCE TEST ENDPOINT
+app.get('/api/performance-test', async (req, res) => {
+  const metrics = {
+    timestamp: new Date().toISOString(),
+    server: {
+      nodeVersion: process.version,
+      memory: process.memoryUsage(),
+      uptime: process.uptime()
+    },
+    database: {},
+    network: {}
+  };
+  
+  try {
+    // Test database performance
+    const dbStart = process.hrtime.bigint();
+    const client = await pool.connect();
+    
+    try {
+      await client.query('SELECT 1');
+      const dbEnd = process.hrtime.bigint();
+      metrics.database.connectionTime = Number(dbEnd - dbStart) / 1000000;
+      
+      // Test simple query
+      const queryStart = process.hrtime.bigint();
+      await client.query('SELECT COUNT(*) FROM users');
+      const queryEnd = process.hrtime.bigint();
+      metrics.database.queryTime = Number(queryEnd - queryStart) / 1000000;
+      
+    } finally {
+      client.release();
+    }
+    
+    res.json(metrics);
+    
+  } catch (error) {
+    console.error('Performance test error:', error);
+    res.status(500).json({ error: 'Performance test failed' });
+  }
+});
+
 app.post('/api/validate', validateUser, async (req, res) => {
     try {
         const { user } = req;
         const client = await pool.connect();
         try {
-            let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
+            let dbUserResult = await monitoredQuery(client, 'SELECT * FROM users WHERE telegram_id = $1', [user.id]);
             let appUser;
             let dailyBonus = null;
 
             if (dbUserResult.rows.length === 0) {
-                const insertResult = await client.query(
+                const insertResult = await monitoredQuery(client,
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
                     [user.id, user.first_name, user.last_name, user.username]
                 );
@@ -274,7 +362,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                     const newPoints = appUser.points + bonusPoints;
                     dailyBonus = { points: bonusPoints, streak: newStreak };
                     
-                    const updateResult = await client.query(
+                    const updateResult = await monitoredQuery(client,
                         'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
                         [user.id, newStreak, newPoints]
                     );
@@ -306,7 +394,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
+      const userResult = await monitoredQuery(client,
         'SELECT points, point_booster_active, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
       );
@@ -320,7 +408,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       const newGamesPlayed = (games_played || 0) + 1;
 
       // Create game session record
-      const sessionResult = await client.query(
+      const sessionResult = await monitoredQuery(client,
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [user.id, finalScore, duration, JSON.stringify(itemsUsed), point_booster_active ? 2.0 : 1.0]
@@ -329,7 +417,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       const sessionId = sessionResult.rows[0].id;
 
       // Update user stats
-      const updateResult = await client.query(
+      const updateResult = await monitoredQuery(client,
         `UPDATE users SET 
          points = $1, 
          point_booster_active = FALSE, 
@@ -387,7 +475,7 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
   ];
 
   for (const badge of badgeUpdates) {
-    await client.query(
+    await monitoredQuery(client,
       `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, badge_name) 
@@ -397,7 +485,7 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
 
     // Award badge if condition met
     if (badge.condition) {
-      await client.query(
+      await monitoredQuery(client,
         `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [userId, badge.name]
       );
@@ -411,12 +499,12 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       const [userResult, badgesResult] = await Promise.all([
-        client.query(
+        monitoredQuery(client,
           `SELECT first_name, username, points, level, daily_streak, created_at,
            games_played, high_score, total_play_time FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
+        monitoredQuery(client, 'SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -447,15 +535,15 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
-        client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
-        client.query(`
+        monitoredQuery(client, 'SELECT * FROM shop_items ORDER BY id ASC'),
+        monitoredQuery(client, 'SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
+        monitoredQuery(client, `
           SELECT item_id, COUNT(item_id) as quantity 
           FROM user_inventory 
           WHERE user_id = $1 
           GROUP BY item_id
         `, [user.id]),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
+        monitoredQuery(client, 'SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -496,7 +584,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
+      const itemResult = await monitoredQuery(client, 'SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) {
         console.log(`❌ Item ${itemId} not found in shop_items table`);
         throw new Error('Item not found.');
@@ -505,7 +593,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       const { name, price, type } = itemResult.rows[0];
       console.log(`📦 Item found: ${name} - $${price} (${type})`);
 
-      const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
+      const userResult = await monitoredQuery(client, 'SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       
       const userPoints = userResult.rows[0].points;
@@ -516,26 +604,26 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       if (name.includes('Badge')) {
         console.log(`🏆 Processing badge purchase: ${name}`);
         
-        const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
+        const badgeResult = await monitoredQuery(client, 'SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
         if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
         
-        await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
+        await monitoredQuery(client, 'INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
         console.log(`✅ Badge added to user_badges table`);
         
       } else {
         console.log(`🎮 Processing consumable item: ${name}`);
         
         if(type === 'permanent') {
-          const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
+          const inventoryResult = await monitoredQuery(client, 'SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
           if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
         }
         
-        await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
+        await monitoredQuery(client, 'INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
         console.log(`✅ Item added to user_inventory table`);
       }
 
       const newPoints = userPoints - price;
-      await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
+      await monitoredQuery(client, 'UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
       console.log(`💸 Points updated: ${userPoints} → ${newPoints}`);
 
       await client.query('COMMIT');
@@ -584,7 +672,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     for (const itemId of selectedItems) {
       console.log(`🔄 Processing selected item: ${itemId}`);
       
-      const consumeResult = await client.query(
+      const consumeResult = await monitoredQuery(client,
         `DELETE FROM user_inventory 
          WHERE id = (
            SELECT id FROM user_inventory 
@@ -611,9 +699,9 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
     // Record item usage
     for (const itemId of usedItems) {
-      const itemName = await client.query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
+      const itemName = await monitoredQuery(client, 'SELECT name FROM shop_items WHERE id = $1', [itemId]);
       if (itemName.rowCount > 0) {
-        await client.query(
+        await monitoredQuery(client,
           `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, $3)`,
           [user.id, itemId, itemName.rows[0].name]
         );
@@ -656,7 +744,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     let totalTimeBonus = 0;
     let hasBomb = false;
 
-    const timeBooster10Result = await client.query(
+    const timeBooster10Result = await monitoredQuery(client,
       `DELETE FROM user_inventory 
        WHERE id = (
          SELECT id FROM user_inventory 
@@ -666,7 +754,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    const timeBooster20Result = await client.query(
+    const timeBooster20Result = await monitoredQuery(client,
       `DELETE FROM user_inventory 
        WHERE id = (
          SELECT id FROM user_inventory 
@@ -676,7 +764,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    const bombBoosterResult = await client.query(
+    const bombBoosterResult = await monitoredQuery(client,
       `DELETE FROM user_inventory 
        WHERE id = (
          SELECT id FROM user_inventory 
@@ -720,11 +808,11 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query('SELECT point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
+      const userResult = await monitoredQuery(client, 'SELECT point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
 
-      const inventoryResult = await client.query(
+      const inventoryResult = await monitoredQuery(client,
         `DELETE FROM user_inventory 
          WHERE id = (
            SELECT id FROM user_inventory 
@@ -735,10 +823,10 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       );
       if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
 
-      await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
+      await monitoredQuery(client, 'UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
       
       // Record usage
-      await client.query(
+      await monitoredQuery(client,
         `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
         [user.id, itemId]
       );
@@ -787,7 +875,7 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
       await client.query('BEGIN');
 
       // Check if friend exists by username
-      const friendResult = await client.query(
+      const friendResult = await monitoredQuery(client,
         'SELECT telegram_id, first_name, username FROM users WHERE LOWER(username) = $1',
         [cleanUsername]
       );
@@ -799,7 +887,7 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
       const friend = friendResult.rows[0];
       
       // Check if already friends
-      const existingFriend = await client.query(
+      const existingFriend = await monitoredQuery(client,
         'SELECT id FROM user_friends WHERE user_id = $1 AND friend_username = $2',
         [user.id, cleanUsername]
       );
@@ -809,7 +897,7 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
       }
 
       // Add friend
-      await client.query(
+      await monitoredQuery(client,
         'INSERT INTO user_friends (user_id, friend_username, friend_telegram_id) VALUES ($1, $2, $3)',
         [user.id, cleanUsername, friend.telegram_id]
       );
@@ -854,7 +942,7 @@ app.post('/api/get-friends', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const friendsResult = await client.query(`
+      const friendsResult = await monitoredQuery(client, `
         SELECT 
           uf.friend_username,
           u.first_name,
@@ -889,13 +977,13 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       const [inventoryResult, usageResult, itemsResult] = await Promise.all([
-        client.query(`
+        monitoredQuery(client, `
           SELECT item_id, COUNT(*) as quantity 
           FROM user_inventory 
           WHERE user_id = $1 
           GROUP BY item_id
         `, [user.id]),
-        client.query(`
+        monitoredQuery(client, `
           SELECT item_name, COUNT(*) as usage_count 
           FROM item_usage_history 
           WHERE user_id = $1 
@@ -903,7 +991,7 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
           ORDER BY usage_count DESC 
           LIMIT 1
         `, [user.id]),
-        client.query('SELECT id, price FROM shop_items')
+        monitoredQuery(client, 'SELECT id, price FROM shop_items')
       ]);
       
       const inventory = inventoryResult.rows;
@@ -940,7 +1028,7 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const historyResult = await client.query(`
+      const historyResult = await monitoredQuery(client, `
         SELECT item_name, used_at, game_score
         FROM item_usage_history 
         WHERE user_id = $1 
@@ -965,12 +1053,12 @@ app.post('/api/get-badge-progress', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       const [progressResult, badgesResult] = await Promise.all([
-        client.query(`
+        monitoredQuery(client, `
           SELECT badge_name, current_progress, target_progress
           FROM badge_progress 
           WHERE user_id = $1
         `, [user.id]),
-        client.query(`
+        monitoredQuery(client, `
           SELECT badge_name, acquired_at
           FROM user_badges 
           WHERE user_id = $1
@@ -1063,7 +1151,7 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
           params = [user.id];
       }
       
-      const leaderboardResult = await client.query(query, params);
+      const leaderboardResult = await monitoredQuery(client, query, params);
       
       const leaderboard = leaderboardResult.rows.map(row => ({
         rank: parseInt(row.rank),
@@ -1088,6 +1176,7 @@ const startServer = () => {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    console.log(`📊 Performance test: http://localhost:${PORT}/api/performance-test`);
   });
 };
 
