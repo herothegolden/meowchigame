@@ -138,6 +138,147 @@ export const findMatches = (board) => {
 };
 
 /**
+ * NEW: Checks if any valid moves exist on the board
+ */
+export const hasValidMoves = (board) => {
+  // Check all possible adjacent swaps
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      const currentPos = { row, col };
+      
+      // Check right neighbor
+      if (col < BOARD_SIZE - 1) {
+        const rightPos = { row, col: col + 1 };
+        if (isValidMove(board, currentPos, rightPos)) {
+          return true;
+        }
+      }
+      
+      // Check bottom neighbor
+      if (row < BOARD_SIZE - 1) {
+        const bottomPos = { row: row + 1, col };
+        if (isValidMove(board, currentPos, bottomPos)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false;
+};
+
+/**
+ * NEW: Shuffles the board while ensuring no immediate matches
+ */
+export const shuffleBoard = (board) => {
+  let newBoard;
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  console.log('🔀 Shuffling board...');
+  
+  do {
+    // Collect all pieces from the current board
+    const allPieces = [];
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        if (board[row][col] !== null) {
+          allPieces.push(board[row][col]);
+        }
+      }
+    }
+    
+    // Shuffle the pieces array using Fisher-Yates algorithm
+    for (let i = allPieces.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allPieces[i], allPieces[j]] = [allPieces[j], allPieces[i]];
+    }
+    
+    // Create new board with shuffled pieces
+    newBoard = [];
+    let pieceIndex = 0;
+    
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      const boardRow = [];
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        if (board[row][col] !== null && pieceIndex < allPieces.length) {
+          boardRow.push(allPieces[pieceIndex]);
+          pieceIndex++;
+        } else {
+          boardRow.push(board[row][col]); // Keep null spaces
+        }
+      }
+      newBoard.push(boardRow);
+    }
+    
+    attempts++;
+  } while (findMatches(newBoard).length > 0 && attempts < maxAttempts);
+  
+  // If we couldn't avoid matches, fill with new random pieces
+  if (findMatches(newBoard).length > 0) {
+    console.log('⚠️ Could not shuffle without matches, generating new board...');
+    newBoard = generateInitialBoard();
+  }
+  
+  console.log(`✅ Board shuffled successfully in ${attempts} attempts`);
+  return newBoard;
+};
+
+/**
+ * NEW: Smart shuffle that guarantees at least one valid move
+ */
+export const smartShuffle = (board) => {
+  let shuffledBoard = shuffleBoard(board);
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  // Keep shuffling until we have valid moves
+  while (!hasValidMoves(shuffledBoard) && attempts < maxAttempts) {
+    console.log(`🔄 No valid moves found, reshuffling... (attempt ${attempts + 1})`);
+    shuffledBoard = shuffleBoard(board);
+    attempts++;
+  }
+  
+  // If still no valid moves after max attempts, force create one
+  if (!hasValidMoves(shuffledBoard)) {
+    console.log('🛠️ Forcing valid move creation...');
+    shuffledBoard = createBoardWithValidMoves(shuffledBoard);
+  }
+  
+  return shuffledBoard;
+};
+
+/**
+ * NEW: Creates a board that guarantees at least one valid move
+ */
+const createBoardWithValidMoves = (board) => {
+  const newBoard = board.map(row => [...row]);
+  
+  // Find a good spot to create a guaranteed match
+  // Place two identical pieces next to each other, then place a third nearby
+  const piece = getRandomEmoji();
+  
+  // Try to place in the middle area for better accessibility
+  const centerRow = Math.floor(BOARD_SIZE / 2);
+  const centerCol = Math.floor(BOARD_SIZE / 2);
+  
+  // Place two identical pieces horizontally
+  if (centerCol + 1 < BOARD_SIZE) {
+    newBoard[centerRow][centerCol] = piece;
+    newBoard[centerRow][centerCol + 1] = piece;
+    
+    // Place third piece one position away (creating a potential match)
+    if (centerCol + 3 < BOARD_SIZE) {
+      newBoard[centerRow][centerCol + 3] = piece;
+    } else if (centerCol - 1 >= 0) {
+      newBoard[centerRow][centerCol - 1] = piece;
+    }
+  }
+  
+  return newBoard;
+};
+
+/**
  * Removes matched pieces from the board
  */
 export const removeMatches = (board, matches) => {
