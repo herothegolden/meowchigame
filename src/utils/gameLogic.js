@@ -1,4 +1,4 @@
-// src/utils/gameLogic.js - FIXED VERSION with enhanced safety
+// src/utils/gameLogic.js - COMPLETE FIXED VERSION with enhanced safety
 // Game configuration - 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
@@ -15,10 +15,6 @@ export const PIECE_IMAGES = [
 
 // Emoji fallbacks for loading states and errors
 export const PIECE_EMOJIS = ['🍪', '🍭', '🧁', '🍰', '🎂', '🍩'];
-
-// FIXED: Validation constants
-const MIN_PIECE_TYPES = 4; // Minimum different pieces for playability
-const MAX_PIECE_TYPES = PIECE_IMAGES.length;
 
 /**
  * FIXED: Enhanced random piece generation with validation
@@ -84,74 +80,6 @@ const setBoardValue = (board, row, col, value) => {
   
   board[row][col] = value;
   return true;
-};
-
-/**
- * FIXED: Enhanced board generation with improved anti-match algorithm
- */
-export const generateInitialBoard = () => {
-  console.log('🎮 Generating initial board...');
-  
-  let board;
-  let attempts = 0;
-  const MAX_ATTEMPTS = 50; // REDUCED: Less aggressive attempt limit
-  const MAX_PLACEMENT_ATTEMPTS = 20; // FIXED: Limit per-piece placement attempts
-
-  do {
-    board = [];
-    
-    // Initialize empty board
-    for (let row = 0; row < BOARD_SIZE; row++) {
-      board.push(new Array(BOARD_SIZE).fill(null));
-    }
-    
-    // FIXED: Fill board with anti-match strategy
-    let boardValid = true;
-    
-    for (let row = 0; row < BOARD_SIZE && boardValid; row++) {
-      for (let col = 0; col < BOARD_SIZE && boardValid; col++) {
-        let piece;
-        let placementAttempts = 0;
-        let validPlacement = false;
-        
-        // Try to place a piece that doesn't create immediate matches
-        do {
-          piece = getRandomPiece();
-          
-          // Check if this piece would create a match
-          const wouldCreateMatch = checkWouldCreateMatch(board, row, col, piece);
-          
-          if (!wouldCreateMatch) {
-            validPlacement = true;
-          }
-          
-          placementAttempts++;
-        } while (!validPlacement && placementAttempts < MAX_PLACEMENT_ATTEMPTS);
-        
-        if (validPlacement) {
-          setBoardValue(board, row, col, piece);
-        } else {
-          // FALLBACK: Use a safe piece type
-          setBoardValue(board, row, col, getSafePiece(board, row, col));
-        }
-      }
-    }
-    
-    attempts++;
-    
-    if (attempts >= MAX_ATTEMPTS) {
-      console.warn(`⚠️ Max board generation attempts reached (${MAX_ATTEMPTS}), using current board`);
-      
-      // FIXED: Ensure board is valid even if not perfect
-      if (!isValidBoard(board)) {
-        board = createFallbackBoard();
-      }
-      break;
-    }
-  } while (findMatches(board).length > 0);
-
-  console.log(`✅ Generated valid board in ${attempts} attempts`);
-  return board;
 };
 
 /**
@@ -308,6 +236,74 @@ const createFallbackBoard = () => {
     board.push(boardRow);
   }
   
+  return board;
+};
+
+/**
+ * FIXED: Enhanced board generation with improved anti-match algorithm
+ */
+export const generateInitialBoard = () => {
+  console.log('🎮 Generating initial board...');
+  
+  let board;
+  let attempts = 0;
+  const MAX_ATTEMPTS = 50; // Reasonable attempt limit
+  const MAX_PLACEMENT_ATTEMPTS = 20; // Limit per-piece placement attempts
+
+  do {
+    board = [];
+    
+    // Initialize empty board
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      board.push(new Array(BOARD_SIZE).fill(null));
+    }
+    
+    // Fill board with anti-match strategy
+    let boardValid = true;
+    
+    for (let row = 0; row < BOARD_SIZE && boardValid; row++) {
+      for (let col = 0; col < BOARD_SIZE && boardValid; col++) {
+        let piece;
+        let placementAttempts = 0;
+        let validPlacement = false;
+        
+        // Try to place a piece that doesn't create immediate matches
+        do {
+          piece = getRandomPiece();
+          
+          // Check if this piece would create a match
+          const wouldCreateMatch = checkWouldCreateMatch(board, row, col, piece);
+          
+          if (!wouldCreateMatch) {
+            validPlacement = true;
+          }
+          
+          placementAttempts++;
+        } while (!validPlacement && placementAttempts < MAX_PLACEMENT_ATTEMPTS);
+        
+        if (validPlacement) {
+          setBoardValue(board, row, col, piece);
+        } else {
+          // FALLBACK: Use a safe piece type
+          setBoardValue(board, row, col, getSafePiece(board, row, col));
+        }
+      }
+    }
+    
+    attempts++;
+    
+    if (attempts >= MAX_ATTEMPTS) {
+      console.warn(`⚠️ Max board generation attempts reached (${MAX_ATTEMPTS}), using current board`);
+      
+      // Ensure board is valid even if not perfect
+      if (!isValidBoard(board)) {
+        board = createFallbackBoard();
+      }
+      break;
+    }
+  } while (findMatches(board).length > 0);
+
+  console.log(`✅ Generated valid board in ${attempts} attempts`);
   return board;
 };
 
