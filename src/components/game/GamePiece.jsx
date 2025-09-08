@@ -1,4 +1,4 @@
-// src/components/game/GamePiece.jsx - REAL FIX for image state reset
+// src/components/game/GamePiece.jsx - FIXED VERSION - No more crazy rotations!
 import React, { useState, useEffect } from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import { PIECE_IMAGES, PIECE_EMOJIS } from '../../utils/gameLogic';
@@ -16,11 +16,11 @@ const GamePiece = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
-  // 🚨 REAL FIX: Reset image states when piece changes - THIS WAS MISSING!
+  // 🚨 FIXED: Reset image states when piece changes
   useEffect(() => {
     setImageLoaded(false);
     setImageError(false);
-  }, [piece]); // Reset states whenever piece prop changes
+  }, [piece]);
   
   // Handle empty pieces
   if (piece === null || piece === undefined) {
@@ -60,7 +60,7 @@ const GamePiece = ({
       }}
       exit={{ scale: 0, opacity: 0 }}
       transition={{ 
-        duration: 0.08,
+        duration: 0.15, // 🔧 FIXED: Reasonable duration for all pieces
         ease: "easeOut"
       }}
     >
@@ -68,7 +68,7 @@ const GamePiece = ({
         className={`
           w-full h-full rounded-lg flex items-center justify-center
           cursor-pointer select-none relative overflow-hidden
-          transition-all duration-50 shadow-lg
+          transition-all duration-150 shadow-lg
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
             : hasBomb
@@ -76,17 +76,17 @@ const GamePiece = ({
               : 'bg-nav hover:bg-gray-600 shadow-black/20'
           }
         `}
-        // Drag functionality
-        drag={!hasBomb} // Bombs don't drag, they explode
+        // 🔧 FIXED: Simplified drag functionality
+        drag={!hasBomb && !isMatched} // Don't drag bombs or matched pieces
         dragControls={controls}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        dragElasticity={0.6}
+        dragElastic={0.3} // 🔧 FIXED: Reduced elasticity
         dragMomentum={false}
         whileDrag={{ 
-          scale: 1.15,
+          scale: 1.1, // 🔧 FIXED: Reduced scale
           zIndex: 1000,
-          rotate: 3,
-          boxShadow: "0 8px 25px rgba(0,0,0,0.4)"
+          rotate: 2, // 🔧 FIXED: Reduced rotation
+          boxShadow: "0 6px 20px rgba(0,0,0,0.3)"
         }}
         onDragEnd={onDragEnd}
         onPointerDown={handlePointerDown}
@@ -97,22 +97,22 @@ const GamePiece = ({
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent'
         }}
-        // Bomb animation
+        // 🔧 FIXED: Proper bomb animation without affecting other pieces
         animate={hasBomb ? {
-          scale: [1, 1.1, 1],
+          scale: [1, 1.05, 1], // 🔧 FIXED: Reduced scale animation
           boxShadow: [
-            "0 0 10px rgba(239, 68, 68, 0.5)",
-            "0 0 20px rgba(239, 68, 68, 0.8)",
-            "0 0 10px rgba(239, 68, 68, 0.5)"
+            "0 0 8px rgba(239, 68, 68, 0.4)",
+            "0 0 15px rgba(239, 68, 68, 0.7)",
+            "0 0 8px rgba(239, 68, 68, 0.4)"
           ]
-        } : {
-          scale: 1,
-          boxShadow: "0 4px 8px rgba(0,0,0,0.2)"
-        }}
-        transition={{
-          duration: hasBomb ? 1.5 : 0.02,
-          repeat: hasBomb ? Infinity : 0,
+        } : undefined} // 🔧 FIXED: No animation for regular pieces
+        transition={hasBomb ? {
+          duration: 1.2, // 🔧 FIXED: Slightly faster bomb animation
+          repeat: Infinity,
           ease: "easeInOut"
+        } : {
+          duration: 0.2, // 🔧 FIXED: Normal duration for state changes
+          ease: "easeOut"
         }}
       >
         {/* MAIN CONTENT: Custom Image with Emoji Fallback */}
@@ -125,8 +125,8 @@ const GamePiece = ({
                 alt={`Meowchi piece ${piece}`}
                 className="w-full h-full object-contain"
                 style={{
-                  maxWidth: '90%',
-                  maxHeight: '90%',
+                  maxWidth: '85%', // 🔧 FIXED: Slightly smaller for better fit
+                  maxHeight: '85%',
                   imageRendering: 'auto',
                   filter: isMatched ? 'blur(2px) brightness(0.7)' : 'none'
                 }}
@@ -139,18 +139,18 @@ const GamePiece = ({
                   console.warn(`❌ Failed to load: ${imageUrl}`);
                 }}
                 draggable={false}
-                initial={{ opacity: 0, scale: 0.8 }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ 
                   opacity: imageLoaded ? 1 : 0,
-                  scale: imageLoaded ? 1 : 0.8
+                  scale: imageLoaded ? 1 : 0.9
                 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.25 }} // 🔧 FIXED: Smoother image transition
               />
               
               {/* Loading state - show emoji while image loads */}
               {!imageLoaded && !imageError && (
                 <motion.div 
-                  className="absolute inset-0 flex items-center justify-center text-3xl"
+                  className="absolute inset-0 flex items-center justify-center text-2xl"
                   initial={{ opacity: 1 }}
                   animate={{ opacity: imageLoaded ? 0 : 1 }}
                   transition={{ duration: 0.2 }}
@@ -162,8 +162,8 @@ const GamePiece = ({
           ) : (
             /* Fallback Emoji - shown on error or as immediate fallback */
             <motion.div 
-              className="text-4xl font-bold"
-              initial={{ scale: 0.8, opacity: 0 }}
+              className="text-3xl font-bold"
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.2 }}
             >
@@ -175,10 +175,10 @@ const GamePiece = ({
         {/* Bomb overlay indicator */}
         {hasBomb && (
           <motion.div
-            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold z-10"
+            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold z-10"
             initial={{ scale: 0 }}
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ duration: 0.5, repeat: Infinity }}
+            animate={{ scale: [1, 1.15, 1] }}
+            transition={{ duration: 0.8, repeat: Infinity }}
           >
             💥
           </motion.div>
@@ -190,7 +190,7 @@ const GamePiece = ({
             className="absolute inset-0 bg-accent/20 rounded-lg pointer-events-none"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.1 }}
+            transition={{ duration: 0.15 }}
           />
         )}
 
@@ -199,8 +199,8 @@ const GamePiece = ({
           <motion.div
             className="absolute inset-0 bg-white/30 rounded-lg pointer-events-none"
             initial={{ scale: 1, opacity: 1 }}
-            animate={{ scale: 1.2, opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            animate={{ scale: 1.15, opacity: 0 }}
+            transition={{ duration: 0.25 }}
           />
         )}
       </motion.div>
