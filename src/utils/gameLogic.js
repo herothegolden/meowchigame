@@ -2,8 +2,15 @@
 export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
 
-// Emoji pieces for the game
-export const PIECE_EMOJIS = ['🍪', '🍭', '🧁', '🍰', '🎂', '🍩'];
+// UPDATED: Custom Meowchi images instead of emojis
+export const PIECE_EMOJIS = [
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Cookie.webp?updatedAt=1757261428707',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1757261428641', 
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Meowchi.webp?updatedAt=1757261428534',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1757261428445',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1757261428281',
+  'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Jar.webp?updatedAt=1757261428553'
+];
 
 /**
  * Generates initial board ensuring no matches exist
