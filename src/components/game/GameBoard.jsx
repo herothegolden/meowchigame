@@ -10,15 +10,18 @@ import {
   swapPieces,
   isValidMove,
   POINTS_PER_PIECE,
+  hasValidMoves,
+  smartShuffle,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 
-const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
+const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [matchedPieces, setMatchedPieces] = useState(new Set());
   const [bombPositions, setBombPositions] = useState(new Set());
+  const [isShuffling, setIsShuffling] = useState(false);
   const processingRef = useRef(false);
   const boardRef = useRef(board);
 
@@ -26,6 +29,57 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
+
+  // NEW: Check for deadlock after board changes
+  useEffect(() => {
+    if (gameStarted && !isProcessing && !isShuffling && board.length > 0) {
+      // Small delay to ensure board is settled
+      const checkDeadlock = setTimeout(() => {
+        const noMoves = !hasValidMoves(boardRef.current);
+        if (noMoves) {
+          console.log('🚨 No valid moves detected! Shuffle needed.');
+          onShuffleNeeded?.(true);
+        } else {
+          onShuffleNeeded?.(false);
+        }
+      }, 500);
+
+      return () => clearTimeout(checkDeadlock);
+    }
+  }, [board, gameStarted, isProcessing, isShuffling, onShuffleNeeded]);
+
+  // NEW: Shuffle function exposed to parent
+  const performShuffle = useCallback(() => {
+    if (isProcessing || isShuffling || !gameStarted) return;
+    
+    console.log('🔀 Performing shuffle...');
+    setIsShuffling(true);
+    
+    // Add a small delay for visual feedback
+    setTimeout(() => {
+      const shuffledBoard = smartShuffle(boardRef.current);
+      setBoard(shuffledBoard);
+      boardRef.current = shuffledBoard;
+      
+      // Clear any drag state
+      setDraggedPiece(null);
+      setMatchedPieces(new Set());
+      
+      setIsShuffling(false);
+      
+      // Haptic feedback for shuffle
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+      }
+      
+      console.log('✅ Shuffle complete!');
+    }, 300);
+  }, [isProcessing, isShuffling, gameStarted]);
+
+  // Expose shuffle function to parent
+  useEffect(() => {
+    onBoardReady?.(performShuffle);
+  }, [performShuffle, onBoardReady]);
 
   // Reset board when game starts - with optional bomb
   useEffect(() => {
@@ -54,6 +108,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       setDraggedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
+      setIsShuffling(false);
       processingRef.current = false;
     }
   }, [gameStarted, startWithBomb]);
@@ -88,7 +143,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
   // OPTIMIZED: Much faster match processing with bomb support
   const processMatches = useCallback(async () => {
-    if (processingRef.current || !gameStarted) return;
+    if (processingRef.current || !gameStarted || isShuffling) return;
     
     processingRef.current = true;
     setIsProcessing(true);
@@ -157,11 +212,11 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     
     setIsProcessing(false);
     processingRef.current = false;
-  }, [setScore, gameStarted, bombPositions, triggerBombExplosion]);
+  }, [setScore, gameStarted, bombPositions, triggerBombExplosion, isShuffling]);
 
   // Handle direct bomb tap
   const handleBombTap = useCallback((index) => {
-    if (!bombPositions.has(index) || isProcessing) return;
+    if (!bombPositions.has(index) || isProcessing || isShuffling) return;
     
     // Trigger bomb explosion
     const explosionIndices = triggerBombExplosion(index);
@@ -191,11 +246,11 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
         processMatches();
       }, 100);
     }, 200);
-  }, [bombPositions, isProcessing, triggerBombExplosion, processMatches]);
+  }, [bombPositions, isProcessing, isShuffling, triggerBombExplosion, processMatches]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
-    if (isProcessing || !gameStarted || processingRef.current) return;
+    if (isProcessing || !gameStarted || processingRef.current || isShuffling) return;
     
     // Check if it's a bomb - handle differently
     if (bombPositions.has(index)) {
@@ -204,11 +259,11 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     }
     
     setDraggedPiece({ index });
-  }, [isProcessing, gameStarted, bombPositions, handleBombTap]);
+  }, [isProcessing, gameStarted, bombPositions, handleBombTap, isShuffling]);
 
   // Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
-    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) return;
+    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current || isShuffling) return;
 
     const { offset } = info;
     const { index } = draggedPiece;
@@ -264,11 +319,11 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
     // Clear dragged piece
     setDraggedPiece(null);
-  }, [isProcessing, gameStarted, draggedPiece, processMatches]);
+  }, [isProcessing, gameStarted, draggedPiece, processMatches, isShuffling]);
 
   // Check for initial matches only once when game starts
   useEffect(() => {
-    if (gameStarted && !processingRef.current) {
+    if (gameStarted && !processingRef.current && !isShuffling) {
       const timeoutId = setTimeout(() => {
         const matches = findMatches(boardRef.current);
         if (matches.length > 0) {
@@ -278,13 +333,15 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       
       return () => clearTimeout(timeoutId);
     }
-  }, [gameStarted, processMatches]);
+  }, [gameStarted, processMatches, isShuffling]);
 
   return (
     <div className="w-full flex justify-center">
       {/* COMPLETELY STATIC: Fixed size container that NEVER moves */}
       <div
-        className="bg-nav rounded-2xl p-3 shadow-2xl relative"
+        className={`bg-nav rounded-2xl p-3 shadow-2xl relative transition-all duration-300 ${
+          isShuffling ? 'animate-pulse bg-accent/20' : ''
+        }`}
         style={{
           width: 'min(85vw, 350px)',
           height: 'min(85vw, 350px)',
@@ -292,6 +349,16 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           flexGrow: 0,   // Never grow
         }}
       >
+        {/* Shuffle overlay */}
+        {isShuffling && (
+          <div className="absolute inset-0 bg-accent/30 rounded-2xl flex items-center justify-center z-20">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🔀</div>
+              <p className="text-sm font-bold text-white">Shuffling...</p>
+            </div>
+          </div>
+        )}
+
         {/* Static grid structure - always present */}
         {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => {
           const row = Math.floor(index / BOARD_SIZE);
@@ -325,6 +392,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
                   hasBomb={hasBomb}
                   onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
+                  disabled={isShuffling}
                 />
               )}
             </div>
