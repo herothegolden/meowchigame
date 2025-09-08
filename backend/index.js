@@ -23,7 +23,7 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-// PHASE 3: COMPREHENSIVE DATABASE SETUP WITH FRIENDS SYSTEM
+// FIXED: COMPREHENSIVE DATABASE SETUP WITH PROPER FOREIGN KEY HANDLING
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
@@ -185,21 +185,49 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 11. Populate shop items
+    // 11. FIXED: Populate shop items with proper foreign key handling
     console.log('🛍️ Setting up shop items...');
-    await client.query('DELETE FROM shop_items');
-    await client.query(`
-      INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-      (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-      (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
-      (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-      (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-      (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-      (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-      (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
-    `);
-
-    await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
+    
+    // Check if shop_items table has any data
+    const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
+    const itemCount = parseInt(existingItemsCount.rows[0].count);
+    
+    if (itemCount === 0) {
+      // Table is empty, safe to insert
+      console.log('📦 Inserting initial shop items...');
+      await client.query(`
+        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
+        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
+        (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
+        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
+        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
+        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
+        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
+        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
+      `);
+      
+      await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
+    } else {
+      console.log(`📦 Shop items already exist (${itemCount} items), updating if needed...`);
+      
+      // Update existing items without deleting (safe for production)
+      await client.query(`
+        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
+        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
+        (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
+        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
+        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
+        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
+        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
+        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
+        ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        price = EXCLUDED.price,
+        icon_name = EXCLUDED.icon_name,
+        type = EXCLUDED.type
+      `);
+    }
 
     console.log('✅ Enhanced database setup complete with friends system!');
   } catch (err) {
