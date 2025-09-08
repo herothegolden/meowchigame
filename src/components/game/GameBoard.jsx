@@ -1,4 +1,4 @@
-// src/components/game/GameBoard.jsx - FIXED VERSION
+// src/components/game/GameBoard.jsx - COMPLETE FIXED VERSION
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -23,35 +23,25 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const [bombPositions, setBombPositions] = useState(new Set());
   
   // FIXED: Single source of truth for processing state
-  const gameStateRef = useRef({
-    isProcessing: false,
-    gameStarted: false,
-    board: board,
-    matchesProcessed: false // FIXED: Track if initial matches processed
-  });
+  const processingRef = useRef(false);
+  const boardRef = useRef(board);
+  const gameStartedRef = useRef(gameStarted);
 
   // AUDIO INTEGRATION
   const { playMatch, playSwap, playInvalidMove, playBomb, playScoreUpdate } = useAudio();
 
-  // FIXED: Synchronize refs with state immediately
+  // Keep refs updated
   useEffect(() => {
-    gameStateRef.current.board = board;
+    boardRef.current = board;
   }, [board]);
 
   useEffect(() => {
-    gameStateRef.current.gameStarted = gameStarted;
-    if (!gameStarted) {
-      gameStateRef.current.matchesProcessed = false; // FIXED: Reset on new game
-    }
+    gameStartedRef.current = gameStarted;
   }, [gameStarted]);
-
-  useEffect(() => {
-    gameStateRef.current.isProcessing = isProcessing;
-  }, [isProcessing]);
 
   // FIXED: Initialize game state properly without loops
   useEffect(() => {
-    if (gameStarted && !gameStateRef.current.matchesProcessed) {
+    if (gameStarted) {
       console.log('🎮 Starting new game...');
       const newBoard = generateInitialBoard();
       
@@ -78,22 +68,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       setDraggedPiece(null);
       setMatchedPieces(new Set());
       setIsProcessing(false);
-      
-      // FIXED: Mark as processed to prevent re-initialization
-      gameStateRef.current.matchesProcessed = true;
-      
-      // FIXED: Process initial matches ONCE with delay
-      setTimeout(() => {
-        if (gameStateRef.current.gameStarted && !gameStateRef.current.isProcessing) {
-          const matches = findMatches(gameStateRef.current.board);
-          if (matches.length > 0) {
-            console.log('🎯 Processing initial matches:', matches.length);
-            processMatches();
-          }
-        }
-      }, 500); // Longer delay to ensure state is stable
+      processingRef.current = false;
     }
-  }, [gameStarted, startWithBomb]); // FIXED: Only depend on game start triggers
+  }, [gameStarted, startWithBomb, playBomb]);
 
   // Handle bomb explosion - clears 3x3 area
   const triggerBombExplosion = useCallback((bombIndex) => {
@@ -130,31 +107,28 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     return explosionIndices;
   }, [setScore, playBomb, playScoreUpdate]);
 
-  // FIXED: Completely rewritten processMatches to prevent infinite loops
+  // FIXED: Match processing with proper loop prevention
   const processMatches = useCallback(async () => {
-    // CRITICAL: Single entry point - prevent concurrent processing
-    if (gameStateRef.current.isProcessing || !gameStateRef.current.gameStarted) {
+    // CRITICAL: Prevent multiple simultaneous processing
+    if (processingRef.current || !gameStartedRef.current) {
       console.log('🚫 Skipping processMatches - already processing or game not started');
       return;
     }
     
     console.log('🔄 Starting match processing...');
-    
-    // FIXED: Set processing state immediately and synchronously
-    gameStateRef.current.isProcessing = true;
+    processingRef.current = true;
     setIsProcessing(true);
     
     try {
-      let currentBoard = [...gameStateRef.current.board.map(row => [...row])];
+      let currentBoard = boardRef.current.map(row => [...row]);
       let totalMatches = 0;
       let cascadeCount = 0;
-      const MAX_CASCADES = 3; // Safety limit
+      const MAX_CASCADES = 3; // CRITICAL: Limit cascades to prevent infinite loops
       
-      // FIXED: Single cascade loop with proper exit conditions
       while (cascadeCount < MAX_CASCADES) {
         const matches = findMatches(currentBoard);
         
-        // CRITICAL: Exit immediately if no matches
+        // CRITICAL: Break if no matches found
         if (matches.length === 0) {
           console.log(`✅ No more matches found after ${cascadeCount} cascades`);
           break;
@@ -197,15 +171,15 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
         // Fill empty spaces
         currentBoard = fillEmptySpaces(currentBoard);
         
-        // FIXED: Single board update per cascade
-        setBoard([...currentBoard.map(row => [...row])]);
-        gameStateRef.current.board = currentBoard;
+        // Update board
+        setBoard(currentBoard.map(row => [...row]));
+        boardRef.current = currentBoard;
         
         // Clear matched pieces animation
         setMatchedPieces(new Set());
         
-        // Wait before next cascade check
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // FIXED: Increased delay to prevent rapid piece changes
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         cascadeCount++;
       }
@@ -236,16 +210,15 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     } catch (error) {
       console.error('🚨 Error in processMatches:', error);
     } finally {
-      // FIXED: Always clear processing state
-      gameStateRef.current.isProcessing = false;
       setIsProcessing(false);
+      processingRef.current = false;
       console.log('✅ Match processing complete');
     }
   }, [setScore, bombPositions, triggerBombExplosion, playMatch, playScoreUpdate]);
 
   // Handle direct bomb tap
   const handleBombTap = useCallback((index) => {
-    if (!bombPositions.has(index) || gameStateRef.current.isProcessing) return;
+    if (!bombPositions.has(index) || isProcessing || processingRef.current) return;
     
     console.log('💥 Bomb tapped at index:', index);
     
@@ -260,33 +233,32 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
     }
     
-    // FIXED: Single async operation with proper state management
     setTimeout(async () => {
-      if (!gameStateRef.current.gameStarted) return;
+      if (!gameStartedRef.current) return;
       
       // Remove exploded pieces
-      let currentBoard = removeMatches(gameStateRef.current.board, Array.from(explosionIndices));
+      const currentBoard = removeMatches(boardRef.current, Array.from(explosionIndices));
       
       // Apply gravity and refill
-      currentBoard = applyGravity(currentBoard);
-      currentBoard = fillEmptySpaces(currentBoard);
+      const gravityBoard = applyGravity(currentBoard);
+      const newBoard = fillEmptySpaces(gravityBoard);
       
-      setBoard([...currentBoard.map(row => [...row])]);
-      gameStateRef.current.board = currentBoard;
+      setBoard(newBoard);
+      boardRef.current = newBoard;
       setMatchedPieces(new Set());
       
       // Process any new matches after a delay
       setTimeout(() => {
-        if (gameStateRef.current.gameStarted && !gameStateRef.current.isProcessing) {
+        if (gameStartedRef.current && !processingRef.current) {
           processMatches();
         }
-      }, 300);
-    }, 400);
-  }, [bombPositions, triggerBombExplosion, processMatches]);
+      }, 200);
+    }, 300);
+  }, [bombPositions, isProcessing, triggerBombExplosion, processMatches]);
 
   // Handle drag start
   const handleDragStart = useCallback((event, { index }) => {
-    if (gameStateRef.current.isProcessing || !gameStateRef.current.gameStarted) {
+    if (isProcessing || !gameStarted || processingRef.current) {
       console.log('🚫 Drag prevented - processing or game not started');
       return;
     }
@@ -298,11 +270,11 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     }
     
     setDraggedPiece({ index });
-  }, [bombPositions, handleBombTap]);
+  }, [isProcessing, gameStarted, bombPositions, handleBombTap]);
 
-  // FIXED: Handle drag end with proper state management
+  // Handle drag end - determine swap direction and execute
   const handleDragEnd = useCallback((event, info) => {
-    if (gameStateRef.current.isProcessing || !gameStateRef.current.gameStarted || !draggedPiece) {
+    if (isProcessing || !gameStarted || !draggedPiece || processingRef.current) {
       setDraggedPiece(null);
       return;
     }
@@ -336,28 +308,28 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       const draggedPosition = getPosition(index);
       const targetPosition = getPosition(targetIndex);
 
-      if (isValidMove(gameStateRef.current.board, draggedPosition, targetPosition)) {
+      if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
         console.log(`✅ Valid move: ${index} -> ${targetIndex}`);
         
         // AUDIO: Successful swap sound
         playSwap();
         
         // Execute the swap
-        const newBoard = swapPieces(gameStateRef.current.board, draggedPosition, targetPosition);
-        setBoard([...newBoard.map(row => [...row])]);
-        gameStateRef.current.board = newBoard;
+        const newBoard = swapPieces(boardRef.current, draggedPosition, targetPosition);
+        setBoard(newBoard);
+        boardRef.current = newBoard;
         
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         }
         
-        // FIXED: Process matches after swap with single timeout
+        // Process matches after swap with delay
         setTimeout(() => {
-          if (gameStateRef.current.gameStarted && !gameStateRef.current.isProcessing) {
+          if (gameStartedRef.current && !processingRef.current) {
             processMatches();
           }
-        }, 150);
+        }, 100);
       } else {
         console.log(`❌ Invalid move: ${index} -> ${targetIndex}`);
         
@@ -373,21 +345,39 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
     // Clear dragged piece
     setDraggedPiece(null);
-  }, [draggedPiece, processMatches, playSwap, playInvalidMove]);
+  }, [isProcessing, gameStarted, draggedPiece, processMatches, playSwap, playInvalidMove]);
+
+  // FIXED: Only check for initial matches once when game starts
+  useEffect(() => {
+    if (gameStarted && !processingRef.current) {
+      // Small delay to ensure board is set
+      const timeoutId = setTimeout(() => {
+        if (gameStartedRef.current && !processingRef.current) {
+          const matches = findMatches(boardRef.current);
+          if (matches.length > 0) {
+            console.log('🎯 Processing initial matches:', matches.length);
+            processMatches();
+          }
+        }
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [gameStarted, processMatches]);
 
   return (
     <div className="w-full flex justify-center">
-      {/* FIXED: Stable container that never changes size */}
+      {/* STATIC: Fixed size container that NEVER moves */}
       <div
         className="bg-nav rounded-2xl p-3 shadow-2xl relative"
         style={{
           width: 'min(85vw, 350px)',
           height: 'min(85vw, 350px)',
-          flexShrink: 0,
-          flexGrow: 0,
+          flexShrink: 0, // Never shrink
+          flexGrow: 0,   // Never grow
         }}
       >
-        {/* FIXED: Static grid with stable key generation */}
+        {/* Static grid structure - always present */}
         {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => {
           const row = Math.floor(index / BOARD_SIZE);
           const col = index % BOARD_SIZE;
@@ -395,15 +385,14 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
           const left = `calc(${col} * (${cellSize} + 4px))`;
           const top = `calc(${row} * (${cellSize} + 4px))`;
           
-          // FIXED: Safe board access with fallbacks
-          const piece = (board[row] && board[row][col] !== undefined) ? board[row][col] : null;
+          const piece = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
           const hasBomb = bombPositions.has(index);
           
           return (
             <div
-              key={`cell-${index}`} // FIXED: Stable key that doesn't change
+              key={`cell-${index}`}
               className="absolute"
               style={{
                 left,
