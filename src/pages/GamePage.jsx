@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
 import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History, Shuffle } from 'lucide-react';
@@ -35,7 +35,7 @@ const GamePage = () => {
   });
   const [showInventoryStats, setShowInventoryStats] = useState(false);
   
-  // NEW: Shuffle functionality
+  // FIXED: Shuffle functionality - NO AUTO-TRIGGERING
   const [shuffleNeeded, setShuffleNeeded] = useState(false);
   const [shuffleCount, setShuffleCount] = useState(0);
   const [shuffleCooldown, setShuffleCooldown] = useState(0);
@@ -60,7 +60,7 @@ const GamePage = () => {
     return () => clearInterval(timer);
   }, [gameStarted, isGameOver, timeLeft]);
 
-  // NEW: Shuffle cooldown timer
+  // Shuffle cooldown timer
   useEffect(() => {
     if (shuffleCooldown > 0 && gameStarted && !isGameOver) {
       const timer = setInterval(() => {
@@ -161,11 +161,31 @@ const GamePage = () => {
     }
   }, []);
 
-  // FIXED: Handle shuffle functionality - ONLY when user clicks
+  // FIXED: Stable shuffle needed handler - memoized to prevent infinite loops
+  const handleShuffleNeeded = useCallback((needed) => {
+    console.log(`🔍 Shuffle needed status: ${needed}`);
+    setShuffleNeeded(needed);
+  }, []);
+
+  // FIXED: Stable board ready handler - memoized to prevent infinite loops  
+  const handleBoardReady = useCallback((shuffleFn) => {
+    console.log('🎮 Board ready, setting shuffle function');
+    setShuffleFunction(() => shuffleFn);
+  }, []);
+
+  // FIXED: Manual shuffle handler - ONLY triggered by user click
   const handleShuffle = () => {
-    if (!shuffleFunction || shuffleCooldown > 0 || !gameStarted || isGameOver) return;
+    if (!shuffleFunction || shuffleCooldown > 0 || !gameStarted || isGameOver) {
+      console.log('🚫 Shuffle prevented:', { 
+        hasFunction: !!shuffleFunction, 
+        cooldown: shuffleCooldown, 
+        gameStarted, 
+        isGameOver 
+      });
+      return;
+    }
     
-    console.log('🔀 User manually triggered shuffle');
+    console.log('🔀 User manually clicked shuffle button');
     shuffleFunction();
     setShuffleCount(prev => prev + 1);
     setShuffleCooldown(10); // 10 second cooldown
@@ -648,7 +668,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* FIXED: Game Header - NO SHUFFLE BUTTON HERE */}
+      {/* Game Header - CLEAN, NO SHUFFLE BUTTON */}
       <motion.div 
         className="flex justify-between items-center"
         initial={{ opacity: 0, y: -20 }}
@@ -689,11 +709,11 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* NEW: Shuffle Alert ABOVE the board */}
+      {/* Shuffle Alert ABOVE the board - ONLY VISUAL, NO CLICK */}
       <AnimatePresence>
         {shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0 && (
           <motion.div
-            className="bg-red-600/90 backdrop-blur-sm rounded-xl p-3 border border-red-500"
+            className="bg-red-600/90 backdrop-blur-sm rounded-xl p-3 border border-red-500 pointer-events-none"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -879,12 +899,12 @@ const GamePage = () => {
           gameStarted={gameStarted}
           startWithBomb={gameConfig.startWithBomb}
           onGameEnd={() => setIsGameOver(true)}
-          onShuffleNeeded={setShuffleNeeded}
-          onBoardReady={setShuffleFunction}
+          onShuffleNeeded={handleShuffleNeeded}
+          onBoardReady={handleBoardReady}
         />
       </motion.div>
       
-      {/* FIXED: Shuffle Button BELOW the game board */}
+      {/* FIXED: Shuffle Button BELOW the game board - ONLY USER TRIGGERED */}
       {gameStarted && !isGameOver && (
         <motion.div 
           className="flex items-center justify-center"
@@ -903,7 +923,7 @@ const GamePage = () => {
                 : 'bg-nav border-gray-700 hover:bg-gray-600 text-primary'
             }`}
             whileTap={shuffleCooldown === 0 ? { scale: 0.95 } : {}}
-            title={shuffleNeeded ? 'No moves available! Click to shuffle' : 'Shuffle board'}
+            title={shuffleNeeded ? 'No moves available! Click to shuffle' : 'Shuffle board when stuck'}
           >
             <Shuffle className={`w-6 h-6 ${
               shuffleNeeded && shuffleCooldown === 0 ? 'text-white' : 
@@ -924,7 +944,7 @@ const GamePage = () => {
         </motion.div>
       )}
       
-      {/* Instructions - UPDATED TEXT */}
+      {/* Instructions */}
       {gameStarted && !isGameOver && (
         <motion.div 
           className="text-center text-secondary max-w-md mx-auto"
