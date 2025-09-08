@@ -572,7 +572,7 @@ const GamePage = () => {
             <div className="text-6xl mb-6">🍪</div>
             
             <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
-              <p className="text-lg font-bold text-accent mb-2">Cookie Match Game</p>
+              <p className="text-lg font-bold text-accent mb-2">Meowchi Match Game</p>
               <p className="text-sm text-secondary">Match 3 or more pieces to score points!</p>
               
               {availableItems.length > 0 && (
@@ -810,7 +810,7 @@ const GamePage = () => {
         />
       </motion.div>
       
-      {/* Instructions */}
+      {/* Instructions - UPDATED TEXT */}
       {gameStarted && !isGameOver && (
         <motion.div 
           className="text-center text-secondary max-w-md mx-auto"
@@ -819,7 +819,7 @@ const GamePage = () => {
           transition={{ duration: 0.5, delay: 0.6 }}
         >
           <p className="text-sm">
-            Drag emojis to adjacent spots to create matches of 3 or more! 🍪✨
+            Drag Meowchi pieces to adjacent spots to create matches of 3 or more! 🎯✨
           </p>
           {availableItems.length > 0 && (
             <p className="text-xs mt-1 text-accent">
