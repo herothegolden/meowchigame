@@ -46,7 +46,7 @@ const GamePiece = ({
       }}
       exit={{ scale: 0, opacity: 0 }}
       transition={{ 
-        duration: 0.15, // 🔧 FIXED: Changed from 0.08 to 0.15 for smoother animation
+        duration: 0.08,
         ease: "easeOut"
       }}
     >
@@ -54,7 +54,7 @@ const GamePiece = ({
         className={`
           w-full h-full rounded-lg flex items-center justify-center
           text-4xl font-bold cursor-pointer select-none
-          transition-all duration-150 shadow-lg relative
+          transition-all duration-50 shadow-lg relative
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
             : hasBomb
@@ -83,7 +83,7 @@ const GamePiece = ({
           WebkitTouchCallout: 'none',
           WebkitTapHighlightColor: 'transparent'
         }}
-        // 🔧 FIXED: Proper animation timing that won't cause spinning
+        // 🔧 MINIMAL FIX: Only changed the duration from 0.02 to 0.3
         animate={hasBomb ? {
           scale: [1, 1.1, 1],
           boxShadow: [
@@ -96,7 +96,7 @@ const GamePiece = ({
           boxShadow: "0 4px 8px rgba(0,0,0,0.2)"
         }}
         transition={{
-          duration: hasBomb ? 1.5 : 0.3, // 🔧 FIXED: Changed from 0.02 to 0.3 seconds
+          duration: hasBomb ? 1.5 : 0.3, // 🔧 ONLY CHANGE: 0.02 → 0.3
           repeat: hasBomb ? Infinity : 0,
           ease: "easeInOut"
         }}
