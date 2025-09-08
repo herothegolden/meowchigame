@@ -1,10 +1,10 @@
-// src/components/game/GamePiece.jsx - FIXED VERSION
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+// src/components/game/GamePiece.jsx - COMPLETE FIXED VERSION
+import React, { useState, useEffect } from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import { PIECE_IMAGES, PIECE_EMOJIS } from '../../utils/gameLogic';
 
 const GamePiece = ({ 
-  piece, // Receives index (0-5) 
+  piece, // Receives index (0-5) instead of emoji
   index, 
   isSelected, 
   onDragStart,
@@ -13,10 +13,14 @@ const GamePiece = ({
   hasBomb = false
 }) => {
   const controls = useDragControls();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   
-  // FIXED: Stable image loading state with proper keys
-  const [imageLoadStates, setImageLoadStates] = useState(new Map());
-  const loadAttemptRef = useRef(new Map()); // Track load attempts to prevent infinite retries
+  // 🚨 CRITICAL FIX: Reset image states when piece changes
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [piece]); // Reset states whenever piece prop changes
   
   // Handle empty pieces
   if (piece === null || piece === undefined) {
@@ -27,77 +31,6 @@ const GamePiece = ({
       />
     );
   }
-
-  // FIXED: Memoize image URL and emoji to prevent unnecessary recalculations
-  const imageData = useMemo(() => {
-    if (piece < 0 || piece >= PIECE_IMAGES.length) {
-      return {
-        imageUrl: null,
-        fallbackEmoji: '🍪' // Default fallback
-      };
-    }
-    
-    return {
-      imageUrl: PIECE_IMAGES[piece],
-      fallbackEmoji: PIECE_EMOJIS[piece] || '🍪'
-    };
-  }, [piece]);
-
-  // FIXED: Stable load state getter
-  const getImageLoadState = useCallback((url) => {
-    return imageLoadStates.get(url) || { loaded: false, error: false, loading: false };
-  }, [imageLoadStates]);
-
-  // FIXED: Prevent infinite image loading loops
-  const handleImageLoad = useCallback((url) => {
-    const currentAttempts = loadAttemptRef.current.get(url) || 0;
-    
-    // CRITICAL: Prevent infinite reload attempts
-    if (currentAttempts > 3) {
-      console.warn(`❌ Max load attempts reached for: ${url}`);
-      setImageLoadStates(prev => new Map(prev).set(url, { loaded: false, error: true, loading: false }));
-      return;
-    }
-    
-    setImageLoadStates(prev => {
-      const newMap = new Map(prev);
-      newMap.set(url, { loaded: true, error: false, loading: false });
-      return newMap;
-    });
-    
-    console.log(`✅ Image loaded: ${url.split('/').pop()?.split('?')[0]}`);
-  }, []);
-
-  // FIXED: Controlled error handling without infinite retries
-  const handleImageError = useCallback((url) => {
-    const currentAttempts = loadAttemptRef.current.get(url) || 0;
-    loadAttemptRef.current.set(url, currentAttempts + 1);
-    
-    console.warn(`❌ Image load failed (attempt ${currentAttempts + 1}): ${url}`);
-    
-    setImageLoadStates(prev => {
-      const newMap = new Map(prev);
-      newMap.set(url, { loaded: false, error: true, loading: false });
-      return newMap;
-    });
-  }, []);
-
-  // FIXED: Initiate loading only when needed
-  const initiateImageLoad = useCallback((url) => {
-    const state = getImageLoadState(url);
-    const attempts = loadAttemptRef.current.get(url) || 0;
-    
-    // CRITICAL: Don't reload if already loaded, errored after max attempts, or currently loading
-    if (state.loaded || state.loading || attempts > 3) {
-      return;
-    }
-    
-    setImageLoadStates(prev => {
-      const newMap = new Map(prev);
-      newMap.set(url, { loaded: false, error: false, loading: true });
-      return newMap;
-    });
-  }, [getImageLoadState]);
 
   const handlePointerDown = (e) => {
     // Trigger haptic feedback on touch
@@ -113,13 +46,9 @@ const GamePiece = ({
     }
   };
 
-  // Get current image state
-  const { imageUrl, fallbackEmoji } = imageData;
-  const imageState = getImageLoadState(imageUrl);
-
-  // FIXED: Determine what to show based on stable states
-  const shouldShowImage = imageUrl && !imageState.error && (imageState.loaded || imageState.loading);
-  const shouldShowEmoji = !imageUrl || imageState.error || (!imageState.loaded && !imageState.loading);
+  // Get the image URL and fallback emoji based on piece index
+  const imageUrl = PIECE_IMAGES[piece];
+  const fallbackEmoji = PIECE_EMOJIS[piece];
 
   return (
     <motion.div
@@ -186,36 +115,53 @@ const GamePiece = ({
           ease: "easeInOut"
         }}
       >
-        {/* FIXED: Content rendering with stable conditions */}
+        {/* MAIN CONTENT: Custom Image with Emoji Fallback */}
         <div className="w-full h-full flex items-center justify-center relative">
-          {shouldShowImage ? (
-            // Custom Image Rendering
-            <motion.img
-              key={`${imageUrl}-${piece}`} // FIXED: Stable key prevents unnecessary re-mounts
-              src={imageUrl}
-              alt={`Meowchi piece ${piece}`}
-              className="w-full h-full object-contain"
-              style={{
-                maxWidth: '90%',
-                maxHeight: '90%',
-                imageRendering: 'auto',
-                filter: isMatched ? 'blur(2px) brightness(0.7)' : 'none'
-              }}
-              onLoad={() => handleImageLoad(imageUrl)}
-              onError={() => handleImageError(imageUrl)}
-              onLoadStart={() => initiateImageLoad(imageUrl)} // FIXED: Only initiate when actually loading
-              draggable={false}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ 
-                opacity: imageState.loaded ? 1 : 0.7,
-                scale: imageState.loaded ? 1 : 0.9
-              }}
-              transition={{ duration: 0.2 }}
-            />
+          {!imageError && imageUrl ? (
+            <>
+              {/* Your Custom Image */}
+              <motion.img
+                src={imageUrl}
+                alt={`Meowchi piece ${piece}`}
+                className="w-full h-full object-contain"
+                style={{
+                  maxWidth: '90%',
+                  maxHeight: '90%',
+                  imageRendering: 'auto',
+                  filter: isMatched ? 'blur(2px) brightness(0.7)' : 'none'
+                }}
+                onLoad={() => {
+                  setImageLoaded(true);
+                  console.log(`✅ Loaded: ${imageUrl.split('/').pop()?.split('?')[0]}`);
+                }}
+                onError={(e) => {
+                  setImageError(true);
+                  console.warn(`❌ Failed to load: ${imageUrl}`);
+                }}
+                draggable={false}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ 
+                  opacity: imageLoaded ? 1 : 0,
+                  scale: imageLoaded ? 1 : 0.8
+                }}
+                transition={{ duration: 0.2 }}
+              />
+              
+              {/* Loading state - show emoji while image loads */}
+              {!imageLoaded && !imageError && (
+                <motion.div 
+                  className="absolute inset-0 flex items-center justify-center text-3xl"
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: imageLoaded ? 0 : 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {fallbackEmoji}
+                </motion.div>
+              )}
+            </>
           ) : (
-            // Emoji Fallback - Always stable, no loading states
+            /* Fallback Emoji - shown on error or as immediate fallback */
             <motion.div 
-              key={`emoji-${piece}`} // FIXED: Stable key
               className="text-4xl font-bold"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -262,14 +208,4 @@ const GamePiece = ({
   );
 };
 
-// FIXED: Memoize component to prevent unnecessary re-renders
-export default React.memo(GamePiece, (prevProps, nextProps) => {
-  // CRITICAL: Only re-render if essential props change
-  return (
-    prevProps.piece === nextProps.piece &&
-    prevProps.index === nextProps.index &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.isMatched === nextProps.isMatched &&
-    prevProps.hasBomb === nextProps.hasBomb
-  );
-});
+export default GamePiece;
