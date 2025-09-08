@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
-import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History } from 'lucide-react';
+import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History, Shuffle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Get the backend URL from the environment variables
@@ -35,6 +35,12 @@ const GamePage = () => {
   });
   const [showInventoryStats, setShowInventoryStats] = useState(false);
   
+  // NEW: Shuffle functionality
+  const [shuffleNeeded, setShuffleNeeded] = useState(false);
+  const [shuffleCount, setShuffleCount] = useState(0);
+  const [shuffleCooldown, setShuffleCooldown] = useState(0);
+  const [shuffleFunction, setShuffleFunction] = useState(null);
+  
   const navigate = useNavigate();
 
   // Timer effect
@@ -53,6 +59,16 @@ const GamePage = () => {
 
     return () => clearInterval(timer);
   }, [gameStarted, isGameOver, timeLeft]);
+
+  // NEW: Shuffle cooldown timer
+  useEffect(() => {
+    if (shuffleCooldown > 0 && gameStarted && !isGameOver) {
+      const timer = setInterval(() => {
+        setShuffleCooldown(prev => Math.max(0, prev - 1));
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [shuffleCooldown, gameStarted, isGameOver]);
 
   // Handle game over submission
   useEffect(() => {
@@ -80,12 +96,13 @@ const GamePage = () => {
               console.log('Score submitted successfully:', data);
               
               const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
+              const shuffleText = shuffleCount > 0 ? `\n🔀 Shuffles used: ${shuffleCount}` : '';
               const finalScore = data.score_awarded || score;
               
               // Show success popup
               tg.showPopup({
                 title: 'Game Over!',
-                message: `🎉 You scored ${finalScore.toLocaleString()} points!${multiplierText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
+                message: `🎉 You scored ${finalScore.toLocaleString()} points!${multiplierText}${shuffleText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
                 buttons: [
                   { text: 'Play Again', type: 'default', id: 'play_again' },
                   { text: 'Home', type: 'default', id: 'home' }
@@ -113,7 +130,8 @@ const GamePage = () => {
           // Browser mode - just show score
           console.log(`Game Over! Final Score: ${score}`);
           setTimeout(() => {
-            const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}\n\nPlay again?`;
+            const shuffleText = shuffleCount > 0 ? `\nShuffles used: ${shuffleCount}` : '';
+            const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}${shuffleText}\n\nPlay again?`;
             if (confirm(message)) {
               restartGame();
             } else {
@@ -132,7 +150,7 @@ const GamePage = () => {
     // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier]);
+  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier, shuffleCount]);
 
   // Disable Telegram swipes during game
   useEffect(() => {
@@ -142,6 +160,22 @@ const GamePage = () => {
       return () => tg.enableVerticalSwipes();
     }
   }, []);
+
+  // NEW: Handle shuffle functionality
+  const handleShuffle = () => {
+    if (!shuffleFunction || shuffleCooldown > 0 || !gameStarted || isGameOver) return;
+    
+    console.log('🔀 User triggered shuffle');
+    shuffleFunction();
+    setShuffleCount(prev => prev + 1);
+    setShuffleCooldown(10); // 10 second cooldown
+    setShuffleNeeded(false);
+    
+    // Haptic feedback
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+  };
 
   // PHASE 3: Simplified loadInventory with basic statistics
   const loadInventory = async () => {
@@ -387,6 +421,11 @@ const GamePage = () => {
       setIsGameOver(false);
       setIsSubmitting(false);
       setShowInventory(false);
+      
+      // Reset shuffle state
+      setShuffleNeeded(false);
+      setShuffleCount(0);
+      setShuffleCooldown(0);
     }
   };
 
@@ -400,6 +439,11 @@ const GamePage = () => {
     setIsGameOver(false);
     setIsSubmitting(false);
     setShowInventory(false);
+    
+    // Reset shuffle state
+    setShuffleNeeded(false);
+    setShuffleCount(0);
+    setShuffleCooldown(0);
   };
 
   const restartGame = async () => {
@@ -412,6 +456,12 @@ const GamePage = () => {
     setShowItemSelection(false);
     setShowInventoryStats(false);
     setSelectedItems(new Set());
+    
+    // Reset shuffle state
+    setShuffleNeeded(false);
+    setShuffleCount(0);
+    setShuffleCooldown(0);
+    setShuffleFunction(null);
     
     await loadInventory();
   };
@@ -455,6 +505,9 @@ const GamePage = () => {
             </p>
             {activeBoosts.pointMultiplier && (
               <p className="text-sm text-green-400 mb-2">🔥 Double Points Applied!</p>
+            )}
+            {shuffleCount > 0 && (
+              <p className="text-sm text-blue-400 mb-2">🔀 Shuffles used: {shuffleCount}</p>
             )}
             
             {isSubmitting ? (
@@ -611,6 +664,37 @@ const GamePage = () => {
         </div>
         
         <div className="flex items-center space-x-2">
+          {/* NEW: Shuffle Button */}
+          {gameStarted && !isGameOver && (
+            <motion.button
+              onClick={handleShuffle}
+              disabled={shuffleCooldown > 0}
+              className={`p-3 rounded-xl shadow-lg border border-gray-700 transition-all duration-200 relative ${
+                shuffleNeeded && shuffleCooldown === 0
+                  ? 'bg-red-600 hover:bg-red-700 animate-pulse' 
+                  : shuffleCooldown > 0
+                  ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-nav hover:bg-gray-600'
+              }`}
+              whileTap={{ scale: 0.95 }}
+              title={shuffleNeeded ? 'No moves available! Click to shuffle' : 'Shuffle board'}
+            >
+              <Shuffle className={`w-6 h-6 ${
+                shuffleNeeded && shuffleCooldown === 0 ? 'text-white' : 'text-accent'
+              }`} />
+              {shuffleCooldown > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {shuffleCooldown}
+                </span>
+              )}
+              {shuffleCount > 0 && shuffleCooldown === 0 && (
+                <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {shuffleCount}
+                </span>
+              )}
+            </motion.button>
+          )}
+
           {/* PHASE 3: Enhanced inventory button */}
           {gameStarted && !isGameOver && availableItems.length > 0 && (
             <motion.button
@@ -635,6 +719,25 @@ const GamePage = () => {
           </div>
         </div>
       </motion.div>
+
+      {/* NEW: Shuffle Alert */}
+      <AnimatePresence>
+        {shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0 && (
+          <motion.div
+            className="bg-red-600/90 backdrop-blur-sm rounded-xl p-3 border border-red-500"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-center justify-center space-x-3 text-sm text-white">
+              <Shuffle className="w-5 h-5" />
+              <span className="font-bold">No moves available! Tap the shuffle button</span>
+              <Shuffle className="w-5 h-5" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Visual Boost Indicators */}
       <AnimatePresence>
@@ -807,6 +910,8 @@ const GamePage = () => {
           gameStarted={gameStarted}
           startWithBomb={gameConfig.startWithBomb}
           onGameEnd={() => setIsGameOver(true)}
+          onShuffleNeeded={setShuffleNeeded}
+          onBoardReady={setShuffleFunction}
         />
       </motion.div>
       
@@ -821,11 +926,12 @@ const GamePage = () => {
           <p className="text-sm">
             Drag Meowchi pieces to adjacent spots to create matches of 3 or more! 🎯✨
           </p>
-          {availableItems.length > 0 && (
-            <p className="text-xs mt-1 text-accent">
-              Tap 📦 to access your items and statistics
-            </p>
-          )}
+          <div className="flex items-center justify-center space-x-4 text-xs mt-2">
+            {availableItems.length > 0 && (
+              <span className="text-accent">Tap 📦 for items</span>
+            )}
+            <span className="text-blue-400">Tap 🔀 if stuck</span>
+          </div>
         </motion.div>
       )}
     </div>
