@@ -24,38 +24,54 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
   const [isShuffling, setIsShuffling] = useState(false);
   const processingRef = useRef(false);
   const boardRef = useRef(board);
+  const deadlockCheckRef = useRef(null);
 
   // Keep board ref updated
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
 
-  // NEW: Check for deadlock after board changes
+  // FIXED: Deadlock detection with proper debouncing and conditions
   useEffect(() => {
-    if (gameStarted && !isProcessing && !isShuffling && board.length > 0) {
-      // Small delay to ensure board is settled
-      const checkDeadlock = setTimeout(() => {
-        const noMoves = !hasValidMoves(boardRef.current);
-        if (noMoves) {
-          console.log('🚨 No valid moves detected! Shuffle needed.');
-          onShuffleNeeded?.(true);
-        } else {
-          onShuffleNeeded?.(false);
-        }
-      }, 500);
-
-      return () => clearTimeout(checkDeadlock);
+    // Clear any existing timeout
+    if (deadlockCheckRef.current) {
+      clearTimeout(deadlockCheckRef.current);
     }
-  }, [board, gameStarted, isProcessing, isShuffling, onShuffleNeeded]);
 
-  // NEW: Shuffle function exposed to parent
+    // Only check for deadlocks when game is stable
+    if (gameStarted && !isProcessing && !isShuffling && board.length > 0) {
+      deadlockCheckRef.current = setTimeout(() => {
+        // Double-check the conditions before checking moves
+        if (!isProcessing && !isShuffling && gameStarted) {
+          const noMoves = !hasValidMoves(boardRef.current);
+          console.log(`🔍 Deadlock check: ${noMoves ? 'NO MOVES' : 'MOVES AVAILABLE'}`);
+          onShuffleNeeded?.(noMoves);
+        }
+      }, 1000); // Increased delay to ensure board is completely settled
+    }
+
+    return () => {
+      if (deadlockCheckRef.current) {
+        clearTimeout(deadlockCheckRef.current);
+      }
+    };
+  }, [board, gameStarted, isProcessing, isShuffling]); // REMOVED onShuffleNeeded from dependencies
+
+  // FIXED: Manual shuffle function - ONLY called by user action
   const performShuffle = useCallback(() => {
-    if (isProcessing || isShuffling || !gameStarted) return;
+    if (isProcessing || isShuffling || !gameStarted) {
+      console.log('🚫 Shuffle blocked:', { isProcessing, isShuffling, gameStarted });
+      return;
+    }
     
-    console.log('🔀 Performing shuffle...');
+    console.log('🔀 MANUAL shuffle triggered by user');
     setIsShuffling(true);
     
-    // Add a small delay for visual feedback
+    // Clear deadlock check to prevent interference
+    if (deadlockCheckRef.current) {
+      clearTimeout(deadlockCheckRef.current);
+    }
+    
     setTimeout(() => {
       const shuffledBoard = smartShuffle(boardRef.current);
       setBoard(shuffledBoard);
@@ -67,23 +83,27 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       
       setIsShuffling(false);
       
+      // Reset deadlock status
+      onShuffleNeeded?.(false);
+      
       // Haptic feedback for shuffle
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
       }
       
-      console.log('✅ Shuffle complete!');
+      console.log('✅ Manual shuffle complete');
     }, 300);
-  }, [isProcessing, isShuffling, gameStarted]);
+  }, []); // FIXED: No dependencies to prevent recreation
 
-  // Expose shuffle function to parent
+  // Expose shuffle function to parent - ONLY ONCE
   useEffect(() => {
     onBoardReady?.(performShuffle);
-  }, [performShuffle, onBoardReady]);
+  }, []); // FIXED: Empty dependencies so it only runs once
 
   // Reset board when game starts - with optional bomb
   useEffect(() => {
     if (gameStarted) {
+      console.log('🎮 Starting new game');
       const newBoard = generateInitialBoard();
       
       // Add cookie bomb if purchased
@@ -110,6 +130,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       setIsProcessing(false);
       setIsShuffling(false);
       processingRef.current = false;
+      
+      // Reset deadlock status
+      onShuffleNeeded?.(false);
     }
   }, [gameStarted, startWithBomb]);
 
@@ -349,9 +372,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
           flexGrow: 0,   // Never grow
         }}
       >
-        {/* Shuffle overlay */}
+        {/* FIXED: Shuffle overlay - NO CLICK HANDLERS */}
         {isShuffling && (
-          <div className="absolute inset-0 bg-accent/30 rounded-2xl flex items-center justify-center z-20">
+          <div className="absolute inset-0 bg-accent/30 rounded-2xl flex items-center justify-center z-20 pointer-events-none">
             <div className="text-center">
               <div className="text-4xl mb-2">🔀</div>
               <p className="text-sm font-bold text-white">Shuffling...</p>
