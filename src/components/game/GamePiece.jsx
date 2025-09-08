@@ -36,6 +36,9 @@ const GamePiece = ({
     }
   };
 
+  // UPDATED: Check if emoji is a URL (image) or actual emoji
+  const isImageUrl = emoji && emoji.startsWith('http');
+
   return (
     <motion.div
       className="w-full h-full flex items-center justify-center p-0.5"
@@ -53,7 +56,7 @@ const GamePiece = ({
       <motion.div
         className={`
           w-full h-full rounded-lg flex items-center justify-center
-          text-4xl font-bold cursor-pointer select-none
+          ${isImageUrl ? 'text-base' : 'text-4xl'} font-bold cursor-pointer select-none
           transition-all duration-50 shadow-lg relative
           ${isSelected 
             ? 'bg-accent shadow-accent/50 scale-110' 
@@ -101,7 +104,29 @@ const GamePiece = ({
           ease: "easeInOut"
         }}
       >
-        {emoji}
+        {/* UPDATED: Render image or emoji based on content */}
+        {isImageUrl ? (
+          <img 
+            src={emoji} 
+            alt="Game piece" 
+            className="w-full h-full object-contain rounded-lg p-1"
+            style={{ 
+              maxWidth: '100%', 
+              maxHeight: '100%',
+              imageRendering: 'auto',
+              userSelect: 'none',
+              pointerEvents: 'none'
+            }}
+            draggable={false}
+            onError={(e) => {
+              // Fallback to a cookie emoji if image fails to load
+              e.target.style.display = 'none';
+              e.target.parentNode.innerHTML = '🍪';
+            }}
+          />
+        ) : (
+          emoji
+        )}
         
         {/* Bomb overlay indicator */}
         {hasBomb && (
