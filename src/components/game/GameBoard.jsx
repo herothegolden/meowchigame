@@ -1,4 +1,4 @@
-// src/components/game/GameBoard.jsx - FIXED infinite loop issue
+// src/components/game/GameBoard.jsx - EXACT FIX for infinite loop
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -39,7 +39,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     gameStartedRef.current = gameStarted;
   }, [gameStarted]);
 
-  // Reset board when game starts - with optional bomb
+  // ✅ EXACT FIX: Remove playBomb from dependencies to prevent infinite loop
   useEffect(() => {
     if (gameStarted) {
       console.log('🎮 Starting new game...');
@@ -70,7 +70,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       setIsProcessing(false);
       processingRef.current = false;
     }
-  }, [gameStarted, startWithBomb, playBomb]);
+  }, [gameStarted, startWithBomb]); // ✅ REMOVED playBomb - this was causing infinite loop!
 
   // Handle bomb explosion - clears 3x3 area
   const triggerBombExplosion = useCallback((bombIndex) => {
