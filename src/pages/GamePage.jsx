@@ -161,11 +161,11 @@ const GamePage = () => {
     }
   }, []);
 
-  // NEW: Handle shuffle functionality
+  // FIXED: Handle shuffle functionality - ONLY when user clicks
   const handleShuffle = () => {
     if (!shuffleFunction || shuffleCooldown > 0 || !gameStarted || isGameOver) return;
     
-    console.log('🔀 User triggered shuffle');
+    console.log('🔀 User manually triggered shuffle');
     shuffleFunction();
     setShuffleCount(prev => prev + 1);
     setShuffleCooldown(10); // 10 second cooldown
@@ -648,7 +648,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Game Header */}
+      {/* FIXED: Game Header - NO SHUFFLE BUTTON HERE */}
       <motion.div 
         className="flex justify-between items-center"
         initial={{ opacity: 0, y: -20 }}
@@ -664,38 +664,7 @@ const GamePage = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* NEW: Shuffle Button */}
-          {gameStarted && !isGameOver && (
-            <motion.button
-              onClick={handleShuffle}
-              disabled={shuffleCooldown > 0}
-              className={`p-3 rounded-xl shadow-lg border border-gray-700 transition-all duration-200 relative ${
-                shuffleNeeded && shuffleCooldown === 0
-                  ? 'bg-red-600 hover:bg-red-700 animate-pulse' 
-                  : shuffleCooldown > 0
-                  ? 'bg-gray-600 cursor-not-allowed opacity-50'
-                  : 'bg-nav hover:bg-gray-600'
-              }`}
-              whileTap={{ scale: 0.95 }}
-              title={shuffleNeeded ? 'No moves available! Click to shuffle' : 'Shuffle board'}
-            >
-              <Shuffle className={`w-6 h-6 ${
-                shuffleNeeded && shuffleCooldown === 0 ? 'text-white' : 'text-accent'
-              }`} />
-              {shuffleCooldown > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {shuffleCooldown}
-                </span>
-              )}
-              {shuffleCount > 0 && shuffleCooldown === 0 && (
-                <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {shuffleCount}
-                </span>
-              )}
-            </motion.button>
-          )}
-
-          {/* PHASE 3: Enhanced inventory button */}
+          {/* ONLY inventory button and timer - NO SHUFFLE BUTTON */}
           {gameStarted && !isGameOver && availableItems.length > 0 && (
             <motion.button
               onClick={() => setShowInventory(!showInventory)}
@@ -720,7 +689,7 @@ const GamePage = () => {
         </div>
       </motion.div>
 
-      {/* NEW: Shuffle Alert */}
+      {/* NEW: Shuffle Alert ABOVE the board */}
       <AnimatePresence>
         {shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0 && (
           <motion.div
@@ -732,7 +701,7 @@ const GamePage = () => {
           >
             <div className="flex items-center justify-center space-x-3 text-sm text-white">
               <Shuffle className="w-5 h-5" />
-              <span className="font-bold">No moves available! Tap the shuffle button</span>
+              <span className="font-bold">No moves available! Use shuffle button below</span>
               <Shuffle className="w-5 h-5" />
             </div>
           </motion.div>
@@ -915,6 +884,46 @@ const GamePage = () => {
         />
       </motion.div>
       
+      {/* FIXED: Shuffle Button BELOW the game board */}
+      {gameStarted && !isGameOver && (
+        <motion.div 
+          className="flex items-center justify-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+        >
+          <motion.button
+            onClick={handleShuffle}
+            disabled={shuffleCooldown > 0}
+            className={`flex items-center space-x-3 px-6 py-3 rounded-xl shadow-lg border transition-all duration-200 relative ${
+              shuffleNeeded && shuffleCooldown === 0
+                ? 'bg-red-600 hover:bg-red-700 border-red-500 animate-pulse text-white' 
+                : shuffleCooldown > 0
+                ? 'bg-gray-600 border-gray-500 cursor-not-allowed opacity-50 text-gray-300'
+                : 'bg-nav border-gray-700 hover:bg-gray-600 text-primary'
+            }`}
+            whileTap={shuffleCooldown === 0 ? { scale: 0.95 } : {}}
+            title={shuffleNeeded ? 'No moves available! Click to shuffle' : 'Shuffle board'}
+          >
+            <Shuffle className={`w-6 h-6 ${
+              shuffleNeeded && shuffleCooldown === 0 ? 'text-white' : 
+              shuffleCooldown > 0 ? 'text-gray-400' : 'text-accent'
+            }`} />
+            
+            <span className="font-bold">
+              {shuffleCooldown > 0 ? `Shuffle (${shuffleCooldown}s)` : 
+               shuffleNeeded ? 'Shuffle Now!' : 'Shuffle'}
+            </span>
+            
+            {shuffleCount > 0 && shuffleCooldown === 0 && (
+              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-1 ml-2">
+                {shuffleCount}
+              </span>
+            )}
+          </motion.button>
+        </motion.div>
+      )}
+      
       {/* Instructions - UPDATED TEXT */}
       {gameStarted && !isGameOver && (
         <motion.div 
@@ -930,7 +939,6 @@ const GamePage = () => {
             {availableItems.length > 0 && (
               <span className="text-accent">Tap 📦 for items</span>
             )}
-            <span className="text-blue-400">Tap 🔀 if stuck</span>
           </div>
         </motion.div>
       )}
