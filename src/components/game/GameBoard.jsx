@@ -1,4 +1,4 @@
-// src/components/game/GameBoard.jsx - EXACT FIX for infinite loop
+// src/components/game/GameBoard.jsx - REAL FIX based on actual code analysis
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -26,6 +26,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
   const processingRef = useRef(false);
   const boardRef = useRef(board);
   const gameStartedRef = useRef(gameStarted);
+  // 🚨 REAL FIX: Add flag to prevent multiple initial match processing
+  const initialMatchesProcessedRef = useRef(false);
 
   // AUDIO INTEGRATION
   const { playMatch, playSwap, playInvalidMove, playBomb, playScoreUpdate } = useAudio();
@@ -37,6 +39,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
 
   useEffect(() => {
     gameStartedRef.current = gameStarted;
+    // 🚨 REAL FIX: Reset flag when game starts/stops
+    if (!gameStarted) {
+      initialMatchesProcessedRef.current = false;
+    }
   }, [gameStarted]);
 
   // FIXED: Initialize game state properly without loops
@@ -69,6 +75,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
       setMatchedPieces(new Set());
       setIsProcessing(false);
       processingRef.current = false;
+      // 🚨 REAL FIX: Reset the flag for new game
+      initialMatchesProcessedRef.current = false;
     }
   }, [gameStarted, startWithBomb, playBomb]);
 
@@ -347,9 +355,25 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd }) => {
     setDraggedPiece(null);
   }, [isProcessing, gameStarted, draggedPiece, processMatches, playSwap, playInvalidMove]);
 
-  // 🚨 EXACT FIX: Removed the problematic useEffect that caused infinite loop
-  // The original useEffect with processMatches dependency has been DELETED
-  // This was causing the "emojis appearing from bottom non-stop" issue
+  // 🚨 REAL FIX: Process initial matches ONCE with proper flag
+  useEffect(() => {
+    if (gameStarted && !processingRef.current && !initialMatchesProcessedRef.current) {
+      const timeoutId = setTimeout(() => {
+        if (gameStartedRef.current && !processingRef.current && !initialMatchesProcessedRef.current) {
+          const matches = findMatches(boardRef.current);
+          if (matches.length > 0) {
+            console.log('🎯 Processing initial matches:', matches.length);
+            initialMatchesProcessedRef.current = true; // 🚨 PREVENT MULTIPLE RUNS
+            processMatches();
+          } else {
+            initialMatchesProcessedRef.current = true; // 🚨 MARK AS PROCESSED EVEN IF NO MATCHES
+          }
+        }
+      }, 500); // Increased delay for stability
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [gameStarted, processMatches]); // Keep processMatches for proper closure
 
   return (
     <div className="w-full flex justify-center">
