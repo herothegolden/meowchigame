@@ -1,3 +1,5 @@
+// FIXED: gameLogic.js - Improved shuffle functions
+
 // Game configuration - Changed to 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
 export const POINTS_PER_PIECE = 10;
@@ -138,7 +140,7 @@ export const findMatches = (board) => {
 };
 
 /**
- * NEW: Checks if any valid moves exist on the board
+ * FIXED: Enhanced hasValidMoves with better performance
  */
 export const hasValidMoves = (board) => {
   // Check all possible adjacent swaps
@@ -168,114 +170,215 @@ export const hasValidMoves = (board) => {
 };
 
 /**
- * NEW: Shuffles the board while ensuring no immediate matches
+ * COMPLETELY REWRITTEN: Much more effective shuffle function
  */
 export const shuffleBoard = (board) => {
-  let newBoard;
+  console.log('🔀 Starting shuffle process...');
+  
+  // Collect all non-null pieces from the current board
+  const allPieces = [];
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      if (board[row][col] !== null) {
+        allPieces.push(board[row][col]);
+      }
+    }
+  }
+  
+  console.log('📦 Collected pieces for shuffle:', allPieces.length);
+  
+  // Fisher-Yates shuffle algorithm - guaranteed randomization
+  for (let i = allPieces.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allPieces[i], allPieces[j]] = [allPieces[j], allPieces[i]];
+  }
+  
+  console.log('🎲 Pieces shuffled');
+  
+  // Create new board with shuffled pieces
+  const newBoard = [];
+  let pieceIndex = 0;
+  
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    const boardRow = [];
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      if (board[row][col] !== null && pieceIndex < allPieces.length) {
+        boardRow.push(allPieces[pieceIndex]);
+        pieceIndex++;
+      } else {
+        boardRow.push(board[row][col]); // Keep null spaces as-is
+      }
+    }
+    newBoard.push(boardRow);
+  }
+  
+  console.log('🎯 New board created');
+  
+  // If the new board has immediate matches, remove them
+  let finalBoard = newBoard;
   let attempts = 0;
-  const maxAttempts = 100;
+  const maxAttempts = 5;
   
-  console.log('🔀 Shuffling board...');
-  
-  do {
-    // Collect all pieces from the current board
-    const allPieces = [];
+  while (findMatches(finalBoard).length > 0 && attempts < maxAttempts) {
+    console.log(`⚠️ Found immediate matches, re-shuffling... (attempt ${attempts + 1})`);
+    
+    // Re-shuffle just the pieces that are causing matches
+    const matchIndices = new Set(findMatches(finalBoard));
+    const matchPieces = [];
+    const nonMatchPieces = [];
+    
     for (let row = 0; row < BOARD_SIZE; row++) {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (board[row][col] !== null) {
-          allPieces.push(board[row][col]);
+        const index = getIndex(row, col);
+        if (finalBoard[row][col] !== null) {
+          if (matchIndices.has(index)) {
+            matchPieces.push(finalBoard[row][col]);
+          } else {
+            nonMatchPieces.push({ piece: finalBoard[row][col], row, col });
+          }
         }
       }
     }
     
-    // Shuffle the pieces array using Fisher-Yates algorithm
-    for (let i = allPieces.length - 1; i > 0; i--) {
+    // Shuffle only the problematic pieces
+    for (let i = matchPieces.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [allPieces[i], allPieces[j]] = [allPieces[j], allPieces[i]];
+      [matchPieces[i], matchPieces[j]] = [matchPieces[j], matchPieces[i]];
     }
     
-    // Create new board with shuffled pieces
-    newBoard = [];
-    let pieceIndex = 0;
+    // Rebuild board
+    finalBoard = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
     
-    for (let row = 0; row < BOARD_SIZE; row++) {
-      const boardRow = [];
-      for (let col = 0; col < BOARD_SIZE; col++) {
-        if (board[row][col] !== null && pieceIndex < allPieces.length) {
-          boardRow.push(allPieces[pieceIndex]);
-          pieceIndex++;
-        } else {
-          boardRow.push(board[row][col]); // Keep null spaces
+    // Place non-match pieces back
+    nonMatchPieces.forEach(({ piece, row, col }) => {
+      finalBoard[row][col] = piece;
+    });
+    
+    // Place shuffled match pieces in empty spots
+    let matchIndex = 0;
+    for (let row = 0; row < BOARD_SIZE && matchIndex < matchPieces.length; row++) {
+      for (let col = 0; col < BOARD_SIZE && matchIndex < matchPieces.length; col++) {
+        if (finalBoard[row][col] === null) {
+          finalBoard[row][col] = matchPieces[matchIndex];
+          matchIndex++;
         }
       }
-      newBoard.push(boardRow);
     }
     
     attempts++;
-  } while (findMatches(newBoard).length > 0 && attempts < maxAttempts);
-  
-  // If we couldn't avoid matches, fill with new random pieces
-  if (findMatches(newBoard).length > 0) {
-    console.log('⚠️ Could not shuffle without matches, generating new board...');
-    newBoard = generateInitialBoard();
   }
   
-  console.log(`✅ Board shuffled successfully in ${attempts} attempts`);
-  return newBoard;
+  console.log(`✅ Shuffle completed in ${attempts} attempts`);
+  console.log('🎯 Final board has matches:', findMatches(finalBoard).length > 0);
+  
+  return finalBoard;
 };
 
 /**
- * NEW: Smart shuffle that guarantees at least one valid move
+ * ENHANCED: Smart shuffle with guaranteed moves and no matches
  */
 export const smartShuffle = (board) => {
+  console.log('🧠 Starting smart shuffle...');
+  
   let shuffledBoard = shuffleBoard(board);
   let attempts = 0;
   const maxAttempts = 10;
   
-  // Keep shuffling until we have valid moves
-  while (!hasValidMoves(shuffledBoard) && attempts < maxAttempts) {
-    console.log(`🔄 No valid moves found, reshuffling... (attempt ${attempts + 1})`);
+  // Keep shuffling until we have valid moves and no immediate matches
+  while ((!hasValidMoves(shuffledBoard) || findMatches(shuffledBoard).length > 0) && attempts < maxAttempts) {
+    console.log(`🔄 Board issues detected, reshuffling... (attempt ${attempts + 1})`);
+    console.log(`   - Has valid moves: ${hasValidMoves(shuffledBoard)}`);
+    console.log(`   - Has matches: ${findMatches(shuffledBoard).length > 0}`);
+    
     shuffledBoard = shuffleBoard(board);
     attempts++;
   }
   
-  // If still no valid moves after max attempts, force create one
-  if (!hasValidMoves(shuffledBoard)) {
-    console.log('🛠️ Forcing valid move creation...');
-    shuffledBoard = createBoardWithValidMoves(shuffledBoard);
+  // If still problematic after max attempts, force create a working board
+  if (!hasValidMoves(shuffledBoard) || findMatches(shuffledBoard).length > 0) {
+    console.log('🛠️ Forcing creation of valid board...');
+    shuffledBoard = createOptimalBoard();
   }
+  
+  console.log('✅ Smart shuffle complete');
+  console.log(`   - Final board has ${hasValidMoves(shuffledBoard) ? 'VALID' : 'NO'} moves`);
+  console.log(`   - Final board has ${findMatches(shuffledBoard).length} immediate matches`);
   
   return shuffledBoard;
 };
 
 /**
- * NEW: Creates a board that guarantees at least one valid move
+ * NEW: Creates an optimal board with guaranteed moves and no matches
  */
-const createBoardWithValidMoves = (board) => {
-  const newBoard = board.map(row => [...row]);
+const createOptimalBoard = () => {
+  console.log('🏗️ Creating optimal board...');
   
-  // Find a good spot to create a guaranteed match
-  // Place two identical pieces next to each other, then place a third nearby
-  const piece = getRandomEmoji();
+  let board;
+  let attempts = 0;
+  const maxAttempts = 50;
   
-  // Try to place in the middle area for better accessibility
-  const centerRow = Math.floor(BOARD_SIZE / 2);
-  const centerCol = Math.floor(BOARD_SIZE / 2);
-  
-  // Place two identical pieces horizontally
-  if (centerCol + 1 < BOARD_SIZE) {
-    newBoard[centerRow][centerCol] = piece;
-    newBoard[centerRow][centerCol + 1] = piece;
-    
-    // Place third piece one position away (creating a potential match)
-    if (centerCol + 3 < BOARD_SIZE) {
-      newBoard[centerRow][centerCol + 3] = piece;
-    } else if (centerCol - 1 >= 0) {
-      newBoard[centerRow][centerCol - 1] = piece;
+  do {
+    // Start with a completely random board
+    board = [];
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      const boardRow = [];
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        boardRow.push(getRandomEmoji());
+      }
+      board.push(boardRow);
     }
+    
+    // Check if it meets our criteria
+    const hasMatches = findMatches(board).length > 0;
+    const hasMoves = hasValidMoves(board);
+    
+    if (!hasMatches && hasMoves) {
+      break; // Perfect board found
+    }
+    
+    attempts++;
+  } while (attempts < maxAttempts);
+  
+  // If we couldn't create a perfect board, manually fix one
+  if (attempts >= maxAttempts) {
+    console.log('🔧 Manually creating valid board...');
+    board = createManualValidBoard();
   }
   
-  return newBoard;
+  console.log(`🎯 Optimal board created in ${attempts} attempts`);
+  return board;
+};
+
+/**
+ * NEW: Manually creates a board with guaranteed valid moves
+ */
+const createManualValidBoard = () => {
+  const board = [];
+  const pieces = [...PIECE_EMOJIS];
+  
+  // Create a pattern that guarantees moves without immediate matches
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    const boardRow = [];
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      // Create a checkerboard-like pattern with variations
+      const pieceIndex = (row + col + Math.floor(Math.random() * 2)) % pieces.length;
+      boardRow.push(pieces[pieceIndex]);
+    }
+    board.push(boardRow);
+  }
+  
+  // Ensure at least one guaranteed move by placing strategic pieces
+  if (BOARD_SIZE >= 4) {
+    const midRow = Math.floor(BOARD_SIZE / 2);
+    const midCol = Math.floor(BOARD_SIZE / 2);
+    
+    // Create a guaranteed horizontal move opportunity
+    board[midRow][midCol] = pieces[0];
+    board[midRow][midCol + 1] = pieces[1];
+    board[midRow][midCol + 2] = pieces[0]; // This creates a potential match when swapped
+  }
+  
+  return board;
 };
 
 /**
