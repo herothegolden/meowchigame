@@ -1,3 +1,4 @@
+// FIXED: GameBoard.jsx - Shuffle functionality
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -31,6 +32,71 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     boardRef.current = board;
   }, [board]);
 
+  // FIXED: Improved shuffle function with better state management
+  const performShuffle = useCallback(() => {
+    if (isProcessing || isShuffling || !gameStarted) {
+      console.log('🚫 Shuffle blocked:', { isProcessing, isShuffling, gameStarted });
+      return false; // Return false to indicate shuffle didn't happen
+    }
+    
+    console.log('🔀 MANUAL shuffle triggered by user');
+    console.log('Current board before shuffle:', boardRef.current);
+    
+    setIsShuffling(true);
+    
+    // Clear deadlock check to prevent interference
+    if (deadlockCheckRef.current) {
+      clearTimeout(deadlockCheckRef.current);
+    }
+    
+    // FIXED: Immediate shuffle without timeout for better UX
+    try {
+      const currentBoard = boardRef.current;
+      const shuffledBoard = smartShuffle(currentBoard);
+      
+      console.log('🎯 Shuffled board result:', shuffledBoard);
+      console.log('🔍 Board changed?', JSON.stringify(currentBoard) !== JSON.stringify(shuffledBoard));
+      
+      // FIXED: Force state update with new reference
+      setBoard([...shuffledBoard.map(row => [...row])]);
+      boardRef.current = shuffledBoard;
+      
+      // Clear any drag state
+      setDraggedPiece(null);
+      setMatchedPieces(new Set());
+      
+      // Reset deadlock status
+      onShuffleNeeded?.(false);
+      
+      // Haptic feedback for shuffle
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+      }
+      
+      console.log('✅ Manual shuffle complete - board updated');
+      
+      // End shuffling state after a brief visual indication
+      setTimeout(() => {
+        setIsShuffling(false);
+      }, 200);
+      
+      return true; // Return true to indicate successful shuffle
+      
+    } catch (error) {
+      console.error('🚨 Shuffle error:', error);
+      setIsShuffling(false);
+      return false;
+    }
+  }, [gameStarted, isProcessing, isShuffling, onShuffleNeeded]);
+
+  // FIXED: Provide shuffle function to parent with better error handling
+  useEffect(() => {
+    if (onBoardReady && typeof onBoardReady === 'function') {
+      console.log('🎮 Providing shuffle function to parent');
+      onBoardReady(performShuffle);
+    }
+  }, [performShuffle, onBoardReady]);
+
   // FIXED: Deadlock detection with proper debouncing and conditions
   useEffect(() => {
     // Clear any existing timeout
@@ -47,7 +113,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
           console.log(`🔍 Deadlock check: ${noMoves ? 'NO MOVES' : 'MOVES AVAILABLE'}`);
           onShuffleNeeded?.(noMoves);
         }
-      }, 1000); // Increased delay to ensure board is completely settled
+      }, 1000);
     }
 
     return () => {
@@ -55,50 +121,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
         clearTimeout(deadlockCheckRef.current);
       }
     };
-  }, [board, gameStarted, isProcessing, isShuffling]); // REMOVED onShuffleNeeded from dependencies
-
-  // FIXED: Manual shuffle function - ONLY called by user action
-  const performShuffle = useCallback(() => {
-    if (isProcessing || isShuffling || !gameStarted) {
-      console.log('🚫 Shuffle blocked:', { isProcessing, isShuffling, gameStarted });
-      return;
-    }
-    
-    console.log('🔀 MANUAL shuffle triggered by user');
-    setIsShuffling(true);
-    
-    // Clear deadlock check to prevent interference
-    if (deadlockCheckRef.current) {
-      clearTimeout(deadlockCheckRef.current);
-    }
-    
-    setTimeout(() => {
-      const shuffledBoard = smartShuffle(boardRef.current);
-      setBoard(shuffledBoard);
-      boardRef.current = shuffledBoard;
-      
-      // Clear any drag state
-      setDraggedPiece(null);
-      setMatchedPieces(new Set());
-      
-      setIsShuffling(false);
-      
-      // Reset deadlock status
-      onShuffleNeeded?.(false);
-      
-      // Haptic feedback for shuffle
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-      }
-      
-      console.log('✅ Manual shuffle complete');
-    }, 300);
-  }, []); // FIXED: No dependencies to prevent recreation
-
-  // Expose shuffle function to parent - ONLY ONCE
-  useEffect(() => {
-    onBoardReady?.(performShuffle);
-  }, []); // FIXED: Empty dependencies so it only runs once
+  }, [board, gameStarted, isProcessing, isShuffling]);
 
   // Reset board when game starts - with optional bomb
   useEffect(() => {
