@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "node meowchi-admin-bot-v2/src/app.js"
+startCommand = "node src/app.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
