@@ -1,224 +1,393 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, Instagram, Phone, Send } from "lucide-react";
+import { Instagram, Phone, Send, ChevronRight } from "lucide-react";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+/**
+ * Minimal, dependency-free IntersectionObserver hook.
+ * Mounts children only when scrolled into view → faster first paint.
+ */
+function useInView(options = { root: null, rootMargin: "0px", threshold: 0.1 }) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true);
+        io.disconnect(); // trigger once
+      }
+    }, options);
+    io.observe(el);
+    return () => io.disconnect();
+  }, [options]);
+
+  return { ref, inView };
+}
+
+/** Pastel palette (Tailwind classes) used consistently across cards */
+const theme = {
+  bgDeep: "bg-[#0E3A3A]", // deep teal background (premium)
+  cardShadow: "shadow-[0_12px_30px_rgba(0,0,0,0.2)]",
+  mint: "bg-[#D6F3E6]",
+  cream: "bg-[#F4EFE7]",
+  blush: "bg-[#FBE2E5]",
+  lavender: "bg-[#E8E6FF]",
+  coral: "bg-[#FFDAD2]",
+  mintText: "text-[#0E3A3A]",
+};
+
+const SectionTitle = ({ children }) => (
+  <h2 className="text-2xl font-semibold text-white/95 tracking-tight">{children}</h2>
+);
 
 const HomePage = () => {
   const [tg, setTg] = useState(null);
   const [galleryModal, setGalleryModal] = useState(null);
-  const [secretClicks, setSecretClicks] = useState([]);
+
+  // Easter egg state: track last taps of 3141142; unlock after 3 full sequences.
+  const [seq, setSeq] = useState("");
+  const [unlocks, setUnlocks] = useState(0);
 
   useEffect(() => {
-    const telegram = window.Telegram?.WebApp;
-    if (telegram) {
-      telegram.ready();
-      setTg(telegram);
+    const t = window.Telegram?.WebApp;
+    if (t) {
+      t.ready();
+      setTg(t);
     }
   }, []);
 
-  // Easter Egg logic
-  const handleSecretClick = (num) => {
-    const sequence = [...secretClicks, num].slice(-7); // keep last 7 taps
-    setSecretClicks(sequence);
-
-    if (sequence.join("") === "3141142") {
-      tg?.showPopup({
-        title: "🎁 Secret Unlocked",
-        message: "Discount code: MEOWCHI42",
-        buttons: [{ text: "OK", type: "ok" }],
-      });
-      setSecretClicks([]);
-    }
+  const handleSequenceTap = (digit) => {
+    setSeq((prev) => {
+      const next = (prev + digit).slice(-7); // keep last 7 digits
+      if (next === "3141142") {
+        const count = unlocks + 1;
+        setUnlocks(count);
+        if (count >= 3) {
+          setUnlocks(0);
+          setSeq("");
+          tg?.showPopup({
+            title: "🎁 Secret Unlocked",
+            message: "Discount code: MEOWCHI42",
+            buttons: [{ text: "OK", type: "ok" }],
+          });
+        }
+        return "";
+      }
+      return next;
+    });
   };
 
-  return (
-    <div className="w-full font-inter text-gray-800">
-      {/* Floating Marshmallow Cube */}
-      <motion.div
-        className="fixed w-12 h-12 bg-white rounded-lg shadow-lg cursor-pointer z-50"
-        animate={{ x: ["10%", "80%", "50%"], y: ["20%", "60%", "30%"] }}
-        transition={{ repeat: Infinity, duration: 15, ease: "easeInOut" }}
+  // Floating marshmallow cube CTA
+  const FloatingCube = useMemo(
+    () => (
+      <motion.button
+        aria-label="Order Now"
+        className="fixed z-40 bottom-16 right-5 w-12 h-12 rounded-2xl bg-white/95 text-[#0E3A3A] font-bold border border-white/70"
+        animate={{ y: [0, -8, 0] }}
+        transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
         onClick={() =>
           tg?.showPopup({
-            title: "Order Now",
-            message: "Tap below to order Meowchi Cookies!",
-            buttons: [
-              { text: "Open Bot", type: "url", url: "https://t.me/MeowchiOrders_Bot" },
-              { text: "Close", type: "cancel" },
-            ],
+            title: "Order Meowchi",
+            message: "Open our Telegram bot to place an order.",
+            buttons: [{ text: "Open Bot", type: "url", url: "https://t.me/MeowchiOrders_Bot" }],
           })
         }
-      />
+      >
+        ◻︎
+      </motion.button>
+    ),
+    [tg]
+  );
 
-      {/* Hero Section */}
-      <section className="relative h-screen flex flex-col items-center justify-center text-center text-white bg-gradient-to-r from-teal-300 via-pink-200 to-amber-100">
-        <motion.h1
-          className="text-6xl font-extrabold drop-shadow-lg"
-          initial={{ opacity: 0, y: -30 }}
+  return (
+    <div className={`min-h-screen ${theme.bgDeep} font-inter`}>
+      {/* ---------- HERO (card-on-dark) ---------- */}
+      <section className="px-4 pt-10 pb-6 max-w-md mx-auto">
+        <motion.div
+          className={`rounded-3xl ${theme.cream} ${theme.cardShadow} p-5 relative overflow-hidden`}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1 }}
+          transition={{ duration: 0.6 }}
         >
-          MEOWCHI | 쫀득쿠키
-        </motion.h1>
-        <p className="mt-6 text-xl max-w-xl text-black/80">
-          Вирусные маршмеллоу-куки из Ташкента. Premium, chewy, and mysterious.
+          {/* subtle background lines */}
+          <div className="pointer-events-none absolute inset-0 opacity-20">
+            <svg width="100%" height="100%">
+              <defs>
+                <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                  <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#0E3A3A" strokeWidth="0.5" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
+            </svg>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-white/90 flex items-center justify-center border border-black/5">
+              <img
+                src="/assets/meowchi-mascot.png"
+                alt="Meowchi"
+                className="w-10 h-10 object-contain"
+                onError={(e) => (e.currentTarget.style.opacity = "0")}
+              />
+            </div>
+            <div>
+              <p className="text-sm text-[#0E3A3A]/70">MEOWCHI | 쫀득쿠키</p>
+              <h1 className="text-xl font-semibold text-[#0E3A3A]">Viral Marshmallow Cookies</h1>
+            </div>
+          </div>
+
+          <p className="mt-5 text-[#0E3A3A]/80">
+            Мраморные маршмеллоу-куки из Ташкента. Premium texture. Slow, elegant, unforgettable.
+          </p>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              className="flex-1 bg-[#0E3A3A] text-white rounded-full py-3 font-semibold shadow-lg shadow-[#0E3A3A]/30"
+              onClick={() => tg?.openTelegramLink("https://t.me/MeowchiOrders_Bot")}
+            >
+              Заказать сейчас
+            </button>
+            <button className="flex-1 border border-[#0E3A3A]/30 text-[#0E3A3A] rounded-full py-3 font-semibold">
+              Стать амбассадором
+            </button>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ---------- ABOUT (large pastel card) ---------- */}
+      <LazyCard appearDelay={0.1} className={`${theme.mint} text-[#0E3A3A]`}>
+        <SectionTitle>О Meowchi</SectionTitle>
+        <p className="mt-2">
+          Мы готовим корейские <span className="font-semibold">쫀득-куки</span> с фирменной текстурой:
+          нежно-тягучие, с мраморным рисунком и чистой эстетикой. Местное производство, мировой вкус.
         </p>
-        <div className="flex gap-6 mt-10">
+      </LazyCard>
+
+      {/* ---------- MAGIC NUMBER (stacked floating cards) ---------- */}
+      <section className="px-4 max-w-md mx-auto space-y-4 mt-4">
+        <SectionTitle>Magic Number: 314 11 42</SectionTitle>
+
+        <MagicCard
+          className={`${theme.lavender}`}
+          number="3.14"
+          caption="White Day & Pi Day"
+          onTap={() => {
+            handleSequenceTap("314".replace(".", "")); // push 314
+            tg?.showPopup({
+              title: "3.14",
+              message:
+                "Desserts are like love... infinite and occasionally circular.",
+              buttons: [{ text: "OK", type: "ok" }],
+            });
+          }}
+        />
+
+        <MagicCard
+          className={`${theme.blush}`}
+          number="11"
+          caption="Twin Paws, Double Snacks"
+          onTap={() => {
+            handleSequenceTap("11");
+            tg?.showPopup({
+              title: "11",
+              message:
+                "Good things come in twos — like marshmallow cubes and wholesome moods.",
+              buttons: [{ text: "OK", type: "ok" }],
+            });
+          }}
+        />
+
+        <MagicCard
+          className={`${theme.coral}`}
+          number="42"
+          caption="The Answer to Life (and Dessert)"
+          onTap={() => {
+            handleSequenceTap("42");
+            tg?.showPopup({
+              title: "42",
+              message: "Life’s big answer? Start with dessert.",
+              buttons: [{ text: "OK", type: "ok" }],
+            });
+          }}
+        />
+
+        <p className="text-white/60 text-xs mt-1">
+          (Tap 3.14 → 11 → 42 three times to unlock a secret.)
+        </p>
+      </section>
+
+      {/* ---------- AMBASSADOR (three pastel cards) ---------- */}
+      <section className="px-4 max-w-md mx-auto mt-8">
+        <SectionTitle>Амбассадорская программа</SectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+          <FeatureCard bg={theme.blush} emoji="💸" title="Комиссия" text="15% с первой покупки" />
+          <FeatureCard bg={theme.mint} emoji="🎁" title="Стартовый набор" text="Free starter pack" />
+          <FeatureCard bg={theme.lavender} emoji="🔗" title="Referral" text="Уникальная ссылка" />
+        </div>
+        <button className="mt-4 w-full bg-white text-[#0E3A3A] rounded-full py-3 font-semibold">
+          Присоединиться
+        </button>
+      </section>
+
+      {/* ---------- PRODUCT CARDS (like sauces) ---------- */}
+      <section className="px-4 max-w-md mx-auto mt-8">
+        <SectionTitle>Галерея вкусов</SectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+          {[
+            { img: "/assets/card-strawberry.jpg", title: "Strawberry Oreo", bg: theme.cream },
+            { img: "/assets/card-matcha.jpg", title: "Matcha Fig", bg: theme.mint },
+            { img: "/assets/card-choco.jpg", title: "Choco Mango", bg: theme.coral },
+          ].map((p, i) => (
+            <motion.button
+              key={i}
+              whileTap={{ scale: 0.98 }}
+              className={`rounded-3xl overflow-hidden text-left ${p.bg} ${theme.cardShadow}`}
+              onClick={() => setGalleryModal(p)}
+            >
+              <div className="aspect-[16/11] w-full bg-white/60">
+                <img
+                  src={p.img}
+                  alt={p.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => (e.currentTarget.style.opacity = "0")}
+                />
+              </div>
+              <div className="p-4">
+                <p className="font-semibold text-[#0E3A3A]">{p.title}</p>
+                <p className="text-[#0E3A3A]/60 text-sm">쫀득 moment • premium texture</p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------- ORDER CARD (checkout-style) ---------- */}
+      <section className="px-4 max-w-md mx-auto my-8">
+        <motion.div
+          className={`rounded-3xl ${theme.cream} ${theme.cardShadow} p-5`}
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-[#0E3A3A]">Готов заказать?</h3>
+            <span className="text-xs text-[#0E3A3A]/60">Tashkent only</span>
+          </div>
+
+          <div className="mt-4 space-y-2 text-[#0E3A3A]">
+            <Row label="Delivery" value="🚚 Same day / next day" />
+            <Row label="Storage" value="❄️ 20 days (fridge)" />
+            <Row label="Phone" value="314 11 42" />
+          </div>
+
           <button
-            className="bg-white text-teal-500 font-bold py-3 px-8 rounded-full shadow-lg transition hover:shadow-teal-400/70 hover:scale-105"
+            className="mt-5 w-full bg-[#0E3A3A] text-white rounded-full py-3 font-semibold flex items-center justify-center gap-2 shadow-lg shadow-[#0E3A3A]/30"
             onClick={() => tg?.openTelegramLink("https://t.me/MeowchiOrders_Bot")}
           >
-            Заказать сейчас
+            Заказать через Telegram <ChevronRight size={18} />
           </button>
-          <button className="border-2 border-white text-white font-bold py-3 px-8 rounded-full shadow-lg transition hover:shadow-pink-400/70 hover:scale-105">
-            Стать амбассадором
-          </button>
-        </div>
-        <div className="absolute bottom-10 text-white animate-bounce">
-          <ChevronDown className="w-8 h-8 mx-auto" />
-          <p className="text-sm">Scroll for Magic Number ↓</p>
-        </div>
+        </motion.div>
       </section>
 
-      {/* About Section */}
-      <section className="min-h-screen bg-gradient-to-r from-amber-50 to-pink-50 flex flex-col md:flex-row items-center justify-center p-12 gap-12">
-        <img
-          src="/assets/meowchi-mascot.png"
-          alt="Meowchi Mascot"
-          className="rounded-lg shadow-xl w-60 md:w-80 hover:scale-105 transition-transform"
-        />
-        <div className="md:w-1/2 bg-white/70 rounded-xl shadow-lg p-8">
-          <h2 className="text-3xl font-bold text-gray-900">О Meowchi</h2>
-          <p className="mt-4">
-            Мы создаём корейские <span className="text-pink-500">쫀득쿠ки</span> прямо в Ташкенте.
-            Каждый батон — это мраморный рисунок, ручная работа и уникальный вкус.
-          </p>
-          <p className="mt-4">
-            쫀득 текстура, эстетика премиум-десерта и уютный мистический вайб — всё это Meowchi.
-          </p>
+      {/* ---------- FOOTER (dark) ---------- */}
+      <footer className="px-4 pt-6 pb-12 max-w-md mx-auto text-white/80">
+        <div className="flex items-center justify-center gap-6">
+          <a href="https://instagram.com/meowchi.lab" aria-label="Instagram">
+            <Instagram className="w-6 h-6 hover:scale-110 transition" />
+          </a>
+          <a href="https://t.me/MeowchiOrders_Bot" aria-label="Telegram">
+            <Send className="w-6 h-6 hover:scale-110 transition" />
+          </a>
+          <a href="tel:+998913141142" aria-label="Phone">
+            <Phone className="w-6 h-6 hover:scale-110 transition" />
+          </a>
         </div>
-      </section>
-
-      {/* Magic Numbers */}
-      <section>
-        {[
-          { num: "3.14", text: "White Day & Pi Day", quote: "Desserts are like love... infinite and occasionally circular." },
-          { num: "11", text: "Twin Paws, Double Snacks", quote: "Good things come in twos — like marshmallow cubes and wholesome moods." },
-          { num: "42", text: "The Answer to Life (and Dessert)", quote: "Life’s big answer? Start with dessert." },
-        ].map((item, i) => (
-          <motion.div
-            key={i}
-            className="h-screen flex flex-col items-center justify-center text-center bg-gradient-to-r from-purple-100 via-pink-100 to-teal-100 p-8"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
-            onClick={() => {
-              handleSecretClick(item.num);
-              tg?.showPopup({
-                title: item.num,
-                message: item.quote,
-                buttons: [{ text: "OK", type: "ok" }],
-              });
-            }}
-          >
-            <motion.h2
-              className="text-7xl font-extrabold text-gray-900 drop-shadow-lg cursor-pointer"
-              initial={{ scale: 0.8 }}
-              whileInView={{ scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              {item.num}
-            </motion.h2>
-            <p className="mt-6 text-xl text-gray-700">{item.text}</p>
-          </motion.div>
-        ))}
-      </section>
-
-      {/* Ambassador Program */}
-      <section className="min-h-screen bg-gradient-to-r from-pink-50 to-amber-50 p-12 text-center">
-        <h2 className="text-3xl font-bold mb-10">Амбассадорская программа</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          {[
-            { icon: "💸", title: "Комиссия", desc: "15% с первой покупки" },
-            { icon: "🎁", title: "Стартовый набор", desc: "Бесплатный набор для старта" },
-            { icon: "🔗", title: "Ссылка", desc: "Уникальная ссылка для друзей" },
-          ].map((card, i) => (
-            <motion.div
-              key={i}
-              whileHover={{ scale: 1.05 }}
-              className="bg-white/80 rounded-xl shadow-lg p-8 transition hover:shadow-pink-200"
-            >
-              <div className="text-4xl">{card.icon}</div>
-              <h3 className="text-xl font-bold mt-4">{card.title}</h3>
-              <p className="mt-2">{card.desc}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* Product Gallery */}
-      <section className="min-h-screen bg-gradient-to-r from-teal-50 to-pink-50 p-12">
-        <h2 className="text-3xl font-bold text-center mb-10">Галерея вкусов</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          {["strawberry.jpg", "matcha.jpg", "choco.jpg"].map((img, i) => (
-            <div
-              key={i}
-              className="relative rounded-xl overflow-hidden shadow-lg cursor-pointer transition hover:shadow-pink-200"
-              onClick={() => setGalleryModal(img)}
-            >
-              <img src={`/assets/${img}`} alt="Cookie" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition">
-                <p className="text-white text-lg">쫀득 moment 🍓</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Order CTA */}
-      <section className="bg-teal-400 text-center py-20 text-white">
-        <h2 className="text-3xl font-bold mb-6">Готов заказать?</h2>
-        <button
-          className="bg-white text-teal-500 font-bold py-4 px-10 rounded-full shadow-lg text-xl transition hover:scale-105 hover:shadow-teal-300"
-          onClick={() => tg?.openTelegramLink("https://t.me/MeowchiOrders_Bot")}
-        >
-          Заказать через Telegram →
-        </button>
-        <div className="flex justify-center gap-6 mt-6 text-lg">
-          <span>🚚 Доставка по Ташкенту</span>
-          <span>❄️ 20 дней в холодильнике</span>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-12 text-center space-y-4">
-        <div className="flex justify-center gap-8">
-          <a href="https://instagram.com/meowchi.lab"><Instagram className="w-6 h-6 hover:scale-110" /></a>
-          <a href="https://t.me/MeowchiOrders_Bot"><Send className="w-6 h-6 hover:scale-110" /></a>
-          <a href="tel:+998913141142"><Phone className="w-6 h-6 hover:scale-110" /></a>
-        </div>
-        <p className="text-lg font-semibold">314 11 42</p>
-        <p className="text-sm opacity-80">Meowchi — viral texture, local flavor, global vibe.</p>
+        <p className="text-center mt-3 text-sm">Meowchi — viral texture, local flavor, global vibe.</p>
       </footer>
 
-      {/* Gallery Modal */}
+      {/* Floating CTA cube */}
+      {FloatingCube}
+
+      {/* Modal for product cards */}
       {galleryModal && (
         <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
           onClick={() => setGalleryModal(null)}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl shadow-xl overflow-hidden max-w-lg"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl overflow-hidden max-w-md w-[92%]"
           >
-            <img src={`/assets/${galleryModal}`} alt="Cookie" className="w-full" />
+            <div className="aspect-[16/11] w-full bg-gray-100">
+              <img
+                src={galleryModal.img}
+                alt={galleryModal.title}
+                className="w-full h-full object-cover"
+                onError={(e) => (e.currentTarget.style.opacity = "0")}
+              />
+            </div>
+            <div className="p-5 text-[#0E3A3A]">
+              <h3 className="text-lg font-semibold">{galleryModal.title}</h3>
+              <p className="text-sm opacity-70 mt-1">
+                Premium chewy marble. Tap “Order via Telegram” on the homepage to buy.
+              </p>
+            </div>
           </motion.div>
         </div>
       )}
     </div>
   );
 };
+
+/* ---------- Reusable little components ---------- */
+
+const LazyCard = ({ children, className = "", appearDelay = 0 }) => {
+  const { ref, inView } = useInView();
+  return (
+    <div ref={ref} className="px-4 max-w-md mx-auto">
+      <motion.div
+        className={`rounded-3xl p-5 mt-2 ${className} ${theme.cardShadow}`}
+        initial={{ opacity: 0, y: 16 }}
+        animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+        transition={{ duration: 0.5, delay: appearDelay }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+};
+
+const MagicCard = ({ className = "", number, caption, onTap }) => (
+  <motion.button
+    whileTap={{ scale: 0.985 }}
+    onClick={onTap}
+    className={`w-full rounded-3xl p-5 text-left ${className} ${theme.cardShadow}`}
+  >
+    <p className="text-4xl font-bold text-[#0E3A3A]">{number}</p>
+    <p className="text-[#0E3A3A]/70 mt-1">{caption}</p>
+  </motion.button>
+);
+
+const FeatureCard = ({ bg, emoji, title, text }) => (
+  <motion.div
+    whileHover={{ y: -2 }}
+    className={`rounded-3xl p-5 ${bg} ${theme.cardShadow}`}
+  >
+    <div className="text-3xl">{emoji}</div>
+    <p className="mt-2 font-semibold text-[#0E3A3A]">{title}</p>
+    <p className="text-[#0E3A3A]/70 text-sm">{text}</p>
+  </motion.div>
+);
+
+const Row = ({ label, value }) => (
+  <div className="flex items-center justify-between text-sm">
+    <span className="text-[#0E3A3A]/70">{label}</span>
+    <span className="font-medium text-[#0E3A3A]">{value}</span>
+  </div>
+);
 
 export default HomePage;
