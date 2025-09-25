@@ -61,7 +61,8 @@ const setupDatabase = async () => {
       { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' }
+      { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'avatar_url', type: 'VARCHAR(500)' } // NEW: Avatar URL column
     ];
 
     for (const column of columnsToAdd) {
@@ -186,7 +187,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: Populate shop items with proper foreign key handling
-    console.log('🛍️ Setting up shop items...');
+    console.log('🛏️ Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -441,7 +442,7 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
       const [userResult, badgesResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time FROM users WHERE telegram_id = $1`, 
+           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
@@ -465,6 +466,93 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/user-stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// NEW: Update Profile (Name) endpoint
+app.post('/api/update-profile', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { firstName } = req.body;
+    
+    if (!firstName || firstName.trim().length === 0) {
+      return res.status(400).json({ error: 'First name is required' });
+    }
+    
+    if (firstName.trim().length > 50) {
+      return res.status(400).json({ error: 'First name too long (max 50 characters)' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'UPDATE users SET first_name = $1 WHERE telegram_id = $2 RETURNING first_name',
+        [firstName.trim(), user.id]
+      );
+      
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.status(200).json({ 
+        success: true, 
+        firstName: result.rows[0].first_name,
+        message: 'Profile updated successfully' 
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/update-profile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// NEW: Update Avatar endpoint
+app.post('/api/update-avatar', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { avatarUrl } = req.body;
+    
+    if (!avatarUrl || typeof avatarUrl !== 'string') {
+      return res.status(400).json({ error: 'Avatar URL is required' });
+    }
+    
+    // Basic URL validation
+    try {
+      new URL(avatarUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid avatar URL' });
+    }
+    
+    if (avatarUrl.length > 500) {
+      return res.status(400).json({ error: 'Avatar URL too long (max 500 characters)' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'UPDATE users SET avatar_url = $1 WHERE telegram_id = $2 RETURNING avatar_url',
+        [avatarUrl, user.id]
+      );
+      
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.status(200).json({ 
+        success: true, 
+        avatarUrl: result.rows[0].avatar_url,
+        message: 'Avatar updated successfully' 
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/update-avatar:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -905,6 +993,44 @@ app.post('/api/get-friends', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/get-friends:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// NEW: Remove Friend endpoint
+app.post('/api/remove-friend', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { friendUsername } = req.body;
+    
+    if (!friendUsername) {
+      return res.status(400).json({ error: 'Friend username is required' });
+    }
+
+    const cleanUsername = friendUsername.replace('@', '').toLowerCase().trim();
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'DELETE FROM user_friends WHERE user_id = $1 AND friend_username = $2 RETURNING friend_username',
+        [user.id, cleanUsername]
+      );
+      
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'Friend not found in your friends list' });
+      }
+      
+      res.status(200).json({ 
+        success: true, 
+        message: `Removed @${cleanUsername} from friends`,
+        removedUsername: cleanUsername
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/remove-friend:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
