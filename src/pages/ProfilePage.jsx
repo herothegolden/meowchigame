@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -140,6 +140,17 @@ const ProfilePage = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [friendsList, setFriendsList] = useState([]);
   
+  // NEW: Profile management state
+  const [badgeProgress, setBadgeProgress] = useState({});
+  const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
+  const [editAvatarValue, setEditAvatarValue] = useState('');
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [removingFriendId, setRemovingFriendId] = useState(null);
+  
   const tg = window.Telegram?.WebApp;
 
   // Mock data for demo mode
@@ -183,6 +194,218 @@ const ProfilePage = () => {
       case 'Epic': return 'text-blue-400 bg-blue-400/20';
       case 'Rare': return 'text-green-400 bg-green-400/20';
       default: return 'text-gray-400 bg-gray-400/20';
+    }
+  };
+
+  // NEW: Badge progress fetching
+  const fetchBadgeProgress = async () => {
+    setBadgeProgressLoading(true);
+    
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        // Demo mode - mock progress data
+        setBadgeProgress({
+          'Cookie Master Badge': 75,
+          'Speed Demon Badge': 45,
+          'Champion Badge': 20
+        });
+        setBadgeProgressLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/get-badge-progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setBadgeProgress(data.progress || {});
+      } else {
+        // Fallback to mock data
+        setBadgeProgress({
+          'Cookie Master Badge': 75,
+          'Speed Demon Badge': 45, 
+          'Champion Badge': 20
+        });
+      }
+    } catch (err) {
+      console.error('Badge progress fetch error:', err);
+      setBadgeProgress({
+        'Cookie Master Badge': 75,
+        'Speed Demon Badge': 45,
+        'Champion Badge': 20
+      });
+    } finally {
+      setBadgeProgressLoading(false);
+    }
+  };
+
+  // NEW: Profile name update handler
+  const handleUpdateProfile = async () => {
+    if (!editNameValue.trim() || editNameValue.trim() === profileData.stats.first_name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setIsUpdatingName(true);
+
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        const message = `Demo: Updated name to "${editNameValue}"\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
+        } else {
+          alert(message);
+        }
+        setIsEditingName(false);
+        setIsUpdatingName(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/update-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, firstName: editNameValue.trim() }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Update failed');
+
+      // Update local state
+      setProfileData(prev => ({
+        ...prev,
+        stats: { ...prev.stats, first_name: result.firstName }
+      }));
+
+      setIsEditingName(false);
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+    } catch (error) {
+      console.error('Profile update error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
+    } finally {
+      setIsUpdatingName(false);
+    }
+  };
+
+  // NEW: Avatar update handler  
+  const handleUpdateAvatar = async () => {
+    if (!editAvatarValue.trim()) {
+      setIsEditingAvatar(false);
+      return;
+    }
+
+    setIsUpdatingAvatar(true);
+
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        const message = `Demo: Updated avatar\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
+        } else {
+          alert(message);
+        }
+        setIsEditingAvatar(false);
+        setIsUpdatingAvatar(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, avatarUrl: editAvatarValue.trim() }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Avatar update failed');
+
+      // Update local state
+      setProfileData(prev => ({
+        ...prev,
+        stats: { ...prev.stats, avatar_url: result.avatarUrl }
+      }));
+
+      setIsEditingAvatar(false);
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+    } catch (error) {
+      console.error('Avatar update error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error', 
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+  // NEW: Friend removal handler
+  const handleRemoveFriend = async (friendUsername) => {
+    setRemovingFriendId(friendUsername);
+
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        const message = `Demo: Removed @${friendUsername} from friends\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Demo Action', message: message, buttons: [{ type: 'ok' }] });
+        } else {
+          alert(message);
+        }
+        setRemovingFriendId(null);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/remove-friend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, friendUsername }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Remove failed');
+
+      // Refresh friends leaderboard
+      fetchLeaderboard('friends');
+
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+    } catch (error) {
+      console.error('Remove friend error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
+    } finally {
+      setRemovingFriendId(null);
     }
   };
 
@@ -379,6 +602,13 @@ const ProfilePage = () => {
     }
   }, [activeTab]);
 
+  // NEW: Load badge progress when badges tab is accessed
+  useEffect(() => {
+    if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
+      fetchBadgeProgress();
+    }
+  }, [activeTab]);
+
   const handleActivateItem = async (itemId) => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
@@ -545,15 +775,69 @@ const ProfilePage = () => {
       case 'badges':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <div className="grid grid-cols-2 gap-3">
-              {allBadges.map(badgeName => (
-                <BadgeCard
-                  key={badgeName}
-                  badgeName={badgeName}
-                  isOwned={ownedBadges.includes(badgeName)}
-                />
-              ))}
-            </div>
+            {badgeProgressLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading progress...</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Badge Progress Summary */}
+                <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
+                  <h3 className="text-lg font-bold text-primary mb-2">Badge Progress</h3>
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div>
+                      <p className="text-secondary">Earned</p>
+                      <p className="text-accent font-bold">{ownedBadges.length}/3</p>
+                    </div>
+                    <div>
+                      <p className="text-secondary">Average Progress</p>
+                      <p className="text-accent font-bold">
+                        {Object.keys(badgeProgress).length > 0 
+                          ? Math.round(Object.values(badgeProgress).reduce((a, b) => a + b, 0) / Object.values(badgeProgress).length)
+                          : 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-secondary">Next Goal</p>
+                      <p className="text-accent font-bold">
+                        {ownedBadges.length < 3 ? `${3 - ownedBadges.length} badges` : 'Complete!'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Badge Cards with Progress */}
+                <div className="grid grid-cols-1 gap-3">
+                  {allBadges.map(badgeName => {
+                    const isOwned = ownedBadges.includes(badgeName);
+                    const progress = badgeProgress[badgeName] || 0;
+                    
+                    return (
+                      <div key={badgeName}>
+                        <BadgeCard badgeName={badgeName} isOwned={isOwned} />
+                        {!isOwned && progress > 0 && (
+                          <div className="mt-2 px-4">
+                            <div className="flex items-center justify-between text-xs text-secondary mb-1">
+                              <span>Progress</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <motion.div
+                                className="bg-accent h-2 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progress}%` }}
+                                transition={{ duration: 1, delay: 0.2 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </motion.div>
         );
       
@@ -690,12 +974,28 @@ const ProfilePage = () => {
                     </div>
 
                     {/* Score */}
-                    <div className="text-right">
+                    <div className="text-right mr-2">
                       <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
                         {entry.score.toLocaleString()}
                       </p>
                       <p className="text-xs text-secondary">pts</p>
                     </div>
+
+                    {/* NEW: Remove Friend Button (only in friends tab for non-current users) */}
+                    {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                      <button
+                        onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
+                        disabled={removingFriendId === entry.player.name.toLowerCase()}
+                        className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center"
+                        title="Remove friend"
+                      >
+                        {removingFriendId === entry.player.name.toLowerCase() ? (
+                          <LoaderCircle className="w-3 h-3 animate-spin" />
+                        ) : (
+                          '✕'
+                        )}
+                      </button>
+                    )}
                   </motion.div>
                 ))}
               </div>
@@ -773,20 +1073,83 @@ const ProfilePage = () => {
         {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
       </div>
 
-      {/* --- FIXED: Horizontal User Header Layout --- */}
+      {/* NEW: Updated Editable Profile Header */}
       <motion.div 
         className="flex items-center space-x-4 p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Profile Photo - LEFT */}
-        <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 flex-shrink-0">
-          <User className="w-8 h-8 text-secondary" />
+        {/* Profile Photo - NOW EDITABLE */}
+        <div className="relative flex-shrink-0">
+          <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
+            {stats.avatar_url ? (
+              <img 
+                src={stats.avatar_url} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <User className={`w-8 h-8 text-secondary ${stats.avatar_url ? 'hidden' : ''}`} />
+          </div>
+          <button
+            onClick={() => {
+              setEditAvatarValue(stats.avatar_url || '');
+              setIsEditingAvatar(true);
+            }}
+            className="absolute -bottom-1 -right-1 bg-accent text-background rounded-full w-6 h-6 flex items-center justify-center hover:scale-110 transition-transform"
+          >
+            ✏️
+          </button>
         </div>
         
-        {/* User Info - RIGHT */}
+        {/* User Info - NOW EDITABLE */}
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
+          {isEditingName ? (
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
+                maxLength={50}
+                autoFocus
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') handleUpdateProfile();
+                  if (e.key === 'Escape') setIsEditingName(false);
+                }}
+              />
+              <button
+                onClick={handleUpdateProfile}
+                disabled={isUpdatingName}
+                className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50"
+              >
+                {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : '✓'}
+              </button>
+              <button
+                onClick={() => setIsEditingName(false)}
+                className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2">
+              <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
+              <button
+                onClick={() => {
+                  setEditNameValue(stats.first_name || '');
+                  setIsEditingName(true);
+                }}
+                className="text-secondary hover:text-accent transition-colors"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
           <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
           <div className="flex items-center mt-1">
             <Star className="w-4 h-4 text-accent mr-1" />
@@ -795,7 +1158,52 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* --- FIXED: Compact Tab Navigation --- */}
+      {/* NEW: Avatar Edit Modal */}
+      <AnimatePresence>
+        {isEditingAvatar && (
+          <motion.div 
+            className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700">
+              <h2 className="text-xl font-bold text-primary mb-4">Update Profile Photo</h2>
+              <input
+                type="url"
+                value={editAvatarValue}
+                onChange={(e) => setEditAvatarValue(e.target.value)}
+                placeholder="Enter image URL..."
+                className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none mb-4"
+              />
+              <p className="text-xs text-secondary mb-4">
+                Enter a direct link to an image (jpg, png, gif). For best results, use a square image.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setIsEditingAvatar(false)}
+                  className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateAvatar}
+                  disabled={isUpdatingAvatar || !editAvatarValue.trim()}
+                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50"
+                >
+                  {isUpdatingAvatar ? (
+                    <LoaderCircle className="w-5 h-5 animate-spin" />
+                  ) : (
+                    'Update'
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Tab Navigation */}
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -826,7 +1234,7 @@ const ProfilePage = () => {
         })}
       </motion.div>
 
-      {/* --- Tab Content --- */}
+      {/* Tab Content */}
       <div className="min-h-[400px]">
         {renderTabContent()}
       </div>
