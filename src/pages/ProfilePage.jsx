@@ -1124,102 +1124,100 @@ const ProfilePage = () => {
         {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
       </div>
 
-      {/* Updated Editable Profile Header */}
+      {/* Updated Editable Profile Header with Integrated Avatar Button */}
       <motion.div 
-        className="flex items-center space-x-4 p-4 bg-nav rounded-lg border border-gray-700" 
+        className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Profile Photo - EDITABLE */}
-        <div className="relative flex-shrink-0">
-          <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
-            {stats.avatar_url ? (
-              <img 
-                src={stats.avatar_url} 
-                alt="Profile" 
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }}
-              />
-            ) : null}
-            <User className={`w-8 h-8 text-secondary ${stats.avatar_url ? 'hidden' : ''}`} />
+        {/* Profile Section */}
+        <div className="flex items-center space-x-4">
+          {/* Profile Photo - EDITABLE */}
+          <div className="relative flex-shrink-0">
+            <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
+              {stats.avatar_url ? (
+                <img 
+                  src={stats.avatar_url} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <User className={`w-8 h-8 text-secondary ${stats.avatar_url ? 'hidden' : ''}`} />
+            </div>
+            <button
+              onClick={() => setIsEditingAvatar(true)}
+              className="absolute -bottom-1 -right-1 bg-accent text-background rounded-full w-6 h-6 flex items-center justify-center hover:scale-110 transition-transform"
+            >
+              ✏️
+            </button>
           </div>
+          
+          {/* User Info - EDITABLE */}
+          <div className="flex-1 min-w-0">
+            {isEditingName ? (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
+                  maxLength={50}
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') handleUpdateProfile();
+                    if (e.key === 'Escape') setIsEditingName(false);
+                  }}
+                />
+                <button
+                  onClick={handleUpdateProfile}
+                  disabled={isUpdatingName}
+                  className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50"
+                >
+                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : '✓'}
+                </button>
+                <button
+                  onClick={() => setIsEditingName(false)}
+                  className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
+                <button
+                  onClick={() => {
+                    setEditNameValue(stats.first_name || '');
+                    setIsEditingName(true);
+                  }}
+                  className="text-secondary hover:text-accent transition-colors"
+                >
+                  ✏️
+                </button>
+              </div>
+            )}
+            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
+            <div className="flex items-center mt-1">
+              <Star className="w-4 h-4 text-accent mr-1" />
+              <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Change Avatar Button - Always Visible */}
+        <div className="mt-4 text-center border-t border-gray-700 pt-3">
           <button
             onClick={() => setIsEditingAvatar(true)}
-            className="absolute -bottom-1 -right-1 bg-accent text-background rounded-full w-6 h-6 flex items-center justify-center hover:scale-110 transition-transform"
+            className="bg-secondary/20 hover:bg-accent/20 border border-secondary/50 hover:border-accent text-secondary hover:text-accent px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 inline-flex items-center space-x-2"
           >
-            ✏️
+            <Upload className="w-4 h-4" />
+            <span>Change Avatar</span>
           </button>
         </div>
-        
-        {/* User Info - EDITABLE */}
-        <div className="flex-1 min-w-0">
-          {isEditingName ? (
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={editNameValue}
-                onChange={(e) => setEditNameValue(e.target.value)}
-                className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
-                maxLength={50}
-                autoFocus
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') handleUpdateProfile();
-                  if (e.key === 'Escape') setIsEditingName(false);
-                }}
-              />
-              <button
-                onClick={handleUpdateProfile}
-                disabled={isUpdatingName}
-                className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50"
-              >
-                {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : '✓'}
-              </button>
-              <button
-                onClick={() => setIsEditingName(false)}
-                className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
-              <button
-                onClick={() => {
-                  setEditNameValue(stats.first_name || '');
-                  setIsEditingName(true);
-                }}
-                className="text-secondary hover:text-accent transition-colors"
-              >
-                ✏️
-              </button>
-            </div>
-          )}
-          <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
-          <div className="flex items-center mt-1">
-            <Star className="w-4 h-4 text-accent mr-1" />
-            <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Change Avatar Button */}
-      <motion.div
-        className="text-center"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <button
-          onClick={() => setIsEditingAvatar(true)}
-          className="bg-secondary/20 hover:bg-accent/20 border border-secondary/50 hover:border-accent text-secondary hover:text-accent px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 mx-auto"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Change Avatar</span>
-        </button>
       </motion.div>
 
       {/* File Upload Only Avatar Edit Modal */}
