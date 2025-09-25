@@ -109,7 +109,7 @@ const setupDatabase = async () => {
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'VARCHAR(500)' } // NEW: Avatar URL column
+      { name: 'avatar_url', type: 'VARCHAR(500)' } // Avatar URL column
     ];
 
     for (const column of columnsToAdd) {
@@ -234,7 +234,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: Populate shop items with proper foreign key handling
-    console.log('🛏️ Setting up shop items...');
+    console.log('🛍️ Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -560,7 +560,7 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// UPDATED: Update Avatar endpoint - now handles both file uploads and URLs
+// NEW: Update Avatar endpoint - handles both file uploads and URLs
 app.post('/api/update-avatar', validateUser, (req, res) => {
   // Use multer to handle potential file upload
   uploadAvatar.single('avatar')(req, res, async (err) => {
