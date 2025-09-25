@@ -2,7 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { validate } from './utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { Pool } = pg;
 
@@ -21,6 +28,46 @@ if (!DATABASE_URL || !BOT_TOKEN) {
 // ---- DATABASE ----
 const pool = new Pool({
   connectionString: DATABASE_URL,
+});
+
+// ---- FILE UPLOAD SETUP ----
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads/avatars directory');
+}
+
+// Multer configuration for avatar uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename: userId_timestamp.extension
+    const userId = req.user?.id || 'unknown';
+    const timestamp = Date.now();
+    const extension = path.extname(file.originalname);
+    cb(null, `${userId}_${timestamp}${extension}`);
+  }
+});
+
+// File filter for images only
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed'), false);
+  }
+};
+
+// Multer middleware
+const uploadAvatar = multer({
+  storage: storage,
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB limit
+  },
+  fileFilter: fileFilter
 });
 
 // FIXED: COMPREHENSIVE DATABASE SETUP WITH PROPER FOREIGN KEY HANDLING
@@ -243,6 +290,9 @@ const setupDatabase = async () => {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ---- MIDDLEWARE ----
 const validateUser = (req, res, next) => {
@@ -510,51 +560,78 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Update Avatar endpoint
-app.post('/api/update-avatar', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { avatarUrl } = req.body;
-    
-    if (!avatarUrl || typeof avatarUrl !== 'string') {
-      return res.status(400).json({ error: 'Avatar URL is required' });
-    }
-    
-    // Basic URL validation
+// UPDATED: Update Avatar endpoint - now handles both file uploads and URLs
+app.post('/api/update-avatar', validateUser, (req, res) => {
+  // Use multer to handle potential file upload
+  uploadAvatar.single('avatar')(req, res, async (err) => {
     try {
-      new URL(avatarUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid avatar URL' });
-    }
-    
-    if (avatarUrl.length > 500) {
-      return res.status(400).json({ error: 'Avatar URL too long (max 500 characters)' });
-    }
+      const { user } = req;
+      let avatarUrl;
 
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        'UPDATE users SET avatar_url = $1 WHERE telegram_id = $2 RETURNING avatar_url',
-        [avatarUrl, user.id]
-      );
-      
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ error: 'File too large. Maximum size is 2MB.' });
+          }
+          return res.status(400).json({ error: 'File upload error: ' + err.message });
+        }
+        return res.status(400).json({ error: err.message });
       }
-      
-      res.status(200).json({ 
-        success: true, 
-        avatarUrl: result.rows[0].avatar_url,
-        message: 'Avatar updated successfully' 
-      });
 
-    } finally {
-      client.release();
+      // Check if file was uploaded
+      if (req.file) {
+        // File upload mode
+        console.log('📸 File uploaded:', req.file.filename);
+        avatarUrl = `/uploads/avatars/${req.file.filename}`;
+      } else {
+        // URL input mode (existing functionality)
+        const { avatarUrl: inputUrl } = req.body;
+        
+        if (!inputUrl || typeof inputUrl !== 'string') {
+          return res.status(400).json({ error: 'Avatar URL or file is required' });
+        }
+        
+        // Basic URL validation
+        try {
+          new URL(inputUrl);
+        } catch {
+          return res.status(400).json({ error: 'Invalid avatar URL' });
+        }
+        
+        if (inputUrl.length > 500) {
+          return res.status(400).json({ error: 'Avatar URL too long (max 500 characters)' });
+        }
+
+        avatarUrl = inputUrl;
+      }
+
+      const client = await pool.connect();
+      try {
+        const result = await client.query(
+          'UPDATE users SET avatar_url = $1 WHERE telegram_id = $2 RETURNING avatar_url',
+          [avatarUrl, user.id]
+        );
+        
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        
+        console.log(`✅ Avatar updated for user ${user.id}: ${avatarUrl}`);
+        
+        res.status(200).json({ 
+          success: true, 
+          avatarUrl: result.rows[0].avatar_url,
+          message: req.file ? 'Avatar uploaded successfully' : 'Avatar updated successfully'
+        });
+
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('🚨 Error in /api/update-avatar:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-  } catch (error) {
-    console.error('🚨 Error in /api/update-avatar:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+  });
 });
 
 app.post('/api/get-shop-data', validateUser, async (req, res) => {
