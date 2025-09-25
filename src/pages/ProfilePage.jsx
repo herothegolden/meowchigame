@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Upload, Link } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -140,7 +140,7 @@ const ProfilePage = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [friendsList, setFriendsList] = useState([]);
   
-  // NEW: Profile management state
+  // Profile management state
   const [badgeProgress, setBadgeProgress] = useState({});
   const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -202,7 +202,7 @@ const ProfilePage = () => {
     }
   };
 
-  // NEW: Badge progress fetching
+  // Badge progress fetching
   const fetchBadgeProgress = async () => {
     setBadgeProgressLoading(true);
     
@@ -247,7 +247,7 @@ const ProfilePage = () => {
     }
   };
 
-  // NEW: Profile name update handler
+  // Profile name update handler
   const handleUpdateProfile = async () => {
     if (!editNameValue.trim() || editNameValue.trim() === profileData.stats.first_name) {
       setIsEditingName(false);
@@ -435,7 +435,7 @@ const ProfilePage = () => {
     }
   };
 
-  // NEW: Friend removal handler
+  // Friend removal handler
   const handleRemoveFriend = async (friendUsername) => {
     setRemovingFriendId(friendUsername);
 
@@ -677,7 +677,7 @@ const ProfilePage = () => {
     }
   }, [activeTab]);
 
-  // NEW: Load badge progress when badges tab is accessed
+  // Load badge progress when badges tab is accessed
   useEffect(() => {
     if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
       fetchBadgeProgress();
@@ -1056,7 +1056,7 @@ const ProfilePage = () => {
                       <p className="text-xs text-secondary">pts</p>
                     </div>
 
-                    {/* NEW: Remove Friend Button (only in friends tab for non-current users) */}
+                    {/* Remove Friend Button (only in friends tab for non-current users) */}
                     {leaderboardTab === 'friends' && !entry.isCurrentUser && (
                       <button
                         onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
@@ -1148,13 +1148,13 @@ const ProfilePage = () => {
         {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
       </div>
 
-      {/* NEW: Updated Editable Profile Header */}
+      {/* Updated Editable Profile Header */}
       <motion.div 
         className="flex items-center space-x-4 p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Profile Photo - NOW EDITABLE */}
+        {/* Profile Photo - EDITABLE */}
         <div className="relative flex-shrink-0">
           <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
             {stats.avatar_url ? (
@@ -1181,7 +1181,7 @@ const ProfilePage = () => {
           </button>
         </div>
         
-        {/* User Info - NOW EDITABLE */}
+        {/* User Info - EDITABLE */}
         <div className="flex-1 min-w-0">
           {isEditingName ? (
             <div className="flex items-center space-x-2">
@@ -1233,7 +1233,7 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* NEW: Avatar Edit Modal */}
+      {/* NEW: Enhanced Avatar Edit Modal with File Upload */}
       <AnimatePresence>
         {isEditingAvatar && (
           <motion.div 
@@ -1244,26 +1244,104 @@ const ProfilePage = () => {
           >
             <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700">
               <h2 className="text-xl font-bold text-primary mb-4">Update Profile Photo</h2>
-              <input
-                type="url"
-                value={editAvatarValue}
-                onChange={(e) => setEditAvatarValue(e.target.value)}
-                placeholder="Enter image URL..."
-                className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none mb-4"
-              />
-              <p className="text-xs text-secondary mb-4">
-                Enter a direct link to an image (jpg, png, gif). For best results, use a square image.
-              </p>
-              <div className="flex space-x-3">
+              
+              {/* Upload Mode Toggle */}
+              <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
                 <button
-                  onClick={() => setIsEditingAvatar(false)}
+                  onClick={() => setUploadMode('url')}
+                  className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md transition-all duration-200 ${
+                    uploadMode === 'url' 
+                      ? 'bg-accent text-background' 
+                      : 'text-secondary hover:text-primary'
+                  }`}
+                >
+                  <Link className="w-4 h-4 mr-2" />
+                  URL
+                </button>
+                <button
+                  onClick={() => setUploadMode('file')}
+                  className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md transition-all duration-200 ${
+                    uploadMode === 'file' 
+                      ? 'bg-accent text-background' 
+                      : 'text-secondary hover:text-primary'
+                  }`}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </button>
+              </div>
+
+              {/* URL Input Mode */}
+              {uploadMode === 'url' && (
+                <div className="space-y-4">
+                  <input
+                    type="url"
+                    value={editAvatarValue}
+                    onChange={(e) => setEditAvatarValue(e.target.value)}
+                    placeholder="Enter image URL..."
+                    className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none"
+                  />
+                  <p className="text-xs text-secondary">
+                    Enter a direct link to an image (jpg, png, gif). For best results, use a square image.
+                  </p>
+                </div>
+              )}
+
+              {/* File Upload Mode */}
+              {uploadMode === 'file' && (
+                <div className="space-y-4">
+                  <input
+                    id="avatar-file-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="avatar-file-input"
+                    className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
+                  >
+                    <Upload className="w-8 h-8 text-secondary mb-2" />
+                    <p className="text-sm text-primary font-medium">Click to select image</p>
+                    <p className="text-xs text-secondary mt-1">JPG, PNG, GIF up to 2MB</p>
+                  </label>
+
+                  {/* File Preview */}
+                  {filePreview && (
+                    <div className="space-y-2">
+                      <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-accent">
+                        <img 
+                          src={filePreview} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <p className="text-xs text-accent">{selectedFile?.name}</p>
+                      <button
+                        onClick={clearFileSelection}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Remove file
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Action Buttons */}
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setIsEditingAvatar(false);
+                    clearFileSelection();
+                  }}
                   className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUpdateAvatar}
-                  disabled={isUpdatingAvatar || !editAvatarValue.trim()}
+                  disabled={isUpdatingAvatar || (uploadMode === 'url' && !editAvatarValue.trim()) || (uploadMode === 'file' && !selectedFile)}
                   className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50"
                 >
                   {isUpdatingAvatar ? (
