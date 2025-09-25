@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Upload } from 'lucide-react';
 
@@ -157,9 +156,6 @@ const ProfilePage = () => {
   
   const tg = window.Telegram?.WebApp;
 
-  // Mobile detection for Telegram WebApp
-  const isMobileTG = tg?.platform === 'android' || tg?.platform === 'ios';
-
   // Mock data for demo mode
   const MOCK_STATS = {
     first_name: 'Demo User',
@@ -308,11 +304,6 @@ const ProfilePage = () => {
     }
   };
 
-  // Mobile-compatible file input handler for visible input
-  const handleDirectFileSelect = (event) => {
-    handleAvatarFileSelect(event); // Reuse existing handler
-  };
-
   // File handling functions
   const handleAvatarFileSelect = (event) => {
     const file = event.target.files[0];
@@ -349,11 +340,9 @@ const ProfilePage = () => {
   const clearAvatarFileSelection = () => {
     setSelectedAvatarFile(null);
     setAvatarFilePreview(null);
-    // Clear all file inputs
-    const hiddenInput = document.getElementById('avatar-file-input');
-    const visibleInput = document.getElementById('avatar-visible-input');
-    if (hiddenInput) hiddenInput.value = '';
-    if (visibleInput) visibleInput.value = '';
+    // Clear file input
+    const fileInput = document.querySelector('input[type="file"][accept="image/*"]');
+    if (fileInput) fileInput.value = '';
   };
 
   // File-only avatar update handler
@@ -1232,113 +1221,65 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* Portal-Based Mobile-Proof Avatar Edit Modal */}
-      {isEditingAvatar && typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          <motion.div 
-            className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-[1000] p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
-          >
-            <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700 relative z-[1001]">
-              <h2 className="text-xl font-bold text-primary mb-4">Upload Profile Photo</h2>
-              
-              {/* File Upload Section */}
-              <div className="space-y-4 mb-6">
-                {/* Desktop Path: Hidden input + programmatic trigger */}
-                {!isMobileTG && (
-                  <>
-                    <input
-                      id="avatar-file-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarFileSelect}
-                      className="hidden"
-                    />
-                    <div className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg">
-                      <Upload className="w-8 h-8 text-secondary mb-3" />
-                      <p className="text-lg text-primary font-medium mb-3">Select image from device</p>
-                      <button
-                        onClick={() => document.getElementById('avatar-file-input').click()}
-                        className="bg-accent text-background px-6 py-3 rounded-lg font-bold hover:bg-accent/90 transition-colors"
-                      >
-                        Choose File
-                      </button>
-                      <p className="text-sm text-secondary mt-2">JPG, PNG, GIF up to 2MB</p>
-                    </div>
-                  </>
-                )}
+      {/* Simple Inline Avatar Upload UI */}
+      {isEditingAvatar && (
+        <motion.div
+          className="bg-nav rounded-lg p-4 border border-gray-700"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <h3 className="text-lg font-bold text-primary mb-3 text-center">Upload New Avatar</h3>
+          
+          {/* File Input - Always Visible on Mobile */}
+          <div className="space-y-3 mb-4">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarFileSelect}
+              className="w-full bg-accent text-background py-2 px-4 rounded-lg font-medium cursor-pointer file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-background file:text-accent file:font-medium hover:bg-accent/90 transition-colors"
+            />
+            <p className="text-xs text-secondary text-center">JPG, PNG, GIF up to 2MB</p>
+          </div>
 
-                {/* Mobile Path: Visible file input for direct tap */}
-                {isMobileTG && (
-                  <div className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg">
-                    <Upload className="w-8 h-8 text-secondary mb-3" />
-                    <p className="text-lg text-primary font-medium mb-3">Select image from device</p>
-                    <input
-                      id="avatar-visible-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleDirectFileSelect}
-                      className="bg-accent text-background px-6 py-3 rounded-lg font-bold hover:bg-accent/90 transition-colors cursor-pointer file:hidden"
-                      style={{
-                        WebkitAppearance: 'none',
-                        appearance: 'none'
-                      }}
-                    />
-                    <p className="text-sm text-secondary mt-2">JPG, PNG, GIF up to 2MB</p>
-                  </div>
-                )}
-
-                {/* File Preview */}
-                {avatarFilePreview && (
-                  <div className="space-y-3 mt-4">
-                    <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-accent">
-                      <img 
-                        src={avatarFilePreview} 
-                        alt="Preview" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <p className="text-sm text-accent font-medium">{selectedAvatarFile?.name}</p>
-                    <button
-                      onClick={clearAvatarFileSelection}
-                      className="text-sm text-red-400 hover:text-red-300 underline"
-                    >
-                      Remove selected file
-                    </button>
-                  </div>
-                )}
+          {/* File Preview */}
+          {avatarFilePreview && (
+            <div className="text-center space-y-2 mb-4">
+              <div className="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-accent">
+                <img 
+                  src={avatarFilePreview} 
+                  alt="Preview" 
+                  className="w-full h-full object-cover"
+                />
               </div>
-              
-              {/* Action Buttons */}
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setIsEditingAvatar(false);
-                    clearAvatarFileSelection();
-                  }}
-                  className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUpdateAvatar}
-                  disabled={isUpdatingAvatar || !selectedAvatarFile}
-                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isUpdatingAvatar ? (
-                    <LoaderCircle className="w-5 h-5 animate-spin" />
-                  ) : (
-                    'Upload'
-                  )}
-                </button>
-              </div>
+              <p className="text-xs text-accent font-medium">{selectedAvatarFile?.name}</p>
             </div>
-          </motion.div>
-        </AnimatePresence>,
-        document.body
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex space-x-2">
+            <button
+              onClick={() => {
+                setIsEditingAvatar(false);
+                clearAvatarFileSelection();
+              }}
+              className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpdateAvatar}
+              disabled={isUpdatingAvatar || !selectedAvatarFile}
+              className="flex-1 bg-accent text-background py-2 px-4 rounded-lg font-medium flex items-center justify-center hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUpdatingAvatar ? (
+                <LoaderCircle className="w-4 h-4 animate-spin" />
+              ) : (
+                'Save'
+              )}
+            </button>
+          </div>
+        </motion.div>
       )}
 
       {/* Tab Navigation */}
