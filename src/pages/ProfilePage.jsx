@@ -151,10 +151,9 @@ const ProfilePage = () => {
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
   
-  // NEW: File upload state
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
-  const [uploadMode, setUploadMode] = useState('url'); // 'url' or 'file'
+  // File upload state
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState(null);
+  const [avatarFilePreview, setAvatarFilePreview] = useState(null);
   
   const tg = window.Telegram?.WebApp;
 
@@ -306,8 +305,8 @@ const ProfilePage = () => {
     }
   };
 
-  // NEW: File handling functions
-  const handleFileSelect = (event) => {
+  // File handling functions
+  const handleAvatarFileSelect = (event) => {
     const file = event.target.files[0];
     if (file) {
       // Validate file type
@@ -330,34 +329,26 @@ const ProfilePage = () => {
         return;
       }
 
-      setSelectedFile(file);
+      setSelectedAvatarFile(file);
       
       // Create preview
       const reader = new FileReader();
-      reader.onload = (e) => setFilePreview(e.target.result);
+      reader.onload = (e) => setAvatarFilePreview(e.target.result);
       reader.readAsDataURL(file);
     }
   };
 
-  const clearFileSelection = () => {
-    setSelectedFile(null);
-    setFilePreview(null);
+  const clearAvatarFileSelection = () => {
+    setSelectedAvatarFile(null);
+    setAvatarFilePreview(null);
     const fileInput = document.getElementById('avatar-file-input');
     if (fileInput) fileInput.value = '';
   };
 
-  // UPDATED: Avatar update handler - now supports both file and URL
+  // UPDATED: Avatar update handler - supports both file and URL
   const handleUpdateAvatar = async () => {
-    if (uploadMode === 'file' && !selectedFile) {
-      if (tg && tg.showPopup) {
-        tg.showPopup({ title: 'Error', message: 'Please select a file to upload', buttons: [{ type: 'ok' }] });
-      } else {
-        alert('Please select a file to upload');
-      }
-      return;
-    }
-
-    if (uploadMode === 'url' && !editAvatarValue.trim()) {
+    // Check if we have a file selected or URL entered
+    if (!selectedAvatarFile && !editAvatarValue.trim()) {
       setIsEditingAvatar(false);
       return;
     }
@@ -367,8 +358,8 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = uploadMode === 'file' 
-          ? `Demo: Uploaded ${selectedFile?.name}\n\n⚠️ This is demo mode only.`
+        const message = selectedAvatarFile 
+          ? `Demo: Uploaded ${selectedAvatarFile.name}\n\n⚠️ This is demo mode only.`
           : `Demo: Updated avatar\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
@@ -376,17 +367,17 @@ const ProfilePage = () => {
           alert(message);
         }
         setIsEditingAvatar(false);
-        clearFileSelection();
+        clearAvatarFileSelection();
         setIsUpdatingAvatar(false);
         return;
       }
 
       let response;
       
-      if (uploadMode === 'file') {
-        // File upload mode
+      if (selectedAvatarFile) {
+        // File upload mode - send FormData
         const formData = new FormData();
-        formData.append('avatar', selectedFile);
+        formData.append('avatar', selectedAvatarFile);
         formData.append('initData', tg.initData);
 
         response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
@@ -394,7 +385,7 @@ const ProfilePage = () => {
           body: formData, // Don't set Content-Type header, let browser handle it
         });
       } else {
-        // URL mode (existing functionality)
+        // URL mode - send JSON (existing functionality)
         response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -405,14 +396,14 @@ const ProfilePage = () => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Avatar update failed');
 
-      // Update local state
+      // Update local state to show new avatar immediately
       setProfileData(prev => ({
         ...prev,
         stats: { ...prev.stats, avatar_url: result.avatarUrl }
       }));
 
       setIsEditingAvatar(false);
-      clearFileSelection();
+      clearAvatarFileSelection();
       setEditAvatarValue('');
       
       tg.HapticFeedback?.notificationOccurred('success');
@@ -1245,80 +1236,52 @@ const ProfilePage = () => {
             <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700">
               <h2 className="text-xl font-bold text-primary mb-4">Update Profile Photo</h2>
               
-              {/* Upload Mode Toggle */}
-              <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
-                <button
-                  onClick={() => setUploadMode('url')}
-                  className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md transition-all duration-200 ${
-                    uploadMode === 'url' 
-                      ? 'bg-accent text-background' 
-                      : 'text-secondary hover:text-primary'
-                  }`}
-                >
-                  <Link className="w-4 h-4 mr-2" />
-                  URL
-                </button>
-                <button
-                  onClick={() => setUploadMode('file')}
-                  className={`flex-1 flex items-center justify-center py-2 px-3 rounded-md transition-all duration-200 ${
-                    uploadMode === 'file' 
-                      ? 'bg-accent text-background' 
-                      : 'text-secondary hover:text-primary'
-                  }`}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload
-                </button>
+              {/* URL Input */}
+              <div className="space-y-4 mb-4">
+                <input
+                  type="url"
+                  value={editAvatarValue}
+                  onChange={(e) => setEditAvatarValue(e.target.value)}
+                  placeholder="Enter image URL..."
+                  className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none"
+                />
+                <p className="text-xs text-secondary">
+                  Enter a direct link to an image, or select a file below.
+                </p>
               </div>
 
-              {/* URL Input Mode */}
-              {uploadMode === 'url' && (
-                <div className="space-y-4">
-                  <input
-                    type="url"
-                    value={editAvatarValue}
-                    onChange={(e) => setEditAvatarValue(e.target.value)}
-                    placeholder="Enter image URL..."
-                    className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none"
-                  />
-                  <p className="text-xs text-secondary">
-                    Enter a direct link to an image (jpg, png, gif). For best results, use a square image.
-                  </p>
-                </div>
-              )}
-
-              {/* File Upload Mode */}
-              {uploadMode === 'file' && (
-                <div className="space-y-4">
+              {/* File Upload Section */}
+              <div className="space-y-4 mb-4">
+                <div className="border-t border-gray-600 pt-4">
                   <input
                     id="avatar-file-input"
                     type="file"
                     accept="image/*"
-                    onChange={handleFileSelect}
+                    onChange={handleAvatarFileSelect}
                     className="hidden"
                   />
                   <label
                     htmlFor="avatar-file-input"
-                    className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
+                    className="w-full flex flex-col items-center justify-center py-6 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
                   >
-                    <Upload className="w-8 h-8 text-secondary mb-2" />
+                    <Upload className="w-6 h-6 text-secondary mb-2" />
                     <p className="text-sm text-primary font-medium">Click to select image</p>
                     <p className="text-xs text-secondary mt-1">JPG, PNG, GIF up to 2MB</p>
                   </label>
 
                   {/* File Preview */}
-                  {filePreview && (
-                    <div className="space-y-2">
-                      <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-accent">
+                  {avatarFilePreview && (
+                    <div className="space-y-2 mt-3">
+                      <div className="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-accent">
                         <img 
-                          src={filePreview} 
+                          src={avatarFilePreview} 
                           alt="Preview" 
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <p className="text-xs text-accent">{selectedFile?.name}</p>
+                      <p className="text-xs text-accent">{selectedAvatarFile?.name}</p>
                       <button
-                        onClick={clearFileSelection}
+                        onClick={clearAvatarFileSelection}
                         className="text-xs text-red-400 hover:text-red-300"
                       >
                         Remove file
@@ -1326,14 +1289,14 @@ const ProfilePage = () => {
                     </div>
                   )}
                 </div>
-              )}
+              </div>
               
               {/* Action Buttons */}
-              <div className="flex space-x-3 mt-6">
+              <div className="flex space-x-3">
                 <button
                   onClick={() => {
                     setIsEditingAvatar(false);
-                    clearFileSelection();
+                    clearAvatarFileSelection();
                   }}
                   className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
                 >
@@ -1341,7 +1304,7 @@ const ProfilePage = () => {
                 </button>
                 <button
                   onClick={handleUpdateAvatar}
-                  disabled={isUpdatingAvatar || (uploadMode === 'url' && !editAvatarValue.trim()) || (uploadMode === 'file' && !selectedFile)}
+                  disabled={isUpdatingAvatar || (!editAvatarValue.trim() && !selectedAvatarFile)}
                   className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50"
                 >
                   {isUpdatingAvatar ? (
