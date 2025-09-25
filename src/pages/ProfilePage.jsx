@@ -151,6 +151,11 @@ const ProfilePage = () => {
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
   
+  // NEW: File upload state
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [uploadMode, setUploadMode] = useState('url'); // 'url' or 'file'
+  
   const tg = window.Telegram?.WebApp;
 
   // Mock data for demo mode
@@ -301,9 +306,58 @@ const ProfilePage = () => {
     }
   };
 
-  // NEW: Avatar update handler  
+  // NEW: File handling functions
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Error', message: 'Please select an image file', buttons: [{ type: 'ok' }] });
+        } else {
+          alert('Please select an image file');
+        }
+        return;
+      }
+
+      // Validate file size (2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Error', message: 'File size must be less than 2MB', buttons: [{ type: 'ok' }] });
+        } else {
+          alert('File size must be less than 2MB');
+        }
+        return;
+      }
+
+      setSelectedFile(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => setFilePreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const clearFileSelection = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    const fileInput = document.getElementById('avatar-file-input');
+    if (fileInput) fileInput.value = '';
+  };
+
+  // UPDATED: Avatar update handler - now supports both file and URL
   const handleUpdateAvatar = async () => {
-    if (!editAvatarValue.trim()) {
+    if (uploadMode === 'file' && !selectedFile) {
+      if (tg && tg.showPopup) {
+        tg.showPopup({ title: 'Error', message: 'Please select a file to upload', buttons: [{ type: 'ok' }] });
+      } else {
+        alert('Please select a file to upload');
+      }
+      return;
+    }
+
+    if (uploadMode === 'url' && !editAvatarValue.trim()) {
       setIsEditingAvatar(false);
       return;
     }
@@ -313,25 +367,43 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = `Demo: Updated avatar\n\n⚠️ This is demo mode only.`;
+        const message = uploadMode === 'file' 
+          ? `Demo: Uploaded ${selectedFile?.name}\n\n⚠️ This is demo mode only.`
+          : `Demo: Updated avatar\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
         } else {
           alert(message);
         }
         setIsEditingAvatar(false);
+        clearFileSelection();
         setIsUpdatingAvatar(false);
         return;
       }
 
-      const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, avatarUrl: editAvatarValue.trim() }),
-      });
+      let response;
+      
+      if (uploadMode === 'file') {
+        // File upload mode
+        const formData = new FormData();
+        formData.append('avatar', selectedFile);
+        formData.append('initData', tg.initData);
 
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Avatar update failed');
+        response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+          method: 'POST',
+          body: formData, // Don't set Content-Type header, let browser handle it
+        });
+      } else {
+        // URL mode (existing functionality)
+        response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData, avatarUrl: editAvatarValue.trim() }),
+        });
+      }
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Avatar update failed');
 
       // Update local state
       setProfileData(prev => ({
@@ -340,6 +412,9 @@ const ProfilePage = () => {
       }));
 
       setIsEditingAvatar(false);
+      clearFileSelection();
+      setEditAvatarValue('');
+      
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
         title: 'Success!',
