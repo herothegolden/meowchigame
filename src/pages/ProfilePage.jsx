@@ -1220,11 +1220,11 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* File Upload Only Avatar Edit Modal */}
+      {/* File Upload Only Avatar Edit Modal - Mobile Compatible */}
       <AnimatePresence>
         {isEditingAvatar && (
           <motion.div 
-            className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
@@ -1241,14 +1241,19 @@ const ProfilePage = () => {
                   onChange={handleAvatarFileSelect}
                   className="hidden"
                 />
-                <label
-                  htmlFor="avatar-file-input"
-                  className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
-                >
+                
+                {/* Direct Choose File Button - Mobile Compatible */}
+                <div className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg">
                   <Upload className="w-8 h-8 text-secondary mb-3" />
-                  <p className="text-lg text-primary font-medium mb-1">Click to select image</p>
-                  <p className="text-sm text-secondary">JPG, PNG, GIF up to 2MB</p>
-                </label>
+                  <p className="text-lg text-primary font-medium mb-3">Select image from device</p>
+                  <button
+                    onClick={() => document.getElementById('avatar-file-input').click()}
+                    className="bg-accent text-background px-6 py-3 rounded-lg font-bold hover:bg-accent/90 transition-colors"
+                  >
+                    Choose File
+                  </button>
+                  <p className="text-sm text-secondary mt-2">JPG, PNG, GIF up to 2MB</p>
+                </div>
 
                 {/* File Preview */}
                 {avatarFilePreview && (
