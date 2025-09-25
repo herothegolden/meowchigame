@@ -1206,6 +1206,22 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
+      {/* Change Avatar Button */}
+      <motion.div
+        className="text-center"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <button
+          onClick={() => setIsEditingAvatar(true)}
+          className="bg-secondary/20 hover:bg-accent/20 border border-secondary/50 hover:border-accent text-secondary hover:text-accent px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 mx-auto"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Change Avatar</span>
+        </button>
+      </motion.div>
+
       {/* File Upload Only Avatar Edit Modal */}
       <AnimatePresence>
         {isEditingAvatar && (
