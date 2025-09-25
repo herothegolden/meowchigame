@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Upload, Link } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Upload } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -147,7 +147,6 @@ const ProfilePage = () => {
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
   const [isEditingAvatar, setIsEditingAvatar] = useState(false);
-  const [editAvatarValue, setEditAvatarValue] = useState('');
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
   
@@ -345,10 +344,10 @@ const ProfilePage = () => {
     if (fileInput) fileInput.value = '';
   };
 
-  // UPDATED: Avatar update handler - supports both file and URL
+  // File-only avatar update handler
   const handleUpdateAvatar = async () => {
-    // Check if we have a file selected or URL entered
-    if (!selectedAvatarFile && !editAvatarValue.trim()) {
+    // Check if we have a file selected
+    if (!selectedAvatarFile) {
       setIsEditingAvatar(false);
       return;
     }
@@ -358,9 +357,7 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = selectedAvatarFile 
-          ? `Demo: Uploaded ${selectedAvatarFile.name}\n\n⚠️ This is demo mode only.`
-          : `Demo: Updated avatar\n\n⚠️ This is demo mode only.`;
+        const message = `Demo: Uploaded ${selectedAvatarFile.name}\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
         } else {
@@ -372,26 +369,15 @@ const ProfilePage = () => {
         return;
       }
 
-      let response;
-      
-      if (selectedAvatarFile) {
-        // File upload mode - send FormData
-        const formData = new FormData();
-        formData.append('avatar', selectedAvatarFile);
-        formData.append('initData', tg.initData);
+      // File upload mode - send FormData
+      const formData = new FormData();
+      formData.append('avatar', selectedAvatarFile);
+      formData.append('initData', tg.initData);
 
-        response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
-          method: 'POST',
-          body: formData, // Don't set Content-Type header, let browser handle it
-        });
-      } else {
-        // URL mode - send JSON (existing functionality)
-        response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData, avatarUrl: editAvatarValue.trim() }),
-        });
-      }
+      const response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+        method: 'POST',
+        body: formData, // Don't set Content-Type header, let browser handle it
+      });
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Avatar update failed');
@@ -404,7 +390,6 @@ const ProfilePage = () => {
 
       setIsEditingAvatar(false);
       clearAvatarFileSelection();
-      setEditAvatarValue('');
       
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
@@ -1162,10 +1147,7 @@ const ProfilePage = () => {
             <User className={`w-8 h-8 text-secondary ${stats.avatar_url ? 'hidden' : ''}`} />
           </div>
           <button
-            onClick={() => {
-              setEditAvatarValue(stats.avatar_url || '');
-              setIsEditingAvatar(true);
-            }}
+            onClick={() => setIsEditingAvatar(true)}
             className="absolute -bottom-1 -right-1 bg-accent text-background rounded-full w-6 h-6 flex items-center justify-center hover:scale-110 transition-transform"
           >
             ✏️
@@ -1224,7 +1206,7 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* NEW: Enhanced Avatar Edit Modal with File Upload */}
+      {/* File Upload Only Avatar Edit Modal */}
       <AnimatePresence>
         {isEditingAvatar && (
           <motion.div 
@@ -1234,61 +1216,45 @@ const ProfilePage = () => {
             transition={{ duration: 0.3 }}
           >
             <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700">
-              <h2 className="text-xl font-bold text-primary mb-4">Update Profile Photo</h2>
+              <h2 className="text-xl font-bold text-primary mb-4">Upload Profile Photo</h2>
               
-              {/* URL Input */}
-              <div className="space-y-4 mb-4">
-                <input
-                  type="url"
-                  value={editAvatarValue}
-                  onChange={(e) => setEditAvatarValue(e.target.value)}
-                  placeholder="Enter image URL..."
-                  className="w-full bg-background border border-gray-500 rounded-lg px-3 py-2 text-primary placeholder-secondary focus:border-accent focus:outline-none"
-                />
-                <p className="text-xs text-secondary">
-                  Enter a direct link to an image, or select a file below.
-                </p>
-              </div>
-
               {/* File Upload Section */}
-              <div className="space-y-4 mb-4">
-                <div className="border-t border-gray-600 pt-4">
-                  <input
-                    id="avatar-file-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarFileSelect}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="avatar-file-input"
-                    className="w-full flex flex-col items-center justify-center py-6 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
-                  >
-                    <Upload className="w-6 h-6 text-secondary mb-2" />
-                    <p className="text-sm text-primary font-medium">Click to select image</p>
-                    <p className="text-xs text-secondary mt-1">JPG, PNG, GIF up to 2MB</p>
-                  </label>
+              <div className="space-y-4 mb-6">
+                <input
+                  id="avatar-file-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="avatar-file-input"
+                  className="w-full flex flex-col items-center justify-center py-8 px-4 border-2 border-dashed border-gray-500 rounded-lg cursor-pointer hover:border-accent transition-colors"
+                >
+                  <Upload className="w-8 h-8 text-secondary mb-3" />
+                  <p className="text-lg text-primary font-medium mb-1">Click to select image</p>
+                  <p className="text-sm text-secondary">JPG, PNG, GIF up to 2MB</p>
+                </label>
 
-                  {/* File Preview */}
-                  {avatarFilePreview && (
-                    <div className="space-y-2 mt-3">
-                      <div className="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-accent">
-                        <img 
-                          src={avatarFilePreview} 
-                          alt="Preview" 
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <p className="text-xs text-accent">{selectedAvatarFile?.name}</p>
-                      <button
-                        onClick={clearAvatarFileSelection}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
-                        Remove file
-                      </button>
+                {/* File Preview */}
+                {avatarFilePreview && (
+                  <div className="space-y-3 mt-4">
+                    <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-accent">
+                      <img 
+                        src={avatarFilePreview} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                  )}
-                </div>
+                    <p className="text-sm text-accent font-medium">{selectedAvatarFile?.name}</p>
+                    <button
+                      onClick={clearAvatarFileSelection}
+                      className="text-sm text-red-400 hover:text-red-300 underline"
+                    >
+                      Remove selected file
+                    </button>
+                  </div>
+                )}
               </div>
               
               {/* Action Buttons */}
@@ -1304,13 +1270,13 @@ const ProfilePage = () => {
                 </button>
                 <button
                   onClick={handleUpdateAvatar}
-                  disabled={isUpdatingAvatar || (!editAvatarValue.trim() && !selectedAvatarFile)}
-                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50"
+                  disabled={isUpdatingAvatar || !selectedAvatarFile}
+                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUpdatingAvatar ? (
                     <LoaderCircle className="w-5 h-5 animate-spin" />
                   ) : (
-                    'Update'
+                    'Upload'
                   )}
                 </button>
               </div>
