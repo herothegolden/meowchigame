@@ -1,4 +1,4 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -19,6 +19,7 @@ import {
   SPECIAL_ITEMS,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
+import { motion } from 'framer-motion';
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
@@ -50,6 +51,75 @@ const getPieceUrl = (piece) => {
 // Helper function to check if piece is a special item
 const isSpecialItem = (piece) => {
   return Object.values(SPECIAL_ITEMS).includes(piece);
+};
+
+// Glow style generator for special items
+const getGlowStyle = (specialType) => {
+  switch (specialType) {
+    case SPECIAL_ITEMS.CAT:
+      return "radial-gradient(circle, rgba(200,220,255,0.7), transparent 70%)";
+    case SPECIAL_ITEMS.HONEY:
+      return "radial-gradient(circle, rgba(255,220,150,0.7), transparent 70%)";
+    case SPECIAL_ITEMS.COLOR_BOMB:
+      return "conic-gradient(from 0deg, red, orange, yellow, green, blue, violet, red)";
+    case SPECIAL_ITEMS.SHOP_BOMB:
+      return "radial-gradient(circle, rgba(255,180,255,0.7), transparent 70%)";
+    default:
+      return null;
+  }
+};
+
+// Special Item Animation Wrapper - only wraps special items
+const SpecialItemWrapper = ({ children, piece, disabled }) => {
+  // Only animate if this is a special item and not disabled
+  if (!isSpecialItem(piece) || disabled) {
+    return children;
+  }
+
+  const glowStyle = getGlowStyle(piece);
+  
+  return (
+    <div className="relative w-full h-full">
+      {/* Glow Aura Background */}
+      {glowStyle && (
+        <motion.div
+          className="absolute inset-0 rounded-lg"
+          style={{
+            background: glowStyle,
+            filter: 'blur(8px)',
+            zIndex: 1,
+          }}
+          animate={{
+            opacity: [0.4, 0.8, 0.4],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+      )}
+      
+      {/* Animated Item Container */}
+      <motion.div
+        className="relative w-full h-full"
+        style={{ zIndex: 10 }}
+        animate={{
+          rotate: [0, 360],
+          y: [0, -10, 0],
+          scale: [1, 1.15, 1],
+        }}
+        transition={{
+          duration: 2.5,
+          repeat: Infinity,
+          ease: "easeInOut",
+          repeatDelay: 1
+        }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
 };
 
 // Helper function to get adjacent pieces for Color Bomb target selection
@@ -544,7 +614,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
         
         // ENHANCED: Handle TRANSFORM_AND_ACTIVATE for Honey + Color Bomb combo
         if (comboResult.type === 'TRANSFORM_AND_ACTIVATE') {
-          console.log('🔄 Transform and activate combo - Honey + Color Bomb');
+          console.log('🔥 Transform and activate combo - Honey + Color Bomb');
           
           // Transform all target pieces into Cat items
           const newBoard = boardRef.current.map(row => [...row]);
@@ -733,16 +803,21 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
               }}
             >
               {piece && (
-                <GamePiece
-                  emoji={getPieceUrl(piece)}
-                  index={index}
-                  isSelected={isSelected}
-                  isMatched={isMatched}
-                  hasBomb={hasBomb}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  disabled={isShuffling}
-                />
+                <SpecialItemWrapper
+                  piece={piece}
+                  disabled={isShuffling || isMatched}
+                >
+                  <GamePiece
+                    emoji={getPieceUrl(piece)}
+                    index={index}
+                    isSelected={isSelected}
+                    isMatched={isMatched}
+                    hasBomb={hasBomb}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    disabled={isShuffling}
+                  />
+                </SpecialItemWrapper>
               )}
             </div>
           );
