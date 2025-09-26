@@ -300,6 +300,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     boardRef.current = finalBoard;
     setMatchedPieces(new Set());
     
+    // FIXED: Reset processing flags before calling processMatches
+    setIsProcessing(false);
+    processingRef.current = false;
+    
     // Process any new matches
     setTimeout(() => {
       processMatches();
