@@ -234,7 +234,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: Populate shop items with proper foreign key handling
-    console.log('🛍️ Setting up shop items...');
+    console.log('🛒 Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -410,6 +410,9 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'Score is required' });
     }
 
+    // FIXED: Convert score to integer to avoid PostgreSQL type errors
+    const baseScore = Math.floor(Number(score) || 0);
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -422,10 +425,12 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) throw new Error('User not found');
 
       const { points, point_booster_active, high_score, games_played } = userResult.rows[0];
-      const finalScore = point_booster_active ? score * 2 : score;
+      const finalScore = point_booster_active ? baseScore * 2 : baseScore;
       const newPoints = points + finalScore;
       const newHighScore = Math.max(high_score || 0, finalScore);
       const newGamesPlayed = (games_played || 0) + 1;
+
+      console.log("Saving score:", finalScore);
 
       // Create game session record
       const sessionResult = await client.query(
@@ -476,19 +481,19 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
   const badgeUpdates = [
     {
       name: 'Cookie Master Badge',
-      current: score,
+      current: Math.floor(score),
       target: 5000,
       condition: score >= 5000
     },
     {
       name: 'Speed Demon Badge', 
-      current: gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5,
+      current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
       target: 100,
       condition: false // Requires specific game duration tracking
     },
     {
       name: 'Champion Badge',
-      current: highScore >= 3000 ? 25 : Math.floor(highScore / 120),
+      current: Math.floor(highScore >= 3000 ? 25 : Math.floor(highScore / 120)),
       target: 100,
       condition: false // Requires leaderboard position
     }
