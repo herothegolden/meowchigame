@@ -25,10 +25,10 @@ const SPECIAL_ITEMS = {
   SHOP_BOMB: 'SHOP_BOMB_ITEM'
 };
 
-// Piece URL mapping - Regular pieces (0-5) + Special items
+// Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
   const urlMap = {
-    // Regular pieces (mapped by array index)
+    // Regular pieces (0-5)
     0: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Matcha.webp?updatedAt=1758904443599',
     1: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Milk.webp?updatedAt=1758904443453', 
     2: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Butter.webp?updatedAt=1758904443280',
@@ -43,7 +43,7 @@ const getPieceUrl = (piece) => {
     [SPECIAL_ITEMS.SHOP_BOMB]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ShopBomb.webp?updatedAt=1758905830542'
   };
   
-  // If piece is a URL already, return as-is (backward compatibility)
+  // If piece is already a URL, return as-is (backward compatibility)
   if (typeof piece === 'string' && piece.startsWith('http')) {
     return piece;
   }
@@ -236,7 +236,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     const maxCascades = 5;
     
     while (cascadeCount < maxCascades) {
-      // Use enhanced match detection
+      // Use enhanced match detection instead of basic findMatches
       const specialMatches = findSpecialMatches(currentBoard);
       
       // Collect all matched indices for animation
@@ -267,23 +267,37 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       // SPECIAL ITEM CREATION: Remove matches but preserve anchors for special items
       const newBoard = currentBoard.map(row => [...row]);
       
-      // Process special matches first - convert anchors to special items
-      [...specialMatches.cat, ...specialMatches.honey, ...specialMatches.colorBomb].forEach(match => {
+      // Process special matches - convert anchors to special items, clear other pieces
+      specialMatches.cat.forEach(match => {
         const { row, col } = match.position;
-        
-        // Determine special item type
-        let specialItem;
-        if (specialMatches.cat.includes(match)) {
-          specialItem = SPECIAL_ITEMS.CAT;
-        } else if (specialMatches.honey.includes(match)) {
-          specialItem = SPECIAL_ITEMS.HONEY;
-        } else if (specialMatches.colorBomb.includes(match)) {
-          specialItem = SPECIAL_ITEMS.COLOR_BOMB;
-        }
-        
-        // Replace anchor with special item
-        newBoard[row][col] = specialItem;
-        
+        // Replace anchor with Cat item
+        newBoard[row][col] = SPECIAL_ITEMS.CAT;
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      specialMatches.honey.forEach(match => {
+        const { row, col } = match.position;
+        // Replace anchor with Honey Jar
+        newBoard[row][col] = SPECIAL_ITEMS.HONEY;
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      specialMatches.colorBomb.forEach(match => {
+        const { row, col } = match.position;
+        // Replace anchor with Color Bomb
+        newBoard[row][col] = SPECIAL_ITEMS.COLOR_BOMB;
         // Clear other pieces in the match (but not the anchor)
         match.pieces.forEach(index => {
           const piecePos = getPosition(index);
