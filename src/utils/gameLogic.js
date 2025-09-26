@@ -1,4 +1,4 @@
-// FIXED: gameLogic.js - Improved shuffle functions + Enhanced Match Detection + Special Activation & Combos
+// FIXED: gameLogic.js - Improved shuffle functions + Enhanced Match Detection + Special Activation & Combos + Complete Honey + Color Bomb
 
 // Game configuration - Changed to 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
@@ -431,7 +431,7 @@ export const activateSpecialItem = (board, specialType, position, targetPiece = 
 };
 
 /**
- * NEW: Execute special item combos - returns { type, indices }
+ * ENHANCED: Execute special item combos with complete Honey + Color Bomb implementation
  */
 export const executeCombo = (board, item1Type, item1Pos, item2Type, item2Pos) => {
   let indices = [];
@@ -457,12 +457,54 @@ export const executeCombo = (board, item1Type, item1Pos, item2Type, item2Pos) =>
     return { type: 'NORMAL', indices: [...new Set(indices)] };
   }
   
-  // Honey Jar + Color Bomb combo
+  // Honey Jar + Color Bomb combo - COMPLETE IMPLEMENTATION
   else if ((item1Type === SPECIAL_ITEMS.HONEY && item2Type === SPECIAL_ITEMS.COLOR_BOMB) ||
            (item1Type === SPECIAL_ITEMS.COLOR_BOMB && item2Type === SPECIAL_ITEMS.HONEY)) {
-    // Transform all pieces of same type into Cat items, then activate them
-    // This requires special handling in GameBoard.jsx
-    return { type: 'TRANSFORM_AND_ACTIVATE', indices: [] };
+    
+    // Determine which position has the Color Bomb
+    const colorBombPos = item1Type === SPECIAL_ITEMS.COLOR_BOMB ? item1Pos : item2Pos;
+    
+    // Find adjacent pieces to Color Bomb to determine target type
+    const adjacentPieces = [];
+    const directions = [
+      { row: colorBombPos.row - 1, col: colorBombPos.col }, // up
+      { row: colorBombPos.row + 1, col: colorBombPos.col }, // down
+      { row: colorBombPos.row, col: colorBombPos.col - 1 }, // left
+      { row: colorBombPos.row, col: colorBombPos.col + 1 }  // right
+    ];
+    
+    directions.forEach(pos => {
+      if (pos.row >= 0 && pos.row < BOARD_SIZE && pos.col >= 0 && pos.col < BOARD_SIZE) {
+        const piece = board[pos.row][pos.col];
+        if (piece && !Object.values(SPECIAL_ITEMS).includes(piece)) {
+          adjacentPieces.push(piece);
+        }
+      }
+    });
+    
+    // Select target piece type (first adjacent non-special piece)
+    const targetPiece = adjacentPieces.length > 0 ? adjacentPieces[0] : null;
+    
+    if (targetPiece) {
+      // Find all positions with the target piece type for transformation
+      const transformIndices = [];
+      for (let row = 0; row < BOARD_SIZE; row++) {
+        for (let col = 0; col < BOARD_SIZE; col++) {
+          if (board[row][col] === targetPiece) {
+            transformIndices.push(getIndex(row, col));
+          }
+        }
+      }
+      
+      return { 
+        type: 'TRANSFORM_AND_ACTIVATE', 
+        indices: transformIndices,
+        targetPiece: targetPiece 
+      };
+    }
+    
+    // If no valid target found, just clear the combo pieces
+    return { type: 'NORMAL', indices: [getIndex(item1Pos.row, item1Pos.col), getIndex(item2Pos.row, item2Pos.col)] };
   }
   
   // Cat + Color Bomb combo
