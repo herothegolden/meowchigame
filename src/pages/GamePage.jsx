@@ -678,7 +678,13 @@ const GamePage = () => {
         >
           <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
             <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
-            <div className="text-6xl mb-6">🍪</div>
+            <div className="flex justify-center mb-6">
+              <img 
+                src="https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672" 
+                alt="Meowchi Cat" 
+                className="w-20 h-20 object-contain"
+              />
+            </div>
             
             <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
               <p className="text-lg font-bold text-accent mb-2">Meowchi Match Game</p>
