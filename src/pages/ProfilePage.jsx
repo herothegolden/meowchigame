@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, Upload } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -298,114 +298,6 @@ const ProfilePage = () => {
       });
     } finally {
       setIsUpdatingName(false);
-    }
-  };
-
-  // File handling functions
-  const handleAvatarFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        if (tg && tg.showPopup) {
-          tg.showPopup({ title: 'Error', message: 'Please select an image file', buttons: [{ type: 'ok' }] });
-        } else {
-          alert('Please select an image file');
-        }
-        return;
-      }
-
-      // Validate file size (2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        if (tg && tg.showPopup) {
-          tg.showPopup({ title: 'Error', message: 'File size must be less than 2MB', buttons: [{ type: 'ok' }] });
-        } else {
-          alert('File size must be less than 2MB');
-        }
-        return;
-      }
-
-      setSelectedAvatarFile(file);
-      
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => setAvatarFilePreview(e.target.result);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const clearAvatarFileSelection = () => {
-    setSelectedAvatarFile(null);
-    setAvatarFilePreview(null);
-    // Clear file input - works for both mobile and desktop versions
-    const fileInput = document.querySelector('input[type="file"][accept="image/*"]');
-    if (fileInput) fileInput.value = '';
-  };
-
-  // File-only avatar update handler
-  const handleUpdateAvatar = async () => {
-    // Check if we have a file selected
-    if (!selectedAvatarFile) {
-      setIsEditingAvatar(false);
-      return;
-    }
-
-    setIsUpdatingAvatar(true);
-
-    try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
-        const message = `Demo: Uploaded ${selectedAvatarFile.name}\n\n⚠️ This is demo mode only.`;
-        if (tg && tg.showPopup) {
-          tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
-        } else {
-          alert(message);
-        }
-        setIsEditingAvatar(false);
-        clearAvatarFileSelection();
-        setIsUpdatingAvatar(false);
-        return;
-      }
-
-      // File upload mode - send FormData
-      const formData = new FormData();
-      formData.append('avatar', selectedAvatarFile);
-      formData.append('initData', tg.initData);
-
-      const response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
-        method: 'POST',
-        body: formData, // Don't set Content-Type header, let browser handle it
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Avatar update failed');
-
-      // Update local state to show new avatar immediately
-      setProfileData(prev => ({
-        ...prev,
-        stats: { ...prev.stats, avatar_url: result.avatarUrl }
-      }));
-
-      setIsEditingAvatar(false);
-      clearAvatarFileSelection();
-      
-      tg.HapticFeedback?.notificationOccurred('success');
-      tg.showPopup({
-        title: 'Success!',
-        message: result.message,
-        buttons: [{ type: 'ok' }]
-      });
-
-    } catch (error) {
-      console.error('Avatar update error:', error);
-      tg?.HapticFeedback?.notificationOccurred('error');
-      tg?.showPopup({
-        title: 'Error', 
-        message: error.message,
-        buttons: [{ type: 'ok' }]
-      });
-    } finally {
-      setIsUpdatingAvatar(false);
     }
   };
 
@@ -1130,7 +1022,7 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* Profile Photo - Uses Telegram Photo */}
+          {/* Profile Photo - Uses Telegram Photo or User Icon Fallback */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
               {telegramPhotoUrl ? (
@@ -1138,13 +1030,10 @@ const ProfilePage = () => {
                   src={telegramPhotoUrl} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
                 />
-              ) : null}
-              <User className={`w-8 h-8 text-secondary ${telegramPhotoUrl ? 'hidden' : ''}`} />
+              ) : (
+                <User className="w-8 h-8 text-secondary" />
+              )}
             </div>
           </div>
           
