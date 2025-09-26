@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
@@ -8,58 +8,35 @@ const HomePage = () => {
     {
       num: "3.14",
       teaser: "День любви и бесконечной сладости.",
-      full: (
-        <>
-          💮 <span className="font-semibold">White Day в Корее + Pi Day во всём мире.</span>
-          <br />
-          14 марта — официальный день рождения Meowchi.
-          <br />
-          На “Pi Party” всё круглое: пончики, макаруны, даже пицца с маршмеллоу.
-          <br />
-          Каждый год Meowchi выкладывает 3.14 из маршмеллоу на огромном торте.
-          <br />
-          <span className="text-emerald-300 italic">
-            «Бесконечность на вкус как маршмеллоу.»
-          </span>
-        </>
-      ),
+      title: "День любви и бесконечной сладости",
+      content: `🍰 White Day в Корее + Pi Day во всём мире. 
+14 марта — официальный день рождения Meowchi. 
+На “Pi Party” всё круглое: пончики, макаруны, даже пицца с маршмеллоу. 
+Каждый год Meowchi выкладывает 3.14 из маршмеллоу на огромном торте.`,
+      tagline: "«Бесконечность на вкус как маршмеллоу.»",
     },
     {
       num: "11",
       teaser: "Двойные лапки, двойная радость.",
-      full: (
-        <>
-          🐾 <span className="font-semibold">11 — магический код дружбы.</span>
-          <br />
-          Если съесть два печенья ровно в 11:11, желание сбудется!
-          <br />
-          Meowchi верит: счастье приходит парами — двойные снеки, двойные эмоции, двойные друзья.
-          <br />
-          <span className="text-emerald-300 italic">
-            «Никогда не перекусывай в одиночку.»
-          </span>
-        </>
-      ),
+      title: "Двойные лапки, двойная радость",
+      content: `🐾 11 — магический код дружбы. 
+Если съесть два печенья ровно в 11:11, желание сбудется! 
+Meowchi верит: счастье приходит парами — двойные снеки, двойные эмоции, двойные друзья.`,
+      tagline: "«Никогда не перекусывай в одиночку.»",
     },
     {
       num: "42",
       teaser: "Ответ на жизнь и десерт.",
-      full: (
-        <>
-          📖 <span className="font-semibold">Книга 42</span> — легендарный сборник идеальных десертов Вселенной.
-          <br />
-          Каждый рецепт открывает маленькое приключение.
-          <br />
-          Фанаты придумывают свои формулы «42» — например, 42 капли шоколада + 42 секунды счастья.
-          <br />
-          <span className="text-emerald-300 italic">«Секрет жизни — в тянучести.»</span>
-        </>
-      ),
+      title: "Ответ на жизнь и десерт",
+      content: `📖 Книга 42 — легендарный сборник идеальных десертов Вселенной. 
+Каждый рецепт открывает маленькое приключение. 
+Фанаты придумывают свои формулы «42» — например, 42 капли шоколада + 42 секунды счастья.`,
+      tagline: "«Секрет жизни — в тянучести.»",
     },
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans">
+    <div className="min-h-screen bg-black text-white font-sans relative">
       {/* Spotlight Background */}
       <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
 
@@ -121,8 +98,8 @@ const HomePage = () => {
         </motion.div>
 
         {/* Magic Number Section */}
-        <div className="space-y-6">
-          <h2 className="text-center text-2xl font-bold mb-4">
+        <div className="space-y-8">
+          <h2 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg">
             Magic Number: 314 11 42
           </h2>
           {cards.map((item, i) => (
@@ -130,26 +107,24 @@ const HomePage = () => {
               key={i}
               whileHover={{ scale: 1.02 }}
               onClick={() => setOpenCard(openCard === i ? null : i)}
-              className="cursor-pointer p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg text-center"
+              className="cursor-pointer p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-lg text-center space-y-3 transition-all"
             >
-              <h3 className="text-3xl font-extrabold text-white drop-shadow-md mb-2">
+              <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(0,255,200,0.5)]">
                 {item.num}
               </h3>
-              <p className="text-gray-300">{item.teaser}</p>
-
-              <AnimatePresence>
-                {openCard === i && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.4 }}
-                    className="mt-4 text-gray-300 leading-relaxed text-sm text-left"
-                  >
-                    {item.full}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {openCard === i ? (
+                <>
+                  <h4 className="text-xl text-emerald-200">{item.title}</h4>
+                  <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                    {item.content}
+                  </p>
+                  <p className="italic text-emerald-300 text-sm border-t border-emerald-400/20 pt-2">
+                    {item.tagline}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-400">{item.teaser}</p>
+              )}
             </motion.div>
           ))}
         </div>
