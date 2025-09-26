@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { FaTelegramPlane, FaInstagram } from "react-icons/fa";
+import { FaTelegram, FaInstagram } from "react-icons/fa"; // ✅ added icons
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
@@ -216,28 +216,28 @@ Meowchi верит: счастье приходит парами — двойн�
         </motion.div>
       </div>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-6 mt-12">
-        <div className="flex justify-center space-x-6">
+      {/* Footer Section */}
+      <footer className="border-t border-white/10 py-6 mt-8">
+        <div className="flex justify-center space-x-6 text-2xl">
           <a
             href="https://t.me/meowchi_lab"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gray-400 hover:text-emerald-300 transition"
+            className="text-emerald-300 hover:text-emerald-400 transition"
           >
-            <FaTelegramPlane size={28} />
+            <FaTelegram />
           </a>
           <a
             href="https://www.instagram.com/meowchi.lab/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gray-400 hover:text-pink-400 transition"
+            className="text-pink-400 hover:text-pink-500 transition"
           >
-            <FaInstagram size={28} />
+            <FaInstagram />
           </a>
         </div>
-        <p className="text-center text-gray-500 text-sm mt-4">
-          Meowchi — viral texture, локальный вкус, глобальные vibes.
+        <p className="text-center text-gray-500 text-sm mt-3">
+          © {new Date().getFullYear()} Meowchi. All rights reserved.
         </p>
       </footer>
     </div>
