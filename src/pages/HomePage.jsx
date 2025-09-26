@@ -1,7 +1,63 @@
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const HomePage = () => {
+  const [openCard, setOpenCard] = useState(null);
+
+  const cards = [
+    {
+      num: "3.14",
+      teaser: "День любви и бесконечной сладости.",
+      full: (
+        <>
+          💮 <span className="font-semibold">White Day в Корее + Pi Day во всём мире.</span>
+          <br />
+          14 марта — официальный день рождения Meowchi.
+          <br />
+          На “Pi Party” всё круглое: пончики, макаруны, даже пицца с маршмеллоу.
+          <br />
+          Каждый год Meowchi выкладывает 3.14 из маршмеллоу на огромном торте.
+          <br />
+          <span className="text-emerald-300 italic">
+            «Бесконечность на вкус как маршмеллоу.»
+          </span>
+        </>
+      ),
+    },
+    {
+      num: "11",
+      teaser: "Двойные лапки, двойная радость.",
+      full: (
+        <>
+          🐾 <span className="font-semibold">11 — магический код дружбы.</span>
+          <br />
+          Если съесть два печенья ровно в 11:11, желание сбудется!
+          <br />
+          Meowchi верит: счастье приходит парами — двойные снеки, двойные эмоции, двойные друзья.
+          <br />
+          <span className="text-emerald-300 italic">
+            «Никогда не перекусывай в одиночку.»
+          </span>
+        </>
+      ),
+    },
+    {
+      num: "42",
+      teaser: "Ответ на жизнь и десерт.",
+      full: (
+        <>
+          📖 <span className="font-semibold">Книга 42</span> — легендарный сборник идеальных десертов Вселенной.
+          <br />
+          Каждый рецепт открывает маленькое приключение.
+          <br />
+          Фанаты придумывают свои формулы «42» — например, 42 капли шоколада + 42 секунды счастья.
+          <br />
+          <span className="text-emerald-300 italic">«Секрет жизни — в тянучести.»</span>
+        </>
+      ),
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-black text-white font-sans">
       {/* Spotlight Background */}
@@ -69,20 +125,31 @@ const HomePage = () => {
           <h2 className="text-center text-2xl font-bold mb-4">
             Magic Number: 314 11 42
           </h2>
-          {[
-            { num: "3.14", text: "White Day & Pi Day — наш день." },
-            { num: "11", text: "двойные лапки, double snacks, двойная радость." },
-            { num: "42", text: "The Answer to Life… and dessert." },
-          ].map((item, i) => (
+          {cards.map((item, i) => (
             <motion.div
               key={i}
-              whileHover={{ scale: 1.03 }}
-              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg text-center"
+              whileHover={{ scale: 1.02 }}
+              onClick={() => setOpenCard(openCard === i ? null : i)}
+              className="cursor-pointer p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg text-center"
             >
               <h3 className="text-3xl font-extrabold text-white drop-shadow-md mb-2">
                 {item.num}
               </h3>
-              <p className="text-gray-300">{item.text}</p>
+              <p className="text-gray-300">{item.teaser}</p>
+
+              <AnimatePresence>
+                {openCard === i && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="mt-4 text-gray-300 leading-relaxed text-sm text-left"
+                  >
+                    {item.full}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           ))}
         </div>
