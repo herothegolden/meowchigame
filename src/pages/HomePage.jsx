@@ -66,7 +66,7 @@ Meowchi верит: счастье приходит парами — двойн�
             <img
               src="https://ik.imagekit.io/59r2kpz8r/Meowchi/1.webp?updatedAt=1758888700434"
               alt="Meowchi Hero"
-              className="w-64 h-64 object-cover rounded-2xl shadow-2xl border border-white/10"
+              className="w-64 h-64 object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
             />
           </div>
 
@@ -101,29 +101,31 @@ Meowchi верит: счастье приходит парами — двойн�
           <p className="mt-3 text-emerald-300 italic font-medium">
             Chewy. Marble. Shareable.
           </p>
-          {/* About Image */}
-          <div className="w-full flex justify-center mt-6">
+          <div className="w-full flex justify-center mt-4">
             <img
               src="https://ik.imagekit.io/59r2kpz8r/Meowchi/2.webp?updatedAt=1758888699837"
               alt="About Meowchi"
-              className="w-full max-w-lg h-48 object-cover rounded-2xl shadow-xl border border-white/10"
+              className="w-full max-w-md h-auto rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
             />
           </div>
         </motion.div>
 
         {/* Magic Number Section */}
         <div className="space-y-8">
-          <h2 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg">
-            Magic Number: 314 11 42
+          <h2 className="text-center text-2xl font-extrabold mb-2 tracking-widest text-gray-200">
+            MAGIC NUMBER:
           </h2>
+          <h3 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg tracking-[0.2em]">
+            314 11 42
+          </h3>
           {cards.map((item, i) => (
             <motion.div
               key={i}
               whileHover={{ scale: 1.02 }}
               onClick={() => setOpenCard(openCard === i ? null : i)}
-              className="cursor-pointer p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-lg text-center space-y-3 transition-all"
+              className="cursor-pointer p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all"
             >
-              <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(0,255,200,0.5)]">
+              <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(0,255,200,0.6)]">
                 {item.num}
               </h3>
               {openCard === i ? (
@@ -149,7 +151,7 @@ Meowchi верит: счастье приходит парами — двойн�
           <div className="grid grid-cols-1 gap-6">
             <motion.div
               whileHover={{ scale: 1.03 }}
-              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-lg"
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
             >
               <div className="w-full h-40 bg-white/10 rounded-lg mb-4"></div>
               <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
@@ -160,7 +162,7 @@ Meowchi верит: счастье приходит парами — двойн�
 
             <motion.div
               whileHover={{ scale: 1.03 }}
-              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-lg"
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
             >
               <div className="w-full h-40 bg-white/10 rounded-lg mb-4"></div>
               <h3 className="text-xl font-semibold">
