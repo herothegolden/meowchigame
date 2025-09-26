@@ -156,6 +156,9 @@ const ProfilePage = () => {
   
   const tg = window.Telegram?.WebApp;
 
+  // Mobile platform detection for Telegram WebApp
+  const isMobileTelegram = tg?.platform === 'android' || tg?.platform === 'ios';
+
   // Mock data for demo mode
   const MOCK_STATS = {
     first_name: 'Demo User',
@@ -1212,6 +1215,7 @@ const ProfilePage = () => {
         {/* Change Avatar Button - Always Visible */}
         <div className="mt-4 text-center border-t border-gray-700 pt-3">
           <button
+            type="button"
             onClick={() => setIsEditingAvatar(true)}
             className="bg-secondary/20 hover:bg-accent/20 border border-secondary/50 hover:border-accent text-secondary hover:text-accent px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 inline-flex items-center space-x-2"
           >
@@ -1231,15 +1235,39 @@ const ProfilePage = () => {
         >
           <h3 className="text-lg font-bold text-primary mb-3 text-center">Upload New Avatar</h3>
           
-          {/* File Input - Always Visible on Mobile */}
+          {/* File Input - Platform-Specific Rendering */}
           <div className="space-y-3 mb-4">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarFileSelect}
-              className="w-full bg-accent text-background py-2 px-4 rounded-lg font-medium cursor-pointer file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-background file:text-accent file:font-medium hover:bg-accent/90 transition-colors"
-            />
-            <p className="text-xs text-secondary text-center">JPG, PNG, GIF up to 2MB</p>
+            {isMobileTelegram ? (
+              /* Mobile Telegram: Plain, always-visible file input */
+              <div className="text-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="w-full text-center"
+                  style={{
+                    padding: '8px',
+                    border: '1px solid #666',
+                    borderRadius: '8px',
+                    backgroundColor: '#EAB308',
+                    color: '#000',
+                    fontSize: '14px'
+                  }}
+                />
+                <p className="text-xs text-secondary mt-1">JPG, PNG, GIF up to 2MB</p>
+              </div>
+            ) : (
+              /* Desktop: Styled file input */
+              <>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="w-full bg-accent text-background py-2 px-4 rounded-lg font-medium cursor-pointer file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-background file:text-accent file:font-medium hover:bg-accent/90 transition-colors"
+                />
+                <p className="text-xs text-secondary text-center">JPG, PNG, GIF up to 2MB</p>
+              </>
+            )}
           </div>
 
           {/* File Preview */}
