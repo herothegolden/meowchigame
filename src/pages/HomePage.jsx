@@ -194,9 +194,17 @@ Meowchi верит: счастье приходит парами — двойн�
           className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
         >
           <h2 className="text-xl font-bold">Как заказать?</h2>
-          <p>🚚 Доставка по Ташкенту: сегодня или завтра</p>
-          <p>❄️ Хранение: 20 дней в холодильнике</p>
-          <p>☎️ Телефон: 314 11 42</p>
+          <p>🚚 Доставка по Ташкенту (Yandex Taxi)</p>
+          <p>❄️ Хранение: 30 дней в холодильнике</p>
+          <p>
+            ☎️ Телефон:{" "}
+            <a
+              href="tel:+998913141142"
+              className="text-emerald-300 hover:underline"
+            >
+              +998 91 314 11 42
+            </a>
+          </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={openTelegramOrder}
