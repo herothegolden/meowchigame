@@ -1,4 +1,4 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations + Bug Fixes
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -318,7 +318,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     return explosionIndices;
   }, [setScore]);
 
-  // NEW: Handle special item activation
+  // FIXED: Handle special item activation with processing flag safety
   const handleSpecialActivation = useCallback(async (index) => {
     const { row, col } = getPosition(index);
     const piece = boardRef.current[row][col];
@@ -331,56 +331,61 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     processingRef.current = true;
     onProcessingChange?.(true);
     
-    let clearIndices = [];
-    
-    // Handle Color Bomb target selection
-    if (piece === SPECIAL_ITEMS.COLOR_BOMB) {
-      const adjacentPieces = getAdjacentPieces(boardRef.current, { row, col });
-      const targetPiece = adjacentPieces.length > 0 ? adjacentPieces[0] : null;
+    try {
+      let clearIndices = [];
       
-      if (targetPiece) {
-        clearIndices = activateSpecialItem(boardRef.current, piece, { row, col }, targetPiece);
+      // Handle Color Bomb target selection
+      if (piece === SPECIAL_ITEMS.COLOR_BOMB) {
+        const adjacentPieces = getAdjacentPieces(boardRef.current, { row, col });
+        const targetPiece = adjacentPieces.length > 0 ? adjacentPieces[0] : null;
+        
+        if (targetPiece) {
+          clearIndices = activateSpecialItem(boardRef.current, piece, { row, col }, targetPiece);
+        } else {
+          clearIndices = [index]; // Just clear the bomb itself if no target
+        }
+        
+        // FIXED: Always include the bomb's own index to consume it
+        clearIndices = Array.from(new Set([...clearIndices, index]));
       } else {
-        clearIndices = [index]; // Just clear the bomb itself if no target
+        clearIndices = activateSpecialItem(boardRef.current, piece, { row, col });
       }
-    } else {
-      clearIndices = activateSpecialItem(boardRef.current, piece, { row, col });
+      
+      // Show matched pieces animation
+      setMatchedPieces(new Set(clearIndices));
+      
+      // Award points for cleared pieces
+      const pointsAwarded = clearIndices.length * POINTS_PER_PIECE * 2; // Double points for special activation
+      setScore(prev => prev + pointsAwarded);
+      
+      // Haptic feedback
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+      }
+      
+      // Animation delay
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Clear pieces and process cascades
+      const newBoard = removeMatches(boardRef.current, clearIndices);
+      const gravityBoard = applyGravity(newBoard);
+      const finalBoard = fillEmptySpaces(gravityBoard);
+      
+      setBoard(finalBoard);
+      boardRef.current = finalBoard;
+      setMatchedPieces(new Set());
+      
+      // Process any new matches
+      setTimeout(() => {
+        processMatches();
+      }, 100);
+      
+    } finally {
+      // FIXED: Always reset processing flags
+      setIsProcessing(false);
+      processingRef.current = false;
+      onProcessingChange?.(false);
     }
-    
-    // Show matched pieces animation
-    setMatchedPieces(new Set(clearIndices));
-    
-    // Award points for cleared pieces
-    const pointsAwarded = clearIndices.length * POINTS_PER_PIECE * 2; // Double points for special activation
-    setScore(prev => prev + pointsAwarded);
-    
-    // Haptic feedback
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-    }
-    
-    // Animation delay
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Clear pieces and process cascades
-    const newBoard = removeMatches(boardRef.current, clearIndices);
-    const gravityBoard = applyGravity(newBoard);
-    const finalBoard = fillEmptySpaces(gravityBoard);
-    
-    setBoard(finalBoard);
-    boardRef.current = finalBoard;
-    setMatchedPieces(new Set());
-    
-    // FIXED: Reset processing flags before calling processMatches
-    setIsProcessing(false);
-    processingRef.current = false;
-    onProcessingChange?.(false);
-    onProcessingChange?.(false);
-    
-    // Process any new matches
-    setTimeout(() => {
-      processMatches();
-    }, 100);
     
   }, [isProcessing, isShuffling, setScore]);
 
@@ -610,107 +615,111 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
         processingRef.current = true;
         onProcessingChange?.(true);
         
-        const comboResult = executeCombo(boardRef.current, draggedPieceType, draggedPosition, targetPieceType, targetPosition);
-        
-        // ENHANCED: Handle TRANSFORM_AND_ACTIVATE for Honey + Color Bomb combo
-        if (comboResult.type === 'TRANSFORM_AND_ACTIVATE') {
-          console.log('🔥 Transform and activate combo - Honey + Color Bomb');
+        try {
+          const comboResult = executeCombo(boardRef.current, draggedPieceType, draggedPosition, targetPieceType, targetPosition);
           
-          // Transform all target pieces into Cat items
-          const newBoard = boardRef.current.map(row => [...row]);
-          comboResult.indices.forEach(index => {
-            const { row, col } = getPosition(index);
-            newBoard[row][col] = SPECIAL_ITEMS.CAT;
-          });
-          
-          // Update board state
-          setBoard(newBoard);
-          boardRef.current = newBoard;
-          
-          // Award initial transformation points
-          const transformPoints = comboResult.indices.length * POINTS_PER_PIECE;
-          setScore(prev => prev + transformPoints);
-          
-          // Heavy haptic feedback for transformation
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-          }
-          
-          // Brief pause to show transformation
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // Activate each Cat item sequentially with wave effect
-          for (const index of comboResult.indices) {
-            const { row, col } = getPosition(index);
-            const catIndices = activateSpecialItem(boardRef.current, SPECIAL_ITEMS.CAT, { row, col });
+          // ENHANCED: Handle TRANSFORM_AND_ACTIVATE for Honey + Color Bomb combo
+          if (comboResult.type === 'TRANSFORM_AND_ACTIVATE') {
+            console.log('🔥 Transform and activate combo - Honey + Color Bomb');
             
-            // Show animation for this Cat activation
-            setMatchedPieces(new Set(catIndices));
+            // Transform all target pieces into Cat items
+            const newBoard = boardRef.current.map(row => [...row]);
+            comboResult.indices.forEach(index => {
+              const { row, col } = getPosition(index);
+              newBoard[row][col] = SPECIAL_ITEMS.CAT;
+            });
             
-            // Award points for Cat activation (triple points for combo effect)
-            const catPoints = catIndices.length * POINTS_PER_PIECE * 3;
-            setScore(prev => prev + catPoints);
+            // Update board state
+            setBoard(newBoard);
+            boardRef.current = newBoard;
             
-            // Medium haptic feedback for each Cat activation
+            // Award initial transformation points
+            const transformPoints = comboResult.indices.length * POINTS_PER_PIECE;
+            setScore(prev => prev + transformPoints);
+            
+            // Heavy haptic feedback for transformation
             if (window.Telegram?.WebApp?.HapticFeedback) {
-              window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
             }
             
-            // Animation delay for wave effect
-            await new Promise(resolve => setTimeout(resolve, 150));
+            // Brief pause to show transformation
+            await new Promise(resolve => setTimeout(resolve, 300));
             
-            // Clear pieces and update board
-            const clearedBoard = removeMatches(boardRef.current, catIndices);
-            const gravityBoard = applyGravity(clearedBoard);
+            // Activate each Cat item sequentially with wave effect
+            for (const index of comboResult.indices) {
+              const { row, col } = getPosition(index);
+              const catIndices = activateSpecialItem(boardRef.current, SPECIAL_ITEMS.CAT, { row, col });
+              
+              // Show animation for this Cat activation
+              setMatchedPieces(new Set(catIndices));
+              
+              // Award points for Cat activation (triple points for combo effect)
+              const catPoints = catIndices.length * POINTS_PER_PIECE * 3;
+              setScore(prev => prev + catPoints);
+              
+              // Medium haptic feedback for each Cat activation
+              if (window.Telegram?.WebApp?.HapticFeedback) {
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+              }
+              
+              // Animation delay for wave effect
+              await new Promise(resolve => setTimeout(resolve, 150));
+              
+              // Clear pieces and update board
+              const clearedBoard = removeMatches(boardRef.current, catIndices);
+              const gravityBoard = applyGravity(clearedBoard);
+              const finalBoard = fillEmptySpaces(gravityBoard);
+              
+              setBoard(finalBoard);
+              boardRef.current = finalBoard;
+              setMatchedPieces(new Set());
+              
+              // Brief pause between Cat activations for visual clarity
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // Process any final cascade matches
+            setTimeout(() => {
+              processMatches();
+            }, 200);
+            
+          } else if (comboResult.indices.length > 0) {
+            // Handle other combos normally
+            setMatchedPieces(new Set(comboResult.indices));
+            
+            // Award combo points
+            const pointsAwarded = comboResult.indices.length * POINTS_PER_PIECE * 3; // Triple points for combos
+            setScore(prev => prev + pointsAwarded);
+            
+            // Heavy haptic feedback for combo
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+            }
+            
+            // Animation delay
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Clear pieces and process cascades
+            const newBoard = removeMatches(boardRef.current, comboResult.indices);
+            const gravityBoard = applyGravity(newBoard);
             const finalBoard = fillEmptySpaces(gravityBoard);
             
             setBoard(finalBoard);
             boardRef.current = finalBoard;
             setMatchedPieces(new Set());
             
-            // Brief pause between Cat activations for visual clarity
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Process any new matches
+            setTimeout(() => {
+              processMatches();
+            }, 100);
           }
           
-          // Process any final cascade matches
-          setTimeout(() => {
-            processMatches();
-          }, 200);
-          
-        } else if (comboResult.indices.length > 0) {
-          // Handle other combos normally
-          setMatchedPieces(new Set(comboResult.indices));
-          
-          // Award combo points
-          const pointsAwarded = comboResult.indices.length * POINTS_PER_PIECE * 3; // Triple points for combos
-          setScore(prev => prev + pointsAwarded);
-          
-          // Heavy haptic feedback for combo
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-          }
-          
-          // Animation delay
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // Clear pieces and process cascades
-          const newBoard = removeMatches(boardRef.current, comboResult.indices);
-          const gravityBoard = applyGravity(newBoard);
-          const finalBoard = fillEmptySpaces(gravityBoard);
-          
-          setBoard(finalBoard);
-          boardRef.current = finalBoard;
-          setMatchedPieces(new Set());
-          
-          // Process any new matches
-          setTimeout(() => {
-            processMatches();
-          }, 100);
+        } finally {
+          // FIXED: Always reset processing flags
+          setIsProcessing(false);
+          processingRef.current = false;
+          onProcessingChange?.(false);
         }
-        
-        setIsProcessing(false);
-        processingRef.current = false;
-        onProcessingChange?.(false);
         
       } else if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
         // Execute normal swap
