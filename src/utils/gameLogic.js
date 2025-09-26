@@ -1,4 +1,4 @@
-// FIXED: gameLogic.js - Improved shuffle functions
+// FIXED: gameLogic.js - Improved shuffle functions + Enhanced Match Detection
 
 // Game configuration - Changed to 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
@@ -78,7 +78,7 @@ export const swapPieces = (board, pos1, pos2) => {
 };
 
 /**
- * FIXED: Finds all matches on the board (3+ in a row/column)
+ * ORIGINAL: Finds all matches on the board (3+ in a row/column) - PRESERVED FOR COMPATIBILITY
  */
 export const findMatches = (board) => {
   const matches = [];
@@ -140,7 +140,239 @@ export const findMatches = (board) => {
 };
 
 /**
- * FIXED: Enhanced hasValidMoves with better performance
+ * NEW: Enhanced match detection for special items
+ * Returns: { regular: number[], cat: {position, pieces}[], honey: {position, pieces}[], colorBomb: {position, pieces}[] }
+ */
+export const findSpecialMatches = (board) => {
+  // Track all potential matches to handle overlaps with priority
+  const allMatches = [];
+  
+  // Find horizontal matches (3+, 4, 5+)
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    let count = 1;
+    let currentPiece = board[row][0];
+    let startCol = 0;
+    
+    for (let col = 1; col <= BOARD_SIZE; col++) {
+      if (col < BOARD_SIZE && board[row][col] === currentPiece && currentPiece !== null) {
+        count++;
+      } else {
+        if (count >= 3 && currentPiece !== null) {
+          const pieces = Array.from({length: count}, (_, i) => getIndex(row, startCol + i));
+          const centerCol = Math.floor(startCol + (count - 1) / 2);
+          
+          if (count >= 5) {
+            allMatches.push({
+              type: 'colorBomb',
+              position: { row, col: centerCol },
+              pieces: pieces,
+              priority: 4
+            });
+          } else if (count === 4) {
+            allMatches.push({
+              type: 'cat',
+              position: { row, col: centerCol },
+              pieces: pieces,
+              priority: 2
+            });
+          } else {
+            allMatches.push({
+              type: 'regular',
+              pieces: pieces,
+              priority: 1
+            });
+          }
+        }
+        
+        if (col < BOARD_SIZE) {
+          currentPiece = board[row][col];
+          startCol = col;
+          count = 1;
+        }
+      }
+    }
+  }
+  
+  // Find vertical matches (3+, 4, 5+)
+  for (let col = 0; col < BOARD_SIZE; col++) {
+    let count = 1;
+    let currentPiece = board[0][col];
+    let startRow = 0;
+    
+    for (let row = 1; row <= BOARD_SIZE; row++) {
+      if (row < BOARD_SIZE && board[row][col] === currentPiece && currentPiece !== null) {
+        count++;
+      } else {
+        if (count >= 3 && currentPiece !== null) {
+          const pieces = Array.from({length: count}, (_, i) => getIndex(startRow + i, col));
+          const centerRow = Math.floor(startRow + (count - 1) / 2);
+          
+          if (count >= 5) {
+            allMatches.push({
+              type: 'colorBomb',
+              position: { row: centerRow, col },
+              pieces: pieces,
+              priority: 4
+            });
+          } else if (count === 4) {
+            allMatches.push({
+              type: 'cat',
+              position: { row: centerRow, col },
+              pieces: pieces,
+              priority: 2
+            });
+          } else {
+            allMatches.push({
+              type: 'regular',
+              pieces: pieces,
+              priority: 1
+            });
+          }
+        }
+        
+        if (row < BOARD_SIZE) {
+          currentPiece = board[row][col];
+          startRow = row;
+          count = 1;
+        }
+      }
+    }
+  }
+  
+  // Find L/T shapes (5 pieces) - highest priority after colorBomb
+  const ltShapes = findLTShapes(board);
+  allMatches.push(...ltShapes.map(shape => ({
+    type: 'honey',
+    position: shape.position,
+    pieces: shape.pieces,
+    priority: 3
+  })));
+  
+  // Resolve overlaps by rarity priority: colorBomb(4) > honey(3) > cat(2) > regular(1)
+  const usedIndices = new Set();
+  const finalMatches = {
+    regular: [],
+    cat: [],
+    honey: [],
+    colorBomb: []
+  };
+  
+  // Sort by priority (highest first), then by discovery order for deterministic results
+  allMatches.sort((a, b) => {
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    // For same priority, prefer earlier discovered (stable sort)
+    return 0;
+  });
+  
+  for (const match of allMatches) {
+    // Check if any piece in this match is already used by higher priority match
+    const hasOverlap = match.pieces.some(index => usedIndices.has(index));
+    
+    if (!hasOverlap) {
+      // Mark all pieces as used
+      match.pieces.forEach(index => usedIndices.add(index));
+      
+      // Add to appropriate category
+      if (match.type === 'regular') {
+        finalMatches.regular.push(...match.pieces);
+      } else {
+        finalMatches[match.type].push({
+          position: match.position,
+          pieces: match.pieces
+        });
+      }
+    }
+  }
+  
+  return finalMatches;
+};
+
+/**
+ * NEW: Helper function to find L/T shapes (exactly 5 tiles)
+ * Returns array of { position: {row, col}, pieces: number[] }
+ */
+const findLTShapes = (board) => {
+  const shapes = [];
+  
+  // Scan for T and L patterns
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      const centerPiece = board[row][col];
+      if (!centerPiece) continue;
+      
+      // Check T-shape: horizontal line of 3 + vertical line of 3 sharing center
+      // Pattern: vertical center extends 1 up and 1 down, horizontal extends 1 left and 1 right
+      if (row >= 1 && row < BOARD_SIZE - 1 && col >= 1 && col < BOARD_SIZE - 1) {
+        if (board[row-1][col] === centerPiece &&    // above
+            board[row+1][col] === centerPiece &&    // below  
+            board[row][col-1] === centerPiece &&    // left
+            board[row][col+1] === centerPiece) {    // right
+          shapes.push({
+            position: { row, col }, // intersection point
+            pieces: [
+              getIndex(row-1, col),  // top
+              getIndex(row, col-1),  // left
+              getIndex(row, col),    // center
+              getIndex(row, col+1),  // right
+              getIndex(row+1, col)   // bottom
+            ]
+          });
+          continue; // Don't check L-shapes at this position
+        }
+      }
+      
+      // Check L-shapes (4 orientations, each exactly 5 pieces)
+      const lPatterns = [
+        // L-shape: ⌞ (bottom-left corner at center)
+        { 
+          coords: [[0,0], [0,1], [0,2], [-1,0], [-2,0]], 
+          valid: row >= 2 && col <= BOARD_SIZE - 3 
+        },
+        // L-shape: ⌟ (bottom-right corner at center)  
+        { 
+          coords: [[0,-2], [0,-1], [0,0], [-1,0], [-2,0]], 
+          valid: row >= 2 && col >= 2 
+        },
+        // L-shape: ⌜ (top-left corner at center)
+        { 
+          coords: [[0,0], [0,1], [0,2], [1,0], [2,0]], 
+          valid: row <= BOARD_SIZE - 3 && col <= BOARD_SIZE - 3 
+        },
+        // L-shape: ⌝ (top-right corner at center)
+        { 
+          coords: [[0,-2], [0,-1], [0,0], [1,0], [2,0]], 
+          valid: row <= BOARD_SIZE - 3 && col >= 2 
+        }
+      ];
+      
+      for (const pattern of lPatterns) {
+        if (!pattern.valid) continue;
+        
+        // Check if all 5 positions contain the same piece
+        const isValidL = pattern.coords.every(([dr, dc]) => {
+          const r = row + dr;
+          const c = col + dc;
+          return r >= 0 && r < BOARD_SIZE && 
+                 c >= 0 && c < BOARD_SIZE && 
+                 board[r][c] === centerPiece;
+        });
+        
+        if (isValidL) {
+          shapes.push({
+            position: { row, col }, // corner position as anchor
+            pieces: pattern.coords.map(([dr, dc]) => getIndex(row + dr, col + dc))
+          });
+          break; // Only detect first valid L-shape per position to avoid duplicates
+        }
+      }
+    }
+  }
+  
+  return shapes;
+};
+
+/**
+ * ENHANCED: hasValidMoves with better performance
  */
 export const hasValidMoves = (board) => {
   // Check all possible adjacent swaps
@@ -311,7 +543,7 @@ export const smartShuffle = (board) => {
  * NEW: Creates an optimal board with guaranteed moves and no matches
  */
 const createOptimalBoard = () => {
-  console.log('🏗️ Creating optimal board...');
+  console.log('🗃️ Creating optimal board...');
   
   let board;
   let attempts = 0;
