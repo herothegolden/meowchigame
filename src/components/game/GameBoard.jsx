@@ -1,9 +1,10 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Animations
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
   BOARD_SIZE,
   findMatches,
+  findSpecialMatches,
   removeMatches,
   applyGravity,
   fillEmptySpaces,
@@ -13,182 +14,70 @@ import {
   POINTS_PER_PIECE,
   hasValidMoves,
   smartShuffle,
+  activateSpecialItem,
+  executeCombo,
+  SPECIAL_ITEMS,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
-import { motion } from 'framer-motion';
 
-// Special item type constants
-const SPECIAL_ITEMS = {
-  CAT: 'CAT_ITEM',
-  HONEY: 'HONEY_ITEM', 
-  COLOR_BOMB: 'COLOR_BOMB_ITEM',
-  SHOP_BOMB: 'SHOP_BOMB_ITEM'
-};
-
-// Function to detect special item type from URL
-const getSpecialItemType = (emoji) => {
-  if (!emoji || typeof emoji !== 'string') return null;
-  
-  if (emoji.includes('Meowchi.webp')) return SPECIAL_ITEMS.CAT;
-  if (emoji.includes('Jar.webp')) return SPECIAL_ITEMS.HONEY;
-  if (emoji.includes('Cookie.webp')) return SPECIAL_ITEMS.COLOR_BOMB;
-  if (emoji.includes('Oreo.webp')) return SPECIAL_ITEMS.SHOP_BOMB;
-  
-  return null;
-};
-
-// Function to get glow style based on special item type
-const getGlowStyle = (type) => {
-  switch (type) {
-    case SPECIAL_ITEMS.CAT:
-      return "radial-gradient(circle, rgba(200,220,255,0.7), transparent 70%)";
-    case SPECIAL_ITEMS.HONEY:
-      return "radial-gradient(circle, rgba(255,220,150,0.7), transparent 70%)";
-    case SPECIAL_ITEMS.COLOR_BOMB:
-      return "conic-gradient(from 0deg, red, orange, yellow, green, blue, violet, red)";
-    case SPECIAL_ITEMS.SHOP_BOMB:
-      return "radial-gradient(circle, rgba(255,180,255,0.7), transparent 70%)";
-    default:
-      return null;
-  }
-};
-
-// Special animated piece component
-const SpecialGamePiece = ({ 
-  emoji, 
-  specialType,
-  index, 
-  isSelected, 
-  onDragStart,
-  onDragEnd,
-  isMatched = false,
-  hasBomb = false,
-  disabled = false 
-}) => {
-  const handlePointerDown = (e) => {
-    if (disabled) return;
+// Asset mapping function - maps piece indices and special items to URLs
+const getPieceUrl = (piece) => {
+  const urlMap = {
+    // Regular pieces (0-5)
+    0: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Matcha.webp?updatedAt=1758904443599',
+    1: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Milk.webp?updatedAt=1758904443453', 
+    2: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Butter.webp?updatedAt=1758904443280',
+    3: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1758904443333',
+    4: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
+    5: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1758904443682',
     
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      const feedbackType = hasBomb ? 'heavy' : 'medium';
-      window.Telegram.WebApp.HapticFeedback.impactOccurred(feedbackType);
-    }
-    
-    onDragStart(e, { index });
+    // Special items
+    [SPECIAL_ITEMS.CAT]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/WhiteCat.webp?updatedAt=1758905830440',
+    [SPECIAL_ITEMS.HONEY]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/HoneyJar.webp?updatedAt=1758905928332',
+    [SPECIAL_ITEMS.COLOR_BOMB]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ColourBomb.webp?updatedAt=1758905830618',
+    [SPECIAL_ITEMS.SHOP_BOMB]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ShopBomb.webp?updatedAt=1758905830542'
   };
-
-  const glowStyle = getGlowStyle(specialType);
-
-  return (
-    <motion.div
-      className="w-full h-full flex items-center justify-center p-0.5"
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ 
-        scale: isMatched ? 0 : 1, 
-        opacity: isMatched ? 0 : (disabled ? 0.6 : 1)
-      }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ 
-        duration: 0.08,
-        ease: "easeOut"
-      }}
-    >
-      <motion.div
-        className={`
-          w-full h-full rounded-lg flex items-center justify-center relative
-          text-base font-bold select-none
-          transition-all duration-50 shadow-lg
-          ${disabled 
-            ? 'cursor-not-allowed opacity-60' 
-            : 'cursor-pointer'
-          }
-          ${isSelected 
-            ? 'bg-accent shadow-accent/50 scale-110' 
-            : hasBomb
-              ? 'bg-red-600 shadow-red-600/50' 
-              : 'bg-nav hover:bg-gray-600 shadow-black/20'
-          }
-        `}
-        onPointerDown={handlePointerDown}
-        style={{ 
-          touchAction: disabled ? 'auto' : 'none',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-          WebkitTapHighlightColor: 'transparent'
-        }}
-      >
-        {/* Special Item Animation Container */}
-        <motion.div
-          className="relative flex items-center justify-center w-full h-full"
-          animate={disabled ? {} : {
-            rotate: [0, 360],
-            y: [0, -10, 0],
-            scale: [1, 1.15, 1],
-          }}
-          transition={{
-            duration: 2.5,
-            ease: "easeInOut",
-            repeat: disabled ? 0 : Infinity,
-            repeatDelay: 1,
-          }}
-        >
-          {/* Glow Aura */}
-          {glowStyle && !disabled && (
-            <motion.div
-              className="absolute rounded-full"
-              style={{
-                width: "90%",
-                height: "90%",
-                background: glowStyle,
-                filter: "blur(8px)",
-                zIndex: 0,
-              }}
-              animate={{ opacity: [0.4, 0.8, 0.4] }}
-              transition={{
-                duration: 2,
-                ease: "easeInOut",
-                repeat: Infinity,
-              }}
-            />
-          )}
-          
-          {/* Special Item Sprite */}
-          <motion.img
-            src={emoji}
-            alt="Special Game Piece"
-            className={`relative z-10 w-full h-full object-contain rounded-lg p-1 ${disabled ? 'grayscale' : ''}`}
-            style={{ 
-              maxWidth: '100%', 
-              maxHeight: '100%',
-              imageRendering: 'auto',
-              userSelect: 'none',
-              pointerEvents: 'none'
-            }}
-            draggable={false}
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.parentNode.innerHTML = '🪙';
-            }}
-          />
-        </motion.div>
-        
-        {/* Bomb overlay indicator */}
-        {hasBomb && !disabled && (
-          <motion.div
-            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
-            initial={{ scale: 0 }}
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ duration: 0.5, repeat: Infinity }}
-          >
-            💥
-          </motion.div>
-        )}
-      </motion.div>
-    </motion.div>
-  );
+  
+  // If piece is already a URL, return as-is (backward compatibility)
+  if (typeof piece === 'string' && piece.startsWith('http')) {
+    return piece;
+  }
+  
+  // Map by index or special item constant
+  return urlMap[piece] || piece;
 };
 
-const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady }) => {
+// Helper function to check if piece is a special item
+const isSpecialItem = (piece) => {
+  return Object.values(SPECIAL_ITEMS).includes(piece);
+};
+
+// Helper function to get adjacent pieces for Color Bomb target selection
+const getAdjacentPieces = (board, position) => {
+  const { row, col } = position;
+  const adjacentPieces = [];
+  
+  // Check all 4 directions
+  const directions = [
+    { row: row - 1, col }, // up
+    { row: row + 1, col }, // down
+    { row, col: col - 1 }, // left
+    { row, col: col + 1 }  // right
+  ];
+  
+  directions.forEach(pos => {
+    if (pos.row >= 0 && pos.row < BOARD_SIZE && pos.col >= 0 && pos.col < BOARD_SIZE) {
+      const piece = board[pos.row][pos.col];
+      if (piece && !isSpecialItem(piece)) {
+        adjacentPieces.push(piece);
+      }
+    }
+  });
+  
+  return adjacentPieces;
+};
+
+const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady, onProcessingChange }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -359,12 +248,79 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     return explosionIndices;
   }, [setScore]);
 
-  // OPTIMIZED: Much faster match processing with bomb support
+  // NEW: Handle special item activation
+  const handleSpecialActivation = useCallback(async (index) => {
+    const { row, col } = getPosition(index);
+    const piece = boardRef.current[row][col];
+    
+    if (!isSpecialItem(piece) || isProcessing || isShuffling) return;
+    
+    console.log('🌟 Activating special item:', piece, 'at position:', { row, col });
+    
+    setIsProcessing(true);
+    processingRef.current = true;
+    onProcessingChange?.(true);
+    
+    let clearIndices = [];
+    
+    // Handle Color Bomb target selection
+    if (piece === SPECIAL_ITEMS.COLOR_BOMB) {
+      const adjacentPieces = getAdjacentPieces(boardRef.current, { row, col });
+      const targetPiece = adjacentPieces.length > 0 ? adjacentPieces[0] : null;
+      
+      if (targetPiece) {
+        clearIndices = activateSpecialItem(boardRef.current, piece, { row, col }, targetPiece);
+      } else {
+        clearIndices = [index]; // Just clear the bomb itself if no target
+      }
+    } else {
+      clearIndices = activateSpecialItem(boardRef.current, piece, { row, col });
+    }
+    
+    // Show matched pieces animation
+    setMatchedPieces(new Set(clearIndices));
+    
+    // Award points for cleared pieces
+    const pointsAwarded = clearIndices.length * POINTS_PER_PIECE * 2; // Double points for special activation
+    setScore(prev => prev + pointsAwarded);
+    
+    // Haptic feedback
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+    
+    // Animation delay
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Clear pieces and process cascades
+    const newBoard = removeMatches(boardRef.current, clearIndices);
+    const gravityBoard = applyGravity(newBoard);
+    const finalBoard = fillEmptySpaces(gravityBoard);
+    
+    setBoard(finalBoard);
+    boardRef.current = finalBoard;
+    setMatchedPieces(new Set());
+    
+    // FIXED: Reset processing flags before calling processMatches
+    setIsProcessing(false);
+    processingRef.current = false;
+    onProcessingChange?.(false);
+    onProcessingChange?.(false);
+    
+    // Process any new matches
+    setTimeout(() => {
+      processMatches();
+    }, 100);
+    
+  }, [isProcessing, isShuffling, setScore]);
+
+  // ENHANCED: Match processing with special item creation
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted || isShuffling) return;
     
     processingRef.current = true;
     setIsProcessing(true);
+    onProcessingChange?.(true);
     
     let currentBoard = boardRef.current.map(row => [...row]);
     let totalMatches = 0;
@@ -372,15 +328,21 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     const maxCascades = 5;
     
     while (cascadeCount < maxCascades) {
-      const matches = findMatches(currentBoard);
+      // Use enhanced match detection instead of basic findMatches
+      const specialMatches = findSpecialMatches(currentBoard);
       
-      if (matches.length === 0) break;
+      // Collect all matched indices for animation
+      const allMatchedIndices = new Set([
+        ...specialMatches.regular,
+        ...specialMatches.cat.flatMap(match => match.pieces),
+        ...specialMatches.honey.flatMap(match => match.pieces), 
+        ...specialMatches.colorBomb.flatMap(match => match.pieces)
+      ]);
+      
+      if (allMatchedIndices.size === 0) break;
       
       // Check if any matches trigger bombs
-      let allMatchedIndices = new Set(matches);
-      
-      // Check for bomb triggers
-      matches.forEach(matchIndex => {
+      allMatchedIndices.forEach(matchIndex => {
         if (bombPositions.has(matchIndex)) {
           const explosionIndices = triggerBombExplosion(matchIndex);
           explosionIndices.forEach(index => allMatchedIndices.add(index));
@@ -394,11 +356,57 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       // FASTER: Reduced from 400ms to 100ms
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Remove matches
-      currentBoard = removeMatches(currentBoard, Array.from(allMatchedIndices));
+      // SPECIAL ITEM CREATION: Remove matches but preserve anchors for special items
+      const newBoard = currentBoard.map(row => [...row]);
+      
+      // Process special matches - convert anchors to special items, clear other pieces
+      specialMatches.cat.forEach(match => {
+        const { row, col } = match.position;
+        // Replace anchor with Cat item
+        newBoard[row][col] = SPECIAL_ITEMS.CAT;
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      specialMatches.honey.forEach(match => {
+        const { row, col } = match.position;
+        // Replace anchor with Honey Jar
+        newBoard[row][col] = SPECIAL_ITEMS.HONEY;
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      specialMatches.colorBomb.forEach(match => {
+        const { row, col } = match.position;
+        // Replace anchor with Color Bomb
+        newBoard[row][col] = SPECIAL_ITEMS.COLOR_BOMB;
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      // Clear regular matches normally
+      specialMatches.regular.forEach(index => {
+        const { row, col } = getPosition(index);
+        newBoard[row][col] = null;
+      });
       
       // Apply gravity
-      currentBoard = applyGravity(currentBoard);
+      currentBoard = applyGravity(newBoard);
       
       // Fill empty spaces
       currentBoard = fillEmptySpaces(currentBoard);
@@ -466,21 +474,30 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     }, 200);
   }, [bombPositions, isProcessing, isShuffling, triggerBombExplosion, processMatches]);
 
-  // Handle drag start
+  // ENHANCED: Handle drag start with special item detection
   const handleDragStart = useCallback((event, { index }) => {
     if (isProcessing || !gameStarted || processingRef.current || isShuffling) return;
     
-    // Check if it's a bomb - handle differently
+    const { row, col } = getPosition(index);
+    const piece = boardRef.current[row][col];
+    
+    // Check if it's a shop bomb - handle differently
     if (bombPositions.has(index)) {
       handleBombTap(index);
       return;
     }
     
+    // Check if it's a special item - activate on tap
+    if (isSpecialItem(piece)) {
+      handleSpecialActivation(index);
+      return;
+    }
+    
     setDraggedPiece({ index });
-  }, [isProcessing, gameStarted, bombPositions, handleBombTap, isShuffling]);
+  }, [isProcessing, gameStarted, bombPositions, handleBombTap, handleSpecialActivation, isShuffling]);
 
-  // Handle drag end - determine swap direction and execute
-  const handleDragEnd = useCallback((event, info) => {
+  // ENHANCED: Handle drag end with special combo detection and TRANSFORM_AND_ACTIVATE
+  const handleDragEnd = useCallback(async (event, info) => {
     if (isProcessing || !gameStarted || !draggedPiece || processingRef.current || isShuffling) return;
 
     const { offset } = info;
@@ -511,9 +528,122 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     if (targetIndex !== undefined) {
       const draggedPosition = getPosition(index);
       const targetPosition = getPosition(targetIndex);
-
-      if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
-        // Execute the swap
+      
+      const draggedPieceType = boardRef.current[draggedPosition.row][draggedPosition.col];
+      const targetPieceType = boardRef.current[targetPosition.row][targetPosition.col];
+      
+      // Check for special item combo
+      if (isSpecialItem(draggedPieceType) && isSpecialItem(targetPieceType)) {
+        console.log('🌟 Special combo detected:', draggedPieceType, '+', targetPieceType);
+        
+        setIsProcessing(true);
+        processingRef.current = true;
+        onProcessingChange?.(true);
+        
+        const comboResult = executeCombo(boardRef.current, draggedPieceType, draggedPosition, targetPieceType, targetPosition);
+        
+        // ENHANCED: Handle TRANSFORM_AND_ACTIVATE for Honey + Color Bomb combo
+        if (comboResult.type === 'TRANSFORM_AND_ACTIVATE') {
+          console.log('🔄 Transform and activate combo - Honey + Color Bomb');
+          
+          // Transform all target pieces into Cat items
+          const newBoard = boardRef.current.map(row => [...row]);
+          comboResult.indices.forEach(index => {
+            const { row, col } = getPosition(index);
+            newBoard[row][col] = SPECIAL_ITEMS.CAT;
+          });
+          
+          // Update board state
+          setBoard(newBoard);
+          boardRef.current = newBoard;
+          
+          // Award initial transformation points
+          const transformPoints = comboResult.indices.length * POINTS_PER_PIECE;
+          setScore(prev => prev + transformPoints);
+          
+          // Heavy haptic feedback for transformation
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+          }
+          
+          // Brief pause to show transformation
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Activate each Cat item sequentially with wave effect
+          for (const index of comboResult.indices) {
+            const { row, col } = getPosition(index);
+            const catIndices = activateSpecialItem(boardRef.current, SPECIAL_ITEMS.CAT, { row, col });
+            
+            // Show animation for this Cat activation
+            setMatchedPieces(new Set(catIndices));
+            
+            // Award points for Cat activation (triple points for combo effect)
+            const catPoints = catIndices.length * POINTS_PER_PIECE * 3;
+            setScore(prev => prev + catPoints);
+            
+            // Medium haptic feedback for each Cat activation
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+            }
+            
+            // Animation delay for wave effect
+            await new Promise(resolve => setTimeout(resolve, 150));
+            
+            // Clear pieces and update board
+            const clearedBoard = removeMatches(boardRef.current, catIndices);
+            const gravityBoard = applyGravity(clearedBoard);
+            const finalBoard = fillEmptySpaces(gravityBoard);
+            
+            setBoard(finalBoard);
+            boardRef.current = finalBoard;
+            setMatchedPieces(new Set());
+            
+            // Brief pause between Cat activations for visual clarity
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          // Process any final cascade matches
+          setTimeout(() => {
+            processMatches();
+          }, 200);
+          
+        } else if (comboResult.indices.length > 0) {
+          // Handle other combos normally
+          setMatchedPieces(new Set(comboResult.indices));
+          
+          // Award combo points
+          const pointsAwarded = comboResult.indices.length * POINTS_PER_PIECE * 3; // Triple points for combos
+          setScore(prev => prev + pointsAwarded);
+          
+          // Heavy haptic feedback for combo
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+          }
+          
+          // Animation delay
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Clear pieces and process cascades
+          const newBoard = removeMatches(boardRef.current, comboResult.indices);
+          const gravityBoard = applyGravity(newBoard);
+          const finalBoard = fillEmptySpaces(gravityBoard);
+          
+          setBoard(finalBoard);
+          boardRef.current = finalBoard;
+          setMatchedPieces(new Set());
+          
+          // Process any new matches
+          setTimeout(() => {
+            processMatches();
+          }, 100);
+        }
+        
+        setIsProcessing(false);
+        processingRef.current = false;
+        onProcessingChange?.(false);
+        
+      } else if (isValidMove(boardRef.current, draggedPosition, targetPosition)) {
+        // Execute normal swap
         const newBoard = swapPieces(boardRef.current, draggedPosition, targetPosition);
         setBoard(newBoard);
         boardRef.current = newBoard;
@@ -537,12 +667,13 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
 
     // Clear dragged piece
     setDraggedPiece(null);
-  }, [isProcessing, gameStarted, draggedPiece, processMatches, isShuffling]);
+  }, [isProcessing, gameStarted, draggedPiece, processMatches, isShuffling, setScore]);
 
   // Check for initial matches only once when game starts
   useEffect(() => {
     if (gameStarted && !processingRef.current && !isShuffling) {
       const timeoutId = setTimeout(() => {
+        // Use legacy findMatches for initial check to avoid creating specials at start
         const matches = findMatches(boardRef.current);
         if (matches.length > 0) {
           processMatches();
@@ -585,13 +716,10 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
           const left = `calc(${col} * (${cellSize} + 4px))`;
           const top = `calc(${row} * (${cellSize} + 4px))`;
           
-          const emoji = board[row] ? board[row][col] : null;
+          const piece = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
           const hasBomb = bombPositions.has(index);
-          
-          // Check if this is a special item
-          const specialType = getSpecialItemType(emoji);
           
           return (
             <div
@@ -604,33 +732,17 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
                 height: cellSize,
               }}
             >
-              {emoji && (
-                specialType ? (
-                  // Render special animated piece
-                  <SpecialGamePiece
-                    emoji={emoji}
-                    specialType={specialType}
-                    index={index}
-                    isSelected={isSelected}
-                    isMatched={isMatched}
-                    hasBomb={hasBomb}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    disabled={isShuffling}
-                  />
-                ) : (
-                  // Render normal piece
-                  <GamePiece
-                    emoji={emoji}
-                    index={index}
-                    isSelected={isSelected}
-                    isMatched={isMatched}
-                    hasBomb={hasBomb}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    disabled={isShuffling}
-                  />
-                )
+              {piece && (
+                <GamePiece
+                  emoji={getPieceUrl(piece)}
+                  index={index}
+                  isSelected={isSelected}
+                  isMatched={isMatched}
+                  hasBomb={hasBomb}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  disabled={isShuffling}
+                />
               )}
             </div>
           );
