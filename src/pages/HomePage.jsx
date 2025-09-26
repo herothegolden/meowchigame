@@ -35,6 +35,11 @@ Meowchi верит: счастье приходит парами — двойн�
     },
   ];
 
+  // helper function to open telegram bot
+  const openTelegramOrder = () => {
+    window.open("https://t.me/MeowchiOrders_Bot", "_blank");
+  };
+
   return (
     <div className="min-h-screen bg-black text-white font-sans relative">
       {/* Spotlight Background */}
@@ -72,6 +77,7 @@ Meowchi верит: счастье приходит парами — двойн�
 
           <motion.button
             whileHover={{ scale: 1.05 }}
+            onClick={openTelegramOrder}
             className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
           >
             Заказать сейчас →
@@ -193,6 +199,7 @@ Meowchi верит: счастье приходит парами — двойн�
           <p>☎️ Телефон: 314 11 42</p>
           <motion.button
             whileHover={{ scale: 1.05 }}
+            onClick={openTelegramOrder}
             className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
           >
             Order via Telegram
