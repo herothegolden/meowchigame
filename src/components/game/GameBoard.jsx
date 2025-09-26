@@ -1,4 +1,4 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -488,7 +488,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     setDraggedPiece({ index });
   }, [isProcessing, gameStarted, bombPositions, handleBombTap, handleSpecialActivation, isShuffling]);
 
-  // ENHANCED: Handle drag end with special combo detection
+  // ENHANCED: Handle drag end with special combo detection and TRANSFORM_AND_ACTIVATE
   const handleDragEnd = useCallback(async (event, info) => {
     if (isProcessing || !gameStarted || !draggedPiece || processingRef.current || isShuffling) return;
 
@@ -533,12 +533,73 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
         
         const comboResult = executeCombo(boardRef.current, draggedPieceType, draggedPosition, targetPieceType, targetPosition);
         
+        // ENHANCED: Handle TRANSFORM_AND_ACTIVATE for Honey + Color Bomb combo
         if (comboResult.type === 'TRANSFORM_AND_ACTIVATE') {
-          // Special handling for Honey + Color Bomb combo
-          // TODO: Implement transform and activate logic
-          console.log('🔄 Transform and activate combo - needs special handling');
+          console.log('🔄 Transform and activate combo - Honey + Color Bomb');
+          
+          // Transform all target pieces into Cat items
+          const newBoard = boardRef.current.map(row => [...row]);
+          comboResult.indices.forEach(index => {
+            const { row, col } = getPosition(index);
+            newBoard[row][col] = SPECIAL_ITEMS.CAT;
+          });
+          
+          // Update board state
+          setBoard(newBoard);
+          boardRef.current = newBoard;
+          
+          // Award initial transformation points
+          const transformPoints = comboResult.indices.length * POINTS_PER_PIECE;
+          setScore(prev => prev + transformPoints);
+          
+          // Heavy haptic feedback for transformation
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+          }
+          
+          // Brief pause to show transformation
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Activate each Cat item sequentially with wave effect
+          for (const index of comboResult.indices) {
+            const { row, col } = getPosition(index);
+            const catIndices = activateSpecialItem(boardRef.current, SPECIAL_ITEMS.CAT, { row, col });
+            
+            // Show animation for this Cat activation
+            setMatchedPieces(new Set(catIndices));
+            
+            // Award points for Cat activation (triple points for combo effect)
+            const catPoints = catIndices.length * POINTS_PER_PIECE * 3;
+            setScore(prev => prev + catPoints);
+            
+            // Medium haptic feedback for each Cat activation
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+            }
+            
+            // Animation delay for wave effect
+            await new Promise(resolve => setTimeout(resolve, 150));
+            
+            // Clear pieces and update board
+            const clearedBoard = removeMatches(boardRef.current, catIndices);
+            const gravityBoard = applyGravity(clearedBoard);
+            const finalBoard = fillEmptySpaces(gravityBoard);
+            
+            setBoard(finalBoard);
+            boardRef.current = finalBoard;
+            setMatchedPieces(new Set());
+            
+            // Brief pause between Cat activations for visual clarity
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          // Process any final cascade matches
+          setTimeout(() => {
+            processMatches();
+          }, 200);
+          
         } else if (comboResult.indices.length > 0) {
-          // Show combo animation
+          // Handle other combos normally
           setMatchedPieces(new Set(comboResult.indices));
           
           // Award combo points
