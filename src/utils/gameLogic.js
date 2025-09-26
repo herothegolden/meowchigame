@@ -1,4 +1,4 @@
-// FIXED: gameLogic.js - Improved shuffle functions + Enhanced Match Detection
+// FIXED: gameLogic.js - Improved shuffle functions + Enhanced Match Detection + Special Activation & Combos
 
 // Game configuration - Changed to 6x6 for better mobile fit
 export const BOARD_SIZE = 6;
@@ -13,6 +13,14 @@ export const PIECE_EMOJIS = [
   'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
   'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1758904443682'
 ];
+
+// Special item constants
+export const SPECIAL_ITEMS = {
+  CAT: 'CAT_ITEM',
+  HONEY: 'HONEY_ITEM', 
+  COLOR_BOMB: 'COLOR_BOMB_ITEM',
+  SHOP_BOMB: 'SHOP_BOMB_ITEM'
+};
 
 /**
  * Generates initial board ensuring no matches exist
@@ -369,6 +377,109 @@ const findLTShapes = (board) => {
   }
   
   return shapes;
+};
+
+/**
+ * NEW: Activate special items - returns array of indices to clear
+ */
+export const activateSpecialItem = (board, specialType, position, targetPiece = null) => {
+  const indices = [];
+  
+  switch(specialType) {
+    case SPECIAL_ITEMS.CAT:
+      // Clear entire row and column
+      for (let i = 0; i < BOARD_SIZE; i++) {
+        indices.push(getIndex(position.row, i)); // Row
+        indices.push(getIndex(i, position.col)); // Column
+      }
+      break;
+      
+    case SPECIAL_ITEMS.HONEY:
+      // Double 3x3 explosion centered on position
+      for (let r = position.row - 1; r <= position.row + 1; r++) {
+        for (let c = position.col - 1; c <= position.col + 1; c++) {
+          if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+            indices.push(getIndex(r, c));
+          }
+        }
+      }
+      // Second explosion at same position (double effect)
+      for (let r = position.row - 1; r <= position.row + 1; r++) {
+        for (let c = position.col - 1; c <= position.col + 1; c++) {
+          if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+            indices.push(getIndex(r, c));
+          }
+        }
+      }
+      break;
+      
+    case SPECIAL_ITEMS.COLOR_BOMB:
+      // Remove all pieces of target type
+      if (targetPiece) {
+        for (let row = 0; row < BOARD_SIZE; row++) {
+          for (let col = 0; col < BOARD_SIZE; col++) {
+            if (board[row][col] === targetPiece) {
+              indices.push(getIndex(row, col));
+            }
+          }
+        }
+      }
+      break;
+  }
+  
+  return [...new Set(indices)]; // Remove duplicates
+};
+
+/**
+ * NEW: Execute special item combos - returns { type, indices }
+ */
+export const executeCombo = (board, item1Type, item1Pos, item2Type, item2Pos) => {
+  let indices = [];
+  
+  // Cat + Honey Jar combo
+  if ((item1Type === SPECIAL_ITEMS.CAT && item2Type === SPECIAL_ITEMS.HONEY) ||
+      (item1Type === SPECIAL_ITEMS.HONEY && item2Type === SPECIAL_ITEMS.CAT)) {
+    // Clear 3 rows and 3 columns centered on both positions
+    [item1Pos, item2Pos].forEach(pos => {
+      // Center row and adjacent rows
+      for (let r = Math.max(0, pos.row - 1); r <= Math.min(BOARD_SIZE - 1, pos.row + 1); r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+          indices.push(getIndex(r, c));
+        }
+      }
+      // Center column and adjacent columns  
+      for (let c = Math.max(0, pos.col - 1); c <= Math.min(BOARD_SIZE - 1, pos.col + 1); c++) {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+          indices.push(getIndex(r, c));
+        }
+      }
+    });
+    return { type: 'NORMAL', indices: [...new Set(indices)] };
+  }
+  
+  // Honey Jar + Color Bomb combo
+  else if ((item1Type === SPECIAL_ITEMS.HONEY && item2Type === SPECIAL_ITEMS.COLOR_BOMB) ||
+           (item1Type === SPECIAL_ITEMS.COLOR_BOMB && item2Type === SPECIAL_ITEMS.HONEY)) {
+    // Transform all pieces of same type into Cat items, then activate them
+    // This requires special handling in GameBoard.jsx
+    return { type: 'TRANSFORM_AND_ACTIVATE', indices: [] };
+  }
+  
+  // Cat + Color Bomb combo
+  else if ((item1Type === SPECIAL_ITEMS.CAT && item2Type === SPECIAL_ITEMS.COLOR_BOMB) ||
+           (item1Type === SPECIAL_ITEMS.COLOR_BOMB && item2Type === SPECIAL_ITEMS.CAT)) {
+    // Checkerboard explosion pattern
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        if ((row + col) % 2 === 0) {
+          indices.push(getIndex(row, col));
+        }
+      }
+    }
+    return { type: 'NORMAL', indices: [...new Set(indices)] };
+  }
+  
+  return { type: 'NORMAL', indices: [] };
 };
 
 /**
