@@ -100,6 +100,7 @@ const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
           <p className="text-xs text-accent mt-1">Quantity: {quantity}</p>
         </div>
       </div>
+      
       <button 
         onClick={handleActivate}
         disabled={disabled || isActivating}
@@ -148,10 +149,17 @@ const ProfilePage = () => {
   const [isUpdatingName, setIsUpdatingName] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
   
+  // FIXED: Avatar & Name sync state
+  const [displayAvatar, setDisplayAvatar] = useState(null);
+  const [displayName, setDisplayName] = useState('');
+  const [isSyncingAvatar, setIsSyncingAvatar] = useState(false);
+  
   const tg = window.Telegram?.WebApp;
 
-  // Get Telegram user photo
-  const telegramPhotoUrl = tg?.initDataUnsafe?.user?.photo_url;
+  // FIXED: Get Telegram user data with fallback
+  const telegramUser = tg?.initDataUnsafe?.user;
+  const telegramPhotoUrl = telegramUser?.photo_url;
+  const telegramFirstName = telegramUser?.first_name;
 
   // Mock data for demo mode
   const MOCK_STATS = {
@@ -160,7 +168,8 @@ const ProfilePage = () => {
     points: 4735,
     level: 1,
     daily_streak: 1,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    avatar_url: null
   };
 
   const MOCK_ITEMS = [
@@ -177,6 +186,62 @@ const ProfilePage = () => {
     { rank: 7, player: { name: 'David', level: 2 }, score: 5800, isCurrentUser: false, badge: null },
     { rank: 8, player: { name: 'Lisa', level: 1 }, score: 4900, isCurrentUser: false, badge: null }
   ];
+
+  // FIXED: Sync avatar from Telegram to backend
+  const syncTelegramAvatar = async () => {
+    if (!telegramPhotoUrl || !isConnected || !tg?.initData || !BACKEND_URL) {
+      return;
+    }
+
+    setIsSyncingAvatar(true);
+    try {
+      console.log('🔄 Syncing Telegram avatar to backend:', telegramPhotoUrl);
+      
+      const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          avatarUrl: telegramPhotoUrl 
+        }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        console.log('✅ Avatar synced successfully:', result.avatarUrl);
+        
+        // Update local state
+        setProfileData(prev => ({
+          ...prev,
+          stats: { ...prev.stats, avatar_url: result.avatarUrl }
+        }));
+      } else {
+        console.warn('⚠️ Avatar sync failed:', res.status);
+      }
+    } catch (error) {
+      console.error('❌ Avatar sync error:', error);
+    } finally {
+      setIsSyncingAvatar(false);
+    }
+  };
+
+  // FIXED: Update display values based on Telegram + DB data
+  useEffect(() => {
+    if (profileData.stats) {
+      // Name: Use Telegram if available, otherwise DB
+      const finalName = telegramFirstName || profileData.stats.first_name || 'User';
+      setDisplayName(finalName);
+      
+      // Avatar: Use Telegram if available, otherwise DB, otherwise null
+      const finalAvatar = telegramPhotoUrl || profileData.stats.avatar_url || null;
+      setDisplayAvatar(finalAvatar);
+      
+      // Sync avatar to backend if Telegram provides one and DB doesn't have it
+      if (telegramPhotoUrl && telegramPhotoUrl !== profileData.stats.avatar_url) {
+        syncTelegramAvatar();
+      }
+    }
+  }, [profileData.stats, telegramPhotoUrl, telegramFirstName, isConnected]);
 
   // Leaderboard helper functions
   const getRankIcon = (rank) => {
@@ -242,9 +307,9 @@ const ProfilePage = () => {
     }
   };
 
-  // Profile name update handler
+  // FIXED: Profile name update handler - use displayName
   const handleUpdateProfile = async () => {
-    if (!editNameValue.trim() || editNameValue.trim() === profileData.stats.first_name) {
+    if (!editNameValue.trim() || editNameValue.trim() === displayName) {
       setIsEditingName(false);
       return;
     }
@@ -260,6 +325,9 @@ const ProfilePage = () => {
         } else {
           alert(message);
         }
+        
+        // Update display name in demo
+        setDisplayName(editNameValue.trim());
         setIsEditingName(false);
         setIsUpdatingName(false);
         return;
@@ -279,7 +347,8 @@ const ProfilePage = () => {
         ...prev,
         stats: { ...prev.stats, first_name: result.firstName }
       }));
-
+      
+      setDisplayName(result.firstName);
       setIsEditingName(false);
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
@@ -1014,7 +1083,7 @@ const ProfilePage = () => {
         {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
       </div>
 
-      {/* Profile Header with Telegram Avatar */}
+      {/* FIXED: Profile Header with Hybrid Avatar & Name Sync */}
       <motion.div 
         className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
@@ -1022,22 +1091,37 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* Profile Photo - Uses Telegram Photo or User Icon Fallback */}
+          {/* FIXED: Profile Photo - Hybrid Telegram + DB with sync indicator */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
-              {telegramPhotoUrl ? (
+              {displayAvatar ? (
                 <img 
-                  src={telegramPhotoUrl} 
+                  src={displayAvatar} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.warn('Avatar failed to load, showing fallback');
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
                 />
               ) : (
                 <User className="w-8 h-8 text-secondary" />
               )}
+              {!displayAvatar && (
+                <User className="w-8 h-8 text-secondary" style={{ display: displayAvatar ? 'none' : 'flex' }} />
+              )}
             </div>
+            
+            {/* Sync indicator */}
+            {isSyncingAvatar && (
+              <div className="absolute -bottom-1 -right-1 bg-accent rounded-full p-1">
+                <LoaderCircle className="w-3 h-3 animate-spin text-background" />
+              </div>
+            )}
           </div>
           
-          {/* User Info - EDITABLE */}
+          {/* FIXED: User Info - EDITABLE with hybrid name */}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
               <div className="flex items-center space-x-2">
@@ -1069,10 +1153,10 @@ const ProfilePage = () => {
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
+                <h1 className="text-xl font-bold text-primary truncate">{displayName}</h1>
                 <button
                   onClick={() => {
-                    setEditNameValue(stats.first_name || '');
+                    setEditNameValue(displayName || '');
                     setIsEditingName(true);
                   }}
                   className="text-secondary hover:text-accent transition-colors"
@@ -1089,10 +1173,19 @@ const ProfilePage = () => {
           </div>
         </div>
         
-        {/* Note about Telegram Avatar */}
+        {/* FIXED: Note about sync sources */}
         <div className="mt-3 pt-3 border-t border-gray-700 text-center">
           <p className="text-xs text-secondary">
-            Avatar synced from your Telegram profile
+            {telegramPhotoUrl || telegramFirstName ? (
+              <>
+                {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
+                 telegramPhotoUrl ? 'Avatar synced from Telegram' :
+                 'Name synced from Telegram'}
+                {(stats.avatar_url || stats.first_name) && ' • DB backup available'}
+              </>
+            ) : (
+              'Using stored profile data'
+            )}
           </p>
         </div>
       </motion.div>
