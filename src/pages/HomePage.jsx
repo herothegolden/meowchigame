@@ -153,7 +153,11 @@ Meowchi верит: счастье приходит парами — двойн�
               whileHover={{ scale: 1.03 }}
               className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
             >
-              <div className="w-full h-40 bg-white/10 rounded-lg mb-4"></div>
+              <img
+                src="https://ik.imagekit.io/59r2kpz8r/Meowchi/3.webp?updatedAt=1758892681518"
+                alt="Viral Strawberry & Oreo"
+                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(255,0,150,0.3)] border border-white/10 mb-4"
+              />
               <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
               <p className="text-gray-300 text-sm">
                 розовое настроение, playful, вирусный фаворит.
