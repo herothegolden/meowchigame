@@ -15,15 +15,17 @@ const HomePage = () => {
           transition={{ duration: 0.8 }}
           className="text-center space-y-4"
         >
-          <h1 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent drop-shadow-lg">
-            Чётко. Стильно. 쫀득.
+          <h1 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent drop-shadow-lg leading-tight">
+            Чётко. <br />
+            Стильно. <br />
+            쫀득.
           </h1>
           <p className="text-lg text-gray-300 leading-relaxed">
-            Это Meowchi — мраморные маршмеллоу-куки из Ташкента. Вкус, который
-            тянется, текстура, которая попадает в ваши Stories.{" "}
-            <span className="text-white font-semibold">
-              Your new viral obsession.
-            </span>
+            Это Meowchi — мраморные маршмеллоу-куки из Ташкента. <br />
+            Вкус, который тянется, текстура, которая попадает в ваши Stories.
+          </p>
+          <p className="text-white font-semibold text-lg">
+            Your new viral obsession.
           </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -44,7 +46,7 @@ const HomePage = () => {
           <h2 className="text-2xl font-bold mb-3">
             Почему Meowchi особенный?
           </h2>
-          <p className="text-gray-300 leading-relaxed">
+          <p className="text-gray-300 leading-relaxed mb-3">
             Meowchi — больше, чем печенье. Это{" "}
             <span className="font-semibold text-white">쫀득-текстура</span>,
             которая делает каждый укус{" "}
@@ -56,6 +58,10 @@ const HomePage = () => {
           <p className="mt-3 text-emerald-300 italic font-medium">
             Chewy. Marble. Shareable.
           </p>
+          {/* Image Placeholder */}
+          <div className="w-full h-40 bg-white/10 rounded-lg mt-4 flex items-center justify-center">
+            <span className="text-gray-400">[ Image Placeholder ]</span>
+          </div>
         </motion.div>
 
         {/* Magic Number Section */}
