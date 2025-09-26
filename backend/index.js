@@ -321,6 +321,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// FIXED: Enhanced /api/validate with automatic name sync on every login
 app.post('/api/validate', validateUser, async (req, res) => {
     try {
         const { user } = req;
@@ -331,13 +332,41 @@ app.post('/api/validate', validateUser, async (req, res) => {
             let dailyBonus = null;
 
             if (dbUserResult.rows.length === 0) {
+                // NEW USER: Create with Telegram data
+                console.log(`🆕 Creating new user: ${user.first_name} (${user.id})`);
                 const insertResult = await client.query(
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
                     [user.id, user.first_name, user.last_name, user.username]
                 );
                 appUser = insertResult.rows[0];
             } else {
+                // EXISTING USER: Sync name if changed + handle daily bonus
                 appUser = dbUserResult.rows[0];
+                
+                // FIXED: Check if Telegram name data has changed and sync it
+                const telegramFirstName = user.first_name || appUser.first_name;
+                const telegramLastName = user.last_name || appUser.last_name;
+                const telegramUsername = user.username || appUser.username;
+                
+                const nameNeedsUpdate = (
+                    telegramFirstName !== appUser.first_name ||
+                    telegramLastName !== appUser.last_name ||
+                    telegramUsername !== appUser.username
+                );
+                
+                if (nameNeedsUpdate) {
+                    console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
+                    
+                    const nameUpdateResult = await client.query(
+                        `UPDATE users SET first_name = $1, last_name = $2, username = $3 WHERE telegram_id = $4 RETURNING *`,
+                        [telegramFirstName, telegramLastName, telegramUsername, user.id]
+                    );
+                    appUser = nameUpdateResult.rows[0];
+                    
+                    console.log(`✅ Name sync completed for user ${user.id}`);
+                }
+                
+                // Handle daily bonus logic (unchanged)
                 const now = new Date();
                 const lastLogin = new Date(appUser.last_login_at);
 
