@@ -1,9 +1,10 @@
-// FIXED: GameBoard.jsx - Shuffle functionality
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
   BOARD_SIZE,
   findMatches,
+  findSpecialMatches,
   removeMatches,
   applyGravity,
   fillEmptySpaces,
@@ -15,6 +16,41 @@ import {
   smartShuffle,
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
+
+// Special item constants
+const SPECIAL_ITEMS = {
+  CAT: 'CAT_ITEM',
+  HONEY: 'HONEY_ITEM', 
+  COLOR_BOMB: 'COLOR_BOMB_ITEM',
+  SHOP_BOMB: 'SHOP_BOMB_ITEM'
+};
+
+// Piece URL mapping - Regular pieces (0-5) + Special items
+const getPieceUrl = (piece) => {
+  const urlMap = {
+    // Regular pieces (mapped by array index)
+    0: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Matcha.webp?updatedAt=1758904443599',
+    1: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Milk.webp?updatedAt=1758904443453', 
+    2: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Butter.webp?updatedAt=1758904443280',
+    3: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1758904443333',
+    4: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
+    5: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1758904443682',
+    
+    // Special items
+    [SPECIAL_ITEMS.CAT]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/WhiteCat.webp?updatedAt=1758905830440',
+    [SPECIAL_ITEMS.HONEY]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/HoneyJar.webp?updatedAt=1758905928332',
+    [SPECIAL_ITEMS.COLOR_BOMB]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ColourBomb.webp?updatedAt=1758905830618',
+    [SPECIAL_ITEMS.SHOP_BOMB]: 'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ShopBomb.webp?updatedAt=1758905830542'
+  };
+  
+  // If piece is a URL already, return as-is (backward compatibility)
+  if (typeof piece === 'string' && piece.startsWith('http')) {
+    return piece;
+  }
+  
+  // Map by index or special item constant
+  return urlMap[piece] || piece;
+};
 
 const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady }) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
@@ -187,7 +223,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     return explosionIndices;
   }, [setScore]);
 
-  // OPTIMIZED: Much faster match processing with bomb support
+  // ENHANCED: Match processing with special item creation
   const processMatches = useCallback(async () => {
     if (processingRef.current || !gameStarted || isShuffling) return;
     
@@ -200,15 +236,21 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     const maxCascades = 5;
     
     while (cascadeCount < maxCascades) {
-      const matches = findMatches(currentBoard);
+      // Use enhanced match detection
+      const specialMatches = findSpecialMatches(currentBoard);
       
-      if (matches.length === 0) break;
+      // Collect all matched indices for animation
+      const allMatchedIndices = new Set([
+        ...specialMatches.regular,
+        ...specialMatches.cat.flatMap(match => match.pieces),
+        ...specialMatches.honey.flatMap(match => match.pieces), 
+        ...specialMatches.colorBomb.flatMap(match => match.pieces)
+      ]);
+      
+      if (allMatchedIndices.size === 0) break;
       
       // Check if any matches trigger bombs
-      let allMatchedIndices = new Set(matches);
-      
-      // Check for bomb triggers
-      matches.forEach(matchIndex => {
+      allMatchedIndices.forEach(matchIndex => {
         if (bombPositions.has(matchIndex)) {
           const explosionIndices = triggerBombExplosion(matchIndex);
           explosionIndices.forEach(index => allMatchedIndices.add(index));
@@ -222,11 +264,43 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       // FASTER: Reduced from 400ms to 100ms
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Remove matches
-      currentBoard = removeMatches(currentBoard, Array.from(allMatchedIndices));
+      // SPECIAL ITEM CREATION: Remove matches but preserve anchors for special items
+      const newBoard = currentBoard.map(row => [...row]);
+      
+      // Process special matches first - convert anchors to special items
+      [...specialMatches.cat, ...specialMatches.honey, ...specialMatches.colorBomb].forEach(match => {
+        const { row, col } = match.position;
+        
+        // Determine special item type
+        let specialItem;
+        if (specialMatches.cat.includes(match)) {
+          specialItem = SPECIAL_ITEMS.CAT;
+        } else if (specialMatches.honey.includes(match)) {
+          specialItem = SPECIAL_ITEMS.HONEY;
+        } else if (specialMatches.colorBomb.includes(match)) {
+          specialItem = SPECIAL_ITEMS.COLOR_BOMB;
+        }
+        
+        // Replace anchor with special item
+        newBoard[row][col] = specialItem;
+        
+        // Clear other pieces in the match (but not the anchor)
+        match.pieces.forEach(index => {
+          const piecePos = getPosition(index);
+          if (piecePos.row !== row || piecePos.col !== col) {
+            newBoard[piecePos.row][piecePos.col] = null;
+          }
+        });
+      });
+      
+      // Clear regular matches normally
+      specialMatches.regular.forEach(index => {
+        const { row, col } = getPosition(index);
+        newBoard[row][col] = null;
+      });
       
       // Apply gravity
-      currentBoard = applyGravity(currentBoard);
+      currentBoard = applyGravity(newBoard);
       
       // Fill empty spaces
       currentBoard = fillEmptySpaces(currentBoard);
@@ -371,6 +445,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
   useEffect(() => {
     if (gameStarted && !processingRef.current && !isShuffling) {
       const timeoutId = setTimeout(() => {
+        // Use legacy findMatches for initial check to avoid creating specials at start
         const matches = findMatches(boardRef.current);
         if (matches.length > 0) {
           processMatches();
@@ -413,7 +488,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
           const left = `calc(${col} * (${cellSize} + 4px))`;
           const top = `calc(${row} * (${cellSize} + 4px))`;
           
-          const emoji = board[row] ? board[row][col] : null;
+          const piece = board[row] ? board[row][col] : null;
           const isSelected = draggedPiece?.index === index;
           const isMatched = matchedPieces.has(index);
           const hasBomb = bombPositions.has(index);
@@ -429,9 +504,9 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
                 height: cellSize,
               }}
             >
-              {emoji && (
+              {piece && (
                 <GamePiece
-                  emoji={emoji}
+                  emoji={getPieceUrl(piece)}
                   index={index}
                   isSelected={isSelected}
                   isMatched={isMatched}
