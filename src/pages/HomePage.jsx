@@ -60,6 +60,16 @@ Meowchi верит: счастье приходит парами — двойн�
           <p className="text-white font-semibold text-lg">
             Your new viral obsession.
           </p>
+
+          {/* Hero Image */}
+          <div className="w-full flex justify-center my-4">
+            <img
+              src="/images/hero-meowchi.png"
+              alt="Meowchi Hero"
+              className="w-64 h-64 object-cover rounded-2xl shadow-2xl border border-white/10"
+            />
+          </div>
+
           <motion.button
             whileHover={{ scale: 1.05 }}
             className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
