@@ -64,7 +64,7 @@ Meowchi верит: счастье приходит парами — двойн�
           {/* Hero Image */}
           <div className="w-full flex justify-center my-4">
             <img
-              src="/images/hero-meowchi.png"
+              src="https://ik.imagekit.io/59r2kpz8r/Meowchi/1.webp?updatedAt=1758888700434"
               alt="Meowchi Hero"
               className="w-64 h-64 object-cover rounded-2xl shadow-2xl border border-white/10"
             />
@@ -101,9 +101,13 @@ Meowchi верит: счастье приходит парами — двойн�
           <p className="mt-3 text-emerald-300 italic font-medium">
             Chewy. Marble. Shareable.
           </p>
-          {/* Image Placeholder */}
-          <div className="w-full h-40 bg-white/10 rounded-lg mt-4 flex items-center justify-center">
-            <span className="text-gray-400">[ Image Placeholder ]</span>
+          {/* About Image */}
+          <div className="w-full flex justify-center mt-6">
+            <img
+              src="https://ik.imagekit.io/59r2kpz8r/Meowchi/2.webp?updatedAt=1758888699837"
+              alt="About Meowchi"
+              className="w-full max-w-lg h-48 object-cover rounded-2xl shadow-xl border border-white/10"
+            />
           </div>
         </motion.div>
 
