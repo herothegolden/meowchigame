@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { FaTelegram, FaInstagram } from "react-icons/fa"; // ✅ added icons
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
@@ -216,24 +215,41 @@ Meowchi верит: счастье приходит парами — двойн�
         </motion.div>
       </div>
 
-      {/* Footer Section */}
+      {/* Footer Section with inline SVGs */}
       <footer className="border-t border-white/10 py-6 mt-8">
         <div className="flex justify-center space-x-6 text-2xl">
+          {/* Telegram */}
           <a
             href="https://t.me/meowchi_lab"
             target="_blank"
             rel="noopener noreferrer"
             className="text-emerald-300 hover:text-emerald-400 transition"
           >
-            <FaTelegram />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              className="w-7 h-7"
+            >
+              <path d="M9.999 15.5 9.5 20a.5.5 0 0 0 .8.4l3.2-2.4 3.8 2.9c.5.4 1.2.1 1.3-.5L21 4.6c.1-.7-.6-1.2-1.2-.9L2.7 11.4c-.7.3-.7 1.3.1 1.5l5.1 1.5 10.6-6.6-8.5 8.7Z" />
+            </svg>
           </a>
+
+          {/* Instagram */}
           <a
             href="https://www.instagram.com/meowchi.lab/"
             target="_blank"
             rel="noopener noreferrer"
             className="text-pink-400 hover:text-pink-500 transition"
           >
-            <FaInstagram />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              className="w-7 h-7"
+            >
+              <path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9A5.5 5.5 0 0 1 16.5 22h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2Zm0 2A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20h9a3.5 3.5 0 0 0 3.5-3.5v-9A3.5 3.5 0 0 0 16.5 4h-9Zm4.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm5.25-2.75a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z" />
+            </svg>
           </a>
         </div>
         <p className="text-center text-gray-500 text-sm mt-3">
