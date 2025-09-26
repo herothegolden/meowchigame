@@ -146,18 +146,12 @@ const ProfilePage = () => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
-  const [isEditingAvatar, setIsEditingAvatar] = useState(false);
-  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
-  
-  // File upload state
-  const [selectedAvatarFile, setSelectedAvatarFile] = useState(null);
-  const [avatarFilePreview, setAvatarFilePreview] = useState(null);
   
   const tg = window.Telegram?.WebApp;
 
-  // Mobile platform detection for Telegram WebApp
-  const isMobileTelegram = tg?.platform === 'android' || tg?.platform === 'ios';
+  // Get Telegram user photo
+  const telegramPhotoUrl = tg?.initDataUnsafe?.user?.photo_url;
 
   // Mock data for demo mode
   const MOCK_STATS = {
@@ -343,7 +337,7 @@ const ProfilePage = () => {
   const clearAvatarFileSelection = () => {
     setSelectedAvatarFile(null);
     setAvatarFilePreview(null);
-    // Clear file input
+    // Clear file input - works for both mobile and desktop versions
     const fileInput = document.querySelector('input[type="file"][accept="image/*"]');
     if (fileInput) fileInput.value = '';
   };
@@ -1128,7 +1122,7 @@ const ProfilePage = () => {
         {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
       </div>
 
-      {/* Updated Editable Profile Header with Integrated Avatar Button */}
+      {/* Profile Header with Telegram Avatar */}
       <motion.div 
         className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
@@ -1136,12 +1130,12 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* Profile Photo - EDITABLE */}
+          {/* Profile Photo - Uses Telegram Photo */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
-              {stats.avatar_url ? (
+              {telegramPhotoUrl ? (
                 <img 
-                  src={stats.avatar_url} 
+                  src={telegramPhotoUrl} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -1150,14 +1144,8 @@ const ProfilePage = () => {
                   }}
                 />
               ) : null}
-              <User className={`w-8 h-8 text-secondary ${stats.avatar_url ? 'hidden' : ''}`} />
+              <User className={`w-8 h-8 text-secondary ${telegramPhotoUrl ? 'hidden' : ''}`} />
             </div>
-            <button
-              onClick={() => setIsEditingAvatar(true)}
-              className="absolute -bottom-1 -right-1 bg-accent text-background rounded-full w-6 h-6 flex items-center justify-center hover:scale-110 transition-transform"
-            >
-              ✏️
-            </button>
           </div>
           
           {/* User Info - EDITABLE */}
@@ -1211,104 +1199,14 @@ const ProfilePage = () => {
             </div>
           </div>
         </div>
-
-        {/* Change Avatar Button - Always Visible */}
-        <div className="mt-4 text-center border-t border-gray-700 pt-3">
-          <button
-            type="button"
-            onClick={() => setIsEditingAvatar(true)}
-            className="bg-secondary/20 hover:bg-accent/20 border border-secondary/50 hover:border-accent text-secondary hover:text-accent px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 inline-flex items-center space-x-2"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Change Avatar</span>
-          </button>
+        
+        {/* Note about Telegram Avatar */}
+        <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+          <p className="text-xs text-secondary">
+            Avatar synced from your Telegram profile
+          </p>
         </div>
       </motion.div>
-
-      {/* Simple Inline Avatar Upload UI */}
-      {isEditingAvatar && (
-        <motion.div
-          className="bg-nav rounded-lg p-4 border border-gray-700"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <h3 className="text-lg font-bold text-primary mb-3 text-center">Upload New Avatar</h3>
-          
-          {/* File Input - Platform-Specific Rendering */}
-          <div className="space-y-3 mb-4">
-            {isMobileTelegram ? (
-              /* Mobile Telegram: Plain, always-visible file input */
-              <div className="text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarFileSelect}
-                  className="w-full text-center"
-                  style={{
-                    padding: '8px',
-                    border: '1px solid #666',
-                    borderRadius: '8px',
-                    backgroundColor: '#EAB308',
-                    color: '#000',
-                    fontSize: '14px'
-                  }}
-                />
-                <p className="text-xs text-secondary mt-1">JPG, PNG, GIF up to 2MB</p>
-              </div>
-            ) : (
-              /* Desktop: Styled file input */
-              <>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarFileSelect}
-                  className="w-full bg-accent text-background py-2 px-4 rounded-lg font-medium cursor-pointer file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:bg-background file:text-accent file:font-medium hover:bg-accent/90 transition-colors"
-                />
-                <p className="text-xs text-secondary text-center">JPG, PNG, GIF up to 2MB</p>
-              </>
-            )}
-          </div>
-
-          {/* File Preview */}
-          {avatarFilePreview && (
-            <div className="text-center space-y-2 mb-4">
-              <div className="w-16 h-16 mx-auto rounded-full overflow-hidden border-2 border-accent">
-                <img 
-                  src={avatarFilePreview} 
-                  alt="Preview" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <p className="text-xs text-accent font-medium">{selectedAvatarFile?.name}</p>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
-            <button
-              onClick={() => {
-                setIsEditingAvatar(false);
-                clearAvatarFileSelection();
-              }}
-              className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleUpdateAvatar}
-              disabled={isUpdatingAvatar || !selectedAvatarFile}
-              className="flex-1 bg-accent text-background py-2 px-4 rounded-lg font-medium flex items-center justify-center hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUpdatingAvatar ? (
-                <LoaderCircle className="w-4 h-4 animate-spin" />
-              ) : (
-                'Save'
-              )}
-            </button>
-          </div>
-        </motion.div>
-      )}
 
       {/* Tab Navigation */}
       <motion.div 
