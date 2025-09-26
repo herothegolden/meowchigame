@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
+import { FaTelegramPlane, FaInstagram } from "react-icons/fa";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
@@ -41,11 +42,11 @@ Meowchi верит: счастье приходит парами — двойн�
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans relative">
+    <div className="min-h-screen bg-black text-white font-sans relative flex flex-col">
       {/* Spotlight Background */}
       <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
 
-      <div className="max-w-2xl mx-auto px-6 py-12 space-y-12">
+      <div className="flex-grow max-w-2xl mx-auto px-6 py-12 space-y-12">
         {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -213,11 +214,32 @@ Meowchi верит: счастье приходит парами — двойн�
             Order via Telegram
           </motion.button>
         </motion.div>
+      </div>
 
-        <p className="text-center text-gray-400 text-sm pt-6">
+      {/* Footer */}
+      <footer className="border-t border-white/10 py-6 mt-12">
+        <div className="flex justify-center space-x-6">
+          <a
+            href="https://t.me/meowchi_lab"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-emerald-300 transition"
+          >
+            <FaTelegramPlane size={28} />
+          </a>
+          <a
+            href="https://www.instagram.com/meowchi.lab/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-pink-400 transition"
+          >
+            <FaInstagram size={28} />
+          </a>
+        </div>
+        <p className="text-center text-gray-500 text-sm mt-4">
           Meowchi — viral texture, локальный вкус, глобальные vibes.
         </p>
-      </div>
+      </footer>
     </div>
   );
 };
