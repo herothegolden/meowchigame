@@ -396,12 +396,8 @@ const GamePage = () => {
 
     } catch (error) {
       console.error('Activation error:', error);
+      // Silent error handling - only haptic feedback, no popup
       tg?.HapticFeedback?.notificationOccurred('error');
-      tg?.showPopup({
-        title: 'Error',
-        message: error.message,
-        buttons: [{ type: 'ok' }]
-      });
     } finally {
       setIsActivatingItem(null);
     }
@@ -519,28 +515,21 @@ const GamePage = () => {
               <p className="text-sm text-blue-400 mb-2">🔀 Shuffles used: {shuffleCount}</p>
             )}
             
-            {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2 text-secondary mt-4">
-                <LoaderCircle className="w-6 h-6 animate-spin" />
-                <span>Saving score...</span>
-              </div>
-            ) : (
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={restartGame}
-                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
-                >
-                  <RotateCcw size={20} />
-                  <span>Play Again</span>
-                </button>
-                <button
-                  onClick={() => navigate('/')}
-                  className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
-                >
-                  Home
-                </button>
-              </div>
-            )}
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={restartGame}
+                className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
+              >
+                <RotateCcw size={20} />
+                <span>Play Again</span>
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
+              >
+                Home
+              </button>
+            </div>
           </div>
         </motion.div>
       )}
