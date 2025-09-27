@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle, Sparkles } from 'lucide-react';
+import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -103,7 +104,11 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
         </motion.div>
       ) : (
         <motion.button 
-          onClick={() => onPurchase(item.id)}
+          onClick={() => {
+            // 🎵 SOUND: Button click
+            soundManager.playUI('button_click', { volume: 0.8 });
+            onPurchase(item.id);
+          }}
           disabled={!canAfford || isPurchasing}
           className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
             canAfford 
@@ -253,7 +258,7 @@ const ShopPage = () => {
     return 'other';
   };
 
-  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS!
+  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS! + SOUND INTEGRATION
   const handlePurchase = async (itemId) => {
     const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
@@ -278,6 +283,9 @@ const ShopPage = () => {
         }
 
         console.log('Purchase successful:', result);
+
+        // 🎵 SOUND: Purchase success
+        soundManager.playCore('score_collect', { volume: 1.0 });
 
         // INSTANT UI UPDATES - NO RELOAD!
         
@@ -321,6 +329,9 @@ const ShopPage = () => {
         
         // Demo mode - instant updates
         if (userPoints >= item.price) {
+          // 🎵 SOUND: Purchase success (demo)
+          soundManager.playCore('score_collect', { volume: 1.0 });
+          
           const newPoints = userPoints - item.price;
           setUserPoints(newPoints);
           setDemoPoints(newPoints);
@@ -362,6 +373,9 @@ const ShopPage = () => {
             alert(message);
           }
         } else {
+          // 🎵 SOUND: Purchase failed - not enough points
+          soundManager.playCore('swap_invalid', { volume: 0.8 });
+          
           const message = 'Not enough points!';
           if (tg && tg.showPopup) {
             tg.showPopup({
@@ -376,6 +390,10 @@ const ShopPage = () => {
       }
     } catch (error) {
       console.error('Purchase error:', error);
+      
+      // 🎵 SOUND: Purchase failed - error
+      soundManager.playCore('swap_invalid', { volume: 0.8 });
+      
       tg?.HapticFeedback?.notificationOccurred('error');
       
       const message = error.message || 'Purchase failed';
