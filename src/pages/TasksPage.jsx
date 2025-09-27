@@ -500,17 +500,13 @@ const TasksPage = () => {
         <p className="text-secondary">Complete tasks to earn rewards and badges</p>
       </motion.div>
 
-      {/* Connection Status */}
-      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-        {loading ? (
-          <div className="flex items-center justify-center space-x-2">
-            <LoaderCircle className="w-4 h-4 animate-spin" />
-            <span>Loading tasks...</span>
-          </div>
-        ) : (
-          <span>{isConnected ? 'Connected to server' : 'Demo mode - showing sample tasks'}</span>
-        )}
-      </div>
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center space-x-2 text-secondary">
+          <LoaderCircle className="w-5 h-5 animate-spin" />
+          <span>Loading tasks...</span>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <motion.div
@@ -527,8 +523,8 @@ const TasksPage = () => {
               : 'text-secondary hover:text-primary hover:bg-background/20'
           }`}
         >
-          <Award className="w-5 h-5 mb-1 mr-2" />
-          <span className="font-medium">🐾 Main Tasks</span>
+          <Award className="w-5 h-5 mr-2" />
+          <span className="font-medium">Main Tasks</span>
         </button>
         <button
           onClick={() => setActiveTab('daily')}
@@ -538,8 +534,8 @@ const TasksPage = () => {
               : 'text-secondary hover:text-primary hover:bg-background/20'
           }`}
         >
-          <Clock className="w-5 h-5 mb-1 mr-2" />
-          <span className="font-medium">📅 Daily Tasks</span>
+          <Clock className="w-5 h-5 mr-2" />
+          <span className="font-medium">Daily Tasks</span>
         </button>
       </motion.div>
 
