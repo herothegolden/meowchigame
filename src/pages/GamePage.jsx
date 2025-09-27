@@ -453,10 +453,58 @@ const GamePage = () => {
     await loadInventory();
   };
 
-  // Load inventory on component mount
-  useEffect(() => {
-    loadInventory();
-  }, []);
+  // Handle item usage during game
+  const handleUseItem = async (itemId) => {
+    const item = availableItems.find(item => item.item_id === itemId);
+    if (!item || item.quantity <= 0) return;
+
+    const details = getItemDetails(itemId);
+    
+    // Handle Extra Time items
+    if (itemId === 1) { // Extra Time +10s
+      setTimeLeft(prev => prev + 10);
+      
+      // Update inventory locally
+      setAvailableItems(prev => 
+        prev.map(invItem => 
+          invItem.item_id === itemId 
+            ? { ...invItem, quantity: invItem.quantity - 1 }
+            : invItem
+        ).filter(invItem => invItem.quantity > 0)
+      );
+      
+      // Haptic feedback
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+      }
+      
+      console.log('Used Extra Time +10s, added 10 seconds');
+    }
+  };
+
+  // Handle bomb drop on board
+  const handleBombDrop = async (position) => {
+    const bombItem = availableItems.find(item => item.item_id === 3);
+    if (!bombItem || bombItem.quantity <= 0) return;
+
+    // Update inventory locally
+    setAvailableItems(prev => 
+      prev.map(invItem => 
+        invItem.item_id === 3 
+          ? { ...invItem, quantity: invItem.quantity - 1 }
+          : invItem
+      ).filter(invItem => invItem.quantity > 0)
+    );
+
+    // Trigger explosion on game board via GameBoard component
+    // This would need to be passed to GameBoard as a prop
+    console.log('Dropped bomb at position:', position);
+    
+    // Haptic feedback
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+  };
 
   const formatTime = (seconds) => {
     return `0:${seconds.toString().padStart(2, '0')}`;
@@ -771,7 +819,7 @@ const GamePage = () => {
 
       {/* Game Board Container */}
       <motion.div 
-        className="flex-1 flex flex-col items-center justify-center"
+        className="flex-1 flex flex-col items-center justify-center space-y-4"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
@@ -783,7 +831,11 @@ const GamePage = () => {
           onGameEnd={() => setIsGameOver(true)}
           onShuffleNeeded={handleShuffleNeeded}
           onBoardReady={handleBoardReady}
+          onBombDrop={handleBombDrop}
         />
+        
+        {/* Items Toolbar */}
+        <ItemsToolbar />
       </motion.div>
       
       {/* FIXED: Enhanced Shuffle Button with better debugging */}
@@ -851,7 +903,7 @@ const GamePage = () => {
           </p>
           <div className="flex items-center justify-center space-x-4 text-xs mt-2">
             {availableItems.length > 0 && (
-              <span className="text-accent">Tap 📦 for items</span>
+              <span className="text-accent">Tap ⏰ for time, drag 💣 to board</span>
             )}
             {shuffleFunction && (
               <span className="text-blue-400">Shuffle ready 🔀</span>
