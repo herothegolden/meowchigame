@@ -21,7 +21,7 @@ const {
 } = process.env;
 
 if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error("â›" Missing DATABASE_URL or BOT_TOKEN environment variables");
   process.exit(1);
 }
 
@@ -35,7 +35,7 @@ const pool = new Pool({
 const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('📁 Created uploads/avatars directory');
+  console.log('ðŸ" Created uploads/avatars directory');
 }
 
 // Multer configuration for avatar uploads
@@ -74,7 +74,7 @@ const uploadAvatar = multer({
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    console.log('🔧 Setting up enhanced database tables...');
+    console.log('ðŸ"§ Setting up enhanced database tables...');
 
     // 1. Create Users Table with enhanced fields
     await client.query(`
@@ -114,7 +114,7 @@ const setupDatabase = async () => {
 
     for (const column of columnsToAdd) {
       if (!existingColumns.includes(column.name)) {
-        console.log(`📊 Adding ${column.name} column...`);
+        console.log(`ðŸ"Š Adding ${column.name} column...`);
         await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
       }
     }
@@ -234,7 +234,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: Populate shop items with proper foreign key handling
-    console.log('🛒 Setting up shop items...');
+    console.log('ðŸ›' Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -242,7 +242,7 @@ const setupDatabase = async () => {
     
     if (itemCount === 0) {
       // Table is empty, safe to insert
-      console.log('📦 Inserting initial shop items...');
+      console.log('ðŸ"¦ Inserting initial shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -256,7 +256,7 @@ const setupDatabase = async () => {
       
       await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
     } else {
-      console.log(`📦 Shop items already exist (${itemCount} items), updating if needed...`);
+      console.log(`ðŸ"¦ Shop items already exist (${itemCount} items), updating if needed...`);
       
       // Update existing items without deleting (safe for production)
       await client.query(`
@@ -277,9 +277,25 @@ const setupDatabase = async () => {
       `);
     }
 
-    console.log('✅ Enhanced database setup complete with friends system!');
+    // 12. USER TASKS SYSTEM: User Tasks Table for Main Tasks tracking
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_tasks (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        task_name VARCHAR(255) NOT NULL,
+        completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        reward_points INT DEFAULT 0,
+        verification_data JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, task_name)
+      );
+    `);
+
+    console.log('âœ… Enhanced database setup complete with tasks system!');
   } catch (err) {
-    console.error('🚨 Database setup error:', err);
+    console.error('ðŸš¨ Database setup error:', err);
     process.exit(1);
   } finally {
     client.release();
@@ -333,7 +349,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
 
             if (dbUserResult.rows.length === 0) {
                 // NEW USER: Create with Telegram data
-                console.log(`🆕 Creating new user: ${user.first_name} (${user.id})`);
+                console.log(`ðŸ†• Creating new user: ${user.first_name} (${user.id})`);
                 const insertResult = await client.query(
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
                     [user.id, user.first_name, user.last_name, user.username]
@@ -355,7 +371,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                 );
                 
                 if (nameNeedsUpdate) {
-                    console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
+                    console.log(`ðŸ"„ Syncing name for user ${user.id}: "${appUser.first_name}" â†' "${telegramFirstName}"`);
                     
                     const nameUpdateResult = await client.query(
                         `UPDATE users SET first_name = $1, last_name = $2, username = $3 WHERE telegram_id = $4 RETURNING *`,
@@ -363,7 +379,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                     );
                     appUser = nameUpdateResult.rows[0];
                     
-                    console.log(`✅ Name sync completed for user ${user.id}`);
+                    console.log(`âœ… Name sync completed for user ${user.id}`);
                 }
                 
                 // Handle daily bonus logic (unchanged)
@@ -396,7 +412,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
             client.release();
         }
     } catch (error) {
-        console.error('🚨 Error in /api/validate:', error);
+        console.error('ðŸš¨ Error in /api/validate:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -471,7 +487,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/update-score:', error);
+    console.error('ðŸš¨ Error in /api/update-score:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -549,7 +565,7 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/user-stats:', error);
+    console.error('ðŸš¨ Error in /api/user-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -589,7 +605,7 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/update-profile:', error);
+    console.error('ðŸš¨ Error in /api/update-profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -615,7 +631,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
       // Check if file was uploaded
       if (req.file) {
         // File upload mode
-        console.log('📸 File uploaded:', req.file.filename);
+        console.log('ðŸ"¸ File uploaded:', req.file.filename);
         avatarUrl = `/uploads/avatars/${req.file.filename}`;
       } else {
         // URL input mode (existing functionality)
@@ -650,7 +666,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
           return res.status(404).json({ error: 'User not found' });
         }
         
-        console.log(`✅ Avatar updated for user ${user.id}: ${avatarUrl}`);
+        console.log(`âœ… Avatar updated for user ${user.id}: ${avatarUrl}`);
         
         res.status(200).json({ 
           success: true, 
@@ -662,7 +678,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
         client.release();
       }
     } catch (error) {
-      console.error('🚨 Error in /api/update-avatar:', error);
+      console.error('ðŸš¨ Error in /api/update-avatar:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -703,7 +719,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-shop-data:', error);
+    console.error('ðŸš¨ Error in /api/get-shop-data:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -713,7 +729,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     const { user } = req;
     const { itemId } = req.body;
     
-    console.log(`🛒 Purchase attempt - User: ${user.id}, Item: ${itemId}`);
+    console.log(`ðŸ›' Purchase attempt - User: ${user.id}, Item: ${itemId}`);
     
     if (!itemId) {
       return res.status(400).json({ error: 'itemId is required' });
@@ -725,32 +741,32 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 
       const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) {
-        console.log(`❌ Item ${itemId} not found in shop_items table`);
+        console.log(`âŒ Item ${itemId} not found in shop_items table`);
         throw new Error('Item not found.');
       }
       
       const { name, price, type } = itemResult.rows[0];
-      console.log(`📦 Item found: ${name} - $${price} (${type})`);
+      console.log(`ðŸ"¦ Item found: ${name} - $${price} (${type})`);
 
       const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       
       const userPoints = userResult.rows[0].points;
-      console.log(`💰 User has ${userPoints} points, needs ${price}`);
+      console.log(`ðŸ'° User has ${userPoints} points, needs ${price}`);
       
       if (userPoints < price) throw new Error('Insufficient points.');
       
       if (name.includes('Badge')) {
-        console.log(`🏆 Processing badge purchase: ${name}`);
+        console.log(`ðŸ† Processing badge purchase: ${name}`);
         
         const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
         if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
         
         await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
-        console.log(`✅ Badge added to user_badges table`);
+        console.log(`âœ… Badge added to user_badges table`);
         
       } else {
-        console.log(`🎮 Processing consumable item: ${name}`);
+        console.log(`ðŸŽ® Processing consumable item: ${name}`);
         
         if(type === 'permanent') {
           const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
@@ -758,15 +774,15 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
         }
         
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
-        console.log(`✅ Item added to user_inventory table`);
+        console.log(`âœ… Item added to user_inventory table`);
       }
 
       const newPoints = userPoints - price;
       await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
-      console.log(`💸 Points updated: ${userPoints} → ${newPoints}`);
+      console.log(`ðŸ'¸ Points updated: ${userPoints} â†' ${newPoints}`);
 
       await client.query('COMMIT');
-      console.log(`🎉 Purchase completed successfully!`);
+      console.log(`ðŸŽ‰ Purchase completed successfully!`);
 
       res.status(200).json({ 
         success: true, 
@@ -776,20 +792,20 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 
     } catch (error) {
       await client.query('ROLLBACK');
-      console.log(`💥 Purchase failed: ${error.message}`);
+      console.log(`ðŸ'¥ Purchase failed: ${error.message}`);
       
       const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.'];
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
       
-      console.error('🚨 Unexpected error in buy-item:', error);
+      console.error('ðŸš¨ Unexpected error in buy-item:', error);
       res.status(500).json({ success: false, error: 'Internal server error during purchase.' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/buy-item:', error);
+    console.error('ðŸš¨ Error in /api/buy-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -798,7 +814,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
   const { user } = req;
   const { selectedItems = [] } = req.body;
   
-  console.log(`🎮 Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
+  console.log(`ðŸŽ® Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
   
   const client = await pool.connect();
   try {
@@ -809,7 +825,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     const usedItems = [];
 
     for (const itemId of selectedItems) {
-      console.log(`🔄 Processing selected item: ${itemId}`);
+      console.log(`ðŸ"„ Processing selected item: ${itemId}`);
       
       const consumeResult = await client.query(
         `DELETE FROM user_inventory 
@@ -822,7 +838,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
       );
 
       if (consumeResult.rowCount > 0) {
-        console.log(`✅ Consumed item ${itemId}`);
+        console.log(`âœ… Consumed item ${itemId}`);
         usedItems.push(itemId);
         
         switch (itemId) {
@@ -830,7 +846,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
           case 2: totalTimeBonus += 20; break;
           case 3: hasBomb = true; break;
           case 4: 
-            console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
+            console.log(`âš ï¸ Double Points (${itemId}) should be activated manually`);
             break;
         }
       }
@@ -851,7 +867,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     
     const finalStartTime = 30 + totalTimeBonus;
     
-    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
+    console.log(`ðŸŽ¯ Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
     
     res.status(200).json({
       startTime: finalStartTime,
@@ -865,7 +881,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('🚨 Error in /api/start-game-session-with-items:', error);
+    console.error('ðŸš¨ Error in /api/start-game-session-with-items:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -874,7 +890,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
 app.post('/api/start-game-session', validateUser, async (req, res) => {
   const { user } = req;
-  console.log(`🎮 Starting legacy game session - User: ${user.id}`);
+  console.log(`ðŸŽ® Starting legacy game session - User: ${user.id}`);
   
   const client = await pool.connect();
   try {
@@ -919,7 +935,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
     hasBomb = bombBoosterResult.rowCount > 0;
     
-    console.log(`🎯 Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
+    console.log(`ðŸŽ¯ Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
     
     res.status(200).json({
       startTime: 30 + totalTimeBonus,
@@ -928,7 +944,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('🚨 Error in /api/start-game-session:', error);
+    console.error('ðŸš¨ Error in /api/start-game-session:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -972,7 +988,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       
       await client.query('COMMIT');
       
-      console.log(`⚡ Point booster activated for user ${user.id}`);
+      console.log(`âš¡ Point booster activated for user ${user.id}`);
       
       res.status(200).json({ success: true, message: 'Point Booster activated for your next game!' });
 
@@ -982,13 +998,13 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
-      console.error('🚨 Error in /api/activate-item:', error);
+      console.error('ðŸš¨ Error in /api/activate-item:', error);
       res.status(500).json({ success: false, error: 'Internal server error.' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/activate-item:', error);
+    console.error('ðŸš¨ Error in /api/activate-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1064,13 +1080,13 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
         return res.status(400).json({ success: false, error: error.message });
       }
       
-      console.error('🚨 Error in /api/add-friend:', error);
+      console.error('ðŸš¨ Error in /api/add-friend:', error);
       res.status(500).json({ success: false, error: 'Failed to add friend' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/add-friend:', error);
+    console.error('ðŸš¨ Error in /api/add-friend:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1103,7 +1119,7 @@ app.post('/api/get-friends', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-friends:', error);
+    console.error('ðŸš¨ Error in /api/get-friends:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1141,7 +1157,7 @@ app.post('/api/remove-friend', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/remove-friend:', error);
+    console.error('ðŸš¨ Error in /api/remove-friend:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1195,7 +1211,7 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-inventory-stats:', error);
+    console.error('ðŸš¨ Error in /api/get-inventory-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1219,7 +1235,7 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-item-usage-history:', error);
+    console.error('ðŸš¨ Error in /api/get-item-usage-history:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1268,7 +1284,7 @@ app.post('/api/get-badge-progress', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-badge-progress:', error);
+    console.error('ðŸš¨ Error in /api/get-badge-progress:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1344,20 +1360,312 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/get-leaderboard:', error);
+    console.error('ðŸš¨ Error in /api/get-leaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+// TASKS SYSTEM: Get user task status
+app.post('/api/get-user-tasks', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const tasksResult = await client.query(
+        'SELECT task_name, completed, completed_at, reward_points FROM user_tasks WHERE user_id = $1',
+        [user.id]
+      );
+      
+      // Define available main tasks
+      const availableTasks = [
+        {
+          id: 1,
+          name: 'Join the Cat Cult',
+          task_name: 'telegram_group_join',
+          reward_points: 500,
+          url: 'https://t.me/meowchi_lab'
+        },
+        {
+          id: 2,
+          name: 'Cat-stagram Star', 
+          task_name: 'instagram_follow',
+          reward_points: 300,
+          url: 'https://www.instagram.com/meowchi.lab/'
+        }
+      ];
+      
+      // Map completed tasks
+      const completedTasks = new Set(tasksResult.rows.map(row => row.task_name));
+      
+      // Return task status
+      const taskStatus = availableTasks.map(task => ({
+        ...task,
+        completed: completedTasks.has(task.task_name),
+        completedAt: tasksResult.rows.find(row => row.task_name === task.task_name)?.completed_at || null
+      }));
+      
+      res.status(200).json({ tasks: taskStatus });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-user-tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// TASKS SYSTEM: Verify task completion
+app.post('/api/verify-task', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { taskName } = req.body;
+    
+    if (!taskName) {
+      return res.status(400).json({ error: 'Task name is required' });
+    }
+
+    console.log(`🔍 Verifying task: ${taskName} for user: ${user.id}`);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      let isCompleted = false;
+      let rewardPoints = 0;
+      let verificationData = {};
+
+      if (taskName === 'telegram_group_join') {
+        // Verify Telegram group membership
+        const membershipResult = await verifyTelegramGroupMembership(user.id);
+        isCompleted = membershipResult.isMember;
+        rewardPoints = 500;
+        verificationData = { 
+          verification_method: 'telegram_api',
+          chat_id: '@meowchi_lab',
+          verified_at: new Date().toISOString(),
+          status: membershipResult.status
+        };
+        
+        console.log(`📱 Telegram verification result:`, membershipResult);
+        
+      } else if (taskName === 'instagram_follow') {
+        // Instagram verification (simplified - requires manual verification)
+        // For now, we'll mark as completed after click and require periodic re-verification
+        const existingTask = await client.query(
+          'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
+          [user.id, taskName]
+        );
+        
+        if (existingTask.rowCount === 0) {
+          // First time - mark as completed (honor system + manual verification)
+          isCompleted = true;
+          rewardPoints = 300;
+          verificationData = {
+            verification_method: 'manual_pending',
+            instagram_url: 'https://www.instagram.com/meowchi.lab/',
+            verified_at: new Date().toISOString(),
+            note: 'Requires periodic manual verification'
+          };
+          console.log(`📸 Instagram task marked for manual verification`);
+        } else {
+          // Return existing status
+          isCompleted = existingTask.rows[0].completed;
+          rewardPoints = existingTask.rows[0].reward_points;
+        }
+      } else {
+        return res.status(400).json({ error: 'Unknown task name' });
+      }
+
+      if (isCompleted) {
+        // Check if task already completed
+        const existingResult = await client.query(
+          'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
+          [user.id, taskName]
+        );
+
+        if (existingResult.rowCount === 0) {
+          // First completion - insert new record and award points
+          await client.query(
+            `INSERT INTO user_tasks (user_id, task_name, completed, completed_at, reward_points, verification_data) 
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)`,
+            [user.id, taskName, true, rewardPoints, JSON.stringify(verificationData)]
+          );
+
+          // Award points to user
+          await client.query(
+            'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
+            [rewardPoints, user.id]
+          );
+
+          console.log(`🎉 Task completed! Awarded ${rewardPoints} points to user ${user.id}`);
+
+        } else if (!existingResult.rows[0].completed) {
+          // Task exists but wasn't completed before - update it
+          await client.query(
+            `UPDATE user_tasks SET completed = true, completed_at = CURRENT_TIMESTAMP, 
+             reward_points = $3, verification_data = $4 WHERE user_id = $1 AND task_name = $2`,
+            [user.id, taskName, rewardPoints, JSON.stringify(verificationData)]
+          );
+
+          // Award points to user
+          await client.query(
+            'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
+            [rewardPoints, user.id]
+          );
+
+          console.log(`🎉 Task updated to completed! Awarded ${rewardPoints} points to user ${user.id}`);
+        } else {
+          console.log(`ℹ️ Task already completed for user ${user.id}`);
+        }
+      } else {
+        // Task not completed - update or insert failed verification
+        await client.query(
+          `INSERT INTO user_tasks (user_id, task_name, completed, verification_data) 
+           VALUES ($1, $2, false, $3)
+           ON CONFLICT (user_id, task_name) 
+           DO UPDATE SET verification_data = $3, updated_at = CURRENT_TIMESTAMP`,
+          [user.id, taskName, JSON.stringify(verificationData)]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      res.status(200).json({
+        success: true,
+        completed: isCompleted,
+        rewardPoints: isCompleted ? rewardPoints : 0,
+        message: isCompleted 
+          ? `Task completed! You earned ${rewardPoints} points.`
+          : 'Task verification failed. Please make sure you have completed the required action.'
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/verify-task:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// TASKS SYSTEM: Open task link and track attempt
+app.post('/api/start-task', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { taskName } = req.body;
+    
+    if (!taskName) {
+      return res.status(400).json({ error: 'Task name is required' });
+    }
+
+    const taskUrls = {
+      'telegram_group_join': 'https://t.me/meowchi_lab',
+      'instagram_follow': 'https://www.instagram.com/meowchi.lab/'
+    };
+
+    const url = taskUrls[taskName];
+    if (!url) {
+      return res.status(400).json({ error: 'Unknown task name' });
+    }
+
+    // Track that user started this task
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO user_tasks (user_id, task_name, completed, verification_data) 
+         VALUES ($1, $2, false, $3)
+         ON CONFLICT (user_id, task_name) 
+         DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+        [user.id, taskName, JSON.stringify({ 
+          started_at: new Date().toISOString(),
+          url_opened: url 
+        })]
+      );
+      
+      console.log(`🚀 User ${user.id} started task: ${taskName}`);
+
+    } finally {
+      client.release();
+    }
+
+    res.status(200).json({
+      success: true,
+      url: url,
+      message: 'Task started. Complete the action and return to verify.'
+    });
+
+  } catch (error) {
+    console.error('🚨 Error in /api/start-task:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// HELPER FUNCTION: Verify Telegram group membership using Bot API
+async function verifyTelegramGroupMembership(userId) {
+  try {
+    if (!BOT_TOKEN) {
+      console.error('❌ BOT_TOKEN not configured for Telegram verification');
+      return { isMember: false, status: 'bot_token_missing' };
+    }
+
+    const chatId = '@meowchi_lab'; // The group/channel username
+    const apiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        user_id: userId
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.ok) {
+      const memberStatus = data.result.status;
+      const isMember = ['member', 'administrator', 'creator'].includes(memberStatus);
+      
+      console.log(`👥 User ${userId} membership status in ${chatId}: ${memberStatus}`);
+      
+      return {
+        isMember: isMember,
+        status: memberStatus,
+        raw_response: data.result
+      };
+    } else {
+      console.error(`❌ Telegram API error:`, data);
+      
+      // Handle common errors
+      if (data.error_code === 400 && data.description.includes('chat not found')) {
+        return { isMember: false, status: 'chat_not_found' };
+      } else if (data.error_code === 400 && data.description.includes('user not found')) {
+        return { isMember: false, status: 'user_not_found' };
+      } else if (data.error_code === 403) {
+        return { isMember: false, status: 'bot_not_admin' };
+      }
+      
+      return { isMember: false, status: 'api_error', error: data.description };
+    }
+  } catch (error) {
+    console.error('❌ Error verifying Telegram membership:', error);
+    return { isMember: false, status: 'network_error', error: error.message };
+  }
+}
+
 const startServer = () => {
   app.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    console.log(`âœ… Server running on port ${PORT}`);
+    console.log(`ðŸ"— Health check: http://localhost:${PORT}/health`);
   });
 };
 
 // Start the application
 setupDatabase().then(startServer).catch(err => {
-  console.error('💥 Failed to start application:', err);
+  console.error('ðŸ'¥ Failed to start application:', err);
   process.exit(1);
 });
