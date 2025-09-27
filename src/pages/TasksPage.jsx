@@ -27,8 +27,16 @@ const TasksPage = () => {
   const [loading, setLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [processingTask, setProcessingTask] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [completedTaskId, setCompletedTaskId] = useState(null);
   
   const tg = window.Telegram?.WebApp;
+
+  // Toast system
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Mock main tasks for demo mode
   const MOCK_MAIN_TASKS = [
@@ -288,27 +296,14 @@ const TasksPage = () => {
         window.open(startResult.url, '_blank');
       }
 
-      // Provide user feedback
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Task Started!',
-          message: `Please complete the action and return to verify completion.`,
-          buttons: [
-            { text: 'Verify Now', type: 'default', id: 'verify' },
-            { text: 'Later', type: 'default', id: 'later' }
-          ]
-        }, (buttonId) => {
-          if (buttonId === 'verify') {
-            setTimeout(() => handleVerifyTask(task), 1000);
-          }
-        });
-      }
+      // Show verification toast
+      showToast('Verifying task...', 'info');
 
       // Auto-verify after a short delay
       setTimeout(() => {
         if (!processingTask) return; // Don't verify if user already handled it
         handleVerifyTask(task);
-      }, 3000);
+      }, 2000);
 
     } catch (error) {
       console.error('Start task error:', error);
@@ -358,22 +353,20 @@ const TasksPage = () => {
 
       console.log('Verification result:', verifyResult);
 
-      // Show result to user
-      if (tg && tg.showPopup) {
-        if (verifyResult.completed) {
-          tg.HapticFeedback?.notificationOccurred('success');
-          tg.showPopup({
-            title: 'Task Completed! 🎉',
-            message: verifyResult.message,
-            buttons: [{ type: 'ok' }]
-          });
-        } else {
-          tg.HapticFeedback?.notificationOccurred('warning');
-          tg.showPopup({
-            title: 'Verification Failed',
-            message: verifyResult.message,
-            buttons: [{ type: 'ok' }]
-          });
+      // Show result toast instead of popup
+      if (verifyResult.completed) {
+        showToast(`Task complete! 🎉 +${verifyResult.rewardPoints} points`, 'success');
+        setCompletedTaskId(task.id);
+        setTimeout(() => setCompletedTaskId(null), 1000); // Clear shake animation
+        
+        if (tg && tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('success');
+        }
+      } else {
+        showToast('Verification failed. Please complete the action first.', 'error');
+        
+        if (tg && tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('warning');
         }
       }
 
@@ -425,7 +418,15 @@ const TasksPage = () => {
         task.completed ? 'opacity-75 border-green-500' : task.disabled ? 'opacity-50' : ''
       }`}
       initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
+      animate={{ 
+        opacity: 1, 
+        x: 0,
+        // Shake animation when task is completed
+        ...(completedTaskId === task.id ? {
+          x: [0, -10, 10, -10, 10, 0],
+          transition: { duration: 0.6 }
+        } : {})
+      }}
       transition={{ duration: 0.3 }}
       whileHover={{ scale: task.disabled ? 1 : 1.02 }}
     >
@@ -462,12 +463,7 @@ const TasksPage = () => {
             : 'bg-accent text-background hover:bg-accent/90'
         }`}
       >
-        {processingTask === task.id ? (
-          <>
-            <LoaderCircle className="w-4 h-4 animate-spin" />
-            <span>Processing...</span>
-          </>
-        ) : task.completed ? (
+        {task.completed ? (
           <>
             <CheckSquare className="w-4 h-4" />
             <span>Done</span>
@@ -476,7 +472,11 @@ const TasksPage = () => {
           <span>Soon</span>
         ) : (
           <>
-            <ExternalLink className="w-4 h-4" />
+            {processingTask === task.id ? (
+              <LoaderCircle className="w-4 h-4 animate-spin" />
+            ) : (
+              <ExternalLink className="w-4 h-4" />
+            )}
             <span>Start</span>
           </>
         )}
@@ -591,6 +591,27 @@ const TasksPage = () => {
           )}
         </AnimatePresence>
       </motion.div>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className={`fixed bottom-20 left-4 right-4 p-4 rounded-lg shadow-lg z-50 flex items-center space-x-3 ${
+              toast.type === 'success' ? 'bg-green-600' : 
+              toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+            }`}
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            transition={{ duration: 0.3 }}
+          >
+            {toast.type === 'info' && <LoaderCircle className="w-5 h-5 animate-spin text-white" />}
+            {toast.type === 'success' && <CheckSquare className="w-5 h-5 text-white" />}
+            {toast.type === 'error' && <ExternalLink className="w-5 h-5 text-white" />}
+            <span className="text-white font-medium">{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
