@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare } from 'lucide-react';
+import TasksPage from './TasksPage';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -19,19 +20,19 @@ const StatCard = ({ icon, label, value, color }) => (
 const BadgeCard = ({ badgeName, isOwned }) => {
   const badgeConfig = {
     'Cookie Master Badge': { 
-      icon: '🍪', 
+      icon: 'ðŸª', 
       title: 'Cookie Master', 
       description: 'Master of the cookies',
       color: 'text-yellow-400'
     },
     'Speed Demon Badge': { 
-      icon: '⚡', 
+      icon: 'âš¡', 
       title: 'Speed Demon', 
       description: 'Lightning fast reflexes',
       color: 'text-blue-400'
     },
     'Champion Badge': { 
-      icon: '🏆', 
+      icon: 'ðŸ†', 
       title: 'Champion', 
       description: 'Ultimate game champion',
       color: 'text-purple-400'
@@ -39,7 +40,7 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   };
 
   const badge = badgeConfig[badgeName] || {
-    icon: '🏅',
+    icon: 'ðŸ…',
     title: badgeName,
     description: 'Special achievement',
     color: 'text-gray-400'
@@ -195,7 +196,7 @@ const ProfilePage = () => {
 
     setIsSyncingAvatar(true);
     try {
-      console.log('🔄 Syncing Telegram avatar to backend:', telegramPhotoUrl);
+      console.log('ðŸ"„ Syncing Telegram avatar to backend:', telegramPhotoUrl);
       
       const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
@@ -208,7 +209,7 @@ const ProfilePage = () => {
 
       if (res.ok) {
         const result = await res.json();
-        console.log('✅ Avatar synced successfully:', result.avatarUrl);
+        console.log('âœ… Avatar synced successfully:', result.avatarUrl);
         
         // Update local state
         setProfileData(prev => ({
@@ -216,10 +217,10 @@ const ProfilePage = () => {
           stats: { ...prev.stats, avatar_url: result.avatarUrl }
         }));
       } else {
-        console.warn('⚠️ Avatar sync failed:', res.status);
+        console.warn('âš ï¸ Avatar sync failed:', res.status);
       }
     } catch (error) {
-      console.error('❌ Avatar sync error:', error);
+      console.error('âŒ Avatar sync error:', error);
     } finally {
       setIsSyncingAvatar(false);
     }
@@ -319,7 +320,7 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = `Demo: Updated name to "${editNameValue}"\n\n⚠️ This is demo mode only.`;
+        const message = `Demo: Updated name to "${editNameValue}"\n\nâš ï¸ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
         } else {
@@ -377,7 +378,7 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = `Demo: Removed @${friendUsername} from friends\n\n⚠️ This is demo mode only.`;
+        const message = `Demo: Removed @${friendUsername} from friends\n\nâš ï¸ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Action', message: message, buttons: [{ type: 'ok' }] });
         } else {
@@ -468,7 +469,7 @@ const ProfilePage = () => {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
         console.log('Demo: Adding friend:', friendUsername);
-        const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
+        const message = `Demo: Added @${friendUsername} as friend!\n\nâš ï¸ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({
             title: 'Demo Mode',
@@ -625,7 +626,7 @@ const ProfilePage = () => {
         // Demo mode
         console.log('Demo: Activating item', itemId);
         
-        const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
+        const message = 'Demo: Double Points activated!\n\nâš ï¸ This is demo mode only.';
         if (tg && tg.showPopup) {
           tg.showPopup({ 
             title: 'Demo Activation', 
@@ -1002,7 +1003,7 @@ const ProfilePage = () => {
                         {removingFriendId === entry.player.name.toLowerCase() ? (
                           <LoaderCircle className="w-3 h-3 animate-spin" />
                         ) : (
-                          '✕'
+                          'âœ•'
                         )}
                       </button>
                     )}
@@ -1034,40 +1035,10 @@ const ProfilePage = () => {
           </motion.div>
         );
       
-      case 'inventory':
+      case 'tasks':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <div className="space-y-3">
-              {boosterActive && (
-                <div className="bg-green-800/50 border border-green-500 text-green-300 p-3 rounded-lg flex items-center">
-                  <Zap className="w-5 h-5 mr-3"/>
-                  <span>A Point Booster is active for your next game!</span>
-                </div>
-              )}
-
-              {activatableItems.length > 0 ? (
-                activatableItems.map(item => {
-                  const inventoryItem = inventory.find(inv => inv.item_id === item.id);
-                  const quantity = inventoryItem ? inventoryItem.quantity : 0;
-                  
-                  return (
-                    <InventoryItemCard 
-                      key={item.id} 
-                      item={item} 
-                      quantity={quantity}
-                      onActivate={handleActivateItem} 
-                      disabled={boosterActive} 
-                    />
-                  );
-                })
-              ) : (
-                !boosterActive && (
-                  <p className="text-secondary text-center p-4 bg-nav rounded-lg border border-gray-700">
-                    You have no boosters. Visit the shop to buy some!
-                  </p>
-                )
-              )}
-            </div>
+            <TasksPage />
           </motion.div>
         );
       
@@ -1142,13 +1113,13 @@ const ProfilePage = () => {
                   disabled={isUpdatingName}
                   className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50"
                 >
-                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : '✓'}
+                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : 'âœ"'}
                 </button>
                 <button
                   onClick={() => setIsEditingName(false)}
                   className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors"
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
             ) : (
@@ -1161,11 +1132,11 @@ const ProfilePage = () => {
                   }}
                   className="text-secondary hover:text-accent transition-colors"
                 >
-                  ✏️
+                  âœï¸
                 </button>
               </div>
             )}
-            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
+            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} â€¢ Level {stats.level}</p>
             <div className="flex items-center mt-1">
               <Star className="w-4 h-4 text-accent mr-1" />
               <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
@@ -1181,7 +1152,7 @@ const ProfilePage = () => {
                 {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
                  telegramPhotoUrl ? 'Avatar synced from Telegram' :
                  'Name synced from Telegram'}
-                {(stats.avatar_url || stats.first_name) && ' • DB backup available'}
+                {(stats.avatar_url || stats.first_name) && ' â€¢ DB backup available'}
               </>
             ) : (
               'Using stored profile data'
@@ -1201,7 +1172,7 @@ const ProfilePage = () => {
           { id: 'overview', label: 'Overview', icon: User },
           { id: 'badges', label: 'Badges', icon: Award },
           { id: 'leaderboard', label: 'Board', icon: Trophy },
-          { id: 'inventory', label: 'Items', icon: Package }
+          { id: 'tasks', label: 'Tasks', icon: CheckSquare }
         ].map((tab) => {
           const TabIcon = tab.icon;
           return (
