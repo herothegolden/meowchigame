@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare, Volume2 } from 'lucide-react';
 import TasksPage from './TasksPage';
+import SoundSettings from '../components/SoundSettings'; // 🎵 SOUND SETTINGS IMPORT
+import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const DEFAULT_AVATAR = "/default-cat.png"; // NEW: fallback image for missing/broken avatars
@@ -21,19 +23,19 @@ const StatCard = ({ icon, label, value, color }) => (
 const BadgeCard = ({ badgeName, isOwned }) => {
   const badgeConfig = {
     'Cookie Master Badge': { 
-      icon: 'ðŸª', 
+      icon: '🪠', 
       title: 'Cookie Master', 
       description: 'Master of the cookies',
       color: 'text-yellow-400'
     },
     'Speed Demon Badge': { 
-      icon: 'âš¡', 
+      icon: '⚡', 
       title: 'Speed Demon', 
       description: 'Lightning fast reflexes',
       color: 'text-blue-400'
     },
     'Champion Badge': { 
-      icon: 'ðŸ†', 
+      icon: '🏆', 
       title: 'Champion', 
       description: 'Ultimate game champion',
       color: 'text-purple-400'
@@ -41,7 +43,7 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   };
 
   const badge = badgeConfig[badgeName] || {
-    icon: 'ðŸ…',
+    icon: '🏅',
     title: badgeName,
     description: 'Special achievement',
     color: 'text-gray-400'
@@ -198,7 +200,7 @@ const ProfilePage = () => {
 
     setIsSyncingAvatar(true);
     try {
-      console.log('ðŸ"„ Syncing Telegram avatar to backend:', telegramPhotoUrl);
+      console.log('📷 Syncing Telegram avatar to backend:', telegramPhotoUrl);
       
       const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
@@ -211,7 +213,7 @@ const ProfilePage = () => {
 
       if (res.ok) {
         const result = await res.json();
-        console.log('âœ… Avatar synced successfully:', result.avatarUrl);
+        console.log('✅ Avatar synced successfully:', result.avatarUrl);
         
         // Update local state
         setProfileData(prev => ({
@@ -219,10 +221,10 @@ const ProfilePage = () => {
           stats: { ...prev.stats, avatar_url: result.avatarUrl }
         }));
       } else {
-        console.warn('âš ï¸ Avatar sync failed:', res.status);
+        console.warn('⚠️ Avatar sync failed:', res.status);
       }
     } catch (error) {
-      console.error('âŒ Avatar sync error:', error);
+      console.error('❌ Avatar sync error:', error);
     } finally {
       setIsSyncingAvatar(false);
     }
@@ -324,7 +326,7 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = `Demo: Updated name to "${editNameValue}"\n\nâš ï¸ This is demo mode only.`;
+        const message = `Demo: Updated name to "${editNameValue}"\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
         } else {
@@ -382,7 +384,7 @@ const ProfilePage = () => {
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
-        const message = `Demo: Removed @${friendUsername} from friends\n\nâš ï¸ This is demo mode only.`;
+        const message = `Demo: Removed @${friendUsername} from friends\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({ title: 'Demo Action', message: message, buttons: [{ type: 'ok' }] });
         } else {
@@ -473,7 +475,7 @@ const ProfilePage = () => {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
         // Demo mode
         console.log('Demo: Adding friend:', friendUsername);
-        const message = `Demo: Added @${friendUsername} as friend!\n\nâš ï¸ This is demo mode only.`;
+        const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
         if (tg && tg.showPopup) {
           tg.showPopup({
             title: 'Demo Mode',
@@ -630,7 +632,7 @@ const ProfilePage = () => {
         // Demo mode
         console.log('Demo: Activating item', itemId);
         
-        const message = 'Demo: Double Points activated!\n\nâš ï¸ This is demo mode only.';
+        const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
         if (tg && tg.showPopup) {
           tg.showPopup({ 
             title: 'Demo Activation', 
@@ -675,6 +677,12 @@ const ProfilePage = () => {
         buttons: [{ type: 'ok' }] 
       });
     }
+  };
+
+  // 🎵 SOUND: Tab switching with sound
+  const handleTabSwitch = (tabId) => {
+    soundManager.playUI('button_click', { volume: 0.6 });
+    setActiveTab(tabId);
   };
 
   if (loading) {
@@ -871,6 +879,8 @@ const ProfilePage = () => {
                   <button
                     key={tab.id}
                     onClick={() => {
+                      // 🎵 SOUND: Tab click
+                      soundManager.playUI('button_click', { volume: 0.6 });
                       setLeaderboardTab(tab.id);
                       fetchLeaderboard(tab.id);
                     }}
@@ -906,7 +916,11 @@ const ProfilePage = () => {
                     }}
                   />
                   <button
-                    onClick={handleAddFriend}
+                    onClick={() => {
+                      // 🎵 SOUND: Button click
+                      soundManager.playUI('button_click', { volume: 0.8 });
+                      handleAddFriend();
+                    }}
                     disabled={isAddingFriend || !friendUsername.trim()}
                     className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -999,7 +1013,11 @@ const ProfilePage = () => {
                     {/* Remove Friend Button (only in friends tab for non-current users) */}
                     {leaderboardTab === 'friends' && !entry.isCurrentUser && (
                       <button
-                        onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
+                        onClick={() => {
+                          // 🎵 SOUND: Button click
+                          soundManager.playUI('button_click', { volume: 0.8 });
+                          handleRemoveFriend(entry.player.name.toLowerCase());
+                        }}
                         disabled={removingFriendId === entry.player.name.toLowerCase()}
                         className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center"
                         title="Remove friend"
@@ -1007,7 +1025,7 @@ const ProfilePage = () => {
                         {removingFriendId === entry.player.name.toLowerCase() ? (
                           <LoaderCircle className="w-3 h-3 animate-spin" />
                         ) : (
-                          'âœ•'
+                          '✖'
                         )}
                       </button>
                     )}
@@ -1043,6 +1061,14 @@ const ProfilePage = () => {
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
             <TasksPage />
+          </motion.div>
+        );
+      
+      // 🎵 NEW: Sound Settings Tab
+      case 'settings':
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+            <SoundSettings />
           </motion.div>
         );
       
@@ -1115,6 +1141,8 @@ const ProfilePage = () => {
                 <h1 className="text-xl font-bold text-primary truncate">{displayName}</h1>
                 <button
                   onClick={() => {
+                    // 🎵 SOUND: Button click
+                    soundManager.playUI('button_click', { volume: 0.6 });
                     setEditNameValue(displayName || '');
                     setIsEditingName(true);
                   }}
@@ -1126,7 +1154,11 @@ const ProfilePage = () => {
                 {/* Dev Tools Button - Only for authorized developer */}
                 {telegramUser?.id === 6998637798 && (
                   <button 
-                    onClick={() => window.location.href = '/dev-tools'}
+                    onClick={() => {
+                      // 🎵 SOUND: Button click
+                      soundManager.playUI('button_click', { volume: 0.8 });
+                      window.location.href = '/dev-tools';
+                    }}
                     className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
                     title="Developer Tools"
                   >
@@ -1151,7 +1183,7 @@ const ProfilePage = () => {
                 {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
                  telegramPhotoUrl ? 'Avatar synced from Telegram' :
                  'Name synced from Telegram'}
-                {(stats.avatar_url || stats.first_name) && ' â€¢ DB backup available'}
+                {(stats.avatar_url || stats.first_name) && ' • DB backup available'}
               </>
             ) : (
               'Using stored profile data'
@@ -1160,7 +1192,7 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation - UPDATED WITH SOUND SETTINGS */}
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -1171,13 +1203,14 @@ const ProfilePage = () => {
           { id: 'overview', label: 'Overview', icon: User },
           { id: 'badges', label: 'Badges', icon: Award },
           { id: 'leaderboard', label: 'Board', icon: Trophy },
-          { id: 'tasks', label: 'Tasks', icon: CheckSquare }
+          { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+          { id: 'settings', label: 'Sound', icon: Volume2 } // 🎵 NEW: Sound Settings Tab
         ].map((tab) => {
           const TabIcon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabSwitch(tab.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-md transition-all duration-200 ${
                 activeTab === tab.id 
                   ? 'bg-accent text-background' 
