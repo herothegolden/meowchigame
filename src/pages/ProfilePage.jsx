@@ -1148,6 +1148,16 @@ const ProfilePage = () => {
                 >
                   <User className="w-4 h-4" />
                 </button>
+                {/* Dev Tools Button - Only for authorized developer */}
+                {telegramUser?.id === 6998637798 && (
+                  <button 
+                    onClick={() => window.location.href = '/dev-tools'}
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+                    title="Developer Tools"
+                  >
+                    Dev Tools
+                  </button>
+                )}
               </div>
             )}
             <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
