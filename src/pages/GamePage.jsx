@@ -320,36 +320,26 @@ const GamePage = () => {
 
       console.log('Configuring game with selected items:', Array.from(selectedItems));
 
-      // Try new endpoint first, fallback to old one
+      // FIXED: Use new endpoint only - no fallback to auto-consumption endpoint
       let sessionData = { startTime: 30, startWithBomb: false };
       
-      try {
-        const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            initData: tg.initData, 
-            selectedItems: Array.from(selectedItems)
-          }),
-        });
-        
-        if (sessionRes.ok) {
-          sessionData = await sessionRes.json();
-          console.log('Game configured with items:', sessionData);
-        } else {
-          throw new Error('New endpoint not available');
-        }
-      } catch (newEndpointError) {
-        console.log('Using fallback game session endpoint');
-        const fallbackRes = await fetch(`${BACKEND_URL}/api/start-game-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        });
-        
-        if (fallbackRes.ok) {
-          sessionData = await fallbackRes.json();
-        }
+      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          selectedItems: Array.from(selectedItems)
+        }),
+      });
+      
+      if (sessionRes.ok) {
+        sessionData = await sessionRes.json();
+        console.log('Game configured with items:', sessionData);
+      } else {
+        console.error('Game session configuration failed:', sessionRes.status);
+        // Use default values instead of auto-consuming items
+        console.log('Using default game configuration - no items consumed');
+        sessionData = { startTime: 30, startWithBomb: false };
       }
       
       setGameConfig(sessionData);
@@ -364,6 +354,7 @@ const GamePage = () => {
 
     } catch (error) {
       console.error('Error configuring game:', error);
+      // Use safe defaults on any error
       setGameConfig({ startTime: 30, startWithBomb: false });
       setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
     } finally {
