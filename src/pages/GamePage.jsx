@@ -1,5 +1,6 @@
-// CLEANED: GamePage.jsx - Correct imports, no duplicate GameBoard
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// CLEANED v1: GamePage.jsx - Remove duplicate GameBoard import, add framer-motion import
+import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
+import { motion } from 'framer-motion'; // ✅ required by SpecialItemWrapper animations
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -17,10 +18,11 @@ import {
   activateSpecialItem,
   executeCombo,
   SPECIAL_ITEMS,
-} from '../utils/gameLogic.js';   // ✅ fixed path
+} from '../utils/gameLogic.js';   // ✅ path is correct
 
-import GameBoard from '../components/game/GameBoard.jsx';   // ✅ external component, no inline version
-import BottomNav from '../components/game/BottomNav.jsx';   // ✅ external component
+// ❌ Removed to avoid duplicate identifier with inline component below
+// import GameBoard from '../components/game/GameBoard.jsx';
+import BottomNav from '../components/game/BottomNav.jsx';   // kept (not modified)
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
