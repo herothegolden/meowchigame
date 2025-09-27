@@ -1,7 +1,7 @@
 // /src/components/SoundSettings.jsx - Sound Control Component
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Volume2, VolumeX, Volume1, VolumeOff } from 'lucide-react';
+import { Volume2, VolumeX, Volume1 } from 'lucide-react';
 import soundManager from '../utils/SoundManager';
 
 const SoundSettings = ({ className = "" }) => {
@@ -44,8 +44,7 @@ const SoundSettings = ({ className = "" }) => {
   // Get appropriate volume icon
   const getVolumeIcon = () => {
     if (isMuted || volume === 0) return VolumeX;
-    if (volume <= 0.3) return VolumeOff;
-    if (volume <= 0.7) return Volume1;
+    if (volume <= 0.5) return Volume1;
     return Volume2;
   };
 
