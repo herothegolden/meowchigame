@@ -17,7 +17,7 @@ import {
   activateSpecialItem,
   executeCombo,
   SPECIAL_ITEMS,
-} from '../../utils/gameLogic';
+} from '../../utils/gameLogic.js';
 import GamePiece from './GamePiece';
 import { motion } from 'framer-motion';
 
