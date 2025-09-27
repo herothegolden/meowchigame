@@ -77,71 +77,56 @@ const GamePage = () => {
     const submitScore = async () => {
       setIsSubmitting(true);
       
-      if (score > 0) {
-        const tg = window.Telegram?.WebApp;
-        
-        if (tg && tg.initData && BACKEND_URL) {
-          try {
-            console.log('Submitting score:', score);
-            
-            const response = await fetch(`${BACKEND_URL}/api/update-score`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ initData: tg.initData, score: score }),
-            });
-            
-            const data = await response.json();
-            
-            if (response.ok) {
-              console.log('Score submitted successfully:', data);
-              
-              const multiplierText = activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : '';
-              const shuffleText = shuffleCount > 0 ? `\n🔀 Shuffles used: ${shuffleCount}` : '';
-              const finalScore = data.score_awarded || score;
-              
-              // Show success popup
-              tg.showPopup({
-                title: 'Game Over!',
-                message: `🎉 You scored ${finalScore.toLocaleString()} points!${multiplierText}${shuffleText}\n\nTotal points: ${data.new_points?.toLocaleString() || 'Unknown'}`,
-                buttons: [
-                  { text: 'Play Again', type: 'default', id: 'play_again' },
-                  { text: 'Home', type: 'default', id: 'home' }
-                ]
-              }, (buttonId) => {
-                if (buttonId === 'play_again') {
-                  restartGame();
-                } else {
-                  navigate('/');
-                }
-              });
-            } else {
-              throw new Error(data.error || 'Failed to submit score');
-            }
-          } catch (error) {
-            console.error('Error submitting score:', error);
-            
-            tg.showPopup({
-              title: 'Error',
-              message: 'Could not save your score. Please try again later.',
-              buttons: [{ text: 'OK', type: 'ok' }]
-            }, () => navigate('/'));
+      // Always show the Game Over popup first
+      const tg = window.Telegram?.WebApp;
+      const finalScore = score;
+      
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Game Over!',
+          message: `🎉 You scored ${finalScore.toLocaleString()} points!\n\nTotal points: Loading...`,
+          buttons: [
+            { text: 'Play Again', type: 'default', id: 'play_again' },
+            { text: 'Home', type: 'default', id: 'home' }
+          ]
+        }, (buttonId) => {
+          if (buttonId === 'play_again') {
+            restartGame();
+          } else {
+            navigate('/');
           }
-        } else {
-          // Browser mode - just show score
-          console.log(`Game Over! Final Score: ${score}`);
-          setTimeout(() => {
-            const shuffleText = shuffleCount > 0 ? `\nShuffles used: ${shuffleCount}` : '';
-            const message = `Game Over!\n\nFinal Score: ${score.toLocaleString()}${activeBoosts.pointMultiplier ? '\n🔥 Double Points Applied!' : ''}${shuffleText}\n\nPlay again?`;
-            if (confirm(message)) {
-              restartGame();
-            } else {
-              navigate('/');
-            }
-          }, 1000);
-        }
+        });
       } else {
-        // No score to submit
-        setTimeout(() => navigate('/'), 1500);
+        // Browser mode - simple confirm
+        setTimeout(() => {
+          const message = `Game Over!\n\nFinal Score: ${finalScore.toLocaleString()}\n\nPlay again?`;
+          if (confirm(message)) {
+            restartGame();
+          } else {
+            navigate('/');
+          }
+        }, 500);
+      }
+      
+      // Submit score silently in background (no popups)
+      if (score > 0 && tg && tg.initData && BACKEND_URL) {
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/update-score`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData: tg.initData, score: score }),
+          });
+          
+          const data = await response.json();
+          if (response.ok) {
+            console.log('Score submitted successfully:', data);
+          } else {
+            console.error('Score submission failed:', data.error);
+          }
+        } catch (error) {
+          console.error('Error submitting score:', error);
+          // No popup - just log the error
+        }
       }
       
       setIsSubmitting(false);
@@ -150,7 +135,7 @@ const GamePage = () => {
     // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, score, navigate, isSubmitting, activeBoosts.pointMultiplier, shuffleCount]);
+  }, [isGameOver, isSubmitting]);
 
   // Disable Telegram swipes during game
   useEffect(() => {
