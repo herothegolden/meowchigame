@@ -21,7 +21,7 @@ const {
 } = process.env;
 
 if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("❌ Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
   process.exit(1);
 }
 
@@ -35,7 +35,7 @@ const pool = new Pool({
 const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('ðŸ" Created uploads/avatars directory');
+  console.log('📁 Created uploads/avatars directory');
 }
 
 // Multer configuration for avatar uploads
@@ -74,7 +74,7 @@ const uploadAvatar = multer({
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    console.log('ðŸ"§ Setting up enhanced database tables...');
+    console.log('🔧 Setting up enhanced database tables...');
 
     // 1. Create Users Table with enhanced fields
     await client.query(`
@@ -114,7 +114,7 @@ const setupDatabase = async () => {
 
     for (const column of columnsToAdd) {
       if (!existingColumns.includes(column.name)) {
-        console.log(`ðŸ"Š Adding ${column.name} column...`);
+        console.log(`📊 Adding ${column.name} column...`);
         await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
       }
     }
@@ -234,7 +234,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: Populate shop items with proper foreign key handling
-    console.log('ðŸ›' Setting up shop items...');
+    console.log('🛒 Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -242,7 +242,7 @@ const setupDatabase = async () => {
     
     if (itemCount === 0) {
       // Table is empty, safe to insert
-      console.log('ðŸ"¦ Inserting initial shop items...');
+      console.log('📦 Inserting initial shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -256,7 +256,7 @@ const setupDatabase = async () => {
       
       await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
     } else {
-      console.log(`ðŸ"¦ Shop items already exist (${itemCount} items), updating if needed...`);
+      console.log(`📦 Shop items already exist (${itemCount} items), updating if needed...`);
       
       // Update existing items without deleting (safe for production)
       await client.query(`
@@ -293,9 +293,9 @@ const setupDatabase = async () => {
       );
     `);
 
-    console.log('âœ… Enhanced database setup complete with tasks system!');
+    console.log('✅ Enhanced database setup complete with tasks system!');
   } catch (err) {
-    console.error('ðŸš¨ Database setup error:', err);
+    console.error('🚨 Database setup error:', err);
     process.exit(1);
   } finally {
     client.release();
@@ -349,7 +349,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
 
             if (dbUserResult.rows.length === 0) {
                 // NEW USER: Create with Telegram data
-                console.log(`ðŸ†• Creating new user: ${user.first_name} (${user.id})`);
+                console.log(`🆕 Creating new user: ${user.first_name} (${user.id})`);
                 const insertResult = await client.query(
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
                     [user.id, user.first_name, user.last_name, user.username]
@@ -371,7 +371,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                 );
                 
                 if (nameNeedsUpdate) {
-                    console.log(`ðŸ"„ Syncing name for user ${user.id}: "${appUser.first_name}" â†' "${telegramFirstName}"`);
+                    console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
                     
                     const nameUpdateResult = await client.query(
                         `UPDATE users SET first_name = $1, last_name = $2, username = $3 WHERE telegram_id = $4 RETURNING *`,
@@ -379,7 +379,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                     );
                     appUser = nameUpdateResult.rows[0];
                     
-                    console.log(`âœ… Name sync completed for user ${user.id}`);
+                    console.log(`✅ Name sync completed for user ${user.id}`);
                 }
                 
                 // Handle daily bonus logic (unchanged)
@@ -412,7 +412,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
             client.release();
         }
     } catch (error) {
-        console.error('ðŸš¨ Error in /api/validate:', error);
+        console.error('🚨 Error in /api/validate:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -487,7 +487,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/update-score:', error);
+    console.error('🚨 Error in /api/update-score:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -565,7 +565,7 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/user-stats:', error);
+    console.error('🚨 Error in /api/user-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -605,7 +605,7 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/update-profile:', error);
+    console.error('🚨 Error in /api/update-profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -631,7 +631,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
       // Check if file was uploaded
       if (req.file) {
         // File upload mode
-        console.log('ðŸ"¸ File uploaded:', req.file.filename);
+        console.log('📸 File uploaded:', req.file.filename);
         avatarUrl = `/uploads/avatars/${req.file.filename}`;
       } else {
         // URL input mode (existing functionality)
@@ -666,7 +666,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
           return res.status(404).json({ error: 'User not found' });
         }
         
-        console.log(`âœ… Avatar updated for user ${user.id}: ${avatarUrl}`);
+        console.log(`✅ Avatar updated for user ${user.id}: ${avatarUrl}`);
         
         res.status(200).json({ 
           success: true, 
@@ -678,7 +678,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
         client.release();
       }
     } catch (error) {
-      console.error('ðŸš¨ Error in /api/update-avatar:', error);
+      console.error('🚨 Error in /api/update-avatar:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -719,7 +719,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-shop-data:', error);
+    console.error('🚨 Error in /api/get-shop-data:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -729,7 +729,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     const { user } = req;
     const { itemId } = req.body;
     
-    console.log(`ðŸ›' Purchase attempt - User: ${user.id}, Item: ${itemId}`);
+    console.log(`🛒 Purchase attempt - User: ${user.id}, Item: ${itemId}`);
     
     if (!itemId) {
       return res.status(400).json({ error: 'itemId is required' });
@@ -741,32 +741,32 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 
       const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
       if (itemResult.rowCount === 0) {
-        console.log(`âŒ Item ${itemId} not found in shop_items table`);
+        console.log(`❌ Item ${itemId} not found in shop_items table`);
         throw new Error('Item not found.');
       }
       
       const { name, price, type } = itemResult.rows[0];
-      console.log(`ðŸ"¦ Item found: ${name} - $${price} (${type})`);
+      console.log(`📦 Item found: ${name} - ${price} (${type})`);
 
       const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
       if (userResult.rowCount === 0) throw new Error('User not found.');
       
       const userPoints = userResult.rows[0].points;
-      console.log(`ðŸ'° User has ${userPoints} points, needs ${price}`);
+      console.log(`💰 User has ${userPoints} points, needs ${price}`);
       
       if (userPoints < price) throw new Error('Insufficient points.');
       
       if (name.includes('Badge')) {
-        console.log(`ðŸ† Processing badge purchase: ${name}`);
+        console.log(`🏆 Processing badge purchase: ${name}`);
         
         const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
         if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
         
         await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
-        console.log(`âœ… Badge added to user_badges table`);
+        console.log(`✅ Badge added to user_badges table`);
         
       } else {
-        console.log(`ðŸŽ® Processing consumable item: ${name}`);
+        console.log(`🎮 Processing consumable item: ${name}`);
         
         if(type === 'permanent') {
           const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
@@ -774,15 +774,15 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
         }
         
         await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
-        console.log(`âœ… Item added to user_inventory table`);
+        console.log(`✅ Item added to user_inventory table`);
       }
 
       const newPoints = userPoints - price;
       await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
-      console.log(`ðŸ'¸ Points updated: ${userPoints} â†' ${newPoints}`);
+      console.log(`💸 Points updated: ${userPoints} → ${newPoints}`);
 
       await client.query('COMMIT');
-      console.log(`ðŸŽ‰ Purchase completed successfully!`);
+      console.log(`🎉 Purchase completed successfully!`);
 
       res.status(200).json({ 
         success: true, 
@@ -792,20 +792,20 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
 
     } catch (error) {
       await client.query('ROLLBACK');
-      console.log(`ðŸ'¥ Purchase failed: ${error.message}`);
+      console.log(`💥 Purchase failed: ${error.message}`);
       
       const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.'];
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
       
-      console.error('ðŸš¨ Unexpected error in buy-item:', error);
+      console.error('🚨 Unexpected error in buy-item:', error);
       res.status(500).json({ success: false, error: 'Internal server error during purchase.' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/buy-item:', error);
+    console.error('🚨 Error in /api/buy-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -814,7 +814,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
   const { user } = req;
   const { selectedItems = [] } = req.body;
   
-  console.log(`ðŸŽ® Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
+  console.log(`🎮 Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
   
   const client = await pool.connect();
   try {
@@ -825,7 +825,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     const usedItems = [];
 
     for (const itemId of selectedItems) {
-      console.log(`ðŸ"„ Processing selected item: ${itemId}`);
+      console.log(`🔄 Processing selected item: ${itemId}`);
       
       const consumeResult = await client.query(
         `DELETE FROM user_inventory 
@@ -838,7 +838,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
       );
 
       if (consumeResult.rowCount > 0) {
-        console.log(`âœ… Consumed item ${itemId}`);
+        console.log(`✅ Consumed item ${itemId}`);
         usedItems.push(itemId);
         
         switch (itemId) {
@@ -846,7 +846,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
           case 2: totalTimeBonus += 20; break;
           case 3: hasBomb = true; break;
           case 4: 
-            console.log(`âš ï¸ Double Points (${itemId}) should be activated manually`);
+            console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
             break;
         }
       }
@@ -867,7 +867,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     
     const finalStartTime = 30 + totalTimeBonus;
     
-    console.log(`ðŸŽ¯ Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
+    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
     
     res.status(200).json({
       startTime: finalStartTime,
@@ -881,7 +881,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('ðŸš¨ Error in /api/start-game-session-with-items:', error);
+    console.error('🚨 Error in /api/start-game-session-with-items:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -890,7 +890,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
 
 app.post('/api/start-game-session', validateUser, async (req, res) => {
   const { user } = req;
-  console.log(`ðŸŽ® Starting legacy game session - User: ${user.id}`);
+  console.log(`🎮 Starting legacy game session - User: ${user.id}`);
   
   const client = await pool.connect();
   try {
@@ -935,7 +935,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
     hasBomb = bombBoosterResult.rowCount > 0;
     
-    console.log(`ðŸŽ¯ Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
+    console.log(`🎯 Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
     
     res.status(200).json({
       startTime: 30 + totalTimeBonus,
@@ -944,7 +944,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('ðŸš¨ Error in /api/start-game-session:', error);
+    console.error('🚨 Error in /api/start-game-session:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -988,7 +988,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       
       await client.query('COMMIT');
       
-      console.log(`âš¡ Point booster activated for user ${user.id}`);
+      console.log(`⚡ Point booster activated for user ${user.id}`);
       
       res.status(200).json({ success: true, message: 'Point Booster activated for your next game!' });
 
@@ -998,13 +998,13 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
-      console.error('ðŸš¨ Error in /api/activate-item:', error);
+      console.error('🚨 Error in /api/activate-item:', error);
       res.status(500).json({ success: false, error: 'Internal server error.' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/activate-item:', error);
+    console.error('🚨 Error in /api/activate-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1080,13 +1080,13 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
         return res.status(400).json({ success: false, error: error.message });
       }
       
-      console.error('ðŸš¨ Error in /api/add-friend:', error);
+      console.error('🚨 Error in /api/add-friend:', error);
       res.status(500).json({ success: false, error: 'Failed to add friend' });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/add-friend:', error);
+    console.error('🚨 Error in /api/add-friend:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1119,7 +1119,7 @@ app.post('/api/get-friends', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-friends:', error);
+    console.error('🚨 Error in /api/get-friends:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1157,7 +1157,7 @@ app.post('/api/remove-friend', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/remove-friend:', error);
+    console.error('🚨 Error in /api/remove-friend:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1211,7 +1211,7 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-inventory-stats:', error);
+    console.error('🚨 Error in /api/get-inventory-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1235,7 +1235,7 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-item-usage-history:', error);
+    console.error('🚨 Error in /api/get-item-usage-history:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1284,7 +1284,7 @@ app.post('/api/get-badge-progress', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-badge-progress:', error);
+    console.error('🚨 Error in /api/get-badge-progress:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1360,7 +1360,7 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-leaderboard:', error);
+    console.error('🚨 Error in /api/get-leaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1659,13 +1659,13 @@ async function verifyTelegramGroupMembership(userId) {
 
 const startServer = () => {
   app.listen(PORT, () => {
-    console.log(`âœ… Server running on port ${PORT}`);
-    console.log(`ðŸ"— Health check: http://localhost:${PORT}/health`);
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   });
 };
 
 // Start the application
 setupDatabase().then(startServer).catch(err => {
-  console.error('ðŸ'¥ Failed to start application:', err);
+  console.error('💥 Failed to start application:', err);
   process.exit(1);
 });
