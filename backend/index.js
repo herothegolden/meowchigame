@@ -21,7 +21,7 @@ const {
 } = process.env;
 
 if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("â›" Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error("❌ Missing DATABASE_URL or BOT_TOKEN environment variables");
   process.exit(1);
 }
 
