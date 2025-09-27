@@ -1,4 +1,4 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations + TMA Bomb Drop Support
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations + TMA Bomb Drop Support + SOUND INTEGRATION
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   generateInitialBoard,
@@ -20,6 +20,7 @@ import {
 } from '../../utils/gameLogic';
 import GamePiece from './GamePiece';
 import { motion } from 'framer-motion';
+import soundManager from '../../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
@@ -172,6 +173,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
     }
 
     console.log('💥 Bomb dropped at:', { row, col });
+
+    // 🎵 SOUND: Bomb explosion
+    soundManager.playCore('power_up', { volume: 1.2 });
 
     // Create explosion indices for 3x3 area
     const explosionIndices = new Set();
@@ -336,6 +340,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
         // Keep the original emoji but mark position as having a bomb
         setBombPositions(new Set([bombIndex]));
         
+        // 🎵 SOUND: Bomb ready
+        soundManager.playCore('power_up', { volume: 0.8 });
+        
         // Haptic feedback for bomb placement
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
@@ -371,6 +378,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
       }
     }
     
+    // 🎵 SOUND: Bomb explosion
+    soundManager.playCore('power_up', { volume: 1.1 });
+    
     // Award points for exploded pieces
     const pointsAwarded = explosionIndices.size * POINTS_PER_PIECE * 2; // Double points for bomb
     setScore(prev => prev + pointsAwarded);
@@ -400,6 +410,17 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
     
     try {
       let clearIndices = [];
+      
+      // 🎵 SOUND: Special item activation (different sounds for different items)
+      if (piece === SPECIAL_ITEMS.CAT) {
+        soundManager.playCore('special_activation', { volume: 1.0 });
+      } else if (piece === SPECIAL_ITEMS.HONEY) {
+        soundManager.playCore('special_activation', { volume: 1.1 });
+      } else if (piece === SPECIAL_ITEMS.COLOR_BOMB) {
+        soundManager.playCore('special_activation', { volume: 1.2 });
+      } else {
+        soundManager.playCore('special_activation', { volume: 1.0 });
+      }
       
       // Handle Color Bomb target selection
       if (piece === SPECIAL_ITEMS.COLOR_BOMB) {
@@ -482,6 +503,19 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
       ]);
       
       if (allMatchedIndices.size === 0) break;
+      
+      // 🎵 SOUND: Match sounds based on type and cascade
+      if (cascadeCount === 0) {
+        // First match
+        if (specialMatches.cat.length > 0 || specialMatches.honey.length > 0 || specialMatches.colorBomb.length > 0) {
+          soundManager.playCore('special_creation', { volume: 1.0 });
+        } else {
+          soundManager.playCore('match', { volume: 0.8 });
+        }
+      } else {
+        // Cascade
+        soundManager.playCore('cascade', { volume: Math.min(1.0, 0.6 + cascadeCount * 0.1) });
+      }
       
       // Check if any matches trigger bombs
       allMatchedIndices.forEach(matchIndex => {
@@ -572,6 +606,11 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
       
       setScore(prev => prev + totalPoints);
       
+      // 🎵 SOUND: Score collection for cascades
+      if (cascadeCount > 1) {
+        soundManager.playCore('score_collect', { volume: 0.9 });
+      }
+      
       // Haptic feedback for matches
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
@@ -635,6 +674,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
       return;
     }
     
+    // 🎵 SOUND: Normal piece selection
+    soundManager.playCore('swap', { volume: 0.6 });
+    
     setDraggedPiece({ index });
   }, [isProcessing, gameStarted, bombPositions, handleBombTap, handleSpecialActivation, isShuffling]);
 
@@ -677,6 +719,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
       // Check for special item combo
       if (isSpecialItem(draggedPieceType) && isSpecialItem(targetPieceType)) {
         console.log('🌟 Special combo detected:', draggedPieceType, '+', targetPieceType);
+        
+        // 🎵 SOUND: Special combo
+        soundManager.playCore('combo_match', { volume: 1.2 });
         
         setIsProcessing(true);
         processingRef.current = true;
@@ -794,6 +839,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
         setBoard(newBoard);
         boardRef.current = newBoard;
         
+        // 🎵 SOUND: Successful swap
+        soundManager.playCore('swap', { volume: 0.8 });
+        
         // Success haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
@@ -804,6 +852,9 @@ const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd,
           processMatches();
         }, 30);
       } else {
+        // 🎵 SOUND: Invalid move
+        soundManager.playCore('swap_invalid', { volume: 0.7 });
+        
         // Invalid swap - light haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
