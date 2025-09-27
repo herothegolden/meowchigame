@@ -41,6 +41,11 @@ const GamePage = () => {
   const [shuffleCooldown, setShuffleCooldown] = useState(0);
   const [shuffleFunction, setShuffleFunction] = useState(null);
   
+  // TMA-compatible bomb dragging state
+  const [isDraggingBomb, setIsDraggingBomb] = useState(false);
+  const [ghostBombPosition, setGhostBombPosition] = useState({ x: 0, y: 0 });
+  const [gameBoardRef, setGameBoardRef] = useState(null);
+  
   const navigate = useNavigate();
 
   // Timer effect
@@ -131,6 +136,11 @@ const GamePage = () => {
     
     // FIXED: Store function reference properly for React state
     setShuffleFunction(() => shuffleFn);
+  }, []);
+
+  // NEW: Handle game board ref for bomb drop detection
+  const handleGameBoardRef = useCallback((ref) => {
+    setGameBoardRef(ref);
   }, []);
 
   // FIXED: Enhanced manual shuffle handler with better error handling
@@ -450,6 +460,10 @@ const GamePage = () => {
     setShuffleCooldown(0);
     setShuffleFunction(null);
     
+    // Reset bomb drag state
+    setIsDraggingBomb(false);
+    setGhostBombPosition({ x: 0, y: 0 });
+    
     await loadInventory();
   };
 
@@ -482,29 +496,114 @@ const GamePage = () => {
     }
   };
 
-  // Handle bomb drop on board
-  const handleBombDrop = async (position) => {
+  // TMA-compatible bomb dragging implementation
+  const startDraggingBomb = useCallback((e) => {
     const bombItem = availableItems.find(item => item.item_id === 3);
-    if (!bombItem || bombItem.quantity <= 0) return;
+    if (!bombItem || bombItem.quantity <= 0 || isDraggingBomb) return;
 
-    // Update inventory locally
-    setAvailableItems(prev => 
-      prev.map(invItem => 
-        invItem.item_id === 3 
-          ? { ...invItem, quantity: invItem.quantity - 1 }
-          : invItem
-      ).filter(invItem => invItem.quantity > 0)
-    );
-
-    // Trigger explosion on game board via GameBoard component
-    // This would need to be passed to GameBoard as a prop
-    console.log('Dropped bomb at position:', position);
+    console.log('Starting bomb drag');
+    setIsDraggingBomb(true);
+    
+    // Get initial pointer position
+    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    
+    setGhostBombPosition({ x: clientX, y: clientY });
     
     // Haptic feedback
     if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
     }
-  };
+    
+    // Prevent default to avoid selection
+    e.preventDefault();
+  }, [availableItems, isDraggingBomb]);
+
+  // Handle pointer move during bomb drag
+  const handlePointerMove = useCallback((e) => {
+    if (!isDraggingBomb) return;
+    
+    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    
+    setGhostBombPosition({ x: clientX, y: clientY });
+    e.preventDefault();
+  }, [isDraggingBomb]);
+
+  // Handle pointer release - bomb drop
+  const handlePointerUp = useCallback((e) => {
+    if (!isDraggingBomb) return;
+    
+    console.log('Ending bomb drag');
+    setIsDraggingBomb(false);
+    
+    // Get drop position
+    const clientX = e.clientX || (e.changedTouches && e.changedTouches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.changedTouches && e.changedTouches[0]?.clientY) || 0;
+    
+    // Find element under pointer
+    const elementUnder = document.elementFromPoint(clientX, clientY);
+    
+    if (elementUnder && gameBoardRef) {
+      // Check if we're over the game board
+      const boardElement = gameBoardRef.getBoardElement ? gameBoardRef.getBoardElement() : null;
+      
+      if (boardElement && boardElement.contains(elementUnder)) {
+        // Calculate board position
+        const boardRect = boardElement.getBoundingClientRect();
+        const cellSize = boardRect.width / 6; // Assuming 6x6 board
+        
+        const relativeX = clientX - boardRect.left;
+        const relativeY = clientY - boardRect.top;
+        
+        const col = Math.floor(relativeX / cellSize);
+        const row = Math.floor(relativeY / cellSize);
+        
+        // Validate position
+        if (row >= 0 && row < 6 && col >= 0 && col < 6) {
+          console.log('Dropping bomb at:', { row, col });
+          
+          // Consume bomb from inventory
+          setAvailableItems(prev => 
+            prev.map(invItem => 
+              invItem.item_id === 3 
+                ? { ...invItem, quantity: invItem.quantity - 1 }
+                : invItem
+            ).filter(invItem => invItem.quantity > 0)
+          );
+          
+          // Trigger bomb drop on game board
+          if (gameBoardRef && gameBoardRef.handleBombDrop) {
+            gameBoardRef.handleBombDrop({ row, col });
+          }
+          
+          // Heavy haptic feedback for successful drop
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+          }
+        }
+      }
+    }
+    
+    e.preventDefault();
+  }, [isDraggingBomb, gameBoardRef, availableItems]);
+
+  // Add global pointer event listeners during drag
+  useEffect(() => {
+    if (isDraggingBomb) {
+      document.addEventListener('pointermove', handlePointerMove, { passive: false });
+      document.addEventListener('pointerup', handlePointerUp, { passive: false });
+      document.addEventListener('touchmove', handlePointerMove, { passive: false });
+      document.addEventListener('touchend', handlePointerUp, { passive: false });
+      
+      return () => {
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('touchmove', handlePointerMove);
+        document.removeEventListener('touchend', handlePointerUp);
+      };
+    }
+  }, [isDraggingBomb, handlePointerMove, handlePointerUp]);
 
   // Load inventory on component mount
   useEffect(() => {
@@ -528,6 +627,21 @@ const GamePage = () => {
 
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
+      
+      {/* Ghost Bomb Element - follows pointer during drag */}
+      {isDraggingBomb && (
+        <motion.div
+          className="fixed pointer-events-none z-50 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-2 border-red-400"
+          style={{
+            left: ghostBombPosition.x - 24,
+            top: ghostBombPosition.y - 24,
+          }}
+          initial={{ scale: 0.8, opacity: 0.8 }}
+          animate={{ scale: 1, opacity: 1 }}
+        >
+          <Bomb className="w-6 h-6 text-white" />
+        </motion.div>
+      )}
       
       {/* Game Over Overlay */}
       {isGameOver && (
@@ -603,7 +717,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Game Header - CLEAN, NO SHUFFLE BUTTON */}
+      {/* Game Header - CLEANED UP (no inventory button) */}
       <motion.div 
         className="flex justify-between items-center"
         initial={{ opacity: 0, y: -20 }}
@@ -619,22 +733,6 @@ const GamePage = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* ONLY inventory button and timer - NO SHUFFLE BUTTON */}
-          {gameStarted && !isGameOver && availableItems.length > 0 && (
-            <motion.button
-              onClick={() => setShowInventory(!showInventory)}
-              className="bg-nav p-3 rounded-xl shadow-lg border border-gray-700 hover:bg-gray-600 transition-colors relative"
-              whileTap={{ scale: 0.95 }}
-            >
-              <Package className="w-6 h-6 text-accent" />
-              {availableItems.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-accent text-background text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {availableItems.reduce((sum, item) => sum + item.quantity, 0)}
-                </span>
-              )}
-            </motion.button>
-          )}
-          
           <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
             <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
             <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>
@@ -701,127 +799,6 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      {/* PHASE 3: Simplified Floating Inventory Panel */}
-      <AnimatePresence>
-        {showInventory && gameStarted && !isGameOver && (
-          <motion.div
-            className="absolute top-20 right-4 bg-nav rounded-xl p-4 shadow-2xl border border-gray-700 z-30 w-80 max-h-96 overflow-hidden"
-            initial={{ opacity: 0, x: 100, scale: 0.8 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 100, scale: 0.8 }}
-            transition={{ duration: 0.3 }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-primary flex items-center">
-                <Package className="w-5 h-5 mr-2 text-accent" />
-                Inventory
-              </h3>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setShowInventoryStats(!showInventoryStats)}
-                  className="p-1 hover:bg-gray-600 rounded"
-                  title="Statistics"
-                >
-                  <BarChart3 className="w-4 h-4 text-secondary hover:text-primary" />
-                </button>
-                <button
-                  onClick={() => setShowInventory(false)}
-                  className="text-secondary hover:text-primary"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Inventory content */}
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {/* Statistics panel */}
-              <AnimatePresence>
-                {showInventoryStats && (
-                  <motion.div
-                    className="bg-background/50 p-3 rounded-lg border border-gray-600"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    <h4 className="text-sm font-bold text-accent mb-2">Inventory Stats</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <p className="text-secondary">Total Items:</p>
-                        <p className="text-primary font-bold">{inventoryStats.totalItems}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Total Value:</p>
-                        <p className="text-primary font-bold">{inventoryStats.totalValue.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Most Used:</p>
-                        <p className="text-primary font-bold text-xs">{inventoryStats.mostUsedItem}</p>
-                      </div>
-                      <div>
-                        <p className="text-secondary">Efficiency:</p>
-                        <p className="text-primary font-bold">{inventoryStats.efficiency}%</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Inventory items */}
-              {availableItems.map((item) => {
-                const details = getItemDetails(item.item_id);
-                const ItemIcon = details.icon;
-                const canActivate = item.item_id === 4 && !activeBoosts.pointMultiplier;
-                
-                return (
-                  <div
-                    key={item.item_id}
-                    className="flex items-center justify-between p-3 bg-background/50 rounded-lg border border-gray-600"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <ItemIcon className={`w-5 h-5 ${details.color}`} />
-                      <div>
-                        <p className="text-sm font-medium text-primary">{details.name}</p>
-                        <div className="flex items-center space-x-2 text-xs">
-                          <span className="text-secondary">Qty: {item.quantity}</span>
-                          <span className="text-accent">Value: {(details.value * item.quantity).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {canActivate && (
-                      <motion.button
-                        onClick={() => handleActivateItem(item.item_id)}
-                        disabled={isActivatingItem === item.item_id}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {isActivatingItem === item.item_id ? (
-                          <LoaderCircle className="w-4 h-4 animate-spin" />
-                        ) : (
-                          'USE'
-                        )}
-                      </motion.button>
-                    )}
-                    
-                    {item.item_id === 4 && activeBoosts.pointMultiplier && (
-                      <span className="text-xs text-green-400 font-bold">ACTIVE</span>
-                    )}
-                  </div>
-                );
-              })}
-              
-              {availableItems.length === 0 && (
-                <p className="text-center text-secondary text-sm py-4">
-                  No items available
-                </p>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Game Board Container */}
       <motion.div 
         className="flex-1 flex flex-col items-center justify-center"
@@ -836,7 +813,7 @@ const GamePage = () => {
           onGameEnd={() => setIsGameOver(true)}
           onShuffleNeeded={handleShuffleNeeded}
           onBoardReady={handleBoardReady}
-          onBombDrop={handleBombDrop}
+          onGameBoardRef={handleGameBoardRef}
         />
       </motion.div>
       
@@ -892,7 +869,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Inline Items Toolbar - FIXED: Replaces undefined ItemsToolbar */}
+      {/* Inline Items Toolbar - TMA-Compatible with Pointer Events */}
       {gameStarted && !isGameOver && availableItems.length > 0 && (
         <motion.div 
           className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4"
@@ -912,13 +889,11 @@ const GamePage = () => {
                     handleUseItem(item.item_id);
                   }
                 }}
-                onDragStart={() => {
+                onPointerDown={(e) => {
                   if (item.item_id === 3) {
-                    // Start dragging bomb
-                    console.log('Started dragging bomb');
+                    startDraggingBomb(e);
                   }
                 }}
-                draggable={item.item_id === 3}
                 className={`flex flex-col items-center p-3 rounded-lg border transition-all duration-200 relative ${
                   item.item_id === 1 
                     ? 'bg-blue-600/20 border-blue-500 hover:bg-blue-600/30 cursor-pointer'
@@ -928,6 +903,7 @@ const GamePage = () => {
                 }`}
                 whileTap={item.item_id === 1 ? { scale: 0.95 } : {}}
                 disabled={item.quantity <= 0}
+                style={{ touchAction: 'none' }}
               >
                 <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
                 <span className="text-xs text-primary font-medium">{item.quantity}</span>
@@ -940,12 +916,6 @@ const GamePage = () => {
               </motion.button>
             );
           })}
-          
-          {/* Toolbar hint */}
-          <div className="text-xs text-secondary ml-4 text-center">
-            <p>⏰ Tap for time</p>
-            <p>💥 Drag to board</p>
-          </div>
         </motion.div>
       )}
     </div>
