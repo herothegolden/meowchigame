@@ -4,6 +4,7 @@ import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, Chevron
 import TasksPage from './TasksPage';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const DEFAULT_AVATAR = "/default-cat.png"; // NEW: fallback image for missing/broken avatars
 
 // --- Helper Components ---
 
@@ -188,8 +189,9 @@ const ProfilePage = () => {
     { rank: 8, player: { name: 'Lisa', level: 1 }, score: 4900, isCurrentUser: false, badge: null }
   ];
 
-  // FIXED: Sync avatar from Telegram to backend
+  // FIXED: Sync avatar from Telegram to backend (only when static URL exists)
   const syncTelegramAvatar = async () => {
+    // CHANGE: early return if no static avatar URL provided by Telegram
     if (!telegramPhotoUrl || !isConnected || !tg?.initData || !BACKEND_URL) {
       return;
     }
@@ -233,11 +235,13 @@ const ProfilePage = () => {
       const finalName = telegramFirstName || profileData.stats.first_name || 'User';
       setDisplayName(finalName);
       
-      // Avatar: Use Telegram if available, otherwise DB, otherwise null
-      const finalAvatar = telegramPhotoUrl || profileData.stats.avatar_url || null;
+      // CHANGE: Avatar selection with safe fallback
+      const finalAvatar = (telegramPhotoUrl && telegramPhotoUrl.trim() !== '')
+        ? telegramPhotoUrl
+        : (profileData.stats.avatar_url || DEFAULT_AVATAR);
       setDisplayAvatar(finalAvatar);
       
-      // Sync avatar to backend if Telegram provides one and DB doesn't have it
+      // CHANGE: Only sync when Telegram actually provided a static photo URL
       if (telegramPhotoUrl && telegramPhotoUrl !== profileData.stats.avatar_url) {
         syncTelegramAvatar();
       }
@@ -942,7 +946,7 @@ const ProfilePage = () => {
               <div className="space-y-2">
                 {leaderboardData.slice(0, 10).map((entry, index) => (
                   <motion.div
-                    key={`${leaderboardTab}-${entry.rank}`}
+                    key={`${leaderboardTab}-${entry.rank}`]
                     className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
                       entry.isCurrentUser 
                         ? 'bg-accent/20 border-accent' 
@@ -1049,7 +1053,7 @@ const ProfilePage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
-      {/* FIXED: Profile Header with Video Avatar Support */}
+      {/* FIXED: Profile Header with Video Avatar Support -> simplified to always use IMG with fallback */}
       <motion.div 
         className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
@@ -1057,44 +1061,15 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* FIXED: Profile Photo - Video Avatar Support */}
+          {/* FIXED: Profile Photo - now static IMG with safe fallback */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
-              {displayAvatar ? (
-                // Support both video and static avatars
-                displayAvatar.includes('.mp4') || displayAvatar.includes('video') ? (
-                  <video 
-                    src={displayAvatar} 
-                    alt="Profile" 
-                    className="w-full h-full object-cover"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    onError={(e) => {
-                      console.warn('Video avatar failed to load, showing fallback');
-                      e.target.style.display = 'none';
-                      e.target.nextElementSibling.style.display = 'flex';
-                    }}
-                  />
-                ) : (
-                  <img 
-                    src={displayAvatar} 
-                    alt="Profile" 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      console.warn('Avatar failed to load, showing fallback');
-                      e.target.style.display = 'none';
-                      e.target.nextElementSibling.style.display = 'flex';
-                    }}
-                  />
-                )
-              ) : (
-                <User className="w-8 h-8 text-secondary" />
-              )}
-              {!displayAvatar && (
-                <User className="w-8 h-8 text-secondary" style={{ display: displayAvatar ? 'none' : 'flex' }} />
-              )}
+              <img
+                src={displayAvatar}
+                alt="Profile"
+                className="w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+              />
             </div>
             
             {/* Sync indicator */}
