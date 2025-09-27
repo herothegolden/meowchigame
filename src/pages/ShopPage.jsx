@@ -153,7 +153,7 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
           } else {
             const inventoryItem = inventory.find(inv => inv.item_id === item.id);
             if (inventoryItem) {
-              ownedQuantity = inventoryItem.quantity;
+              ownedQuantity = Number(inventoryItem.quantity) || 0;
               isOwned = item.type === 'permanent';
             }
           }
@@ -224,7 +224,11 @@ const ShopPage = () => {
             }
             
             setUserPoints(data.userPoints);
-            setInventory(data.inventory || []);
+            const normalizedInventory = (data.inventory || []).map(it => ({
+              ...it,
+              quantity: Number(it.quantity || 0)
+            }));
+            setInventory(normalizedInventory);
             setOwnedBadges(data.ownedBadges || []);
             setConnectionStatus('Connected to server');
             setIsConnected(true);
