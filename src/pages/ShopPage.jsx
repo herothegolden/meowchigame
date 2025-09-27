@@ -18,12 +18,11 @@ const iconComponents = {
 // STANDARDIZED FALLBACK SHOP ITEMS - Complete catalog with consistent pricing
 const FALLBACK_SHOP_ITEMS = [
   { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
-  { id: 2, name: 'Extra Time +20s', description: '+20 seconds to your next game', price: 1500, icon_name: 'Timer', type: 'consumable', category: 'time' },
   { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
   { id: 4, name: 'Double Points', description: '2x points for your next game', price: 1500, icon_name: 'ChevronsUp', type: 'consumable', category: 'multiplier' },
-  { id: 5, name: 'Cookie Master Badge', description: 'Golden cookie profile badge', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
-  { id: 6, name: 'Speed Demon Badge', description: 'Lightning bolt profile badge', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
-  { id: 7, name: 'Champion Badge', description: 'Trophy profile badge', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
+  { id: 5, name: 'Cookie Master', description: 'Golden cookie profile badge', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
+  { id: 6, name: 'Speed Demon', description: 'Lightning bolt profile badge', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
+  { id: 7, name: 'Champion', description: 'Trophy profile badge', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
 ];
 
 const categoryConfig = {
@@ -430,11 +429,6 @@ const ShopPage = () => {
           <span className="text-xl font-bold">{userPoints.toLocaleString()}</span>
         </motion.div>
       </motion.div>
-
-      {/* Connection Status */}
-      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-        {connectionStatus}
-      </div>
 
       {/* Shop Categories */}
       <motion.div className="space-y-8" layout>
