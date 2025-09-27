@@ -20,19 +20,19 @@ const StatCard = ({ icon, label, value, color }) => (
 
 const BadgeCard = ({ badgeName, isOwned }) => {
   const badgeConfig = {
-    'Cookie Master Badge': { 
+    'Cookie Master': { 
       icon: '🍪', 
       title: 'Cookie Master', 
       description: 'Master of the cookies',
       color: 'text-yellow-400'
     },
-    'Speed Demon Badge': { 
+    'Speed Demon': { 
       icon: '⚡', 
       title: 'Speed Demon', 
       description: 'Lightning fast reflexes',
       color: 'text-blue-400'
     },
-    'Champion Badge': { 
+    'Champion': { 
       icon: '🏆', 
       title: 'Champion', 
       description: 'Ultimate game champion',
@@ -41,7 +41,7 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   };
 
   const badge = badgeConfig[badgeName] || {
-    icon: '🏅',
+    icon: '🎖',
     title: badgeName,
     description: 'Special achievement',
     color: 'text-gray-400'
@@ -163,24 +163,18 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // STANDARDIZED MOCK DATA - Complete with all required fields
+  // Mock data for demo mode
   const MOCK_STATS = {
     first_name: 'Demo User',
     username: 'demouser',
     points: 4735,
-    level: 2,
-    daily_streak: 3,
-    games_played: 12,           // ✅ ADDED - fixes averageScore calculation
-    high_score: 1850,          // ✅ ADDED - prevents undefined in stats display
-    total_play_time: 180,      // ✅ ADDED - 3 hours in minutes
+    level: 1,
+    daily_streak: 1,
     created_at: new Date().toISOString(),
     avatar_url: null
   };
 
-  // STANDARDIZED MOCK ITEMS - matches other pages' inventory format
   const MOCK_ITEMS = [
-    { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', category: 'time' },
-    { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', category: 'bomb' },
     { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
   ];
 
@@ -204,7 +198,7 @@ const ProfilePage = () => {
 
     setIsSyncingAvatar(true);
     try {
-      console.log('📷 Syncing Telegram avatar to backend:', telegramPhotoUrl);
+      console.log('📸 Syncing Telegram avatar to backend:', telegramPhotoUrl);
       
       const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
@@ -281,9 +275,9 @@ const ProfilePage = () => {
       if (!tg?.initData || !BACKEND_URL) {
         // Demo mode - mock progress data
         setBadgeProgress({
-          'Cookie Master Badge': 75,
-          'Speed Demon Badge': 45,
-          'Champion Badge': 20
+          'Cookie Master': 75,
+          'Speed Demon': 45,
+          'Champion': 20
         });
         setBadgeProgressLoading(false);
         return;
@@ -301,17 +295,17 @@ const ProfilePage = () => {
       } else {
         // Fallback to mock data
         setBadgeProgress({
-          'Cookie Master Badge': 75,
-          'Speed Demon Badge': 45, 
-          'Champion Badge': 20
+          'Cookie Master': 75,
+          'Speed Demon': 45, 
+          'Champion': 20
         });
       }
     } catch (err) {
       console.error('Badge progress fetch error:', err);
       setBadgeProgress({
-        'Cookie Master Badge': 75,
-        'Speed Demon Badge': 45,
-        'Champion Badge': 20
+        'Cookie Master': 75,
+        'Speed Demon': 45,
+        'Champion': 20
       });
     } finally {
       setBadgeProgressLoading(false);
@@ -546,14 +540,10 @@ const ProfilePage = () => {
   const fetchProfileData = useCallback(async () => {
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using standardized mock profile data');
+        console.log('Demo mode: Using mock profile data');
         setProfileData({
           stats: MOCK_STATS,
-          inventory: [
-            { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
-            { item_id: 3, quantity: 1 },  // 1x Cookie Bomb  
-            { item_id: 4, quantity: 1 }   // 1x Double Points
-          ],
+          inventory: [],
           allItems: MOCK_ITEMS,
           boosterActive: false,
           ownedBadges: []
@@ -602,14 +592,10 @@ const ProfilePage = () => {
       console.error('Profile fetch error:', err);
       setError(err.message);
       
-      // Fallback to standardized demo data
+      // Fallback to demo data
       setProfileData({
         stats: MOCK_STATS,
-        inventory: [
-          { item_id: 1, quantity: 2 },
-          { item_id: 3, quantity: 1 },
-          { item_id: 4, quantity: 1 }
-        ],
+        inventory: [],
         allItems: MOCK_ITEMS,
         boosterActive: false,
         ownedBadges: []
@@ -724,9 +710,9 @@ const ProfilePage = () => {
 
   // Get all possible badges
   const allBadges = [
-    'Cookie Master Badge',
-    'Speed Demon Badge', 
-    'Champion Badge'
+    'Cookie Master',
+    'Speed Demon', 
+    'Champion'
   ];
 
   const renderTabContent = () => {
@@ -764,7 +750,7 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Trophy size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">High Score</p>
-                <p className="text-lg font-bold text-primary">{stats.high_score || 0}</p>
+                <p className="text-lg font-bold text-primary">{stats.high_score || 1455}</p>
                 <p className="text-xs text-green-400 mt-1">New record!</p>
               </div>
             </div>
@@ -774,19 +760,17 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Package size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Games Played</p>
-                <p className="text-lg font-bold text-primary">{stats.games_played || 0}</p>
+                <p className="text-lg font-bold text-primary">{stats.games_played || 4}</p>
                 <p className="text-xs text-green-400 mt-1">+5 this week</p>
               </div>
             </div>
 
-            {/* Average Score - FIXED calculation */}
+            {/* Average Score */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Award size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Average Score</p>
-                <p className="text-lg font-bold text-primary">
-                  {stats.games_played > 0 ? Math.floor(stats.points / stats.games_played) : 0}
-                </p>
+                <p className="text-lg font-bold text-primary">{stats.averageScore || Math.floor(stats.points / (stats.games_played || 1))}</p>
                 <p className="text-xs text-green-400 mt-1">Improving!</p>
               </div>
             </div>
@@ -796,9 +780,7 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Calendar size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Play Time</p>
-                <p className="text-lg font-bold text-primary">
-                  {stats.total_play_time ? `${Math.floor(stats.total_play_time / 60)}h ${stats.total_play_time % 60}m` : '0h 0m'}
-                </p>
+                <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
                 <p className="text-xs text-green-400 mt-1">Getting better!</p>
               </div>
             </div>
