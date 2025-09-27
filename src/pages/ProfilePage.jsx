@@ -946,7 +946,7 @@ const ProfilePage = () => {
               <div className="space-y-2">
                 {leaderboardData.slice(0, 10).map((entry, index) => (
                   <motion.div
-                    key={`${leaderboardTab}-${entry.rank}`]
+                    key={`${leaderboardTab}-${entry.rank}`}
                     className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
                       entry.isCurrentUser 
                         ? 'bg-accent/20 border-accent' 
