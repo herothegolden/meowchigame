@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
 import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History, Shuffle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 // Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -64,6 +65,14 @@ const GamePage = () => {
 
     return () => clearInterval(timer);
   }, [gameStarted, isGameOver, timeLeft]);
+
+  // 🎵 SOUND: Game over trigger
+  useEffect(() => {
+    if (isGameOver && !isSubmitting) {
+      // Play game over sound
+      soundManager.playCore('game_over', { volume: 1.0 });
+    }
+  }, [isGameOver, isSubmitting]);
 
   // Shuffle cooldown timer
   useEffect(() => {
@@ -426,6 +435,9 @@ const GamePage = () => {
   };
 
   const startGame = async () => {
+    // 🎵 SOUND: Game start
+    soundManager.playCore('power_up', { volume: 0.8 });
+    
     // Auto-configure with no selected items (skip item selection entirely)
     setSelectedItems(new Set());
     await configureGameWithSelectedItems();
@@ -445,6 +457,10 @@ const GamePage = () => {
 
   const restartGame = async () => {
     console.log('Restarting game...');
+    
+    // 🎵 SOUND: Button click for restart
+    soundManager.playUI('button_click', { volume: 0.8 });
+    
     setGameStarted(false);
     setScore(0);
     setIsGameOver(false);
@@ -476,6 +492,9 @@ const GamePage = () => {
     
     // Handle Extra Time items
     if (itemId === 1) { // Extra Time +10s
+      // 🎵 SOUND: Power up usage
+      soundManager.playCore('power_up', { volume: 0.9 });
+      
       setTimeLeft(prev => prev + 10);
       
       // Update inventory locally
@@ -673,7 +692,11 @@ const GamePage = () => {
                 <span>Play Again</span>
               </button>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => {
+                  // 🎵 SOUND: Button click for navigation
+                  soundManager.playUI('button_click', { volume: 0.8 });
+                  navigate('/');
+                }}
                 className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
               >
                 Home
@@ -826,7 +849,11 @@ const GamePage = () => {
           transition={{ duration: 0.5, delay: 0.4 }}
         >
           <motion.button
-            onClick={handleShuffle}
+            onClick={() => {
+              // 🎵 SOUND: Button click for shuffle
+              soundManager.playUI('button_click', { volume: 0.8 });
+              handleShuffle();
+            }}
             disabled={shuffleCooldown > 0 || !shuffleFunction}
             className={`flex items-center space-x-3 px-6 py-3 rounded-xl shadow-lg border transition-all duration-200 relative ${
               shuffleNeeded && shuffleCooldown === 0 && shuffleFunction
