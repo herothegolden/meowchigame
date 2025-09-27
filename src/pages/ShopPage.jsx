@@ -316,13 +316,6 @@ const ShopPage = () => {
         // 4. Haptic feedback
         tg.HapticFeedback?.notificationOccurred('success');
         
-        // 5. Show success popup (optional - can be removed for even smoother experience)
-        tg.showPopup({
-          title: 'Success!',
-          message: result.message,
-          buttons: [{ type: 'ok' }]
-        });
-        
       } else {
         console.log('Demo purchase for item:', itemId);
         
@@ -357,17 +350,6 @@ const ShopPage = () => {
           // Show success animation
           setJustPurchasedId(itemId);
           setTimeout(() => setJustPurchasedId(null), 1500);
-          
-          const message = `Demo: Purchased ${item.name} for ${item.price} points!\n\n⚠️ This purchase is for demo only and won't persist.`;
-          if (tg && tg.showPopup) {
-            tg.showPopup({
-              title: 'Demo Purchase',
-              message: message,
-              buttons: [{ type: 'ok' }]
-            });
-          } else {
-            alert(message);
-          }
         } else {
           const message = 'Not enough points!';
           if (tg && tg.showPopup) {
