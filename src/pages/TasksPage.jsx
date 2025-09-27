@@ -24,6 +24,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const TasksPage = () => {
   const [activeTab, setActiveTab] = useState('main');
   const [mainTasks, setMainTasks] = useState([]);
+  const [dailyTasks, setDailyTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [processingTask, setProcessingTask] = useState(null);
@@ -41,102 +42,146 @@ const TasksPage = () => {
   // Mock main tasks for demo mode
   const MOCK_MAIN_TASKS = [
       {
+    id: 1,
+    emoji: '🍓',
+    name: 'Feed the Hungry Stray',
+    description: 'Collect 10 strawberries today',
+    reward: 'Berry Boost points',
+    icon: Heart,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 2,
+    emoji: '⏰',
+    name: 'Pi Moment of Truth',
+    description: 'Log in exactly at 3:14',
+    reward: '31.4 bonus points',
+    icon: Clock,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 3,
+    emoji: '🪃',
+    name: 'Double Snack Attack',
+    description: 'Play exactly 2 games (not 1, not 3)',
+    reward: 'Perfect Balance badge',
+    icon: Gamepad2,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 4,
+    emoji: '☕',
+    name: 'Espresso Meowchi',
+    description: 'Log in before 10am, Meowchi will sip coffee',
+    reward: 'Morning Energy boost',
+    icon: Coffee,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 5,
+    emoji: '🌙',
+    name: 'Midnight Mischief',
+    description: 'Log in after midnight; reward doubles if you meow in chat',
+    reward: 'Night Owl badge',
+    icon: Moon,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 6,
+    emoji: '🐾',
+    name: 'Paw-fect Rhythm',
+    description: 'Tap Meowchi 11 times in a row without missing',
+    reward: 'Rhythm Master title',
+    icon: Target,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 7,
+    emoji: '😂',
+    name: 'Oops, My Paw Slipped',
+    description: 'Make one useless swap that doesn\'t match',
+    reward: 'Clumsy Cat charm',
+    icon: Zap,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 8,
+    emoji: '💤',
+    name: 'Nap with Meowchi',
+    description: 'Stay idle for 20 seconds mid-game',
+    reward: 'Sleepy bonus',
+    icon: Moon,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 9,
+    emoji: '🎉',
+    name: 'Chaos Cat',
+    description: 'Trigger 3 cascades in a single move',
+    reward: 'Chain Reaction badge',
+    icon: Zap,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  },
+  {
+    id: 10,
+    emoji: '📸',
+    name: 'Send Meowchi a Selfie',
+    description: 'Share a score card in chat',
+    reward: 'Social Butterfly badge',
+    icon: Camera,
+    completed: false,
+    disabled: true // ADDED: Shows "Soon" button state
+  }
+];
+
+  // Mock daily tasks for demo mode
+  const MOCK_DAILY_TASKS = [
+    {
       id: 1,
-      emoji: '🍓',
-      name: 'Feed the Hungry Stray',
-      description: 'Collect 10 strawberries today',
-      reward: 'Berry Boost points',
-      icon: Heart,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 2,
-      emoji: '⏰',
-      name: 'Pi Moment of Truth',
-      description: 'Log in exactly at 3:14',
-      reward: '31.4 bonus points',
-      icon: Clock,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 3,
-      emoji: '🪃',
-      name: 'Double Snack Attack',
-      description: 'Play exactly 2 games (not 1, not 3)',
-      reward: 'Perfect Balance badge',
+      emoji: '🎮',
+      name: 'Daily Player',
+      description: 'Play 3 games today',
+      reward: '200 bonus points',
       icon: Gamepad2,
       completed: false,
       disabled: true
     },
     {
-      id: 4,
-      emoji: '☕',
-      name: 'Espresso Meowchi',
-      description: 'Log in before 10am, Meowchi will sip coffee',
-      reward: 'Morning Energy boost',
-      icon: Coffee,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 5,
-      emoji: '🌙',
-      name: 'Midnight Mischief',
-      description: 'Log in after midnight; reward doubles if you meow in chat',
-      reward: 'Night Owl badge',
-      icon: Moon,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 6,
-      emoji: '🾎',
-      name: 'Paw-fect Rhythm',
-      description: 'Tap Meowchi 11 times in a row without missing',
-      reward: 'Rhythm Master title',
+      id: 2,
+      emoji: '🏆',
+      name: 'Score Master',
+      description: 'Achieve a score of 1000+ in a single game',
+      reward: '150 bonus points',
       icon: Target,
       completed: false,
       disabled: true
     },
     {
-      id: 7,
-      emoji: '😂',
-      name: 'Oops, My Paw Slipped',
-      description: 'Make one useless swap that doesn\'t match',
-      reward: 'Clumsy Cat charm',
+      id: 3,
+      emoji: '⚡',
+      name: 'Speed Demon',
+      description: 'Complete a game in under 20 seconds',
+      reward: '100 bonus points',
       icon: Zap,
       completed: false,
       disabled: true
     },
     {
-      id: 8,
-      emoji: '💤',
-      name: 'Nap with Meowchi',
-      description: 'Stay idle for 20 seconds mid-game',
-      reward: 'Sleepy bonus',
-      icon: Moon,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 9,
-      emoji: '🎉',
-      name: 'Chaos Cat',
-      description: 'Trigger 3 cascades in a single move',
-      reward: 'Chain Reaction badge',
-      icon: Zap,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 10,
-      emoji: '📸',
-      name: 'Send Meowchi a Selfie',
-      description: 'Share a score card in chat',
-      reward: 'Social Butterfly badge',
-      icon: Camera,
+      id: 4,
+      emoji: '💎',
+      name: 'Collector',
+      description: 'Use 2 power-ups in games today',
+      reward: '75 bonus points',
+      icon: Star,
       completed: false,
       disabled: true
     }
@@ -150,6 +195,7 @@ const TasksPage = () => {
       if (!tg?.initData || !BACKEND_URL) {
         console.log('Demo mode: Using mock main tasks');
         setMainTasks(MOCK_MAIN_TASKS);
+        setDailyTasks(MOCK_DAILY_TASKS);
         setIsConnected(false);
         setLoading(false);
         return;
@@ -199,6 +245,7 @@ const TasksPage = () => {
         });
         
         setMainTasks(mappedTasks);
+        setDailyTasks(MOCK_DAILY_TASKS);
         setIsConnected(true);
       } else {
         throw new Error(`Failed to fetch tasks: ${res.status}`);
@@ -206,6 +253,7 @@ const TasksPage = () => {
     } catch (err) {
       console.error('Main tasks fetch error:', err);
       setMainTasks(MOCK_MAIN_TASKS);
+      setDailyTasks(MOCK_DAILY_TASKS);
       setIsConnected(false);
     } finally {
       setLoading(false);
