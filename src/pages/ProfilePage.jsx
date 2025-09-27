@@ -1049,12 +1049,7 @@ const ProfilePage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
-      {/* Connection status */}
-      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-        {isConnected ? 'Connected to server' : 'Demo mode - data won\'t persist'}
-      </div>
-
-      {/* FIXED: Profile Header with Hybrid Avatar & Name Sync */}
+      {/* FIXED: Profile Header with Video Avatar Support */}
       <motion.div 
         className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
@@ -1062,20 +1057,38 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* FIXED: Profile Photo - Hybrid Telegram + DB with sync indicator */}
+          {/* FIXED: Profile Photo - Video Avatar Support */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
               {displayAvatar ? (
-                <img 
-                  src={displayAvatar} 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    console.warn('Avatar failed to load, showing fallback');
-                    e.target.style.display = 'none';
-                    e.target.nextElementSibling.style.display = 'flex';
-                  }}
-                />
+                // Support both video and static avatars
+                displayAvatar.includes('.mp4') || displayAvatar.includes('video') ? (
+                  <video 
+                    src={displayAvatar} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    onError={(e) => {
+                      console.warn('Video avatar failed to load, showing fallback');
+                      e.target.style.display = 'none';
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : (
+                  <img 
+                    src={displayAvatar} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.warn('Avatar failed to load, showing fallback');
+                      e.target.style.display = 'none';
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }}
+                  />
+                )
               ) : (
                 <User className="w-8 h-8 text-secondary" />
               )}
@@ -1111,15 +1124,15 @@ const ProfilePage = () => {
                 <button
                   onClick={handleUpdateProfile}
                   disabled={isUpdatingName}
-                  className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50"
+                  className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center"
                 >
-                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : 'âœ"'}
+                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
                 </button>
                 <button
                   onClick={() => setIsEditingName(false)}
-                  className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors"
+                  className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors flex items-center"
                 >
-                  âœ•
+                  <Star className="w-4 h-4" />
                 </button>
               </div>
             ) : (
@@ -1130,13 +1143,14 @@ const ProfilePage = () => {
                     setEditNameValue(displayName || '');
                     setIsEditingName(true);
                   }}
-                  className="text-secondary hover:text-accent transition-colors"
+                  className="text-secondary hover:text-accent transition-colors p-1"
+                  title="Edit name"
                 >
-                  âœï¸
+                  <User className="w-4 h-4" />
                 </button>
               </div>
             )}
-            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} â€¢ Level {stats.level}</p>
+            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
             <div className="flex items-center mt-1">
               <Star className="w-4 h-4 text-accent mr-1" />
               <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
