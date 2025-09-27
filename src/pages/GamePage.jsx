@@ -107,7 +107,7 @@ const GamePage = () => {
     // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, isSubmitting]);
+  }, [isGameOver, score, isSubmitting]);
 
   // Disable Telegram swipes during game
   useEffect(() => {
@@ -506,6 +506,11 @@ const GamePage = () => {
     }
   };
 
+  // Load inventory on component mount
+  useEffect(() => {
+    loadInventory();
+  }, []);
+
   const formatTime = (seconds) => {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
@@ -819,7 +824,7 @@ const GamePage = () => {
 
       {/* Game Board Container */}
       <motion.div 
-        className="flex-1 flex flex-col items-center justify-center space-y-4"
+        className="flex-1 flex flex-col items-center justify-center"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
@@ -833,9 +838,6 @@ const GamePage = () => {
           onBoardReady={handleBoardReady}
           onBombDrop={handleBombDrop}
         />
-        
-        {/* Items Toolbar */}
-        <ItemsToolbar />
       </motion.div>
       
       {/* FIXED: Enhanced Shuffle Button with better debugging */}
@@ -889,25 +891,60 @@ const GamePage = () => {
           </motion.button>
         </motion.div>
       )}
-      
-      {/* Instructions */}
-      {gameStarted && !isGameOver && (
+
+      {/* Inline Items Toolbar - FIXED: Replaces undefined ItemsToolbar */}
+      {gameStarted && !isGameOver && availableItems.length > 0 && (
         <motion.div 
-          className="text-center text-secondary max-w-md mx-auto"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
         >
-          <p className="text-sm">
-            Drag Meowchi pieces to adjacent spots to create matches of 3 or more! 🎯✨
-          </p>
-          <div className="flex items-center justify-center space-x-4 text-xs mt-2">
-            {availableItems.length > 0 && (
-              <span className="text-accent">Tap ⏰ for time, drag 💣 to board</span>
-            )}
-            {shuffleFunction && (
-              <span className="text-blue-400">Shuffle ready 🔀</span>
-            )}
+          {availableItems.map((item) => {
+            const details = getItemDetails(item.item_id);
+            const ItemIcon = details.icon;
+            
+            return (
+              <motion.button
+                key={item.item_id}
+                onClick={() => {
+                  if (item.item_id === 1) {
+                    handleUseItem(item.item_id);
+                  }
+                }}
+                onDragStart={() => {
+                  if (item.item_id === 3) {
+                    // Start dragging bomb
+                    console.log('Started dragging bomb');
+                  }
+                }}
+                draggable={item.item_id === 3}
+                className={`flex flex-col items-center p-3 rounded-lg border transition-all duration-200 relative ${
+                  item.item_id === 1 
+                    ? 'bg-blue-600/20 border-blue-500 hover:bg-blue-600/30 cursor-pointer'
+                    : item.item_id === 3
+                    ? 'bg-red-600/20 border-red-500 hover:bg-red-600/30 cursor-grab'
+                    : 'bg-gray-600/20 border-gray-600 opacity-50'
+                }`}
+                whileTap={item.item_id === 1 ? { scale: 0.95 } : {}}
+                disabled={item.quantity <= 0}
+              >
+                <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
+                <span className="text-xs text-primary font-medium">{item.quantity}</span>
+                
+                {/* Usage hint */}
+                <div className="absolute -top-2 -right-2 text-xs">
+                  {item.item_id === 1 && '⏰'}
+                  {item.item_id === 3 && '💥'}
+                </div>
+              </motion.button>
+            );
+          })}
+          
+          {/* Toolbar hint */}
+          <div className="text-xs text-secondary ml-4 text-center">
+            <p>⏰ Tap for time</p>
+            <p>💥 Drag to board</p>
           </div>
         </motion.div>
       )}
