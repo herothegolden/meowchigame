@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare, Volume2 } from 'lucide-react';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare } from 'lucide-react';
 import TasksPage from './TasksPage';
-import SoundSettings from '../components/SoundSettings'; // 🎵 SOUND SETTINGS IMPORT
-import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const DEFAULT_AVATAR = "/default-cat.png"; // NEW: fallback image for missing/broken avatars
@@ -23,7 +21,7 @@ const StatCard = ({ icon, label, value, color }) => (
 const BadgeCard = ({ badgeName, isOwned }) => {
   const badgeConfig = {
     'Cookie Master Badge': { 
-      icon: '🪠', 
+      icon: '🍪', 
       title: 'Cookie Master', 
       description: 'Master of the cookies',
       color: 'text-yellow-400'
@@ -165,18 +163,24 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode
+  // STANDARDIZED MOCK DATA - Complete with all required fields
   const MOCK_STATS = {
     first_name: 'Demo User',
     username: 'demouser',
     points: 4735,
-    level: 1,
-    daily_streak: 1,
+    level: 2,
+    daily_streak: 3,
+    games_played: 12,           // ✅ ADDED - fixes averageScore calculation
+    high_score: 1850,          // ✅ ADDED - prevents undefined in stats display
+    total_play_time: 180,      // ✅ ADDED - 3 hours in minutes
     created_at: new Date().toISOString(),
     avatar_url: null
   };
 
+  // STANDARDIZED MOCK ITEMS - matches other pages' inventory format
   const MOCK_ITEMS = [
+    { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', category: 'time' },
+    { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', category: 'bomb' },
     { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
   ];
 
@@ -542,10 +546,14 @@ const ProfilePage = () => {
   const fetchProfileData = useCallback(async () => {
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using mock profile data');
+        console.log('Demo mode: Using standardized mock profile data');
         setProfileData({
           stats: MOCK_STATS,
-          inventory: [],
+          inventory: [
+            { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
+            { item_id: 3, quantity: 1 },  // 1x Cookie Bomb  
+            { item_id: 4, quantity: 1 }   // 1x Double Points
+          ],
           allItems: MOCK_ITEMS,
           boosterActive: false,
           ownedBadges: []
@@ -594,10 +602,14 @@ const ProfilePage = () => {
       console.error('Profile fetch error:', err);
       setError(err.message);
       
-      // Fallback to demo data
+      // Fallback to standardized demo data
       setProfileData({
         stats: MOCK_STATS,
-        inventory: [],
+        inventory: [
+          { item_id: 1, quantity: 2 },
+          { item_id: 3, quantity: 1 },
+          { item_id: 4, quantity: 1 }
+        ],
         allItems: MOCK_ITEMS,
         boosterActive: false,
         ownedBadges: []
@@ -679,12 +691,6 @@ const ProfilePage = () => {
     }
   };
 
-  // 🎵 SOUND: Tab switching with sound
-  const handleTabSwitch = (tabId) => {
-    soundManager.playUI('button_click', { volume: 0.6 });
-    setActiveTab(tabId);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -758,7 +764,7 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Trophy size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">High Score</p>
-                <p className="text-lg font-bold text-primary">{stats.high_score || 1455}</p>
+                <p className="text-lg font-bold text-primary">{stats.high_score || 0}</p>
                 <p className="text-xs text-green-400 mt-1">New record!</p>
               </div>
             </div>
@@ -768,17 +774,19 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Package size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Games Played</p>
-                <p className="text-lg font-bold text-primary">{stats.games_played || 4}</p>
+                <p className="text-lg font-bold text-primary">{stats.games_played || 0}</p>
                 <p className="text-xs text-green-400 mt-1">+5 this week</p>
               </div>
             </div>
 
-            {/* Average Score */}
+            {/* Average Score - FIXED calculation */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Award size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Average Score</p>
-                <p className="text-lg font-bold text-primary">{stats.averageScore || Math.floor(stats.points / (stats.games_played || 1))}</p>
+                <p className="text-lg font-bold text-primary">
+                  {stats.games_played > 0 ? Math.floor(stats.points / stats.games_played) : 0}
+                </p>
                 <p className="text-xs text-green-400 mt-1">Improving!</p>
               </div>
             </div>
@@ -788,7 +796,9 @@ const ProfilePage = () => {
               <div className="mr-4 text-primary"><Calendar size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Play Time</p>
-                <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
+                <p className="text-lg font-bold text-primary">
+                  {stats.total_play_time ? `${Math.floor(stats.total_play_time / 60)}h ${stats.total_play_time % 60}m` : '0h 0m'}
+                </p>
                 <p className="text-xs text-green-400 mt-1">Getting better!</p>
               </div>
             </div>
@@ -879,8 +889,6 @@ const ProfilePage = () => {
                   <button
                     key={tab.id}
                     onClick={() => {
-                      // 🎵 SOUND: Tab click
-                      soundManager.playUI('button_click', { volume: 0.6 });
                       setLeaderboardTab(tab.id);
                       fetchLeaderboard(tab.id);
                     }}
@@ -916,11 +924,7 @@ const ProfilePage = () => {
                     }}
                   />
                   <button
-                    onClick={() => {
-                      // 🎵 SOUND: Button click
-                      soundManager.playUI('button_click', { volume: 0.8 });
-                      handleAddFriend();
-                    }}
+                    onClick={handleAddFriend}
                     disabled={isAddingFriend || !friendUsername.trim()}
                     className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -1013,11 +1017,7 @@ const ProfilePage = () => {
                     {/* Remove Friend Button (only in friends tab for non-current users) */}
                     {leaderboardTab === 'friends' && !entry.isCurrentUser && (
                       <button
-                        onClick={() => {
-                          // 🎵 SOUND: Button click
-                          soundManager.playUI('button_click', { volume: 0.8 });
-                          handleRemoveFriend(entry.player.name.toLowerCase());
-                        }}
+                        onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
                         disabled={removingFriendId === entry.player.name.toLowerCase()}
                         className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center"
                         title="Remove friend"
@@ -1025,7 +1025,7 @@ const ProfilePage = () => {
                         {removingFriendId === entry.player.name.toLowerCase() ? (
                           <LoaderCircle className="w-3 h-3 animate-spin" />
                         ) : (
-                          '✖'
+                          '✕'
                         )}
                       </button>
                     )}
@@ -1061,14 +1061,6 @@ const ProfilePage = () => {
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
             <TasksPage />
-          </motion.div>
-        );
-      
-      // 🎵 NEW: Sound Settings Tab
-      case 'settings':
-        return (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <SoundSettings />
           </motion.div>
         );
       
@@ -1141,8 +1133,6 @@ const ProfilePage = () => {
                 <h1 className="text-xl font-bold text-primary truncate">{displayName}</h1>
                 <button
                   onClick={() => {
-                    // 🎵 SOUND: Button click
-                    soundManager.playUI('button_click', { volume: 0.6 });
                     setEditNameValue(displayName || '');
                     setIsEditingName(true);
                   }}
@@ -1154,11 +1144,7 @@ const ProfilePage = () => {
                 {/* Dev Tools Button - Only for authorized developer */}
                 {telegramUser?.id === 6998637798 && (
                   <button 
-                    onClick={() => {
-                      // 🎵 SOUND: Button click
-                      soundManager.playUI('button_click', { volume: 0.8 });
-                      window.location.href = '/dev-tools';
-                    }}
+                    onClick={() => window.location.href = '/dev-tools'}
                     className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
                     title="Developer Tools"
                   >
@@ -1192,7 +1178,7 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* Tab Navigation - UPDATED WITH SOUND SETTINGS */}
+      {/* Tab Navigation */}
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -1203,14 +1189,13 @@ const ProfilePage = () => {
           { id: 'overview', label: 'Overview', icon: User },
           { id: 'badges', label: 'Badges', icon: Award },
           { id: 'leaderboard', label: 'Board', icon: Trophy },
-          { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-          { id: 'settings', label: 'Sound', icon: Volume2 } // 🎵 NEW: Sound Settings Tab
+          { id: 'tasks', label: 'Tasks', icon: CheckSquare }
         ].map((tab) => {
           const TabIcon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => handleTabSwitch(tab.id)}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-md transition-all duration-200 ${
                 activeTab === tab.id 
                   ? 'bg-accent text-background' 
