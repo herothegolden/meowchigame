@@ -1,3 +1,4 @@
+// CLEANED: GamePage.jsx - Correct imports, no duplicate GameBoard
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
@@ -18,8 +19,8 @@ import {
   SPECIAL_ITEMS,
 } from '../utils/gameLogic.js';   // ✅ fixed path
 
-import GameBoard from '../components/game/GameBoard.jsx';  // ✅ keep this
-import BottomNav from '../components/game/BottomNav.jsx';  // ✅ keep this
+import GameBoard from '../components/game/GameBoard.jsx';   // ✅ external component, no inline version
+import BottomNav from '../components/game/BottomNav.jsx';   // ✅ external component
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
