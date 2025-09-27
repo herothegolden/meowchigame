@@ -415,27 +415,9 @@ const GamePage = () => {
     });
   };
 
-  const startGameWithConfiguration = async () => {
-    if (availableItems.length > 0) {
-      setShowItemSelection(true);
-    } else {
-      await configureGameWithSelectedItems();
-      setGameStarted(true);
-      setScore(0);
-      setTimeLeft(gameConfig.startTime);
-      setIsGameOver(false);
-      setIsSubmitting(false);
-      setShowInventory(false);
-      
-      // Reset shuffle state
-      setShuffleNeeded(false);
-      setShuffleCount(0);
-      setShuffleCooldown(0);
-    }
-  };
-
-  const confirmGameStart = async () => {
-    setShowItemSelection(false);
+  const startGame = async () => {
+    // Auto-configure with no selected items (skip item selection entirely)
+    setSelectedItems(new Set());
     await configureGameWithSelectedItems();
     
     setGameStarted(true);
@@ -534,84 +516,8 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Item Selection Overlay */}
-      <AnimatePresence>
-        {showItemSelection && (
-          <motion.div 
-            className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-40 p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="bg-nav rounded-2xl p-6 text-center max-w-md w-full border border-gray-700">
-              <h2 className="text-2xl font-bold text-primary mb-4 flex items-center justify-center">
-                <Settings className="w-6 h-6 mr-2 text-accent" />
-                Select Items
-              </h2>
-              <p className="text-sm text-secondary mb-6">Choose which items to use for this game:</p>
-              
-              <div className="space-y-3 mb-6 max-h-64 overflow-y-auto">
-                {availableItems.map((item) => {
-                  const details = getItemDetails(item.item_id);
-                  const ItemIcon = details.icon;
-                  const isSelected = selectedItems.has(item.item_id);
-                  
-                  return (
-                    <motion.button
-                      key={item.item_id}
-                      onClick={() => handleItemSelection(item.item_id)}
-                      className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
-                        isSelected 
-                          ? 'border-accent bg-accent/20' 
-                          : 'border-gray-600 bg-background/50 hover:border-gray-500'
-                      }`}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <ItemIcon className={`w-6 h-6 ${details.color}`} />
-                          <div className="text-left">
-                            <p className="font-medium text-primary">{details.name}</p>
-                            <p className="text-xs text-secondary">{details.description}</p>
-                            <p className="text-xs text-accent">Available: {item.quantity}</p>
-                          </div>
-                        </div>
-                        {isSelected && <CheckCircle className="w-6 h-6 text-accent" />}
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-              
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowItemSelection(false)}
-                  className="flex-1 bg-gray-600 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
-                >
-                  Skip
-                </button>
-                <button
-                  onClick={confirmGameStart}
-                  disabled={isConfiguringGame}
-                  className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors disabled:opacity-50"
-                >
-                  {isConfiguringGame ? (
-                    <LoaderCircle className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Play size={20} />
-                      <span>Start Game</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Pre-game Setup */}
-      {!gameStarted && !isGameOver && !showItemSelection && (
+      {!gameStarted && !isGameOver && (
         <motion.div 
           className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4"
           initial={{ opacity: 0 }}
@@ -631,22 +537,14 @@ const GamePage = () => {
             <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
               <p className="text-lg font-bold text-accent mb-2">Meowchi Match Game</p>
               <p className="text-sm text-secondary">Match 3 or more pieces to score points!</p>
-              
-              {availableItems.length > 0 && (
-                <p className="text-xs text-accent mt-2">
-                  You have {availableItems.length} item{availableItems.length !== 1 ? 's' : ''} available
-                </p>
-              )}
             </div>
             
             <button
-              onClick={startGameWithConfiguration}
+              onClick={startGame}
               className="w-full py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 bg-accent text-background hover:bg-accent/90 transition-colors"
             >
               <Play size={24} />
-              <span>
-                {availableItems.length > 0 ? 'Configure & Start' : 'Start Game'}
-              </span>
+              <span>Start Game</span>
             </button>
           </div>
         </motion.div>
