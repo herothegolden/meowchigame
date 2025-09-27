@@ -7,7 +7,7 @@
     "cascade": "/sounds/core/Cascade.mp3",
     "special_creation": "/sounds/core/SpecialItemCreation.wav",
     "special_activation": "/sounds/core/SpecialItemActivation.wav",
-    "score_collect": "/sounds/core/Score:CcollectItem.mp3",
+    "score_collect": "/sounds/core/Score:CollectItem.mp3",
     "power_up": "/sounds/core/PowerUp.mp3",
     "level_complete": "/sounds/core/LevelComplete.mp3",
     "game_over": "/sounds/core/GameOver.ogg"
