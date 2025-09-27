@@ -1,5 +1,5 @@
-// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations + Bug Fixes
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// FIXED: GameBoard.jsx - Shuffle functionality + Special Item Spawn Integration + Special Activation & Combos + Complete Honey + Color Bomb + Special Item Animations + TMA Bomb Drop Support
+import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -147,7 +147,7 @@ const getAdjacentPieces = (board, position) => {
   return adjacentPieces;
 };
 
-const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady, onProcessingChange }) => {
+const GameBoard = forwardRef(({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleNeeded, onBoardReady, onGameBoardRef, onProcessingChange }, ref) => {
   const [board, setBoard] = useState(() => generateInitialBoard());
   const [draggedPiece, setDraggedPiece] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,11 +157,78 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
   const processingRef = useRef(false);
   const boardRef = useRef(board);
   const deadlockCheckRef = useRef(null);
+  const boardElementRef = useRef(null);
 
   // Keep board ref updated
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
+
+  // TMA bomb drop handler
+  const handleBombDrop = useCallback(({ row, col }) => {
+    if (isProcessing || isShuffling || !gameStarted) {
+      console.log('🚫 Bomb drop blocked - game not ready');
+      return;
+    }
+
+    console.log('💥 Bomb dropped at:', { row, col });
+
+    // Create explosion indices for 3x3 area
+    const explosionIndices = new Set();
+    for (let r = row - 1; r <= row + 1; r++) {
+      for (let c = col - 1; c <= col + 1; c++) {
+        if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+          explosionIndices.add(r * BOARD_SIZE + c);
+        }
+      }
+    }
+
+    // Award points for exploded pieces (double points for bomb)
+    const pointsAwarded = explosionIndices.size * POINTS_PER_PIECE * 2;
+    setScore(prev => prev + pointsAwarded);
+
+    // Show explosion animation
+    setMatchedPieces(explosionIndices);
+
+    // Heavy haptic feedback for bomb explosion
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+    }
+
+    setTimeout(async () => {
+      // Remove exploded pieces
+      const currentBoard = removeMatches(boardRef.current, Array.from(explosionIndices));
+      
+      // Apply gravity and refill
+      const gravityBoard = applyGravity(currentBoard);
+      const newBoard = fillEmptySpaces(gravityBoard);
+      
+      setBoard(newBoard);
+      boardRef.current = newBoard;
+      setMatchedPieces(new Set());
+      
+      // Process any new matches
+      setTimeout(() => {
+        processMatches();
+      }, 100);
+    }, 200);
+  }, [isProcessing, isShuffling, gameStarted, setScore]);
+
+  // Expose methods to parent via useImperativeHandle
+  useImperativeHandle(ref, () => ({
+    getBoardElement: () => boardElementRef.current,
+    handleBombDrop: handleBombDrop
+  }), [handleBombDrop]);
+
+  // Provide board reference to GamePage
+  useEffect(() => {
+    if (onGameBoardRef) {
+      onGameBoardRef({
+        getBoardElement: () => boardElementRef.current,
+        handleBombDrop: handleBombDrop
+      });
+    }
+  }, [onGameBoardRef, handleBombDrop]);
 
   // FIXED: Improved shuffle function with better state management
   const performShuffle = useCallback(() => {
@@ -767,6 +834,7 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
     <div className="w-full flex justify-center">
       {/* COMPLETELY STATIC: Fixed size container that NEVER moves */}
       <div
+        ref={boardElementRef}
         className={`bg-nav rounded-2xl p-3 shadow-2xl relative transition-all duration-300 ${
           isShuffling ? 'animate-pulse bg-accent/20' : ''
         }`}
@@ -834,6 +902,8 @@ const GameBoard = ({ setScore, gameStarted, startWithBomb, onGameEnd, onShuffleN
       </div>
     </div>
   );
-};
+});
+
+GameBoard.displayName = 'GameBoard';
 
 export default GameBoard;
