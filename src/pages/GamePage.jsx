@@ -22,7 +22,6 @@ import {
 
 // ❌ Removed to avoid duplicate identifier with inline component below
 // import GameBoard from '../components/game/GameBoard.jsx';
-import BottomNav from '../components/game/BottomNav.jsx';   // kept (not modified)
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
