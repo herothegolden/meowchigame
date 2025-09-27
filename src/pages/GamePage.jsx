@@ -215,20 +215,24 @@ const GamePage = () => {
     
     try {
       if (!tg || !tg.initData || !BACKEND_URL) {
-        // Browser mode - use mock data
-        console.log('Browser mode: Using mock inventory with stats');
+        // Browser mode - use standardized mock data
+        console.log('Browser mode: Using standardized mock inventory');
         const mockItems = [
-          { item_id: 1, quantity: 2 },
-          { item_id: 4, quantity: 1 },
-          { item_id: 3, quantity: 1 }
+          { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
+          { item_id: 3, quantity: 1 },  // 1x Cookie Bomb
+          { item_id: 4, quantity: 1 }   // 1x Double Points
         ];
         setAvailableItems(mockItems);
         setInventory(mockItems.filter(item => item.item_id === 4));
         
-        // Calculate mock stats
+        // Calculate standardized mock stats
+        const totalItems = mockItems.reduce((sum, item) => sum + item.quantity, 0);
+        const itemValues = { 1: 750, 2: 1500, 3: 1000, 4: 1500 };
+        const totalValue = mockItems.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
+        
         setInventoryStats({
-          totalItems: 4,
-          totalValue: 3750,
+          totalItems,
+          totalValue,
           mostUsedItem: 'Extra Time +10s',
           efficiency: 85
         });
