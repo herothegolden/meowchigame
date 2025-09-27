@@ -77,36 +77,8 @@ const GamePage = () => {
     const submitScore = async () => {
       setIsSubmitting(true);
       
-      // Always show the Game Over popup first
+      // React overlay modal will handle the Game Over display
       const tg = window.Telegram?.WebApp;
-      const finalScore = score;
-      
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Game Over!',
-          message: `🎉 You scored ${finalScore.toLocaleString()} points!\n\nTotal points: Loading...`,
-          buttons: [
-            { text: 'Play Again', type: 'default', id: 'play_again' },
-            { text: 'Home', type: 'default', id: 'home' }
-          ]
-        }, (buttonId) => {
-          if (buttonId === 'play_again') {
-            restartGame();
-          } else {
-            navigate('/');
-          }
-        });
-      } else {
-        // Browser mode - simple confirm
-        setTimeout(() => {
-          const message = `Game Over!\n\nFinal Score: ${finalScore.toLocaleString()}\n\nPlay again?`;
-          if (confirm(message)) {
-            restartGame();
-          } else {
-            navigate('/');
-          }
-        }, 500);
-      }
       
       // Submit score silently in background (no popups)
       if (score > 0 && tg && tg.initData && BACKEND_URL) {
@@ -419,12 +391,8 @@ const GamePage = () => {
         });
       }
 
+      // Silent success - only haptic feedback, no popup
       tg.HapticFeedback?.notificationOccurred('success');
-      tg.showPopup({
-        title: 'Success!',
-        message: result.message,
-        buttons: [{ type: 'ok' }]
-      });
 
     } catch (error) {
       console.error('Activation error:', error);
