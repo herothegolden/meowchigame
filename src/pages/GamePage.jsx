@@ -1,5 +1,4 @@
-// CLEANED: GameBoard.jsx - Removed unused HTML5 drag/drop code + TMA Bomb Drop Support
-import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   generateInitialBoard,
   BOARD_SIZE,
@@ -17,9 +16,10 @@ import {
   activateSpecialItem,
   executeCombo,
   SPECIAL_ITEMS,
-} from '../../utils/gameLogic.js';
-import GamePiece from './GamePiece';
-import { motion } from 'framer-motion';
+} from '../utils/gameLogic.js';   // ✅ fixed path
+
+import GameBoard from '../components/game/GameBoard.jsx';  // ✅ keep this
+import BottomNav from '../components/game/BottomNav.jsx';  // ✅ keep this
 
 // Asset mapping function - maps piece indices and special items to URLs
 const getPieceUrl = (piece) => {
