@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle, Sparkles } from 'lucide-react';
-import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -16,13 +15,15 @@ const iconComponents = {
   Default: <Star size={28} />
 };
 
+// STANDARDIZED FALLBACK SHOP ITEMS - Complete catalog with consistent pricing
 const FALLBACK_SHOP_ITEMS = [
   { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
+  { id: 2, name: 'Extra Time +20s', description: '+20 seconds to your next game', price: 1500, icon_name: 'Timer', type: 'consumable', category: 'time' },
   { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
   { id: 4, name: 'Double Points', description: '2x points for your next game', price: 1500, icon_name: 'ChevronsUp', type: 'consumable', category: 'multiplier' },
-  { id: 5, name: 'Cookie Master', description: 'Golden cookie collectible', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
-  { id: 6, name: 'Speed Demon', description: 'Lightning bolt collectible', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
-  { id: 7, name: 'Champion', description: 'Trophy collectible', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
+  { id: 5, name: 'Cookie Master Badge', description: 'Golden cookie profile badge', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
+  { id: 6, name: 'Speed Demon Badge', description: 'Lightning bolt profile badge', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
+  { id: 7, name: 'Champion Badge', description: 'Trophy profile badge', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
 ];
 
 const categoryConfig = {
@@ -104,11 +105,7 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
         </motion.div>
       ) : (
         <motion.button 
-          onClick={() => {
-            // 🎵 SOUND: Button click
-            soundManager.playUI('button_click', { volume: 0.8 });
-            onPurchase(item.id);
-          }}
+          onClick={() => onPurchase(item.id)}
           disabled={!canAfford || isPurchasing}
           className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
             canAfford 
@@ -192,9 +189,13 @@ const ShopPage = () => {
   const [isConnected, setIsConnected] = useState(false);
   const tg = window.Telegram?.WebApp;
 
-  // Demo state for offline mode
+  // STANDARDIZED DEMO STATE - consistent with other pages
   const [demoPoints, setDemoPoints] = useState(4735);
-  const [demoInventory, setDemoInventory] = useState([]);
+  const [demoInventory, setDemoInventory] = useState([
+    { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
+    { item_id: 3, quantity: 1 },  // 1x Cookie Bomb
+    { item_id: 4, quantity: 1 }   // 1x Double Points
+  ]);
   const [demoBadges, setDemoBadges] = useState([]);
 
   useEffect(() => {
@@ -238,6 +239,7 @@ const ShopPage = () => {
         setConnectionStatus('Demo mode - purchases won\'t persist');
         setIsConnected(false);
         
+        // Use standardized fallback data
         setShopItems(FALLBACK_SHOP_ITEMS);
         setUserPoints(demoPoints);
         setInventory(demoInventory);
@@ -258,7 +260,7 @@ const ShopPage = () => {
     return 'other';
   };
 
-  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS! + SOUND INTEGRATION
+  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS!
   const handlePurchase = async (itemId) => {
     const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
@@ -283,9 +285,6 @@ const ShopPage = () => {
         }
 
         console.log('Purchase successful:', result);
-
-        // 🎵 SOUND: Purchase success
-        soundManager.playCore('score_collect', { volume: 1.0 });
 
         // INSTANT UI UPDATES - NO RELOAD!
         
@@ -327,11 +326,8 @@ const ShopPage = () => {
       } else {
         console.log('Demo purchase for item:', itemId);
         
-        // Demo mode - instant updates
+        // Demo mode - instant updates with standardized inventory
         if (userPoints >= item.price) {
-          // 🎵 SOUND: Purchase success (demo)
-          soundManager.playCore('score_collect', { volume: 1.0 });
-          
           const newPoints = userPoints - item.price;
           setUserPoints(newPoints);
           setDemoPoints(newPoints);
@@ -373,9 +369,6 @@ const ShopPage = () => {
             alert(message);
           }
         } else {
-          // 🎵 SOUND: Purchase failed - not enough points
-          soundManager.playCore('swap_invalid', { volume: 0.8 });
-          
           const message = 'Not enough points!';
           if (tg && tg.showPopup) {
             tg.showPopup({
@@ -390,10 +383,6 @@ const ShopPage = () => {
       }
     } catch (error) {
       console.error('Purchase error:', error);
-      
-      // 🎵 SOUND: Purchase failed - error
-      soundManager.playCore('swap_invalid', { volume: 0.8 });
-      
       tg?.HapticFeedback?.notificationOccurred('error');
       
       const message = error.message || 'Purchase failed';
@@ -441,6 +430,11 @@ const ShopPage = () => {
           <span className="text-xl font-bold">{userPoints.toLocaleString()}</span>
         </motion.div>
       </motion.div>
+
+      {/* Connection Status */}
+      <div className={`text-xs text-center p-2 rounded ${isConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+        {connectionStatus}
+      </div>
 
       {/* Shop Categories */}
       <motion.div className="space-y-8" layout>
