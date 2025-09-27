@@ -10,6 +10,7 @@ import ShopPage from './pages/ShopPage';
 import TasksPage from './pages/TasksPage';
 import PartnersPage from './pages/PartnersPage';
 import LeaderboardsPage from './pages/LeaderboardsPage';
+import DevToolsPage from './pages/DevToolsPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/partners" element={<PartnersPage />} />
           <Route path="/leaderboards" element={<LeaderboardsPage />} />
+          <Route path="/dev-tools" element={<DevToolsPage />} />
         </Routes>
       </main>
 
