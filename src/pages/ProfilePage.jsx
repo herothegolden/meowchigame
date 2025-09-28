@@ -163,9 +163,10 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode - FIXED: removed problematic username field
+  // Mock data for demo mode - FIXED: changed username value but kept the field
   const MOCK_STATS = {
     first_name: 'Demo User',
+    username: 'user',
     points: 4735,
     level: 1,
     daily_streak: 1,
