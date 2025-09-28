@@ -10,6 +10,9 @@ const DevToolsPage = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
+
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
   
   const tg = window.Telegram?.WebApp;
 
@@ -74,6 +77,54 @@ const DevToolsPage = () => {
       }
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleCleanupDemoUsers = async () => {
+    if (!isAuthorized || !tg?.initData || !BACKEND_URL) {
+      alert('Not authorized or backend unavailable');
+      return;
+    }
+
+    setIsCleaning(true);
+    setCleanupResult(null);
+
+    try {
+      console.log('🧹 Cleaning up demo accounts...');
+
+      const response = await fetch(`${BACKEND_URL}/api/dev/cleanup-demo-users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Demo accounts cleaned:', result);
+        setCleanupResult({
+          success: true,
+          message: result.message,
+          cleanedAccounts: result.cleanedAccounts
+        });
+
+        if (tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('success');
+        }
+      } else {
+        throw new Error(result.error || 'Cleanup failed');
+      }
+    } catch (error) {
+      console.error('❌ Cleanup error:', error);
+      setCleanupResult({
+        success: false,
+        message: error.message
+      });
+
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+    } finally {
+      setIsCleaning(false);
     }
   };
 
@@ -202,6 +253,78 @@ const DevToolsPage = () => {
             </motion.div>
           )}
         </div>
+      </motion.div>
+
+      {/* Cleanup Demo Accounts */}
+      <motion.div
+        className="bg-nav p-6 rounded-lg border border-gray-700"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <h2 className="text-xl font-bold text-primary mb-4 flex items-center">
+          <RotateCcw className="w-6 h-6 mr-2 text-accent" />
+          Cleanup Demo Accounts
+        </h2>
+        
+        <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
+          <h3 className="font-bold text-primary mb-2">Remove Demo Users</h3>
+          <p className="text-sm text-secondary mb-4">
+            This will reset all demo accounts (<code>demoUser</code> / <code>user_12345</code>). 
+            On next login, they will sync real Telegram usernames.
+          </p>
+          
+          <button
+            onClick={handleCleanupDemoUsers}
+            disabled={isCleaning}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCleaning ? (
+              <>
+                <LoaderCircle className="w-5 h-5 animate-spin" />
+                <span>Cleaning...</span>
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-5 h-5" />
+                <span>Reset Demo Accounts</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Result Display */}
+        {cleanupResult && (
+          <motion.div
+            className={`p-4 mt-4 rounded-lg border ${
+              cleanupResult.success 
+                ? 'bg-green-600/20 border-green-500 text-green-300' 
+                : 'bg-red-600/20 border-red-500 text-red-300'
+            }`}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-start space-x-3">
+              {cleanupResult.success ? (
+                <CheckCircle className="w-6 h-6 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-6 h-6 mt-0.5" />
+              )}
+              <div>
+                <p className="font-bold">
+                  {cleanupResult.success ? 'Cleanup Successful' : 'Cleanup Failed'}
+                </p>
+                <p className="text-sm mt-1">{cleanupResult.message}</p>
+                {cleanupResult.success && (
+                  <div className="text-xs mt-2 space-y-1">
+                    <p>Cleaned accounts: {cleanupResult.cleanedAccounts?.length}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Warning */}
