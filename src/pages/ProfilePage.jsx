@@ -538,10 +538,15 @@ const ProfilePage = () => {
 
   const fetchProfileData = useCallback(async () => {
     try {
-      // FIXED: Instead of falling back to mock data, show proper error for missing auth
       if (!tg?.initData || !BACKEND_URL) {
-        console.log('Missing Telegram authentication or backend URL');
-        setError('Authentication required. Please open this app through Telegram.');
+        console.log('Demo mode: Using mock profile data');
+        setProfileData({
+          stats: MOCK_STATS,
+          inventory: [],
+          allItems: MOCK_ITEMS,
+          boosterActive: false,
+          ownedBadges: []
+        });
         setIsConnected(false);
         setLoading(false);
         return;
