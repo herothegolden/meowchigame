@@ -668,14 +668,64 @@ const GamePage = () => {
         if (row >= 0 && row < 6 && col >= 0 && col < 6) {
           console.log('Dropping bomb at:', { row, col });
           
-          // Consume bomb from inventory
-          setAvailableItems(prev => 
-            prev.map(invItem => 
-              invItem.item_id === 3 
-                ? { ...invItem, quantity: invItem.quantity - 1 }
-                : invItem
-            ).filter(invItem => invItem.quantity > 0)
-          );
+          // FIXED: Consume bomb from inventory (both locally and backend)
+          const consumeBombFromInventory = async () => {
+            const tg = window.Telegram?.WebApp;
+            
+            try {
+              if (!tg || !tg.initData || !BACKEND_URL) {
+                // Demo mode - only local update
+                setAvailableItems(prev => 
+                  prev.map(invItem => 
+                    invItem.item_id === 3 
+                      ? { ...invItem, quantity: invItem.quantity - 1 }
+                      : invItem
+                  ).filter(invItem => invItem.quantity > 0)
+                );
+                return;
+              }
+
+              // Real mode - call backend to consume bomb
+              const res = await fetch(`${BACKEND_URL}/api/use-bomb`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData: tg.initData, itemId: 3 }),
+              });
+
+              const result = await res.json();
+              
+              if (!res.ok) {
+                throw new Error(result.error || 'Failed to use bomb');
+              }
+
+              // Success - update local state
+              setAvailableItems(prev => 
+                prev.map(invItem => 
+                  invItem.item_id === 3 
+                    ? { ...invItem, quantity: invItem.quantity - 1 }
+                    : invItem
+                ).filter(invItem => invItem.quantity > 0)
+              );
+              
+              console.log('Cookie Bomb used successfully');
+
+            } catch (error) {
+              console.error('Bomb usage error:', error);
+              
+              if (tg && tg.showPopup) {
+                tg.showPopup({
+                  title: 'Error',
+                  message: error.message,
+                  buttons: [{ type: 'ok' }]
+                });
+              } else {
+                alert(error.message);
+              }
+            }
+          };
+
+          // Call the function
+          consumeBombFromInventory();
           
           // Trigger bomb drop on game board
           if (gameBoardRef && gameBoardRef.handleBombDrop) {
