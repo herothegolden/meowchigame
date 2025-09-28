@@ -128,7 +128,6 @@ const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
   
   // Profile editing states
   const [isEditingName, setIsEditingName] = useState(false);
@@ -198,13 +197,10 @@ const ProfilePage = () => {
         boosterActive: shopData.boosterActive,
         ownedBadges: shopData.ownedBadges || []
       });
-      
-      setIsConnected(true);
 
     } catch (err) {
       console.error('Profile fetch error:', err);
       setError(err.message);
-      setIsConnected(false);
     } finally {
       setLoading(false);
     }
@@ -230,7 +226,7 @@ const ProfilePage = () => {
 
   const handleActivateItem = async (itemId) => {
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot activate items offline.');
       }
 
@@ -306,7 +302,7 @@ const ProfilePage = () => {
     setIsUpdatingName(true);
 
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot update profile offline.');
       }
 
@@ -352,7 +348,7 @@ const ProfilePage = () => {
     setRemovingFriendId(friendUsername);
 
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot manage friends offline.');
       }
 
@@ -433,7 +429,7 @@ const ProfilePage = () => {
     setIsAddingFriend(true);
 
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot add friends offline.');
       }
 
@@ -546,6 +542,24 @@ const ProfilePage = () => {
               <span>Retry</span>
             </button>
           </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // If no profile data, show error
+  if (!profileData?.stats) {
+    return (
+      <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
+        <motion.div className="text-center">
+          <User className="w-16 h-16 text-secondary mx-auto mb-4" />
+          <h2 className="text-xl font-bold">Profile Not Available</h2>
+          <button
+            onClick={fetchProfileData}
+            className="mt-4 bg-accent text-background px-4 py-2 rounded-lg font-bold"
+          >
+            Try Again
+          </button>
         </motion.div>
       </div>
     );
@@ -904,26 +918,32 @@ const ProfilePage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
-      {/* Profile Header */}
-      <motion.div 
-        className="p-4 bg-nav rounded-lg border border-gray-700" 
-        initial={{ opacity: 0, y: -20 }} 
-        animate={{ opacity: 1, y: 0 }}
+      {/* Profile Header - Improved from second file */}
+      <motion.div
+        className="bg-nav p-6 rounded-lg border border-gray-700"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
       >
-        {/* Profile Section */}
-        <div className="flex items-center space-x-4">
-          {/* Profile Photo */}
-          <div className="relative flex-shrink-0">
-            <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
-              <img
-                src={telegramPhotoUrl || '/default-avatar.png'}
-                alt="Profile"
-                className="w-full h-full object-cover"
-                onError={(e) => { e.currentTarget.src = '/default-avatar.png'; }}
-              />
+        <div className="flex items-start space-x-4">
+          {/* Avatar */}
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
+              {stats.avatar_url || telegramPhotoUrl ? (
+                <img 
+                  src={stats.avatar_url || telegramPhotoUrl} 
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <User className="w-10 h-10 text-accent" style={{ display: stats.avatar_url || telegramPhotoUrl ? 'none' : 'block' }} />
             </div>
           </div>
-          
+
           {/* User Info */}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
@@ -965,7 +985,7 @@ const ProfilePage = () => {
                   className="text-secondary hover:text-accent transition-colors p-1"
                   title="Edit name"
                 >
-                  <User className="w-4 h-4" />
+                  <Edit2 className="w-4 h-4" />
                 </button>
                 {/* Dev Tools Button - Only for authorized developer */}
                 {telegramUser?.id === 6998637798 && (
@@ -985,6 +1005,20 @@ const ProfilePage = () => {
               <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
             </div>
           </div>
+        </div>
+        
+        {/* Avatar/Name Sync Info */}
+        <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+          <p className="text-xs text-secondary">
+            {telegramPhotoUrl || telegramFirstName ? (
+              <>
+                {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
+                 telegramPhotoUrl ? 'Avatar synced from Telegram' : 'Name synced from Telegram'}
+              </>
+            ) : (
+              'Personalize your profile above'
+            )}
+          </p>
         </div>
       </motion.div>
 
