@@ -270,7 +270,7 @@ const DevToolsPage = () => {
         <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
           <h3 className="font-bold text-primary mb-2">Remove Demo Users</h3>
           <p className="text-sm text-secondary mb-4">
-            This will reset all demo accounts (<code>demoUser</code> / <code>user_12345</code>). 
+            This will reset all placeholder accounts with invalid usernames. 
             On next login, they will sync real Telegram usernames.
           </p>
           
