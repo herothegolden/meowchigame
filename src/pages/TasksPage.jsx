@@ -1,207 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CheckSquare, 
-  Star, 
-  Users, 
-  Instagram, 
-  Gift,
-  Clock,
-  Gamepad2,
-  Coffee,
-  Moon,
-  Zap,
-  Camera,
-  Heart,
-  Target,
-  Award,
+  CheckCircle, 
+  Clock, 
+  ExternalLink, 
+  Gift, 
+  RefreshCw,
   LoaderCircle,
-  ExternalLink
+  AlertTriangle
 } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const TasksPage = () => {
-  const [activeTab, setActiveTab] = useState('main');
-  const [mainTasks, setMainTasks] = useState([]);
-  const [dailyTasks, setDailyTasks] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState(null);
   const [processingTask, setProcessingTask] = useState(null);
   const [toast, setToast] = useState(null);
-  const [completedTaskId, setCompletedTaskId] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   
   const tg = window.Telegram?.WebApp;
 
-  // Toast system
-  const showToast = (message, type = 'info') => {
+  // Toast notification system
+  const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Mock main tasks for demo mode
-  const MOCK_MAIN_TASKS = [
-      {
-    id: 1,
-    emoji: '🍓',
-    name: 'Feed the Hungry Stray',
-    description: 'Collect 10 strawberries today',
-    reward: 'Berry Boost points',
-    icon: Heart,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 2,
-    emoji: '⏰',
-    name: 'Pi Moment of Truth',
-    description: 'Log in exactly at 3:14',
-    reward: '31.4 bonus points',
-    icon: Clock,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 3,
-    emoji: '🪃',
-    name: 'Double Snack Attack',
-    description: 'Play exactly 2 games (not 1, not 3)',
-    reward: 'Perfect Balance badge',
-    icon: Gamepad2,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 4,
-    emoji: '☕',
-    name: 'Espresso Meowchi',
-    description: 'Log in before 10am, Meowchi will sip coffee',
-    reward: 'Morning Energy boost',
-    icon: Coffee,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 5,
-    emoji: '🌙',
-    name: 'Midnight Mischief',
-    description: 'Log in after midnight; reward doubles if you meow in chat',
-    reward: 'Night Owl badge',
-    icon: Moon,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 6,
-    emoji: '🐾',
-    name: 'Paw-fect Rhythm',
-    description: 'Tap Meowchi 11 times in a row without missing',
-    reward: 'Rhythm Master title',
-    icon: Target,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 7,
-    emoji: '😂',
-    name: 'Oops, My Paw Slipped',
-    description: 'Make one useless swap that doesn\'t match',
-    reward: 'Clumsy Cat charm',
-    icon: Zap,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 8,
-    emoji: '💤',
-    name: 'Nap with Meowchi',
-    description: 'Stay idle for 20 seconds mid-game',
-    reward: 'Sleepy bonus',
-    icon: Moon,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 9,
-    emoji: '🎉',
-    name: 'Chaos Cat',
-    description: 'Trigger 3 cascades in a single move',
-    reward: 'Chain Reaction badge',
-    icon: Zap,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  },
-  {
-    id: 10,
-    emoji: '📸',
-    name: 'Send Meowchi a Selfie',
-    description: 'Share a score card in chat',
-    reward: 'Social Butterfly badge',
-    icon: Camera,
-    completed: false,
-    disabled: true // ADDED: Shows "Soon" button state
-  }
-];
-
-  // Mock daily tasks for demo mode
-  const MOCK_DAILY_TASKS = [
-    {
-      id: 1,
-      emoji: '🎮',
-      name: 'Daily Player',
-      description: 'Play 3 games today',
-      reward: '200 bonus points',
-      icon: Gamepad2,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 2,
-      emoji: '🏆',
-      name: 'Score Master',
-      description: 'Achieve a score of 1000+ in a single game',
-      reward: '150 bonus points',
-      icon: Target,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 3,
-      emoji: '⚡',
-      name: 'Speed Demon',
-      description: 'Complete a game in under 20 seconds',
-      reward: '100 bonus points',
-      icon: Zap,
-      completed: false,
-      disabled: true
-    },
-    {
-      id: 4,
-      emoji: '💎',
-      name: 'Collector',
-      description: 'Use 2 power-ups in games today',
-      reward: '75 bonus points',
-      icon: Star,
-      completed: false,
-      disabled: true
-    }
-  ];
-
-  // Load main tasks from backend
-  const loadMainTasks = async () => {
+  // Fetch tasks from backend
+  const fetchTasks = async () => {
     setLoading(true);
-    
+    setError(null);
+
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using mock main tasks');
-        setMainTasks(MOCK_MAIN_TASKS);
-        setDailyTasks(MOCK_DAILY_TASKS);
-        setIsConnected(false);
-        setLoading(false);
-        return;
+        throw new Error('Connection not available. Please check your internet connection and try again.');
       }
 
-      console.log('Loading main tasks from backend...');
+      console.log('Fetching tasks...');
 
       const res = await fetch(`${BACKEND_URL}/api/get-user-tasks`, {
         method: 'POST',
@@ -209,85 +46,39 @@ const TasksPage = () => {
         body: JSON.stringify({ initData: tg.initData }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Main tasks loaded:', data.tasks);
-        
-        // Map backend tasks to frontend format
-        const mappedTasks = data.tasks.map(task => ({
-          id: task.id,
-          name: task.name,
-          task_name: task.task_name,
-          description: task.task_name === 'telegram_group_join' 
-            ? 'Join the Meowchi Telegram Group'
-            : 'Follow Meowchi Instagram',
-          reward: task.task_name === 'telegram_group_join'
-            ? 'Cat Paw Emoji Badge'
-            : 'Insta Frame cosmetic',
-          reward_points: task.reward_points,
-          icon: task.task_name === 'telegram_group_join' ? Users : Instagram,
-          completed: task.completed,
-          completedAt: task.completedAt,
-          url: task.url
-        }));
-
-        // Add the unimplemented third task
-        mappedTasks.push({
-          id: 3,
-          name: 'Recruit Your Cat Crew',
-          task_name: 'invite_friends',
-          description: 'Invite 2 friends',
-          reward: 'Golden Honey Jar booster',
-          reward_points: 1000,
-          icon: Gift,
-          completed: false,
-          disabled: true
-        });
-        
-        setMainTasks(mappedTasks);
-        setDailyTasks(MOCK_DAILY_TASKS);
-        setIsConnected(true);
-      } else {
-        throw new Error(`Failed to fetch tasks: ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to fetch tasks');
       }
+
+      const data = await res.json();
+      console.log('Tasks loaded:', data);
+      
+      setTasks(data.tasks || []);
+      setIsConnected(true);
+
     } catch (err) {
-      console.error('Main tasks fetch error:', err);
-      setMainTasks(MOCK_MAIN_TASKS);
-      setDailyTasks(MOCK_DAILY_TASKS);
+      console.error('Tasks fetch error:', err);
+      setError(err.message);
       setIsConnected(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle task start (open link and track)
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  // Handle task start (open external link)
   const handleStartTask = async (task) => {
-    if (task.disabled || task.completed) return;
+    if (task.disabled || task.completed || processingTask) return;
 
     setProcessingTask(task.id);
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode - just open link
-        console.log('Demo: Opening link for task:', task.name);
-        if (tg && tg.openLink) {
-          tg.openLink(task.url);
-        } else {
-          window.open(task.url, '_blank');
-        }
-        
-        const message = `Demo: Opened ${task.name} link\n\n⚠️ This is demo mode only.`;
-        if (tg && tg.showPopup) {
-          tg.showPopup({
-            title: 'Demo Mode',
-            message: message,
-            buttons: [{ type: 'ok' }]
-          });
-        } else {
-          alert(message);
-        }
-        setProcessingTask(null);
-        return;
+        throw new Error('Connection not available. Cannot start tasks offline.');
       }
 
       console.log('Starting task:', task.task_name);
@@ -351,8 +142,7 @@ const TasksPage = () => {
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        setProcessingTask(null);
-        return;
+        throw new Error('Connection not available. Cannot verify tasks offline.');
       }
 
       console.log('Verifying task:', task.task_name);
@@ -376,137 +166,70 @@ const TasksPage = () => {
 
       // Show result toast instead of popup
       if (verifyResult.completed) {
-        showToast(`Task complete! 🎉 +${verifyResult.rewardPoints} points`, 'success');
-        setCompletedTaskId(task.id);
-        setTimeout(() => setCompletedTaskId(null), 1000); // Clear shake animation
+        showToast(`Task complete! +${verifyResult.reward} points earned`, 'success');
         
+        // Haptic feedback for success
         if (tg && tg.HapticFeedback) {
           tg.HapticFeedback.notificationOccurred('success');
         }
-      } else {
-        showToast('Verification failed. Please complete the action first.', 'error');
         
-        if (tg && tg.HapticFeedback) {
-          tg.HapticFeedback.notificationOccurred('warning');
-        }
+        // Refresh tasks to update UI
+        await fetchTasks();
+      } else {
+        showToast(verifyResult.message || 'Task not yet completed', 'warning');
       }
-
-      // Refresh task list to show updated status
-      setTimeout(() => {
-        loadMainTasks();
-      }, 1000);
 
     } catch (error) {
       console.error('Verify task error:', error);
-      
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Error',
-          message: error.message,
-          buttons: [{ type: 'ok' }]
-        });
-      } else {
-        alert(error.message);
-      }
+      showToast(error.message || 'Verification failed', 'error');
     } finally {
       setProcessingTask(null);
     }
   };
 
-  // Load tasks on component mount
-  useEffect(() => {
-    loadMainTasks();
-  }, []);
-
-  // Reload tasks when user returns to app (visibility change)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && isConnected) {
-        console.log('App became visible, refreshing task status...');
-        setTimeout(() => {
-          loadMainTasks();
-        }, 1000);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isConnected]);
-
-  const TaskCard = ({ task, isDaily = false }) => (
-    <motion.div
-      className={`bg-nav p-4 rounded-lg border border-gray-700 flex items-center justify-between ${
-        task.completed ? 'opacity-75 border-green-500' : task.disabled ? 'opacity-50' : ''
-      }`}
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ 
-        opacity: 1, 
-        x: 0,
-        // Shake animation when task is completed
-        ...(completedTaskId === task.id ? {
-          x: [0, -10, 10, -10, 10, 0],
-          transition: { duration: 0.6 }
-        } : {})
-      }}
-      transition={{ duration: 0.3 }}
-      whileHover={{ scale: task.disabled ? 1 : 1.02 }}
-    >
-      <div className="flex items-center space-x-4 flex-1">
-        <div className="text-2xl">
-          {isDaily ? task.emoji : 
-           task.id === 1 ? '🐱' : 
-           task.id === 2 ? '📸' : '🐾'}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-bold truncate ${task.completed ? 'text-green-400' : 'text-primary'}`}>
-            {task.name}
-          </h3>
-          <p className="text-sm text-secondary">{task.description}</p>
-          <div className="flex items-center mt-1">
-            <Star className="w-3 h-3 text-accent mr-1" />
-            <span className="text-xs text-accent">
-              {isDaily ? task.reward : `${task.reward_points} points + ${task.reward}`}
-            </span>
-          </div>
-        </div>
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <LoaderCircle className="w-8 h-8 text-accent" />
+        </motion.div>
       </div>
-      
-      <button
-        onClick={() => isDaily ? null : task.completed ? null : handleStartTask(task)}
-        disabled={task.disabled || task.completed || processingTask === task.id}
-        className={`px-4 py-2 rounded-lg font-bold transition-all duration-200 flex items-center space-x-2 ${
-          task.completed
-            ? 'bg-green-600 text-white cursor-default'
-            : task.disabled
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : processingTask === task.id
-            ? 'bg-blue-600 text-white cursor-wait'
-            : 'bg-accent text-background hover:bg-accent/90'
-        }`}
-      >
-        {task.completed ? (
-          <>
-            <CheckSquare className="w-4 h-4" />
-            <span>Done</span>
-          </>
-        ) : task.disabled ? (
-          <span>Soon</span>
-        ) : (
-          <>
-            {processingTask === task.id ? (
-              <LoaderCircle className="w-4 h-4 animate-spin" />
-            ) : (
-              <ExternalLink className="w-4 h-4" />
-            )}
-            <span>Start</span>
-          </>
-        )}
-      </button>
-    </motion.div>
-  );
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
+        <motion.div
+          className="text-center max-w-md"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-red-600/20 border border-red-500 rounded-lg p-6">
+            <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h1 className="text-xl font-bold text-primary mb-2">Connection Error</h1>
+            <p className="text-secondary text-sm mb-4">{error}</p>
+            <button
+              onClick={fetchTasks}
+              className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-colors flex items-center space-x-2 mx-auto"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 space-y-6 bg-background text-primary">
+    <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
       {/* Header */}
       <motion.div 
         className="text-center"
@@ -515,117 +238,131 @@ const TasksPage = () => {
         transition={{ duration: 0.5 }}
       >
         <div className="flex items-center justify-center mb-2">
-          <CheckSquare className="w-8 h-8 mr-3 text-accent" />
-          <h1 className="text-3xl font-bold">Tasks & Challenges</h1>
+          <Gift className="w-8 h-8 mr-3 text-accent" />
+          <h1 className="text-3xl font-bold">Tasks</h1>
         </div>
-        <p className="text-secondary">Complete tasks to earn rewards and badges</p>
+        <p className="text-secondary">Complete tasks to earn rewards</p>
       </motion.div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center space-x-2 text-secondary">
-          <LoaderCircle className="w-5 h-5 animate-spin" />
-          <span>Loading tasks...</span>
-        </div>
+      {/* Connection Status */}
+      {isConnected && (
+        <motion.div
+          className="bg-green-600/20 border border-green-500 text-green-300 p-3 rounded-lg text-center text-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          ✅ Connected - Real rewards available
+        </motion.div>
       )}
 
-      {/* Tab Navigation */}
-      <motion.div
-        className="flex bg-nav rounded-lg border border-gray-700 p-1"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.1 }}
-      >
-        <button
-          onClick={() => setActiveTab('main')}
-          className={`flex-1 flex items-center justify-center py-3 px-4 rounded-md transition-all duration-200 ${
-            activeTab === 'main' 
-              ? 'bg-accent text-background' 
-              : 'text-secondary hover:text-primary hover:bg-background/20'
-          }`}
-        >
-          <Award className="w-5 h-5 mr-2" />
-          <span className="font-medium">Main Tasks</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('daily')}
-          className={`flex-1 flex items-center justify-center py-3 px-4 rounded-md transition-all duration-200 ${
-            activeTab === 'daily' 
-              ? 'bg-accent text-background' 
-              : 'text-secondary hover:text-primary hover:bg-background/20'
-          }`}
-        >
-          <Clock className="w-5 h-5 mr-2" />
-          <span className="font-medium">Daily Tasks</span>
-        </button>
-      </motion.div>
-
-      {/* Task Content */}
-      <motion.div className="space-y-3" layout>
-        <AnimatePresence mode="wait">
-          {activeTab === 'main' && (
+      {/* Tasks List */}
+      <div className="space-y-4">
+        {tasks.length === 0 ? (
+          <motion.div
+            className="text-center py-12"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Gift className="w-16 h-16 text-secondary mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-secondary mb-2">No tasks available</h3>
+            <p className="text-sm text-secondary">Check back later for new tasks!</p>
+          </motion.div>
+        ) : (
+          tasks.map((task, index) => (
             <motion.div
-              key="main-tasks"
-              className="space-y-3"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              key={task.id}
+              className={`bg-nav p-6 rounded-lg border transition-all duration-200 ${
+                task.completed 
+                  ? 'border-green-500 bg-green-600/10' 
+                  : task.disabled 
+                    ? 'border-gray-600 opacity-50' 
+                    : 'border-gray-700 hover:border-accent'
+              }`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
             >
-              {mainTasks.map((task, index) => (
-                <motion.div
-                  key={task.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                >
-                  <TaskCard task={task} />
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-primary mb-2">{task.name}</h3>
+                  <p className="text-secondary text-sm mb-4">{task.description}</p>
+                  
+                  <div className="flex items-center space-x-4 text-sm">
+                    <div className="flex items-center space-x-1 text-accent">
+                      <Gift className="w-4 h-4" />
+                      <span>{task.reward} points</span>
+                    </div>
+                    
+                    {task.completed && (
+                      <div className="flex items-center space-x-1 text-green-400">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Completed</span>
+                      </div>
+                    )}
+                    
+                    {task.disabled && (
+                      <div className="flex items-center space-x-1 text-gray-400">
+                        <Clock className="w-4 h-4" />
+                        <span>Coming Soon</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          {activeTab === 'daily' && (
-            <motion.div
-              key="daily-tasks"
-              className="space-y-3"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              {dailyTasks.map((task, index) => (
-                <motion.div
-                  key={task.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                >
-                  <TaskCard task={task} isDaily={true} />
-                </motion.div>
-              ))}
+                {/* Action Button */}
+                <div className="ml-4">
+                  {task.completed ? (
+                    <div className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center space-x-2">
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Done</span>
+                    </div>
+                  ) : task.disabled ? (
+                    <div className="bg-gray-600 text-gray-300 px-4 py-2 rounded-lg font-bold cursor-not-allowed">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleStartTask(task)}
+                      disabled={processingTask === task.id}
+                      className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {processingTask === task.id ? (
+                        <>
+                          <LoaderCircle className="w-5 h-5 animate-spin" />
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="w-5 h-5" />
+                          <span>Start</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+          ))
+        )}
+      </div>
 
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
           <motion.div
-            className={`fixed bottom-20 left-4 right-4 p-4 rounded-lg shadow-lg z-50 flex items-center space-x-3 ${
-              toast.type === 'success' ? 'bg-green-600' : 
-              toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
-            }`}
-            initial={{ opacity: 0, y: 50 }}
+            className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg ${
+              toast.type === 'success' ? 'bg-green-600' :
+              toast.type === 'error' ? 'bg-red-600' :
+              toast.type === 'warning' ? 'bg-yellow-600' :
+              'bg-blue-600'
+            } text-white font-bold`}
+            initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
+            exit={{ opacity: 0, y: -50 }}
             transition={{ duration: 0.3 }}
           >
-            {toast.type === 'info' && <LoaderCircle className="w-5 h-5 animate-spin text-white" />}
-            {toast.type === 'success' && <CheckSquare className="w-5 h-5 text-white" />}
-            {toast.type === 'error' && <ExternalLink className="w-5 h-5 text-white" />}
-            <span className="text-white font-medium">{toast.message}</span>
+            {toast.message}
           </motion.div>
         )}
       </AnimatePresence>
