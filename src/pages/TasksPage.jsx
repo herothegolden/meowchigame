@@ -18,7 +18,6 @@ const TasksPage = () => {
   const [error, setError] = useState(null);
   const [processingTask, setProcessingTask] = useState(null);
   const [toast, setToast] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
   
   const tg = window.Telegram?.WebApp;
 
@@ -28,7 +27,7 @@ const TasksPage = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Fetch tasks from backend
+  // Fetch tasks from backend - SAME FOR ALL USERS
   const fetchTasks = async () => {
     setLoading(true);
     setError(null);
@@ -55,12 +54,10 @@ const TasksPage = () => {
       console.log('Tasks loaded:', data);
       
       setTasks(data.tasks || []);
-      setIsConnected(true);
 
     } catch (err) {
       console.error('Tasks fetch error:', err);
       setError(err.message);
-      setIsConnected(false);
     } finally {
       setLoading(false);
     }
@@ -70,14 +67,14 @@ const TasksPage = () => {
     fetchTasks();
   }, []);
 
-  // Handle task start (open external link)
+  // Handle task start (open external link) - SAME FOR ALL USERS
   const handleStartTask = async (task) => {
     if (task.disabled || task.completed || processingTask) return;
 
     setProcessingTask(task.id);
 
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot start tasks offline.');
       }
 
@@ -134,14 +131,14 @@ const TasksPage = () => {
     }
   };
 
-  // Handle task verification
+  // Handle task verification - SAME FOR ALL USERS
   const handleVerifyTask = async (task) => {
     if (task.disabled || task.completed) return;
 
     setProcessingTask(task.id);
 
     try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+      if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot verify tasks offline.');
       }
 
@@ -164,7 +161,7 @@ const TasksPage = () => {
 
       console.log('Verification result:', verifyResult);
 
-      // Show result toast instead of popup
+      // Show result toast
       if (verifyResult.completed) {
         showToast(`Task complete! +${verifyResult.reward} points earned`, 'success');
         
@@ -187,7 +184,7 @@ const TasksPage = () => {
     }
   };
 
-  // Show loading state
+  // Show loading state - SAME FOR ALL USERS
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -201,7 +198,7 @@ const TasksPage = () => {
     );
   }
 
-  // Show error state
+  // Show error state - SAME FOR ALL USERS
   if (error) {
     return (
       <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
@@ -230,7 +227,7 @@ const TasksPage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
-      {/* Header */}
+      {/* Header - SAME FOR ALL USERS */}
       <motion.div 
         className="text-center"
         initial={{ opacity: 0, y: -20 }}
@@ -244,18 +241,7 @@ const TasksPage = () => {
         <p className="text-secondary">Complete tasks to earn rewards</p>
       </motion.div>
 
-      {/* Connection Status */}
-      {isConnected && (
-        <motion.div
-          className="bg-green-600/20 border border-green-500 text-green-300 p-3 rounded-lg text-center text-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          ✅ Connected - Real rewards available
-        </motion.div>
-      )}
-
-      {/* Tasks List */}
+      {/* Tasks List - SAME FOR ALL USERS */}
       <div className="space-y-4">
         {tasks.length === 0 ? (
           <motion.div
@@ -310,7 +296,7 @@ const TasksPage = () => {
                   </div>
                 </div>
 
-                {/* Action Button */}
+                {/* Action Button - SAME FOR ALL USERS */}
                 <div className="ml-4">
                   {task.completed ? (
                     <div className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center space-x-2">
@@ -347,7 +333,7 @@ const TasksPage = () => {
         )}
       </div>
 
-      {/* Toast Notification */}
+      {/* Toast Notification - SAME FOR ALL USERS */}
       <AnimatePresence>
         {toast && (
           <motion.div
