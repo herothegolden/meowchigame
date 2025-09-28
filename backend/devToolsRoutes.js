@@ -1,4 +1,4 @@
-// devToolsRoutes.js
+// devToolsRoutes.js - Only restrict by developer ID
 import express from 'express';
 import pg from 'pg';
 import { validate } from './utils.js';
@@ -6,12 +6,11 @@ import { validate } from './utils.js';
 const { Pool } = pg;
 const router = express.Router();
 
-// ---- DATABASE ----
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// ---- MIDDLEWARE ----
+// Developer validation - ONLY check ID, no username restrictions
 const validateDeveloper = (req, res, next) => {
   const { initData } = req.body;
   if (!initData) {
@@ -19,7 +18,7 @@ const validateDeveloper = (req, res, next) => {
   }
 
   if (!validate(initData, process.env.BOT_TOKEN)) {
-    return res.status(401).json({ error: 'Invalid Telegram authentication' });
+    return res.status(401).json({ error: 'Invalid authentication' });
   }
 
   const params = new URLSearchParams(initData);
@@ -29,30 +28,55 @@ const validateDeveloper = (req, res, next) => {
     return res.status(400).json({ error: 'Invalid user data in initData' });
   }
   
-  // Only allow specific developer ID
+  // ONLY restrict by developer ID - no username checks
   if (user.id !== 6998637798) {
-    return res.status(403).json({ error: 'Unauthorized - Developer access only' });
+    return res.status(403).json({ error: 'Developer access only' });
   }
   
   req.user = user;
   next();
 };
 
-// 🛠️ Health check for DevTools
-router.get('/health', async (req, res) => {
+// Health check
+router.get('/health', (req, res) => {
+  res.json({ status: '✅ DevTools API running' });
+});
+
+// Demo accounts cleanup - anyone can access this now, but only dev can use it
+router.post('/cleanup-demo-users', validateDeveloper, async (req, res) => {
   try {
-    res.json({ status: '✅ DevTools API is running' });
+    const client = await pool.connect();
+
+    const result = await client.query(`
+      UPDATE users
+      SET username = NULL,
+          points = 0,
+          level = 1,
+          daily_streak = 0,
+          games_played = 0,
+          high_score = 0,
+          total_play_time = 0
+      WHERE LOWER(username) = 'demouser'
+         OR LOWER(username) LIKE 'user_%'
+    `);
+
+    client.release();
+
+    res.json({ 
+      success: true,
+      message: `✅ Reset ${result.rowCount} demo accounts`,
+      cleanedAccounts: result.rowCount
+    });
   } catch (error) {
-    console.error('❌ DevTools health check error:', error);
-    res.status(500).json({ error: 'Health check failed' });
+    console.error('❌ Error resetting demo accounts:', error);
+    res.status(500).json({ error: 'Failed to reset demo accounts' });
   }
 });
 
-// 🔄 Reset tasks for developer account
+// Task reset - developer only
 router.post('/reset-tasks', validateDeveloper, async (req, res) => {
   try {
     const { user } = req;
-
     console.log(`🔧 Developer ${user.id} resetting tasks...`);
 
     const client = await pool.connect();
@@ -76,7 +100,7 @@ router.post('/reset-tasks', validateDeveloper, async (req, res) => {
 
       await client.query('COMMIT');
 
-      res.status(200).json({
+      res.json({
         success: true,
         message: `Reset ${tasksDeleted} tasks and subtracted ${pointsFromTasks} points.`,
         tasksDeleted,
@@ -89,33 +113,8 @@ router.post('/reset-tasks', validateDeveloper, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/dev/reset-tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// 📊 Get system stats (optional developer utility)
-router.get('/stats', validateDeveloper, async (req, res) => {
-  try {
-    const client = await pool.connect();
-    try {
-      const [usersResult, tasksResult, sessionsResult] = await Promise.all([
-        client.query('SELECT COUNT(*) as total_users FROM users'),
-        client.query('SELECT COUNT(*) as total_tasks FROM user_tasks'),
-        client.query('SELECT COUNT(*) as total_sessions FROM game_sessions')
-      ]);
-
-      res.json({
-        totalUsers: parseInt(usersResult.rows[0].total_users),
-        totalTasks: parseInt(tasksResult.rows[0].total_tasks),
-        totalSessions: parseInt(sessionsResult.rows[0].total_sessions)
-      });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('❌ Error fetching dev stats:', error);
-    res.status(500).json({ error: 'Failed to fetch stats' });
+    console.error('🚨 Error in reset-tasks:', error);
+    res.status(500).json({ error: 'Reset failed' });
   }
 });
 
