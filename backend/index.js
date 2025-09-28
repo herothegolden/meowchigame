@@ -354,17 +354,21 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// FIXED: Enhanced /api/validate with strict username requirements + proper Telegram sync
-app.post('/api/validate', validateUser, async (req, res) => {
+// FIXED: /api/validate now reads Telegram data directly from initDataUnsafe.user
+app.post('/api/validate', async (req, res) => {
     try {
         const client = await pool.connect();
         try {
-            // Pull fresh Telegram user data from initDataUnsafe (not just req.user)
-            const tgData = req.body.initDataUnsafe?.user || {};
-            const telegramId = tgData.id || req.user?.id;
-            const telegramFirstName = tgData.first_name || req.user?.first_name;
-            const telegramLastName = tgData.last_name || req.user?.last_name;
-            const telegramUsername = tgData.username || null;
+            // Always pull fresh Telegram data
+            const tgUser = req.body?.initDataUnsafe?.user;
+            if (!tgUser) {
+                return res.status(400).json({ error: "Invalid Telegram initData" });
+            }
+
+            const telegramId = tgUser.id;
+            const telegramUsername = tgUser.username || null;
+            const telegramFirstName = tgUser.first_name || "";
+            const telegramLastName = tgUser.last_name || "";
 
             // Helper function to check if username is invalid
             const isInvalidUsername = (username) => {
