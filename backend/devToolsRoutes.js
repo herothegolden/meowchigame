@@ -25,7 +25,6 @@ router.post('/cleanup-demo-users', async (req, res) => {
   try {
     const client = await pool.connect();
 
-    // Reset demo accounts instead of deleting, so they sync properly on next login
     const result = await client.query(`
       UPDATE users
       SET username = NULL,
@@ -35,8 +34,8 @@ router.post('/cleanup-demo-users', async (req, res) => {
           games_played = 0,
           high_score = 0,
           total_play_time = 0
-      WHERE username = 'demoUser'
-         OR username ILIKE 'user_%'
+      WHERE LOWER(username) = 'demouser'
+         OR LOWER(username) LIKE 'user_%'
     `);
 
     client.release();
