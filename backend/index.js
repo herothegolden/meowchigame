@@ -1,1930 +1,1202 @@
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import pg from 'pg';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { validate } from './utils.js';
-import devToolsRoutes from './devToolsRoutes.js'; // 👈 NEW import
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare } from 'lucide-react';
+import TasksPage from './TasksPage';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const DEFAULT_AVATAR = "/default-cat.png"; // NEW: fallback image for missing/broken avatars
 
-const { Pool } = pg;
+// --- Helper Components ---
 
-// ---- ENV VARS ----
-const {
-  PORT = 3000,
-  DATABASE_URL,
-  BOT_TOKEN
-} = process.env;
+const StatCard = ({ icon, label, value, color }) => (
+  <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+    <div className={`mr-4 text-${color}`}>{icon}</div>
+    <div>
+      <p className="text-sm text-secondary">{label}</p>
+      <p className="text-lg font-bold text-primary">{value}</p>
+    </div>
+  </div>
+);
 
-if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
-  process.exit(1);
-}
+const BadgeCard = ({ badgeName, isOwned }) => {
+  const badgeConfig = {
+    'Cookie Master': { 
+      icon: '🍪', 
+      title: 'Cookie Master', 
+      description: 'Master of the cookies',
+      color: 'text-yellow-400'
+    },
+    'Speed Demon': { 
+      icon: '⚡', 
+      title: 'Speed Demon', 
+      description: 'Lightning fast reflexes',
+      color: 'text-blue-400'
+    },
+    'Champion': { 
+      icon: '🏆', 
+      title: 'Champion', 
+      description: 'Ultimate game champion',
+      color: 'text-purple-400'
+    }
+  };
 
-// ---- DATABASE ----
-export const pool = new Pool({
-  connectionString: DATABASE_URL,
-});
+  const badge = badgeConfig[badgeName] || {
+    icon: '🎖',
+    title: badgeName,
+    description: 'Special achievement',
+    color: 'text-gray-400'
+  };
 
-// ---- EXPRESS APP ----
-const app = express();
-app.use(cors());
-app.use(express.json());
+  return (
+    <motion.div
+      className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+        isOwned 
+          ? 'bg-nav border-accent shadow-accent/20' 
+          : 'bg-gray-800 border-gray-600 opacity-50'
+      }`}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      whileHover={{ scale: isOwned ? 1.05 : 1 }}
+    >
+      <div className="text-center">
+        <div className="text-3xl mb-2">{badge.icon}</div>
+        <h3 className={`font-bold ${isOwned ? badge.color : 'text-gray-500'}`}>
+          {badge.title}
+        </h3>
+        <p className="text-xs text-secondary mt-1">{badge.description}</p>
+        {isOwned && (
+          <div className="flex items-center justify-center mt-2 text-accent">
+            <Award className="w-4 h-4 mr-1" />
+            <span className="text-xs font-bold">OWNED</span>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
 
-// ---- DEV TOOLS ROUTES ----
-app.use('/api/dev', devToolsRoutes); // 👈 All dev-only routes under /api/dev
+const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
+  const [isActivating, setIsActivating] = useState(false);
 
-// ---- MIDDLEWARE ----
-const validateUser = (req, res, next) => {
-  const { initData } = req.body;
-  if (!initData) {
-    return res.status(400).json({ error: 'initData is required' });
-  }
+  const handleActivate = async () => {
+    setIsActivating(true);
+    await onActivate(item.id);
+    setIsActivating(false);
+  };
 
-  if (!validate(initData, BOT_TOKEN)) {
-    return res.status(401).json({ error: 'Invalid data' });
-  }
+  const getItemIcon = (itemId) => {
+    switch(itemId) {
+      case 4: return <ChevronsUp size={28} />; // Double Points
+      default: return <Star size={28} />;
+    }
+  };
 
-  const params = new URLSearchParams(initData);
-  const user = JSON.parse(params.get('user'));
+  return (
+    <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
+      <div className="flex items-center">
+        <div className="mr-4 text-accent">{getItemIcon(item.id)}</div>
+        <div>
+          <p className="font-bold text-primary">{item.name}</p>
+          <p className="text-sm text-secondary">{item.description}</p>
+          <p className="text-xs text-accent mt-1">Quantity: {quantity}</p>
+        </div>
+      </div>
+      
+      <button 
+        onClick={handleActivate}
+        disabled={disabled || isActivating}
+        className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
+          disabled 
+            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+            : 'bg-accent text-background hover:scale-105'
+        }`}
+      >
+        {isActivating ? <LoaderCircle className="w-5 h-5 animate-spin" /> : 'Activate'}
+      </button>
+    </div>
+  );
+};
 
-  if (!user || !user.id) {
-    return res.status(400).json({ error: 'Invalid user data in initData' });
-  }
+// --- Main Profile Page Component ---
+
+const ProfilePage = () => {
+  const [profileData, setProfileData] = useState({ 
+    stats: null, 
+    inventory: [], 
+    allItems: [], 
+    boosterActive: false,
+    ownedBadges: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
   
-  req.user = user;
-  next();
-};
+  // Leaderboard state
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardTab, setLeaderboardTab] = useState('global');
+  
+  // Friends system state
+  const [friendUsername, setFriendUsername] = useState('');
+  const [isAddingFriend, setIsAddingFriend] = useState(false);
+  const [friendsList, setFriendsList] = useState([]);
+  
+  // Profile management state
+  const [badgeProgress, setBadgeProgress] = useState({});
+  const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [removingFriendId, setRemovingFriendId] = useState(null);
+  
+  // FIXED: Avatar & Name sync state
+  const [displayAvatar, setDisplayAvatar] = useState(null);
+  const [displayName, setDisplayName] = useState('');
+  const [isSyncingAvatar, setIsSyncingAvatar] = useState(false);
+  
+  const tg = window.Telegram?.WebApp;
 
-// ---- FILE UPLOAD SETUP ----
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('📁 Created uploads/avatars directory');
-}
+  // FIXED: Get Telegram user data with fallback
+  const telegramUser = tg?.initDataUnsafe?.user;
+  const telegramPhotoUrl = telegramUser?.photo_url;
+  const telegramFirstName = telegramUser?.first_name;
 
-// Multer configuration for avatar uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename: userId_timestamp.extension
-    const userId = req.user?.id || 'unknown';
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    cb(null, `${userId}_${timestamp}${extension}`);
-  }
-});
+  // Mock data for demo mode
+  const MOCK_STATS = {
+    first_name: 'Demo User',
+    username: 'demouser',
+    points: 4735,
+    level: 1,
+    daily_streak: 1,
+    created_at: new Date().toISOString(),
+    avatar_url: null
+  };
 
-// File filter for images only
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed'), false);
-  }
-};
-
-// Multer middleware
-const uploadAvatar = multer({
-  storage: storage,
-  limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB limit
-  },
-  fileFilter: fileFilter
-});
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// FIXED: COMPREHENSIVE DATABASE SETUP WITH PROPER FOREIGN KEY HANDLING
-const setupDatabase = async () => {
-  const client = await pool.connect();
-  try {
-    console.log('🔧 Setting up enhanced database tables...');
-
-    // 1. Create Users Table with enhanced fields
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          telegram_id BIGINT UNIQUE NOT NULL,
-          first_name VARCHAR(255),
-          last_name VARCHAR(255),
-          username VARCHAR(255),
-          points INT DEFAULT 100 NOT NULL,
-          level INT DEFAULT 1 NOT NULL,
-          daily_streak INT DEFAULT 0 NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          games_played INT DEFAULT 0 NOT NULL,
-          high_score INT DEFAULT 0 NOT NULL,
-          total_play_time INT DEFAULT 0 NOT NULL
-      );
-    `);
-
-    // 2. Add new columns if they don't exist
-    const userColumns = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='users'
-    `);
-    
-    const existingColumns = userColumns.rows.map(row => row.column_name);
-    
-    const columnsToAdd = [
-      { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
-      { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'VARCHAR(500)' } // Avatar URL column
-    ];
-
-    for (const column of columnsToAdd) {
-      if (!existingColumns.includes(column.name)) {
-        console.log(`📊 Adding ${column.name} column...`);
-        await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
-      }
-    }
-
-    // 3. Shop Items Table
-    const tableCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='shop_items'
-    `);
-
-    if (tableCheck.rowCount === 0) {
-      console.log('Creating new shop_items table...');
-      await client.query(`
-        CREATE TABLE shop_items (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          price INT NOT NULL,
-          icon_name VARCHAR(50),
-          type VARCHAR(50) DEFAULT 'consumable' NOT NULL
-        );
-      `);
-    } else {
-      const hasTypeColumn = tableCheck.rows.some(row => row.column_name === 'type');
-      if (!hasTypeColumn) {
-        console.log('Adding type column to existing shop_items table...');
-        await client.query(`ALTER TABLE shop_items ADD COLUMN type VARCHAR(50) DEFAULT 'consumable' NOT NULL`);
-      }
-    }
-    
-    // 4. User Inventory Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_inventory (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        item_id INT REFERENCES shop_items(id),
-        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 5. User Badges Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_badges (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        badge_name VARCHAR(255) NOT NULL,
-        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, badge_name)
-      );
-    `);
-
-    // 6. PHASE 3: Game Sessions Table for detailed tracking
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS game_sessions (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        score INT NOT NULL,
-        duration INT NOT NULL,
-        items_used JSONB,
-        boost_multiplier DECIMAL(3,2) DEFAULT 1.0,
-        started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        ended_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 7. PHASE 3: Item Usage History Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS item_usage_history (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        item_id INT REFERENCES shop_items(id),
-        item_name VARCHAR(255) NOT NULL,
-        used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        game_session_id INT REFERENCES game_sessions(id),
-        game_score INT DEFAULT 0
-      );
-    `);
-
-    // 8. PHASE 3: Badge Progress Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS badge_progress (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        badge_name VARCHAR(255) NOT NULL,
-        current_progress INT DEFAULT 0,
-        target_progress INT NOT NULL,
-        progress_data JSONB,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, badge_name)
-      );
-    `);
-
-    // 9. PHASE 3: Leaderboard Cache Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS leaderboard_cache (
-        id SERIAL PRIMARY KEY,
-        leaderboard_type VARCHAR(50) NOT NULL,
-        user_id BIGINT REFERENCES users(telegram_id),
-        rank INT NOT NULL,
-        score INT NOT NULL,
-        additional_data JSONB,
-        cached_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 10. FRIENDS SYSTEM: User Friends Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_friends (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        friend_username VARCHAR(255) NOT NULL,
-        friend_telegram_id BIGINT,
-        added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, friend_username)
-      );
-    `);
-    
-    // 11. FIXED: PROPER CLEANUP OF ITEM ID 2 (Extra Time +20s)
-    console.log('🛠️ Setting up shop items...');
-    
-    // Check if shop_items table has any data
-    const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
-    const itemCount = parseInt(existingItemsCount.rows[0].count);
-    
-    // FIXED: Check if item ID 2 exists and needs cleanup
-    const item2Check = await client.query('SELECT id FROM shop_items WHERE id = 2');
-    
-    if (item2Check.rowCount > 0) {
-      console.log('🗑️ Cleaning up deprecated Extra Time +20s (item ID 2)...');
-      
-      // Step 1: Delete from item_usage_history first (dependent table)
-      const historyDeleteResult = await client.query('DELETE FROM item_usage_history WHERE item_id = 2');
-      console.log(`🗑️ Removed ${historyDeleteResult.rowCount} usage history records for item ID 2`);
-      
-      // Step 2: Delete from user_inventory (dependent table)
-      const inventoryDeleteResult = await client.query('DELETE FROM user_inventory WHERE item_id = 2');
-      console.log(`🗑️ Removed ${inventoryDeleteResult.rowCount} inventory records for item ID 2`);
-      
-      // Step 3: Now safe to delete from shop_items (parent table)
-      const itemDeleteResult = await client.query('DELETE FROM shop_items WHERE id = 2');
-      console.log(`🗑️ Removed item ID 2 from shop_items table (${itemDeleteResult.rowCount} record)`);
-    }
-    
-    if (itemCount === 0) {
-      // Table is empty, safe to insert
-      console.log('📦 Inserting initial shop items...');
-      await client.query(`
-        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
-      `);
-      
-      await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
-    } else {
-      console.log(`📦 Shop items table updated, ensuring correct items exist...`);
-      
-      // Update existing items without item ID 2 (safe upsert)
-      await client.query(`
-        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
-        ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        description = EXCLUDED.description,
-        price = EXCLUDED.price,
-        icon_name = EXCLUDED.icon_name,
-        type = EXCLUDED.type
-      `);
-    }
-
-    // 12. USER TASKS SYSTEM: User Tasks Table for Main Tasks tracking
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_tasks (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        task_name VARCHAR(255) NOT NULL,
-        completed BOOLEAN DEFAULT FALSE,
-        completed_at TIMESTAMP WITH TIME ZONE,
-        reward_points INT DEFAULT 0,
-        verification_data JSONB,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, task_name)
-      );
-    `);
-
-    console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
-  } catch (err) {
-    console.error('🚨 Database setup error:', err);
-    process.exit(1);
-  } finally {
-    client.release();
-  }
-};
-
-// ---- ROUTES ----
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// ✅ Correct /api/validate route using validate from utils.js
-app.post('/api/validate', async (req, res) => {
-  try {
-    // 1. Verify Telegram initData with validate()
-    const isValid = validate(req.body.initData, process.env.BOT_TOKEN);
-    if (!isValid) {
-      return res.status(403).json({ error: 'Invalid Telegram initData' });
-    }
-
-    // 2. Extract user info (Telegram attaches it via initDataUnsafe)
-    const { user } = req.body;
-    if (!user || !user.id) {
-      return res.status(400).json({ error: 'Missing Telegram user info' });
-    }
-
-    const client = await pool.connect();
-    try {
-      // ✅ Null-safe username validation
-      const isInvalidUsername = (username) => {
-        if (!username) return true; // null, undefined, or empty
-        const lower = username.toLowerCase();
-        return (
-          lower === 'demouser' ||
-          lower.startsWith('user_') ||
-          username.trim() === ''
-        );
-      };
-
-      // Check if user exists first
-      let dbUserResult = await client.query(
-        'SELECT * FROM users WHERE telegram_id = $1',
-        [user.id]
-      );
-
-      // REQUIREMENT 1 & 2: Block NEW users without valid Telegram username
-      if (dbUserResult.rows.length === 0 && isInvalidUsername(user.username)) {
-        return res.status(400).json({
-          error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
-          requiresUsername: true,
-        });
-      }
-
-      let appUser;
-      let dailyBonus = null;
-
-      if (dbUserResult.rows.length === 0) {
-        // 🆕 NEW USER
-        console.log(`🆕 Creating new user: ${user.first_name} (@${user.username}) (${user.id})`);
-        const insertResult = await client.query(
-          `INSERT INTO users (telegram_id, first_name, last_name, username)
-           VALUES ($1, $2, $3, $4) RETURNING *`,
-          [user.id, user.first_name, user.last_name, user.username]
-        );
-        appUser = insertResult.rows[0];
-      } else {
-        // EXISTING USER
-        appUser = dbUserResult.rows[0];
-
-        // REQUIREMENT 4: Reset if username invalid OR NULL
-        if (isInvalidUsername(appUser.username) || !appUser.username) {
-          console.log(`🔄 Resetting invalid/NULL username for user ${user.id}`);
-          const resetResult = await client.query(
-            `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3,
-             points = 100, level = 1, daily_streak = 0,
-             games_played = 0, high_score = 0, total_play_time = 0,
-             last_login_at = CURRENT_TIMESTAMP
-             WHERE telegram_id = $4 RETURNING *`,
-            [user.first_name, user.last_name, user.username, user.id]
-          );
-          appUser = resetResult.rows[0];
-        }
-        // REQUIREMENT 3: Username changed → reset
-        else if (user.username !== appUser.username) {
-          console.log(`🔄 Username changed for user ${user.id}: "${appUser.username}" → "${user.username}"`);
-          const resetResult = await client.query(
-            `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3,
-             points = 100, level = 1, daily_streak = 0,
-             games_played = 0, high_score = 0, total_play_time = 0,
-             last_login_at = CURRENT_TIMESTAMP
-             WHERE telegram_id = $4 RETURNING *`,
-            [user.first_name, user.last_name, user.username, user.id]
-          );
-          appUser = resetResult.rows[0];
-        }
-        // Normal sync + daily bonus
-        else {
-          const telegramFirstName = user.first_name || appUser.first_name;
-          const telegramLastName = user.last_name || appUser.last_name;
-
-          const nameNeedsUpdate =
-            telegramFirstName !== appUser.first_name ||
-            telegramLastName !== appUser.last_name;
-
-          if (nameNeedsUpdate) {
-            console.log(`🔄 Syncing names for user ${user.id}`);
-            const nameUpdateResult = await client.query(
-              `UPDATE users SET first_name = $1, last_name = $2 WHERE telegram_id = $3 RETURNING *`,
-              [telegramFirstName, telegramLastName, user.id]
-            );
-            appUser = nameUpdateResult.rows[0];
-          }
-
-          // Daily bonus check
-          const now = new Date();
-          const lastLogin = new Date(appUser.last_login_at);
-          const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
-          const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-          if (nowDate > lastLoginDate) {
-            const diffDays = Math.ceil((nowDate - lastLoginDate) / (1000 * 60 * 60 * 24));
-            let newStreak = diffDays === 1 ? appUser.daily_streak + 1 : 1;
-            const bonusPoints = 100 * newStreak;
-            const newPoints = appUser.points + bonusPoints;
-            dailyBonus = { points: bonusPoints, streak: newStreak };
-
-            const updateResult = await client.query(
-              'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
-              [user.id, newStreak, newPoints]
-            );
-            appUser = updateResult.rows[0];
-          }
-        }
-      }
-
-      res.status(200).json({ ...appUser, dailyBonus });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/validate:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PHASE 3: Enhanced update-score with session tracking
-app.post('/api/update-score', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { score, duration = 30, itemsUsed = [] } = req.body;
-    if (score === undefined) {
-      return res.status(400).json({ error: 'Score is required' });
-    }
-
-    // FIXED: Convert score to integer to avoid PostgreSQL type errors
-    const baseScore = Math.floor(Number(score) || 0);
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const userResult = await client.query(
-        'SELECT points, point_booster_active, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
-        [user.id]
-      );
-      
-      if (userResult.rowCount === 0) throw new Error('User not found');
-
-      const { points, point_booster_active, high_score, games_played } = userResult.rows[0];
-      const finalScore = point_booster_active ? baseScore * 2 : baseScore;
-      const newPoints = points + finalScore;
-      const newHighScore = Math.max(high_score || 0, finalScore);
-      const newGamesPlayed = (games_played || 0) + 1;
-
-      console.log("Saving score:", finalScore);
-
-      // Create game session record
-      const sessionResult = await client.query(
-        `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [user.id, finalScore, duration, JSON.stringify(itemsUsed), point_booster_active ? 2.0 : 1.0]
-      );
-      
-      const sessionId = sessionResult.rows[0].id;
-
-      // Update user stats
-      const updateResult = await client.query(
-        `UPDATE users SET 
-         points = $1, 
-         point_booster_active = FALSE, 
-         high_score = $3, 
-         games_played = $4,
-         total_play_time = total_play_time + $5
-         WHERE telegram_id = $2 RETURNING points`,
-        [newPoints, user.id, newHighScore, newGamesPlayed, duration]
-      );
-
-      // Update badge progress
-      await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
-
-      await client.query('COMMIT');
-
-      return res.status(200).json({ 
-        new_points: updateResult.rows[0].points, 
-        score_awarded: finalScore,
-        session_id: sessionId
-      });
-
-    } catch(e){
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/update-score:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Helper function to update badge progress
-const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
-  const badgeUpdates = [
-    {
-      name: 'Cookie Master Badge',
-      current: Math.floor(score),
-      target: 5000,
-      condition: score >= 5000
-    },
-    {
-      name: 'Speed Demon Badge', 
-      current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
-      target: 100,
-      condition: false // Requires specific game duration tracking
-    },
-    {
-      name: 'Champion Badge',
-      current: Math.floor(highScore >= 3000 ? 25 : Math.floor(highScore / 120)),
-      target: 100,
-      condition: false // Requires leaderboard position
-    }
+  const MOCK_ITEMS = [
+    { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
   ];
 
-  for (const badge of badgeUpdates) {
-    await client.query(
-      `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, badge_name) 
-       DO UPDATE SET current_progress = GREATEST(badge_progress.current_progress, $3), updated_at = CURRENT_TIMESTAMP`,
-      [userId, badge.name, badge.current, badge.target]
-    );
+  const MOCK_LEADERBOARD = [
+    { rank: 1, player: { name: 'Alex', level: 3 }, score: 12450, isCurrentUser: true, badge: 'Legend' },
+    { rank: 2, player: { name: 'Maria', level: 4 }, score: 11200, isCurrentUser: false, badge: 'Epic' },
+    { rank: 3, player: { name: 'John', level: 2 }, score: 9800, isCurrentUser: false, badge: 'Epic' },
+    { rank: 4, player: { name: 'Sarah', level: 3 }, score: 8500, isCurrentUser: false, badge: 'Rare' },
+    { rank: 5, player: { name: 'Mike', level: 2 }, score: 7200, isCurrentUser: false, badge: 'Rare' },
+    { rank: 6, player: { name: 'Emma', level: 1 }, score: 6100, isCurrentUser: false, badge: null },
+    { rank: 7, player: { name: 'David', level: 2 }, score: 5800, isCurrentUser: false, badge: null },
+    { rank: 8, player: { name: 'Lisa', level: 1 }, score: 4900, isCurrentUser: false, badge: null }
+  ];
 
-    // Award badge if condition met
-    if (badge.condition) {
-      await client.query(
-        `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [userId, badge.name]
-      );
+  // FIXED: Sync avatar from Telegram to backend (only when static URL exists)
+  const syncTelegramAvatar = async () => {
+    // CHANGE: early return if no static avatar URL provided by Telegram
+    if (!telegramPhotoUrl || !isConnected || !tg?.initData || !BACKEND_URL) {
+      return;
     }
-  }
-};
 
-app.post('/api/user-stats', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
+    setIsSyncingAvatar(true);
     try {
-      const [userResult, badgesResult] = await Promise.all([
-        client.query(
-          `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
-          [user.id]
-        ),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
-      ]);
+      console.log('📸 Syncing Telegram avatar to backend:', telegramPhotoUrl);
       
-      if (userResult.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      const userData = userResult.rows[0];
-      userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
-      
-      // Calculate additional stats
-      userData.averageScore = userData.games_played > 0 ? Math.floor(userData.points / userData.games_played) : 0;
-      userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
-      
-      res.status(200).json(userData);
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/user-stats:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// NEW: Update Profile (Name) endpoint
-app.post('/api/update-profile', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { firstName } = req.body;
-    
-    if (!firstName || firstName.trim().length === 0) {
-      return res.status(400).json({ error: 'First name is required' });
-    }
-    
-    if (firstName.trim().length > 50) {
-      return res.status(400).json({ error: 'First name too long (max 50 characters)' });
-    }
-
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        'UPDATE users SET first_name = $1 WHERE telegram_id = $2 RETURNING first_name',
-        [firstName.trim(), user.id]
-      );
-      
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      res.status(200).json({ 
-        success: true, 
-        firstName: result.rows[0].first_name,
-        message: 'Profile updated successfully' 
+      const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          avatarUrl: telegramPhotoUrl 
+        }),
       });
 
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/update-profile:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// NEW: Update Avatar endpoint - handles both file uploads and URLs
-app.post('/api/update-avatar', validateUser, (req, res) => {
-  // Use multer to handle potential file upload
-  uploadAvatar.single('avatar')(req, res, async (err) => {
-    try {
-      const { user } = req;
-      let avatarUrl;
-
-      if (err) {
-        if (err instanceof multer.MulterError) {
-          if (err.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ error: 'File too large. Maximum size is 2MB.' });
-          }
-          return res.status(400).json({ error: 'File upload error: ' + err.message });
-        }
-        return res.status(400).json({ error: err.message });
-      }
-
-      // Check if file was uploaded
-      if (req.file) {
-        // File upload mode
-        console.log('📸 File uploaded:', req.file.filename);
-        avatarUrl = `/uploads/avatars/${req.file.filename}`;
+      if (res.ok) {
+        const result = await res.json();
+        console.log('✅ Avatar synced successfully:', result.avatarUrl);
+        
+        // Update local state
+        setProfileData(prev => ({
+          ...prev,
+          stats: { ...prev.stats, avatar_url: result.avatarUrl }
+        }));
       } else {
-        // URL input mode (existing functionality)
-        const { avatarUrl: inputUrl } = req.body;
-        
-        if (!inputUrl || typeof inputUrl !== 'string') {
-          return res.status(400).json({ error: 'Avatar URL or file is required' });
-        }
-        
-        // Basic URL validation
-        try {
-          new URL(inputUrl);
-        } catch {
-          return res.status(400).json({ error: 'Invalid avatar URL' });
-        }
-        
-        if (inputUrl.length > 500) {
-          return res.status(400).json({ error: 'Avatar URL too long (max 500 characters)' });
-        }
-
-        avatarUrl = inputUrl;
+        console.warn('⚠️ Avatar sync failed:', res.status);
       }
+    } catch (error) {
+      console.error('❌ Avatar sync error:', error);
+    } finally {
+      setIsSyncingAvatar(false);
+    }
+  };
 
-      const client = await pool.connect();
-      try {
-        const result = await client.query(
-          'UPDATE users SET avatar_url = $1 WHERE telegram_id = $2 RETURNING avatar_url',
-          [avatarUrl, user.id]
-        );
-        
-        if (result.rowCount === 0) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-        
-        console.log(`✅ Avatar updated for user ${user.id}: ${avatarUrl}`);
-        
-        res.status(200).json({ 
-          success: true, 
-          avatarUrl: result.rows[0].avatar_url,
-          message: req.file ? 'Avatar uploaded successfully' : 'Avatar updated successfully'
+  // FIXED: Update display values based on Telegram + DB data
+  useEffect(() => {
+    if (profileData.stats) {
+      // Name: Use Telegram if available, otherwise DB
+      const finalName = telegramFirstName || profileData.stats.first_name || 'User';
+      setDisplayName(finalName);
+      
+      // CHANGE: Avatar selection with safe fallback
+      const finalAvatar = (telegramPhotoUrl && telegramPhotoUrl.trim() !== '')
+        ? telegramPhotoUrl
+        : (profileData.stats.avatar_url || DEFAULT_AVATAR);
+      setDisplayAvatar(finalAvatar);
+      
+      // CHANGE: Only sync when Telegram actually provided a static photo URL
+      if (telegramPhotoUrl && telegramPhotoUrl !== profileData.stats.avatar_url) {
+        syncTelegramAvatar();
+      }
+    }
+  }, [profileData.stats, telegramPhotoUrl, telegramFirstName, isConnected]);
+
+  // Leaderboard helper functions
+  const getRankIcon = (rank) => {
+    switch(rank) {
+      case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
+      case 2: return <Medal className="w-5 h-5 text-gray-300" />;
+      case 3: return <Medal className="w-5 h-5 text-amber-600" />;
+      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
+    }
+  };
+
+  const getBadgeColor = (badge) => {
+    switch(badge) {
+      case 'Legend': return 'text-purple-400 bg-purple-400/20';
+      case 'Epic': return 'text-blue-400 bg-blue-400/20';
+      case 'Rare': return 'text-green-400 bg-green-400/20';
+      default: return 'text-gray-400 bg-gray-400/20';
+    }
+  };
+
+  // Badge progress fetching
+  const fetchBadgeProgress = async () => {
+    setBadgeProgressLoading(true);
+    
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        // Demo mode - mock progress data
+        setBadgeProgress({
+          'Cookie Master': 75,
+          'Speed Demon': 45,
+          'Champion': 20
         });
-
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error('🚨 Error in /api/update-avatar:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-});
-
-// DEV-ONLY: Reset tasks for developer account
-app.post('/api/dev-reset-tasks', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-
-    if (user.id !== 6998637798) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const result = await client.query(
-        'DELETE FROM user_tasks WHERE user_id = $1 RETURNING reward_points',
-        [user.id]
-      );
-
-      const tasksDeleted = result.rowCount;
-      const pointsFromTasks = result.rows.reduce((sum, row) => sum + row.reward_points, 0);
-
-      if (pointsFromTasks > 0) {
-        await client.query(
-          'UPDATE users SET points = GREATEST(points - $1, 0) WHERE telegram_id = $2',
-          [pointsFromTasks, user.id]
-        );
+        setBadgeProgressLoading(false);
+        return;
       }
 
-      await client.query('COMMIT');
-
-      res.status(200).json({
-        success: true,
-        message: `Reset ${tasksDeleted} tasks and subtracted ${pointsFromTasks} points.`,
-        tasksDeleted,
-        pointsFromTasks
+      const res = await fetch(`${BACKEND_URL}/api/get-badge-progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
       });
+
+      if (res.ok) {
+        const data = await res.json();
+        setBadgeProgress(data.progress || {});
+      } else {
+        // Fallback to mock data
+        setBadgeProgress({
+          'Cookie Master': 75,
+          'Speed Demon': 45, 
+          'Champion': 20
+        });
+      }
     } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
+      console.error('Badge progress fetch error:', err);
+      setBadgeProgress({
+        'Cookie Master': 75,
+        'Speed Demon': 45,
+        'Champion': 20
+      });
     } finally {
-      client.release();
+      setBadgeProgressLoading(false);
     }
-  } catch (error) {
-    console.error('🚨 Error in /api/dev-reset-tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  };
 
-app.post('/api/get-shop-data', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
+  // FIXED: Profile name update handler - use displayName
+  const handleUpdateProfile = async () => {
+    if (!editNameValue.trim() || editNameValue.trim() === displayName) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setIsUpdatingName(true);
+
     try {
-      const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
-        client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id]),
-        client.query(`
-          SELECT item_id, COUNT(item_id) as quantity 
-          FROM user_inventory 
-          WHERE user_id = $1 
-          GROUP BY item_id
-        `, [user.id]),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
-      ]);
-      
-      if (userResult.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      let inventory = inventoryResult.rows;
-      
-      // FILTER OUT Extra Time +20s (item_id: 2) from inventory response - NOT NEEDED ANYMORE since we deleted the records
-      // inventory = inventory.filter(item => item.item_id !== 2);
-
-      const shopData = {
-        items: itemsResult.rows,
-        userPoints: userResult.rows[0].points,
-        inventory: inventory,
-        boosterActive: userResult.rows[0].point_booster_active,
-        ownedBadges: badgesResult.rows.map(row => row.badge_name)
-      };
-      
-      res.status(200).json(shopData);
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-shop-data:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/buy-item', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId } = req.body;
-    
-    console.log(`🛒 Purchase attempt - User: ${user.id}, Item: ${itemId}`);
-    
-    if (!itemId) {
-      return res.status(400).json({ error: 'itemId is required' });
-    }
-
-    // PREVENT purchasing Extra Time +20s (item ID 2)
-    if (itemId === 2) {
-      return res.status(400).json({ error: 'This item is no longer available for purchase' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const itemResult = await client.query('SELECT name, price, type FROM shop_items WHERE id = $1', [itemId]);
-      if (itemResult.rowCount === 0) {
-        console.log(`❌ Item ${itemId} not found in shop_items table`);
-        throw new Error('Item not found.');
-      }
-      
-      const { name, price, type } = itemResult.rows[0];
-      console.log(`📦 Item found: ${name} - ${price} (${type})`);
-
-      const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
-      if (userResult.rowCount === 0) throw new Error('User not found.');
-      
-      const userPoints = userResult.rows[0].points;
-      console.log(`💰 User has ${userPoints} points, needs ${price}`);
-      
-      if (userPoints < price) throw new Error('Insufficient points.');
-      
-      if (name.includes('Badge')) {
-        console.log(`🏆 Processing badge purchase: ${name}`);
-        
-        const badgeResult = await client.query('SELECT * FROM user_badges WHERE user_id = $1 AND badge_name = $2', [user.id, name]);
-        if (badgeResult.rowCount > 0) throw new Error('Badge already owned.');
-        
-        await client.query('INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2)', [user.id, name]);
-        console.log(`✅ Badge added to user_badges table`);
-        
-      } else {
-        console.log(`🎮 Processing consumable item: ${name}`);
-        
-        if(type === 'permanent') {
-          const inventoryResult = await client.query('SELECT * FROM user_inventory WHERE user_id = $1 AND item_id = $2', [user.id, itemId]);
-          if (inventoryResult.rowCount > 0) throw new Error('Item already owned.');
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        const message = `Demo: Updated name to "${editNameValue}"\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
+        } else {
+          alert(message);
         }
         
-        await client.query('INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)', [user.id, itemId]);
-        console.log(`✅ Item added to user_inventory table`);
+        // Update display name in demo
+        setDisplayName(editNameValue.trim());
+        setIsEditingName(false);
+        setIsUpdatingName(false);
+        return;
       }
 
-      const newPoints = userPoints - price;
-      await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
-      console.log(`💸 Points updated: ${userPoints} → ${newPoints}`);
-
-      await client.query('COMMIT');
-      console.log(`🎉 Purchase completed successfully!`);
-
-      res.status(200).json({ 
-        success: true, 
-        newPoints: newPoints, 
-        message: `Successfully purchased ${name}!` 
+      const res = await fetch(`${BACKEND_URL}/api/update-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, firstName: editNameValue.trim() }),
       });
 
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.log(`💥 Purchase failed: ${error.message}`);
-      
-      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.', 'This item is no longer available for purchase'];
-      if (knownErrors.includes(error.message)) {
-          return res.status(400).json({ success: false, error: error.message });
-      }
-      
-      console.error('🚨 Unexpected error in buy-item:', error);
-      res.status(500).json({ success: false, error: 'Internal server error during purchase.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/buy-item:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Update failed');
 
-app.post('/api/start-game-session-with-items', validateUser, async (req, res) => {
-  const { user } = req;
-  const { selectedItems = [] } = req.body;
-  
-  console.log(`🎮 Starting game session with selected items - User: ${user.id}, Items: ${selectedItems}`);
-  
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    let totalTimeBonus = 0;
-    let hasBomb = false;
-    const usedItems = [];
-
-    for (const itemId of selectedItems) {
-      console.log(`🔄 Processing selected item: ${itemId}`);
-      
-      // SKIP Extra Time +20s (item ID 2) if somehow present
-      if (itemId === 2) {
-        console.log(`⚠️ Skipping deprecated item ID 2 (Extra Time +20s)`);
-        continue;
-      }
-      
-      const consumeResult = await client.query(
-        `DELETE FROM user_inventory 
-         WHERE id = (
-           SELECT id FROM user_inventory 
-           WHERE user_id = $1 AND item_id = $2 
-           LIMIT 1
-         ) RETURNING item_id`,
-        [user.id, itemId]
-      );
-
-      if (consumeResult.rowCount > 0) {
-        console.log(`✅ Consumed item ${itemId}`);
-        usedItems.push(itemId);
-        
-        switch (itemId) {
-          case 1: totalTimeBonus += 10; break;
-          // REMOVED: case 2 (Extra Time +20s)
-          case 3: hasBomb = true; break;
-          case 4: 
-            console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
-            break;
-        }
-      }
-    }
-
-    // Record item usage
-    for (const itemId of usedItems) {
-      const itemName = await client.query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
-      if (itemName.rowCount > 0) {
-        await client.query(
-          `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, $3)`,
-          [user.id, itemId, itemName.rows[0].name]
-        );
-      }
-    }
-
-    await client.query('COMMIT');
-    
-    const finalStartTime = 30 + totalTimeBonus;
-    
-    console.log(`🎯 Game session configured: startTime=${finalStartTime}s, bomb=${hasBomb}`);
-    
-    res.status(200).json({
-      startTime: finalStartTime,
-      startWithBomb: hasBomb,
-      appliedEffects: {
-        timeBonus: totalTimeBonus,
-        bomb: hasBomb,
-        itemsConsumed: usedItems
-      }
-    });
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('🚨 Error in /api/start-game-session-with-items:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
-  }
-});
-
-app.post('/api/start-game-session', validateUser, async (req, res) => {
-  const { user } = req;
-  console.log(`🎮 Starting legacy game session - User: ${user.id}`);
-  
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    let totalTimeBonus = 0;
-    let hasBomb = false;
-
-    const timeBooster10Result = await client.query(
-      `DELETE FROM user_inventory 
-       WHERE id = (
-         SELECT id FROM user_inventory 
-         WHERE user_id = $1 AND item_id = 1 
-         LIMIT 1
-       ) RETURNING item_id`,
-      [user.id]
-    );
-
-    // REMOVED: Extra Time +20s logic (item ID 2)
-
-    const bombBoosterResult = await client.query(
-      `DELETE FROM user_inventory 
-       WHERE id = (
-         SELECT id FROM user_inventory 
-         WHERE user_id = $1 AND item_id = 3
-         LIMIT 1
-       ) RETURNING item_id`,
-      [user.id]
-    );
-
-    await client.query('COMMIT');
-    
-    if (timeBooster10Result.rowCount > 0) totalTimeBonus += 10;
-    hasBomb = bombBoosterResult.rowCount > 0;
-    
-    console.log(`🎯 Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
-    
-    res.status(200).json({
-      startTime: 30 + totalTimeBonus,
-      startWithBomb: hasBomb,
-    });
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('🚨 Error in /api/start-game-session:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
-  }
-});
-
-app.post('/api/activate-item', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId } = req.body;
-    if (!itemId || itemId !== 4) {
-      return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const userResult = await client.query('SELECT point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
-      if (userResult.rowCount === 0) throw new Error('User not found.');
-      if (userResult.rows[0].point_booster_active) throw new Error('A booster is already active.');
-
-      const inventoryResult = await client.query(
-        `DELETE FROM user_inventory 
-         WHERE id = (
-           SELECT id FROM user_inventory 
-           WHERE user_id = $1 AND item_id = $2 
-           LIMIT 1
-         ) RETURNING id`,
-        [user.id, itemId]
-      );
-      if (inventoryResult.rowCount === 0) throw new Error('You do not own this item.');
-
-      await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
-      
-      // Record usage
-      await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
-        [user.id, itemId]
-      );
-      
-      await client.query('COMMIT');
-      
-      console.log(`⚡ Point booster activated for user ${user.id}`);
-      
-      res.status(200).json({ success: true, message: 'Point Booster activated for your next game!' });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      const knownErrors = ['User not found.', 'A booster is already active.', 'You do not own this item.'];
-      if (knownErrors.includes(error.message)) {
-          return res.status(400).json({ success: false, error: error.message });
-      }
-      console.error('🚨 Error in /api/activate-item:', error);
-      res.status(500).json({ success: false, error: 'Internal server error.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/activate-item:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// NEW: Use Time Booster endpoint for mid-game Extra Time +10s consumption
-app.post('/api/use-time-booster', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId, timeBonus } = req.body;
-    
-    if (!itemId || itemId !== 1) {
-      return res.status(400).json({ error: 'Only Extra Time +10s can be used this way.' });
-    }
-    
-    if (!timeBonus || timeBonus !== 10) {
-      return res.status(400).json({ error: 'Invalid time bonus value.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Check and consume the item from inventory
-      const inventoryResult = await client.query(
-        `DELETE FROM user_inventory 
-         WHERE id = (
-           SELECT id FROM user_inventory 
-           WHERE user_id = $1 AND item_id = $2 
-           LIMIT 1
-         ) RETURNING id`,
-        [user.id, itemId]
-      );
-      
-      if (inventoryResult.rowCount === 0) {
-        throw new Error('You do not own this item.');
-      }
-
-      // Record usage in history
-      await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
-        [user.id, itemId]
-      );
-      
-      await client.query('COMMIT');
-      
-      console.log(`⏰ Extra Time +10s used by user ${user.id}`);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Extra Time +10s used successfully!',
-        timeBonus: timeBonus
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      const knownErrors = ['You do not own this item.'];
-      if (knownErrors.includes(error.message)) {
-          return res.status(400).json({ success: false, error: error.message });
-      }
-      console.error('🚨 Error in /api/use-time-booster:', error);
-      res.status(500).json({ success: false, error: 'Internal server error.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/use-time-booster:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// NEW: Use Cookie Bomb endpoint for mid-game bomb consumption
-app.post('/api/use-bomb', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId } = req.body;
-    
-    if (!itemId || itemId !== 3) {
-      return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Check and consume the item from inventory
-      const inventoryResult = await client.query(
-        `DELETE FROM user_inventory 
-         WHERE id = (
-           SELECT id FROM user_inventory 
-           WHERE user_id = $1 AND item_id = $2 
-           LIMIT 1
-         ) RETURNING id`,
-        [user.id, itemId]
-      );
-      
-      if (inventoryResult.rowCount === 0) {
-        throw new Error('You do not own this item.');
-      }
-
-      // Record usage in history
-      await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Cookie Bomb')`,
-        [user.id, itemId]
-      );
-      
-      await client.query('COMMIT');
-      
-      console.log(`💥 Cookie Bomb used by user ${user.id}`);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Cookie Bomb used successfully!'
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      const knownErrors = ['You do not own this item.'];
-      if (knownErrors.includes(error.message)) {
-          return res.status(400).json({ success: false, error: error.message });
-      }
-      console.error('🚨 Error in /api/use-bomb:', error);
-      res.status(500).json({ success: false, error: 'Internal server error.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/use-bomb:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// FRIENDS SYSTEM: Add Friend by Username
-app.post('/api/add-friend', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { friendUsername } = req.body;
-    
-    if (!friendUsername) {
-      return res.status(400).json({ error: 'Friend username is required' });
-    }
-
-    const cleanUsername = friendUsername.replace('@', '').toLowerCase().trim();
-    
-    if (cleanUsername === (user.username || '').toLowerCase()) {
-      return res.status(400).json({ error: 'Cannot add yourself as a friend' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Check if friend exists by username
-      const friendResult = await client.query(
-        'SELECT telegram_id, first_name, username FROM users WHERE LOWER(username) = $1',
-        [cleanUsername]
-      );
-      
-      if (friendResult.rowCount === 0) {
-        throw new Error('User not found. Make sure they have played the game at least once.');
-      }
-
-      const friend = friendResult.rows[0];
-      
-      // Check if already friends
-      const existingFriend = await client.query(
-        'SELECT id FROM user_friends WHERE user_id = $1 AND friend_username = $2',
-        [user.id, cleanUsername]
-      );
-      
-      if (existingFriend.rowCount > 0) {
-        throw new Error('Already friends with this user');
-      }
-
-      // Add friend
-      await client.query(
-        'INSERT INTO user_friends (user_id, friend_username, friend_telegram_id) VALUES ($1, $2, $3)',
-        [user.id, cleanUsername, friend.telegram_id]
-      );
-
-      await client.query('COMMIT');
-      
-      res.status(200).json({ 
-        success: true, 
-        message: `Added ${friend.first_name} (@${friend.username}) as friend!`,
-        friend: {
-          username: friend.username,
-          name: friend.first_name
-        }
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      const knownErrors = [
-        'User not found. Make sure they have played the game at least once.',
-        'Already friends with this user',
-        'Cannot add yourself as a friend'
-      ];
-      
-      if (knownErrors.includes(error.message)) {
-        return res.status(400).json({ success: false, error: error.message });
-      }
-      
-      console.error('🚨 Error in /api/add-friend:', error);
-      res.status(500).json({ success: false, error: 'Failed to add friend' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/add-friend:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// FRIENDS SYSTEM: Get Friends List
-app.post('/api/get-friends', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const friendsResult = await client.query(`
-        SELECT 
-          uf.friend_username,
-          u.first_name,
-          u.username,
-          u.points,
-          u.level
-        FROM user_friends uf
-        LEFT JOIN users u ON uf.friend_telegram_id = u.telegram_id
-        WHERE uf.user_id = $1
-        ORDER BY u.points DESC
-      `, [user.id]);
-      
-      res.status(200).json({ 
-        friends: friendsResult.rows,
-        count: friendsResult.rowCount 
-      });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-friends:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// NEW: Remove Friend endpoint
-app.post('/api/remove-friend', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { friendUsername } = req.body;
-    
-    if (!friendUsername) {
-      return res.status(400).json({ error: 'Friend username is required' });
-    }
-
-    const cleanUsername = friendUsername.replace('@', '').toLowerCase().trim();
-
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        'DELETE FROM user_friends WHERE user_id = $1 AND friend_username = $2 RETURNING friend_username',
-        [user.id, cleanUsername]
-      );
-      
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'Friend not found in your friends list' });
-      }
-      
-      res.status(200).json({ 
-        success: true, 
-        message: `Removed @${cleanUsername} from friends`,
-        removedUsername: cleanUsername
-      });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/remove-friend:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PHASE 3: NEW ENDPOINTS
-
-app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const [inventoryResult, usageResult, itemsResult] = await Promise.all([
-        client.query(`
-          SELECT item_id, COUNT(*) as quantity 
-          FROM user_inventory 
-          WHERE user_id = $1
-          GROUP BY item_id
-        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
-        client.query(`
-          SELECT item_name, COUNT(*) as usage_count 
-          FROM item_usage_history 
-          WHERE user_id = $1
-          GROUP BY item_name 
-          ORDER BY usage_count DESC 
-          LIMIT 1
-        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
-        client.query('SELECT id, price FROM shop_items') // No longer need to filter since item 2 is deleted
-      ]);
-      
-      const inventory = inventoryResult.rows;
-      const items = itemsResult.rows.reduce((acc, item) => {
-        acc[item.id] = item.price;
-        return acc;
-      }, {});
-      
-      const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
-      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (items[item.item_id] || 0)), 0);
-      const mostUsedItem = usageResult.rows[0]?.item_name || 'None';
-      
-      // Simple efficiency calculation
-      const efficiency = Math.min(95, Math.max(50, totalItems * 10 + Math.random() * 20));
-      
-      res.status(200).json({
-        totalItems,
-        totalValue,
-        mostUsedItem,
-        efficiency: Math.round(efficiency)
-      });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-inventory-stats:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const historyResult = await client.query(`
-        SELECT item_name, used_at, game_score
-        FROM item_usage_history 
-        WHERE user_id = $1
-        ORDER BY used_at DESC 
-        LIMIT 20
-      `, [user.id]); // No longer need to filter item_id != 2 since records are deleted
-      
-      res.status(200).json(historyResult.rows);
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-item-usage-history:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/get-badge-progress', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const [progressResult, badgesResult] = await Promise.all([
-        client.query(`
-          SELECT badge_name, current_progress, target_progress
-          FROM badge_progress 
-          WHERE user_id = $1
-        `, [user.id]),
-        client.query(`
-          SELECT badge_name, acquired_at
-          FROM user_badges 
-          WHERE user_id = $1
-        `, [user.id])
-      ]);
-      
-      const progress = {};
-      progressResult.rows.forEach(row => {
-        progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
-      });
-      
-      const ownedBadges = badgesResult.rows;
-      
-      res.status(200).json({
-        progress,
-        stats: {
-          totalBadges: 5,
-          unlockedBadges: ownedBadges.length,
-          rarityBreakdown: {
-            common: 0,
-            uncommon: ownedBadges.filter(b => b.badge_name.includes('Bomb')).length,
-            rare: ownedBadges.filter(b => b.badge_name.includes('Cookie Master') || b.badge_name.includes('Streak')).length,
-            epic: ownedBadges.filter(b => b.badge_name.includes('Speed')).length,
-            legendary: ownedBadges.filter(b => b.badge_name.includes('Champion')).length
-          }
-        }
-      });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-badge-progress:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/get-leaderboard', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { type = 'global' } = req.body;
-    const client = await pool.connect();
-    try {
-      let query;
-      let params = [];
-      
-      switch (type) {
-        case 'weekly':
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            WHERE u.last_login_at >= NOW() - INTERVAL '7 days'
-            ORDER BY u.points DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-          break;
-          
-        case 'friends':
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            JOIN user_friends uf ON u.telegram_id = uf.friend_telegram_id
-            WHERE uf.user_id = $1
-            UNION
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            WHERE u.telegram_id = $1
-            ORDER BY score DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-          break;
-          
-        default: // global
-          query = `
-            SELECT u.first_name as name, u.points as score, u.level,
-                   ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
-                   CASE WHEN u.telegram_id = $1 THEN true ELSE false END as is_current_user
-            FROM users u 
-            ORDER BY u.points DESC 
-            LIMIT 50
-          `;
-          params = [user.id];
-      }
-      
-      const leaderboardResult = await client.query(query, params);
-      
-      const leaderboard = leaderboardResult.rows.map(row => ({
-        rank: parseInt(row.rank),
-        player: { name: row.name, level: row.level },
-        score: row.score,
-        isCurrentUser: row.is_current_user,
-        badge: row.score > 5000 ? 'Legend' : row.score > 3000 ? 'Epic' : row.score > 1000 ? 'Rare' : null
+      // Update local state
+      setProfileData(prev => ({
+        ...prev,
+        stats: { ...prev.stats, first_name: result.firstName }
       }));
       
-      res.status(200).json({ leaderboard });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-leaderboard:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// TASKS SYSTEM: Get user task status
-app.post('/api/get-user-tasks', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const tasksResult = await client.query(
-        'SELECT task_name, completed, completed_at, reward_points FROM user_tasks WHERE user_id = $1',
-        [user.id]
-      );
-      
-      // Define available main tasks
-      const availableTasks = [
-        {
-          id: 1,
-          name: 'Join the Cat Cult',
-          task_name: 'telegram_group_join',
-          reward_points: 500,
-          url: 'https://t.me/meowchi_lab'
-        },
-        {
-          id: 2,
-          name: 'Cat-stagram Star', 
-          task_name: 'instagram_follow',
-          reward_points: 300,
-          url: 'https://www.instagram.com/meowchi.lab/'
-        }
-      ];
-      
-      // Map completed tasks
-      const completedTasks = new Set(tasksResult.rows.map(row => row.task_name));
-      
-      // Return task status
-      const taskStatus = availableTasks.map(task => ({
-        ...task,
-        completed: completedTasks.has(task.task_name),
-        completedAt: tasksResult.rows.find(row => row.task_name === task.task_name)?.completed_at || null
-      }));
-      
-      res.status(200).json({ tasks: taskStatus });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/get-user-tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// TASKS SYSTEM: Verify task completion
-app.post('/api/verify-task', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { taskName } = req.body;
-    
-    if (!taskName) {
-      return res.status(400).json({ error: 'Task name is required' });
-    }
-
-    console.log(`🔍 Verifying task: ${taskName} for user: ${user.id}`);
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      let isCompleted = false;
-      let rewardPoints = 0;
-      let verificationData = {};
-
-      if (taskName === 'telegram_group_join') {
-        // Verify Telegram group membership
-        const membershipResult = await verifyTelegramGroupMembership(user.id);
-        isCompleted = membershipResult.isMember;
-        rewardPoints = 500;
-        verificationData = { 
-          verification_method: 'telegram_api',
-          chat_id: '@meowchi_lab',
-          verified_at: new Date().toISOString(),
-          status: membershipResult.status
-        };
-        
-        console.log(`📱 Telegram verification result:`, membershipResult);
-        
-      } else if (taskName === 'instagram_follow') {
-        // Instagram verification (simplified - requires manual verification)
-        // For now, we'll mark as completed after click and require periodic re-verification
-        const existingTask = await client.query(
-          'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
-          [user.id, taskName]
-        );
-        
-        if (existingTask.rowCount === 0) {
-          // First time - mark as completed (honor system + manual verification)
-          isCompleted = true;
-          rewardPoints = 300;
-          verificationData = {
-            verification_method: 'manual_pending',
-            instagram_url: 'https://www.instagram.com/meowchi.lab/',
-            verified_at: new Date().toISOString(),
-            note: 'Requires periodic manual verification'
-          };
-          console.log(`📸 Instagram task marked for manual verification`);
-        } else {
-          // Return existing status
-          isCompleted = existingTask.rows[0].completed;
-          rewardPoints = existingTask.rows[0].reward_points;
-        }
-      } else {
-        return res.status(400).json({ error: 'Unknown task name' });
-      }
-
-      if (isCompleted) {
-        // Check if task already completed
-        const existingResult = await client.query(
-          'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
-          [user.id, taskName]
-        );
-
-        if (existingResult.rowCount === 0) {
-          // First completion - insert new record and award points
-          await client.query(
-            `INSERT INTO user_tasks (user_id, task_name, completed, completed_at, reward_points, verification_data) 
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)`,
-            [user.id, taskName, true, rewardPoints, JSON.stringify(verificationData)]
-          );
-
-          // Award points to user
-          await client.query(
-            'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
-            [rewardPoints, user.id]
-          );
-
-          console.log(`🎉 Task completed! Awarded ${rewardPoints} points to user ${user.id}`);
-
-        } else if (!existingResult.rows[0].completed) {
-          // Task exists but wasn't completed before - update it
-          await client.query(
-            `UPDATE user_tasks SET completed = true, completed_at = CURRENT_TIMESTAMP, 
-             reward_points = $3, verification_data = $4 WHERE user_id = $1 AND task_name = $2`,
-            [user.id, taskName, rewardPoints, JSON.stringify(verificationData)]
-          );
-
-          // Award points to user
-          await client.query(
-            'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
-            [rewardPoints, user.id]
-          );
-
-          console.log(`🎉 Task updated to completed! Awarded ${rewardPoints} points to user ${user.id}`);
-        } else {
-          console.log(`ℹ️ Task already completed for user ${user.id}`);
-        }
-      } else {
-        // Task not completed - update or insert failed verification
-        await client.query(
-          `INSERT INTO user_tasks (user_id, task_name, completed, verification_data) 
-           VALUES ($1, $2, false, $3)
-           ON CONFLICT (user_id, task_name) 
-           DO UPDATE SET verification_data = $3, updated_at = CURRENT_TIMESTAMP`,
-          [user.id, taskName, JSON.stringify(verificationData)]
-        );
-      }
-
-      await client.query('COMMIT');
-
-      res.status(200).json({
-        success: true,
-        completed: isCompleted,
-        rewardPoints: isCompleted ? rewardPoints : 0,
-        message: isCompleted 
-          ? `Task completed! You earned ${rewardPoints} points.`
-          : 'Task verification failed. Please make sure you have completed the required action.'
+      setDisplayName(result.firstName);
+      setIsEditingName(false);
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
       });
 
     } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
+      console.error('Profile update error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
     } finally {
-      client.release();
+      setIsUpdatingName(false);
     }
-  } catch (error) {
-    console.error('🚨 Error in /api/verify-task:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  };
 
-// TASKS SYSTEM: Open task link and track attempt
-app.post('/api/start-task', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { taskName } = req.body;
-    
-    if (!taskName) {
-      return res.status(400).json({ error: 'Task name is required' });
-    }
+  // Friend removal handler
+  const handleRemoveFriend = async (friendUsername) => {
+    setRemovingFriendId(friendUsername);
 
-    const taskUrls = {
-      'telegram_group_join': 'https://t.me/meowchi_lab',
-      'instagram_follow': 'https://www.instagram.com/meowchi.lab/'
-    };
-
-    const url = taskUrls[taskName];
-    if (!url) {
-      return res.status(400).json({ error: 'Unknown task name' });
-    }
-
-    // Track that user started this task
-    const client = await pool.connect();
     try {
-      await client.query(
-        `INSERT INTO user_tasks (user_id, task_name, completed, verification_data) 
-         VALUES ($1, $2, false, $3)
-         ON CONFLICT (user_id, task_name) 
-         DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
-        [user.id, taskName, JSON.stringify({ 
-          started_at: new Date().toISOString(),
-          url_opened: url 
-        })]
-      );
-      
-      console.log(`🚀 User ${user.id} started task: ${taskName}`);
-
-    } finally {
-      client.release();
-    }
-
-    res.status(200).json({
-      success: true,
-      url: url,
-      message: 'Task started. Complete the action and return to verify.'
-    });
-
-  } catch (error) {
-    console.error('🚨 Error in /api/start-task:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// HELPER FUNCTION: Verify Telegram group membership using Bot API
-async function verifyTelegramGroupMembership(userId) {
-  try {
-    if (!BOT_TOKEN) {
-      console.error('❌ BOT_TOKEN not configured for Telegram verification');
-      return { isMember: false, status: 'bot_token_missing' };
-    }
-
-    const chatId = '@meowchi_lab'; // The group/channel username
-    const apiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        user_id: userId
-      })
-    });
-
-    const data = await response.json();
-    
-    if (data.ok) {
-      const memberStatus = data.result.status;
-      const isMember = ['member', 'administrator', 'creator'].includes(memberStatus);
-      
-      console.log(`👥 User ${userId} membership status in ${chatId}: ${memberStatus}`);
-      
-      return {
-        isMember: isMember,
-        status: memberStatus,
-        raw_response: data.result
-      };
-    } else {
-      console.error(`❌ Telegram API error:`, data);
-      
-      // Handle common errors
-      if (data.error_code === 400 && data.description.includes('chat not found')) {
-        return { isMember: false, status: 'chat_not_found' };
-      } else if (data.error_code === 400 && data.description.includes('user not found')) {
-        return { isMember: false, status: 'user_not_found' };
-      } else if (data.error_code === 403) {
-        return { isMember: false, status: 'bot_not_admin' };
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        const message = `Demo: Removed @${friendUsername} from friends\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({ title: 'Demo Action', message: message, buttons: [{ type: 'ok' }] });
+        } else {
+          alert(message);
+        }
+        setRemovingFriendId(null);
+        return;
       }
-      
-      return { isMember: false, status: 'api_error', error: data.description };
-    }
-  } catch (error) {
-    console.error('❌ Error verifying Telegram membership:', error);
-    return { isMember: false, status: 'network_error', error: error.message };
-  }
-}
 
-const startServer = () => {
-  app.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  });
+      const res = await fetch(`${BACKEND_URL}/api/remove-friend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, friendUsername }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Remove failed');
+
+      // Refresh friends leaderboard
+      fetchLeaderboard('friends');
+
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+    } catch (error) {
+      console.error('Remove friend error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
+    } finally {
+      setRemovingFriendId(null);
+    }
+  };
+
+  const fetchLeaderboard = async (type = 'global') => {
+    setLeaderboardLoading(true);
+    
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        setLeaderboardData(MOCK_LEADERBOARD);
+        setLeaderboardLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, type }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data.leaderboard || []);
+      } else {
+        setLeaderboardData(MOCK_LEADERBOARD);
+      }
+    } catch (err) {
+      setLeaderboardData(MOCK_LEADERBOARD);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
+
+  const handleAddFriend = async () => {
+    if (!friendUsername.trim()) {
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: 'Please enter a username',
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert('Please enter a username');
+      }
+      return;
+    }
+
+    setIsAddingFriend(true);
+
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        console.log('Demo: Adding friend:', friendUsername);
+        const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
+        if (tg && tg.showPopup) {
+          tg.showPopup({
+            title: 'Demo Mode',
+            message: message,
+            buttons: [{ type: 'ok' }]
+          });
+        } else {
+          alert(message);
+        }
+        setFriendUsername('');
+        setIsAddingFriend(false);
+        return;
+      }
+
+      console.log('Adding friend:', friendUsername);
+
+      const res = await fetch(`${BACKEND_URL}/api/add-friend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          initData: tg.initData, 
+          friendUsername: friendUsername.trim() 
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to add friend');
+      }
+
+      console.log('Friend added successfully:', result);
+
+      // Success feedback
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+      // Clear input and refresh leaderboard
+      setFriendUsername('');
+      fetchLeaderboard('friends');
+
+    } catch (error) {
+      console.error('Add friend error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: error.message,
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert(error.message);
+      }
+    } finally {
+      setIsAddingFriend(false);
+    }
+  };
+
+  const fetchProfileData = useCallback(async () => {
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        console.log('Demo mode: Using mock profile data');
+        setProfileData({
+          stats: MOCK_STATS,
+          inventory: [],
+          allItems: MOCK_ITEMS,
+          boosterActive: false,
+          ownedBadges: []
+        });
+        setIsConnected(false);
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching real profile data...');
+
+      // Fetch both user stats and shop/inventory data in parallel
+      const [statsRes, shopDataRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/user-stats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        }),
+        fetch(`${BACKEND_URL}/api/get-shop-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        })
+      ]);
+
+      if (!statsRes.ok || !shopDataRes.ok) {
+        throw new Error('Failed to fetch profile data.');
+      }
+
+      const stats = await statsRes.json();
+      const shopData = await shopDataRes.json();
+      
+      console.log('Profile data loaded:', { stats, shopData });
+      
+      setProfileData({
+        stats,
+        inventory: shopData.inventory,
+        allItems: shopData.items,
+        boosterActive: shopData.boosterActive,
+        ownedBadges: shopData.ownedBadges || []
+      });
+      
+      setIsConnected(true);
+
+    } catch (err) {
+      console.error('Profile fetch error:', err);
+      setError(err.message);
+      
+      // Fallback to demo data
+      setProfileData({
+        stats: MOCK_STATS,
+        inventory: [],
+        allItems: MOCK_ITEMS,
+        boosterActive: false,
+        ownedBadges: []
+      });
+      setIsConnected(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [tg]);
+
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
+
+  // Load leaderboard when leaderboard tab is accessed
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
+      fetchLeaderboard(leaderboardTab);
+    }
+  }, [activeTab]);
+
+  // Load badge progress when badges tab is accessed
+  useEffect(() => {
+    if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
+      fetchBadgeProgress();
+    }
+  }, [activeTab]);
+
+  const handleActivateItem = async (itemId) => {
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        // Demo mode
+        console.log('Demo: Activating item', itemId);
+        
+        const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
+        if (tg && tg.showPopup) {
+          tg.showPopup({ 
+            title: 'Demo Activation', 
+            message: message, 
+            buttons: [{ type: 'ok' }] 
+          });
+        } else {
+          alert(message);
+        }
+        return;
+      }
+
+      console.log('Activating item:', itemId);
+      
+      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, itemId }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Activation failed.');
+
+      console.log('Item activated successfully:', result);
+
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({ 
+        title: 'Success!', 
+        message: result.message, 
+        buttons: [{ type: 'ok' }] 
+      });
+
+      // Refresh profile data
+      fetchProfileData();
+
+    } catch (err) {
+      console.error('Activation error:', err);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({ 
+        title: 'Error', 
+        message: err.message, 
+        buttons: [{ type: 'ok' }] 
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      </div>
+    );
+  }
+
+  if (error && !profileData.stats) {
+    return (
+      <div className="p-4 text-center text-red-400">
+        <p>Could not load profile.</p>
+        <p className="text-sm text-secondary">{error}</p>
+        <button 
+          onClick={fetchProfileData}
+          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  
+  const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
+  
+  // Get activatable items (Double Points only)
+  const activatableItems = allItems.filter(item => 
+    item.id === 4 && // Double Points item
+    inventory.some(inv => inv.item_id === item.id && inv.quantity > 0)
+  );
+
+  // Get all possible badges
+  const allBadges = [
+    'Cookie Master',
+    'Speed Demon', 
+    'Champion'
+  ];
+
+  const renderTabContent = () => {
+    switch(activeTab) {
+      case 'overview':
+        return (
+          <motion.div 
+            className="grid grid-cols-2 gap-4" 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            transition={{ delay: 0.2 }}
+          >
+            {/* Total Points */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-accent"><Star size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Total Points</p>
+                <p className="text-lg font-bold text-primary">{stats.points.toLocaleString()}</p>
+                <p className="text-xs text-green-400 mt-1">+15% this week</p>
+              </div>
+            </div>
+
+            {/* Daily Streak */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-accent"><Flame size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Daily Streak</p>
+                <p className="text-lg font-bold text-primary">{stats.daily_streak} Days</p>
+                <p className="text-xs text-green-400 mt-1">Personal best!</p>
+              </div>
+            </div>
+
+            {/* High Score */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Trophy size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">High Score</p>
+                <p className="text-lg font-bold text-primary">{stats.high_score || 1455}</p>
+                <p className="text-xs text-green-400 mt-1">New record!</p>
+              </div>
+            </div>
+
+            {/* Games Played */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Package size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Games Played</p>
+                <p className="text-lg font-bold text-primary">{stats.games_played || 4}</p>
+                <p className="text-xs text-green-400 mt-1">+5 this week</p>
+              </div>
+            </div>
+
+            {/* Average Score */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Award size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Average Score</p>
+                <p className="text-lg font-bold text-primary">{stats.averageScore || Math.floor(stats.points / (stats.games_played || 1))}</p>
+                <p className="text-xs text-green-400 mt-1">Improving!</p>
+              </div>
+            </div>
+
+            {/* Play Time */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Calendar size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Play Time</p>
+                <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
+                <p className="text-xs text-green-400 mt-1">Getting better!</p>
+              </div>
+            </div>
+          </motion.div>
+        );
+      
+      case 'badges':
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+            {badgeProgressLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading progress...</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Badge Progress Summary */}
+                <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
+                  <h3 className="text-lg font-bold text-primary mb-2">Badge Progress</h3>
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div>
+                      <p className="text-secondary">Earned</p>
+                      <p className="text-accent font-bold">{ownedBadges.length}/3</p>
+                    </div>
+                    <div>
+                      <p className="text-secondary">Average Progress</p>
+                      <p className="text-accent font-bold">
+                        {Object.keys(badgeProgress).length > 0 
+                          ? Math.round(Object.values(badgeProgress).reduce((a, b) => a + b, 0) / Object.values(badgeProgress).length)
+                          : 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-secondary">Next Goal</p>
+                      <p className="text-accent font-bold">
+                        {ownedBadges.length < 3 ? `${3 - ownedBadges.length} badges` : 'Complete!'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Badge Cards with Progress */}
+                <div className="grid grid-cols-1 gap-3">
+                  {allBadges.map(badgeName => {
+                    const isOwned = ownedBadges.includes(badgeName);
+                    const progress = badgeProgress[badgeName] || 0;
+                    
+                    return (
+                      <div key={badgeName}>
+                        <BadgeCard badgeName={badgeName} isOwned={isOwned} />
+                        {!isOwned && progress > 0 && (
+                          <div className="mt-2 px-4">
+                            <div className="flex items-center justify-between text-xs text-secondary mb-1">
+                              <span>Progress</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <motion.div
+                                className="bg-accent h-2 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progress}%` }}
+                                transition={{ duration: 1, delay: 0.2 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        );
+      
+      case 'leaderboard':
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+            {/* Leaderboard Tabs */}
+            <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
+              {[
+                { id: 'global', label: 'Global', icon: Users },
+                { id: 'weekly', label: 'Weekly', icon: Calendar },
+                { id: 'friends', label: 'Friends', icon: Star }
+              ].map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setLeaderboardTab(tab.id);
+                      fetchLeaderboard(tab.id);
+                    }}
+                    className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
+                      leaderboardTab === tab.id 
+                        ? 'bg-accent text-background' 
+                        : 'text-secondary hover:text-primary'
+                    }`}
+                  >
+                    <TabIcon className="w-4 h-4 mr-1" />
+                    <span className="text-xs font-medium">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Add Friend Section - Only show in Friends tab */}
+            {leaderboardTab === 'friends' && (
+              <div className="bg-background rounded-lg border border-gray-600 p-3 mb-4">
+                <h4 className="text-sm font-bold text-primary mb-2">Add Friend</h4>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={friendUsername}
+                    onChange={(e) => setFriendUsername(e.target.value)}
+                    placeholder="Enter username (without @)"
+                    className="flex-1 bg-nav border border-gray-500 rounded-lg px-3 py-2 text-sm text-primary placeholder-secondary focus:border-accent focus:outline-none"
+                    disabled={isAddingFriend}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddFriend();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAddFriend}
+                    disabled={isAddingFriend || !friendUsername.trim()}
+                    className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAddingFriend ? (
+                      <LoaderCircle className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Add'
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-secondary mt-2">
+                  Add friends by their Telegram username to compete together
+                </p>
+              </div>
+            )}
+
+            {/* Leaderboard Content */}
+            {leaderboardLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading...</span>
+              </div>
+            ) : leaderboardData.length === 0 ? (
+              <div className="text-center py-8">
+                <Trophy className="w-12 h-12 text-secondary mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-primary mb-2">
+                  {leaderboardTab === 'friends' ? 'No Friends Yet' : 'No Players Yet'}
+                </h3>
+                <p className="text-secondary text-sm">
+                  {leaderboardTab === 'friends' 
+                    ? 'Add friends to see your private leaderboard!' 
+                    : 'Be the first to climb the leaderboard!'
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {leaderboardData.slice(0, 10).map((entry, index) => (
+                  <motion.div
+                    key={`${leaderboardTab}-${entry.rank}`}
+                    className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
+                      entry.isCurrentUser 
+                        ? 'bg-accent/20 border-accent' 
+                        : 'bg-background border-gray-600'
+                    }`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    {/* Rank */}
+                    <div className="flex items-center justify-center w-8 h-8 mr-3">
+                      {getRankIcon(entry.rank)}
+                    </div>
+
+                    {/* Player Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                          {entry.player.name}
+                        </p>
+                        {entry.isCurrentUser && (
+                          <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">
+                            YOU
+                          </span>
+                        )}
+                        {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                          <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">
+                            FRIEND
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
+                        {entry.badge && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
+                            {entry.badge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className="text-right mr-2">
+                      <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                        {entry.score.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-secondary">pts</p>
+                    </div>
+
+                    {/* Remove Friend Button (only in friends tab for non-current users) */}
+                    {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                      <button
+                        onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
+                        disabled={removingFriendId === entry.player.name.toLowerCase()}
+                        className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center"
+                        title="Remove friend"
+                      >
+                        {removingFriendId === entry.player.name.toLowerCase() ? (
+                          <LoaderCircle className="w-3 h-3 animate-spin" />
+                        ) : (
+                          '✕'
+                        )}
+                      </button>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* Stats Footer */}
+            {!leaderboardLoading && leaderboardData.length > 0 && (
+              <div className="bg-background rounded-lg p-3 border border-gray-600 text-center mt-4">
+                <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
+                  <div className="flex items-center">
+                    <Users className="w-3 h-3 mr-1" />
+                    <span>
+                      {leaderboardTab === 'friends' 
+                        ? `${leaderboardData.length} Friends` 
+                        : `${leaderboardData.length} Players`
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="w-3 h-3 mr-1" />
+                    <span>Updates hourly</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        );
+      
+      case 'tasks':
+        return (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+            <TasksPage />
+          </motion.div>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-6 bg-background text-primary">
+      {/* FIXED: Profile Header with Video Avatar Support -> simplified to always use IMG with fallback */}
+      <motion.div 
+        className="p-4 bg-nav rounded-lg border border-gray-700" 
+        initial={{ opacity: 0, y: -20 }} 
+        animate={{ opacity: 1, y: 0 }}
+      >
+        {/* Profile Section */}
+        <div className="flex items-center space-x-4">
+          {/* FIXED: Profile Photo - now static IMG with safe fallback */}
+          <div className="relative flex-shrink-0">
+            <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
+              <img
+                src={displayAvatar}
+                alt="Profile"
+                className="w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+              />
+            </div>
+            
+            {/* Sync indicator */}
+            {isSyncingAvatar && (
+              <div className="absolute -bottom-1 -right-1 bg-accent rounded-full p-1">
+                <LoaderCircle className="w-3 h-3 animate-spin text-background" />
+              </div>
+            )}
+          </div>
+          
+          {/* FIXED: User Info - EDITABLE with hybrid name */}
+          <div className="flex-1 min-w-0">
+            {isEditingName ? (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
+                  maxLength={50}
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') handleUpdateProfile();
+                    if (e.key === 'Escape') setIsEditingName(false);
+                  }}
+                />
+                <button
+                  onClick={handleUpdateProfile}
+                  disabled={isUpdatingName}
+                  className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => setIsEditingName(false)}
+                  className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors flex items-center"
+                >
+                  <Star className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-bold text-primary truncate">{displayName}</h1>
+                <button
+                  onClick={() => {
+                    setEditNameValue(displayName || '');
+                    setIsEditingName(true);
+                  }}
+                  className="text-secondary hover:text-accent transition-colors p-1"
+                  title="Edit name"
+                >
+                  <User className="w-4 h-4" />
+                </button>
+                {/* Dev Tools Button - Only for authorized developer */}
+                {telegramUser?.id === 6998637798 && (
+                  <button 
+                    onClick={() => window.location.href = '/dev-tools'}
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+                    title="Developer Tools"
+                  >
+                    Dev Tools
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
+            <div className="flex items-center mt-1">
+              <Star className="w-4 h-4 text-accent mr-1" />
+              <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* FIXED: Note about sync sources */}
+        <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+          <p className="text-xs text-secondary">
+            {telegramPhotoUrl || telegramFirstName ? (
+              <>
+                {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
+                 telegramPhotoUrl ? 'Avatar synced from Telegram' :
+                 'Name synced from Telegram'}
+                {(stats.avatar_url || stats.first_name) && ' • DB backup available'}
+              </>
+            ) : (
+              'Using stored profile data'
+            )}
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Tab Navigation */}
+      <motion.div 
+        className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
+        initial={{ opacity: 0, scale: 0.95 }} 
+        animate={{ opacity: 1, scale: 1 }} 
+        transition={{ delay: 0.1 }}
+      >
+        {[
+          { id: 'overview', label: 'Overview', icon: User },
+          { id: 'badges', label: 'Badges', icon: Award },
+          { id: 'leaderboard', label: 'Board', icon: Trophy },
+          { id: 'tasks', label: 'Tasks', icon: CheckSquare }
+        ].map((tab) => {
+          const TabIcon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-md transition-all duration-200 ${
+                activeTab === tab.id 
+                  ? 'bg-accent text-background' 
+                  : 'text-secondary hover:text-primary hover:bg-background/20'
+              }`}
+            >
+              <TabIcon className="w-4 h-4 mb-1" />
+              <span className="text-xs font-medium truncate">{tab.label}</span>
+            </button>
+          );
+        })}
+      </motion.div>
+
+      {/* Tab Content */}
+      <div className="min-h-[400px]">
+        {renderTabContent()}
+      </div>
+    </div>
+  );
 };
 
-// Start the application
-setupDatabase().then(startServer).catch(err => {
-  console.error('💥 Failed to start application:', err);
-  process.exit(1);
-});
+export default ProfilePage;
