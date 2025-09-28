@@ -354,12 +354,18 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// FIXED: Enhanced /api/validate with strict username requirements
+// FIXED: Enhanced /api/validate with strict username requirements + proper Telegram sync
 app.post('/api/validate', validateUser, async (req, res) => {
     try {
-        const { user } = req;
         const client = await pool.connect();
         try {
+            // Pull fresh Telegram user data from initDataUnsafe (not just req.user)
+            const tgData = req.body.initDataUnsafe?.user || {};
+            const telegramId = tgData.id || req.user?.id;
+            const telegramFirstName = tgData.first_name || req.user?.first_name;
+            const telegramLastName = tgData.last_name || req.user?.last_name;
+            const telegramUsername = tgData.username || null;
+
             // Helper function to check if username is invalid
             const isInvalidUsername = (username) => {
                 return !username || 
@@ -369,24 +375,24 @@ app.post('/api/validate', validateUser, async (req, res) => {
             };
 
             // REQUIREMENT 1 & 2: Block users without valid Telegram username
-            if (isInvalidUsername(user.username)) {
+            if (isInvalidUsername(telegramUsername)) {
                 return res.status(400).json({ 
                     error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
                     requiresUsername: true 
                 });
             }
 
-            let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
+            let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [telegramId]);
             let appUser;
             let dailyBonus = null;
 
             if (dbUserResult.rows.length === 0) {
                 // NEW USER: Create with valid Telegram username
-                console.log(`🆕 Creating new user: ${user.first_name} (@${user.username}) (${user.id})`);
+                console.log(`🆕 Creating new user: ${telegramFirstName} (@${telegramUsername}) (${telegramId})`);
                 
                 const insertResult = await client.query(
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
-                    [user.id, user.first_name, user.last_name, user.username]
+                    [telegramId, telegramFirstName, telegramLastName, telegramUsername]
                 );
                 appUser = insertResult.rows[0];
             } else {
@@ -395,54 +401,51 @@ app.post('/api/validate', validateUser, async (req, res) => {
                 
                 // REQUIREMENT 4: Check if existing user has bad username - reset immediately
                 if (isInvalidUsername(appUser.username)) {
-                    console.log(`🔄 User ${user.id} has invalid username "${appUser.username}" - resetting account`);
+                    console.log(`🔄 User ${telegramId} has invalid username "${appUser.username}" - resetting account`);
                     
                     const resetResult = await client.query(
                         `UPDATE users SET 
                          first_name = $1, last_name = $2, username = $3,
-                         points = 100, level = 1, daily_streak = 0, 
+                         points = 0, level = 1, daily_streak = 0, 
                          games_played = 0, high_score = 0, total_play_time = 0
                          WHERE telegram_id = $4 RETURNING *`,
-                        [user.first_name, user.last_name, user.username, user.id]
+                        [telegramFirstName, telegramLastName, telegramUsername, telegramId]
                     );
                     appUser = resetResult.rows[0];
-                    console.log(`✅ Account reset completed for user ${user.id}`);
+                    console.log(`✅ Account reset completed for user ${telegramId}`);
                 }
                 // REQUIREMENT 3: Check if username changed - reset account
-                else if (user.username !== appUser.username) {
-                    console.log(`🔄 Username changed for user ${user.id}: "${appUser.username}" → "${user.username}" - resetting account`);
+                else if (telegramUsername !== appUser.username) {
+                    console.log(`🔄 Username changed for user ${telegramId}: "${appUser.username}" → "${telegramUsername}" - resetting account`);
                     
                     const resetResult = await client.query(
                         `UPDATE users SET 
                          first_name = $1, last_name = $2, username = $3,
-                         points = 100, level = 1, daily_streak = 0, 
+                         points = 0, level = 1, daily_streak = 0, 
                          games_played = 0, high_score = 0, total_play_time = 0
                          WHERE telegram_id = $4 RETURNING *`,
-                        [user.first_name, user.last_name, user.username, user.id]
+                        [telegramFirstName, telegramLastName, telegramUsername, telegramId]
                     );
                     appUser = resetResult.rows[0];
-                    console.log(`✅ Account reset for username change completed for user ${user.id}`);
+                    console.log(`✅ Account reset for username change completed for user ${telegramId}`);
                 }
                 // Normal name sync (no username change)
                 else {
-                    const telegramFirstName = user.first_name || appUser.first_name;
-                    const telegramLastName = user.last_name || appUser.last_name;
-                    
                     const nameNeedsUpdate = (
                         telegramFirstName !== appUser.first_name ||
                         telegramLastName !== appUser.last_name
                     );
                     
                     if (nameNeedsUpdate) {
-                        console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
+                        console.log(`🔄 Syncing name for user ${telegramId}: "${appUser.first_name}" → "${telegramFirstName}"`);
                         
                         const nameUpdateResult = await client.query(
                             `UPDATE users SET first_name = $1, last_name = $2 WHERE telegram_id = $3 RETURNING *`,
-                            [telegramFirstName, telegramLastName, user.id]
+                            [telegramFirstName, telegramLastName, telegramId]
                         );
                         appUser = nameUpdateResult.rows[0];
                         
-                        console.log(`✅ Name sync completed for user ${user.id}`);
+                        console.log(`✅ Name sync completed for user ${telegramId}`);
                     }
                     
                     // Handle daily bonus logic (only if no reset occurred)
@@ -463,7 +466,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
                         
                         const updateResult = await client.query(
                             'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
-                            [user.id, newStreak, newPoints]
+                            [telegramId, newStreak, newPoints]
                         );
                         appUser = updateResult.rows[0];
                     }
