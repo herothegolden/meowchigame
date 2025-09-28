@@ -163,10 +163,9 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode
+  // Mock data for demo mode - FIXED: removed problematic username field
   const MOCK_STATS = {
     first_name: 'Demo User',
-    username: 'demouser',
     points: 4735,
     level: 1,
     daily_streak: 1,
@@ -539,15 +538,10 @@ const ProfilePage = () => {
 
   const fetchProfileData = useCallback(async () => {
     try {
+      // FIXED: Instead of falling back to mock data, show proper error for missing auth
       if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using mock profile data');
-        setProfileData({
-          stats: MOCK_STATS,
-          inventory: [],
-          allItems: MOCK_ITEMS,
-          boosterActive: false,
-          ownedBadges: []
-        });
+        console.log('Missing Telegram authentication or backend URL');
+        setError('Authentication required. Please open this app through Telegram.');
         setIsConnected(false);
         setLoading(false);
         return;
@@ -591,15 +585,6 @@ const ProfilePage = () => {
     } catch (err) {
       console.error('Profile fetch error:', err);
       setError(err.message);
-      
-      // Fallback to demo data
-      setProfileData({
-        stats: MOCK_STATS,
-        inventory: [],
-        allItems: MOCK_ITEMS,
-        boosterActive: false,
-        ownedBadges: []
-      });
       setIsConnected(false);
     } finally {
       setLoading(false);
