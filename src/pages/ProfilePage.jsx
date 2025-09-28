@@ -61,44 +61,53 @@ const BadgeCard = ({ badgeName, isOwned }) => {
     >
       <div className="text-center">
         <div className="text-3xl mb-2">{badge.icon}</div>
-        <h3 className={`font-bold ${isOwned ? badge.color : 'text-gray-400'}`}>
+        <h3 className={`font-bold ${isOwned ? badge.color : 'text-gray-500'}`}>
           {badge.title}
         </h3>
         <p className="text-xs text-secondary mt-1">{badge.description}</p>
-        {!isOwned && (
-          <div className="text-xs text-gray-500 mt-2">Not unlocked</div>
+        {isOwned && (
+          <div className="flex items-center justify-center mt-2 text-accent">
+            <Award className="w-4 h-4 mr-1" />
+            <span className="text-xs font-bold">OWNED</span>
+          </div>
         )}
       </div>
     </motion.div>
   );
 };
 
-const InventoryItemCard = ({ item, onActivate, isActivating }) => {
-  const isDisabled = item.type === 'permanent';
-  
+const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
+  const [isActivating, setIsActivating] = useState(false);
+
+  const handleActivate = async () => {
+    setIsActivating(true);
+    await onActivate(item.id);
+    setIsActivating(false);
+  };
+
+  const getItemIcon = (itemId) => {
+    switch(itemId) {
+      case 4: return <ChevronsUp size={28} />; // Double Points
+      default: return <Star size={28} />;
+    }
+  };
+
   return (
-    <div className="bg-nav border border-gray-700 p-4 rounded-lg">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <h3 className="font-bold text-primary">{item.name}</h3>
+    <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
+      <div className="flex items-center">
+        <div className="mr-4 text-accent">{getItemIcon(item.id)}</div>
+        <div>
+          <p className="font-bold text-primary">{item.name}</p>
           <p className="text-sm text-secondary">{item.description}</p>
-          <p className="text-xs text-accent mt-1">
-            {item.category === 'badge' ? 'Cosmetic' : 'Consumable'}
-          </p>
-        </div>
-        <div className="ml-4">
-          <div className="text-center mb-2">
-            <ChevronsUp className="w-6 h-6 text-accent mx-auto" />
-            <p className="text-xs text-secondary">x{item.quantity || 1}</p>
-          </div>
+          <p className="text-xs text-accent mt-1">Quantity: {quantity}</p>
         </div>
       </div>
       
-      <button
-        onClick={() => onActivate(item.id)}
-        disabled={isActivating || isDisabled}
-        className={`w-full mt-3 py-2 px-4 rounded-lg font-bold transition-all duration-200 flex items-center justify-center ${
-          isDisabled 
+      <button 
+        onClick={handleActivate}
+        disabled={disabled || isActivating}
+        className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
+          disabled 
             ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
             : 'bg-accent text-background hover:scale-105'
         }`}
@@ -154,10 +163,10 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode - FIXED: replaced 'demouser' with neutral placeholder
+  // Mock data for demo mode
   const MOCK_STATS = {
     first_name: 'Demo User',
-    username: 'guest',
+    username: 'demouser',
     points: 4735,
     level: 1,
     daily_streak: 1,
@@ -181,13 +190,15 @@ const ProfilePage = () => {
   ];
 
   // FIXED: Sync avatar from Telegram to backend (only when static URL exists)
-  const syncAvatarFromTelegram = useCallback(async () => {
-    if (!telegramPhotoUrl || !tg?.initData || !BACKEND_URL || isSyncingAvatar) {
+  const syncTelegramAvatar = async () => {
+    // CHANGE: early return if no static avatar URL provided by Telegram
+    if (!telegramPhotoUrl || !isConnected || !tg?.initData || !BACKEND_URL) {
       return;
     }
 
+    setIsSyncingAvatar(true);
     try {
-      setIsSyncingAvatar(true);
+      console.log('📸 Syncing Telegram avatar to backend:', telegramPhotoUrl);
       
       const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
@@ -200,69 +211,63 @@ const ProfilePage = () => {
 
       if (res.ok) {
         const result = await res.json();
-        console.log('✅ Avatar synced from Telegram:', result.avatarUrl);
-        setDisplayAvatar(result.avatarUrl);
+        console.log('✅ Avatar synced successfully:', result.avatarUrl);
         
-        // Update profile data
+        // Update local state
         setProfileData(prev => ({
           ...prev,
           stats: { ...prev.stats, avatar_url: result.avatarUrl }
         }));
+      } else {
+        console.warn('⚠️ Avatar sync failed:', res.status);
       }
-    } catch (err) {
-      console.error('Avatar sync error:', err);
+    } catch (error) {
+      console.error('❌ Avatar sync error:', error);
     } finally {
       setIsSyncingAvatar(false);
     }
-  }, [telegramPhotoUrl, tg, isSyncingAvatar]);
+  };
 
-  // FIXED: Initialize display values and handle Telegram sync
+  // FIXED: Update display values based on Telegram + DB data
   useEffect(() => {
-    const stats = profileData.stats || MOCK_STATS;
-    
-    // Set display name: priority -> custom name -> Telegram name -> fallback
-    const finalDisplayName = stats.first_name || telegramFirstName || 'Guest User';
-    setDisplayName(finalDisplayName);
-    
-    // Set display avatar: priority -> uploaded avatar -> Telegram photo -> default
-    const finalDisplayAvatar = stats.avatar_url || telegramPhotoUrl || DEFAULT_AVATAR;
-    setDisplayAvatar(finalDisplayAvatar);
-    
-    // Auto-sync Telegram avatar if we have one and no stored avatar
-    if (telegramPhotoUrl && !stats.avatar_url && isConnected) {
-      syncAvatarFromTelegram();
+    if (profileData.stats) {
+      // Name: Use Telegram if available, otherwise DB
+      const finalName = telegramFirstName || profileData.stats.first_name || 'User';
+      setDisplayName(finalName);
+      
+      // CHANGE: Avatar selection with safe fallback
+      const finalAvatar = (telegramPhotoUrl && telegramPhotoUrl.trim() !== '')
+        ? telegramPhotoUrl
+        : (profileData.stats.avatar_url || DEFAULT_AVATAR);
+      setDisplayAvatar(finalAvatar);
+      
+      // CHANGE: Only sync when Telegram actually provided a static photo URL
+      if (telegramPhotoUrl && telegramPhotoUrl !== profileData.stats.avatar_url) {
+        syncTelegramAvatar();
+      }
     }
-  }, [profileData.stats, telegramFirstName, telegramPhotoUrl, syncAvatarFromTelegram, isConnected]);
+  }, [profileData.stats, telegramPhotoUrl, telegramFirstName, isConnected]);
 
-  const fetchLeaderboard = async (type = 'global') => {
-    setLeaderboardLoading(true);
-    
-    try {
-      if (!tg?.initData || !BACKEND_URL) {
-        setLeaderboardData(MOCK_LEADERBOARD);
-        setLeaderboardLoading(false);
-        return;
-      }
-
-      const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, type }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboardData(data.leaderboard || []);
-      } else {
-        setLeaderboardData(MOCK_LEADERBOARD);
-      }
-    } catch (err) {
-      setLeaderboardData(MOCK_LEADERBOARD);
-    } finally {
-      setLeaderboardLoading(false);
+  // Leaderboard helper functions
+  const getRankIcon = (rank) => {
+    switch(rank) {
+      case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
+      case 2: return <Medal className="w-5 h-5 text-gray-300" />;
+      case 3: return <Medal className="w-5 h-5 text-amber-600" />;
+      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
     }
   };
 
+  const getBadgeColor = (badge) => {
+    switch(badge) {
+      case 'Legend': return 'text-purple-400 bg-purple-400/20';
+      case 'Epic': return 'text-blue-400 bg-blue-400/20';
+      case 'Rare': return 'text-green-400 bg-green-400/20';
+      default: return 'text-gray-400 bg-gray-400/20';
+    }
+  };
+
+  // Badge progress fetching
   const fetchBadgeProgress = async () => {
     setBadgeProgressLoading(true);
     
@@ -416,6 +421,35 @@ const ProfilePage = () => {
       });
     } finally {
       setRemovingFriendId(null);
+    }
+  };
+
+  const fetchLeaderboard = async (type = 'global') => {
+    setLeaderboardLoading(true);
+    
+    try {
+      if (!tg?.initData || !BACKEND_URL) {
+        setLeaderboardData(MOCK_LEADERBOARD);
+        setLeaderboardLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, type }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data.leaderboard || []);
+      } else {
+        setLeaderboardData(MOCK_LEADERBOARD);
+      }
+    } catch (err) {
+      setLeaderboardData(MOCK_LEADERBOARD);
+    } finally {
+      setLeaderboardLoading(false);
     }
   };
 
@@ -723,33 +757,33 @@ const ProfilePage = () => {
 
             {/* Games Played */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
-              <div className="mr-4 text-accent"><Package size={24} /></div>
+              <div className="mr-4 text-primary"><Package size={24} /></div>
               <div>
                 <p className="text-sm text-secondary">Games Played</p>
-                <p className="text-lg font-bold text-primary">{stats.games_played || 28}</p>
-                <p className="text-xs text-green-400 mt-1">Keep going!</p>
+                <p className="text-lg font-bold text-primary">{stats.games_played || 4}</p>
+                <p className="text-xs text-green-400 mt-1">+5 this week</p>
               </div>
             </div>
 
-            {/* Inventory Section */}
-            {activatableItems.length > 0 && (
-              <div className="col-span-2">
-                <h3 className="text-lg font-bold text-primary mb-3 flex items-center">
-                  <Zap className="w-5 h-5 mr-2 text-accent" />
-                  Active Items
-                </h3>
-                <div className="space-y-3">
-                  {activatableItems.map(item => (
-                    <InventoryItemCard 
-                      key={item.id} 
-                      item={item} 
-                      onActivate={handleActivateItem}
-                      isActivating={false}
-                    />
-                  ))}
-                </div>
+            {/* Average Score */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Award size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Average Score</p>
+                <p className="text-lg font-bold text-primary">{stats.averageScore || Math.floor(stats.points / (stats.games_played || 1))}</p>
+                <p className="text-xs text-green-400 mt-1">Improving!</p>
               </div>
-            )}
+            </div>
+
+            {/* Play Time */}
+            <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
+              <div className="mr-4 text-primary"><Calendar size={24} /></div>
+              <div>
+                <p className="text-sm text-secondary">Play Time</p>
+                <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
+                <p className="text-xs text-green-400 mt-1">Getting better!</p>
+              </div>
+            </div>
           </motion.div>
         );
       
@@ -757,22 +791,22 @@ const ProfilePage = () => {
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
             {badgeProgressLoading ? (
-              <div className="text-center py-8">
-                <LoaderCircle className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
-                <p className="text-secondary">Loading badge progress...</p>
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading progress...</span>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* Progress Overview */}
-                <div className="bg-nav p-4 rounded-lg border border-gray-700">
-                  <h3 className="text-lg font-bold text-primary mb-3">Badge Progress</h3>
-                  <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                {/* Badge Progress Summary */}
+                <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
+                  <h3 className="text-lg font-bold text-primary mb-2">Badge Progress</h3>
+                  <div className="grid grid-cols-3 gap-4 text-center text-sm">
                     <div>
-                      <p className="text-secondary">Owned</p>
+                      <p className="text-secondary">Earned</p>
                       <p className="text-accent font-bold">{ownedBadges.length}/3</p>
                     </div>
                     <div>
-                      <p className="text-secondary">Progress</p>
+                      <p className="text-secondary">Average Progress</p>
                       <p className="text-accent font-bold">
                         {Object.keys(badgeProgress).length > 0 
                           ? Math.round(Object.values(badgeProgress).reduce((a, b) => a + b, 0) / Object.values(badgeProgress).length)
@@ -843,126 +877,161 @@ const ProfilePage = () => {
                     className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
                       leaderboardTab === tab.id 
                         ? 'bg-accent text-background' 
-                        : 'text-secondary hover:text-primary hover:bg-background/20'
+                        : 'text-secondary hover:text-primary'
                     }`}
                   >
                     <TabIcon className="w-4 h-4 mr-1" />
-                    <span className="text-sm font-medium">{tab.label}</span>
+                    <span className="text-xs font-medium">{tab.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Friends Tab: Add Friend Form */}
+            {/* Add Friend Section - Only show in Friends tab */}
             {leaderboardTab === 'friends' && (
-              <div className="bg-background p-4 rounded-lg border border-gray-600 mb-4">
-                <h3 className="font-bold text-primary mb-3">Add Friend</h3>
+              <div className="bg-background rounded-lg border border-gray-600 p-3 mb-4">
+                <h4 className="text-sm font-bold text-primary mb-2">Add Friend</h4>
                 <div className="flex space-x-2">
                   <input
                     type="text"
-                    placeholder="Enter Telegram username"
                     value={friendUsername}
                     onChange={(e) => setFriendUsername(e.target.value)}
-                    className="flex-1 bg-nav border border-gray-600 rounded-lg px-3 py-2 text-primary focus:outline-none focus:border-accent"
+                    placeholder="Enter username (without @)"
+                    className="flex-1 bg-nav border border-gray-500 rounded-lg px-3 py-2 text-sm text-primary placeholder-secondary focus:border-accent focus:outline-none"
+                    disabled={isAddingFriend}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddFriend();
+                      }
+                    }}
                   />
                   <button
                     onClick={handleAddFriend}
                     disabled={isAddingFriend || !friendUsername.trim()}
-                    className="bg-accent text-background px-4 py-2 rounded-lg font-bold hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isAddingFriend ? <LoaderCircle className="w-4 h-4 animate-spin" /> : 'Add'}
+                    {isAddingFriend ? (
+                      <LoaderCircle className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Add'
+                    )}
                   </button>
                 </div>
+                <p className="text-xs text-secondary mt-2">
+                  Add friends by their Telegram username to compete together
+                </p>
               </div>
             )}
 
             {/* Leaderboard Content */}
             {leaderboardLoading ? (
-              <div className="text-center py-8">
-                <LoaderCircle className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
-                <p className="text-secondary">Loading leaderboard...</p>
+              <div className="flex items-center justify-center py-8">
+                <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
+                <span className="text-secondary text-sm">Loading...</span>
               </div>
             ) : leaderboardData.length === 0 ? (
               <div className="text-center py-8">
-                <Trophy className="w-16 h-16 text-secondary mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-primary mb-2">No Players Yet</h3>
-                <p className="text-secondary">Be the first to climb the leaderboard!</p>
+                <Trophy className="w-12 h-12 text-secondary mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-primary mb-2">
+                  {leaderboardTab === 'friends' ? 'No Friends Yet' : 'No Players Yet'}
+                </h3>
+                <p className="text-secondary text-sm">
+                  {leaderboardTab === 'friends' 
+                    ? 'Add friends to see your private leaderboard!' 
+                    : 'Be the first to climb the leaderboard!'
+                  }
+                </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {leaderboardData.map((entry, index) => (
+              <div className="space-y-2">
+                {leaderboardData.slice(0, 10).map((entry, index) => (
                   <motion.div
-                    key={entry.rank || index}
-                    className={`p-4 rounded-lg border transition-all duration-200 ${
+                    key={`${leaderboardTab}-${entry.rank}`}
+                    className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
                       entry.isCurrentUser 
-                        ? 'bg-accent/10 border-accent text-accent' 
-                        : 'bg-nav border-gray-700 hover:border-gray-600'
+                        ? 'bg-accent/20 border-accent' 
+                        : 'bg-background border-gray-600'
                     }`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-background text-xs font-bold">
-                          {entry.rank <= 3 ? (
-                            entry.rank === 1 ? <Crown className="w-4 h-4 text-yellow-400" /> :
-                            entry.rank === 2 ? <Medal className="w-4 h-4 text-gray-400" /> :
-                            <Medal className="w-4 h-4 text-orange-400" />
-                          ) : (
-                            entry.rank
-                          )}
-                        </div>
-                        <div>
-                          <p className={`font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
-                            {entry.player?.name || entry.username || 'Anonymous'}
-                          </p>
-                          <p className="text-xs text-secondary">
-                            Level {entry.player?.level || entry.level || 1}
-                            {entry.badge && <span className="ml-2 text-accent">• {entry.badge}</span>}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
-                          {entry.score.toLocaleString()}
-                        </p>
-                        <p className="text-xs text-secondary">points</p>
-                      </div>
-                      {/* Friend Management for Friends Tab */}
-                      {leaderboardTab === 'friends' && !entry.isCurrentUser && (
-                        <button
-                          onClick={() => handleRemoveFriend(entry.username)}
-                          disabled={removingFriendId === entry.username}
-                          className="ml-3 text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
-                        >
-                          {removingFriendId === entry.username ? (
-                            <LoaderCircle className="w-4 h-4 animate-spin" />
-                          ) : (
-                            '×'
-                          )}
-                        </button>
-                      )}
+                    {/* Rank */}
+                    <div className="flex items-center justify-center w-8 h-8 mr-3">
+                      {getRankIcon(entry.rank)}
                     </div>
+
+                    {/* Player Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                          {entry.player.name}
+                        </p>
+                        {entry.isCurrentUser && (
+                          <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">
+                            YOU
+                          </span>
+                        )}
+                        {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                          <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">
+                            FRIEND
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
+                        {entry.badge && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
+                            {entry.badge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className="text-right mr-2">
+                      <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                        {entry.score.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-secondary">pts</p>
+                    </div>
+
+                    {/* Remove Friend Button (only in friends tab for non-current users) */}
+                    {leaderboardTab === 'friends' && !entry.isCurrentUser && (
+                      <button
+                        onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
+                        disabled={removingFriendId === entry.player.name.toLowerCase()}
+                        className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center"
+                        title="Remove friend"
+                      >
+                        {removingFriendId === entry.player.name.toLowerCase() ? (
+                          <LoaderCircle className="w-3 h-3 animate-spin" />
+                        ) : (
+                          '✕'
+                        )}
+                      </button>
+                    )}
                   </motion.div>
                 ))}
-                
-                {/* Footer Info */}
-                <div className="text-center pt-4">
-                  <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
-                    <div className="flex items-center">
-                      <Users className="w-3 h-3 mr-1" />
-                      <span>
-                        {leaderboardTab === 'friends' 
-                          ? `${leaderboardData.length} Friends` 
-                          : `${leaderboardData.length} Players`
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center">
-                      <Clock className="w-3 h-3 mr-1" />
-                      <span>Updates hourly</span>
-                    </div>
+              </div>
+            )}
+
+            {/* Stats Footer */}
+            {!leaderboardLoading && leaderboardData.length > 0 && (
+              <div className="bg-background rounded-lg p-3 border border-gray-600 text-center mt-4">
+                <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
+                  <div className="flex items-center">
+                    <Users className="w-3 h-3 mr-1" />
+                    <span>
+                      {leaderboardTab === 'friends' 
+                        ? `${leaderboardData.length} Friends` 
+                        : `${leaderboardData.length} Players`
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="w-3 h-3 mr-1" />
+                    <span>Updates hourly</span>
                   </div>
                 </div>
               </div>
@@ -1014,29 +1083,32 @@ const ProfilePage = () => {
           {/* FIXED: User Info - EDITABLE with hybrid name */}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
-              <div className="space-y-2">
+              <div className="flex items-center space-x-2">
                 <input
                   type="text"
                   value={editNameValue}
                   onChange={(e) => setEditNameValue(e.target.value)}
-                  className="w-full bg-background border border-gray-600 rounded px-3 py-1 text-primary focus:outline-none focus:border-accent"
-                  placeholder="Enter your name"
+                  className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
+                  maxLength={50}
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') handleUpdateProfile();
+                    if (e.key === 'Escape') setIsEditingName(false);
+                  }}
                 />
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleUpdateProfile}
-                    disabled={isUpdatingName}
-                    className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors flex items-center disabled:opacity-50"
-                  >
-                    {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={() => setIsEditingName(false)}
-                    className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors flex items-center"
-                  >
-                    <Star className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={handleUpdateProfile}
+                  disabled={isUpdatingName}
+                  className="bg-accent text-background px-3 py-1 rounded font-bold hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {isUpdatingName ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => setIsEditingName(false)}
+                  className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors flex items-center"
+                >
+                  <Star className="w-4 h-4" />
+                </button>
               </div>
             ) : (
               <div className="flex items-center space-x-2">
