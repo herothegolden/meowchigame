@@ -4,13 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#FDF6E3" />
-    <meta name="background-color" content="#FDF6E3" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <title>Meowchi Cookie Club</title>
+    
+    <!-- IMMEDIATE TELEGRAM READY CALL - Eliminates black screen -->
+    <script>
+      // Tell Telegram to show our content immediately (before any rendering)
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        console.log('✅ Telegram WebApp ready() called immediately');
+      }
+    </script>
   </head>
   <body style="background-color: #FDF6E3 !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden;">
     
-    <!-- INSTANT LOADING SCREEN - Covers black screen immediately -->
+    <!-- INSTANT LOADING SCREEN - Shows immediately after ready() -->
     <div style="
       position: fixed !important;
       top: 0 !important;
@@ -82,12 +90,6 @@
           animation: pulse3 1.5s ease-in-out infinite !important;
         "></div>
       </div>
-      
-      <!-- Floating Cookie Crumbs -->
-      <div style="position: absolute; top: 10%; left: 15%; width: 8px; height: 8px; background-color: #F59E0B; border-radius: 50%; opacity: 0.6; animation: float1 4s ease-in-out infinite;"></div>
-      <div style="position: absolute; top: 20%; right: 20%; width: 8px; height: 8px; background-color: #F59E0B; border-radius: 50%; opacity: 0.6; animation: float2 4s ease-in-out infinite;"></div>
-      <div style="position: absolute; bottom: 30%; left: 10%; width: 8px; height: 8px; background-color: #F59E0B; border-radius: 50%; opacity: 0.6; animation: float3 4s ease-in-out infinite;"></div>
-      <div style="position: absolute; bottom: 15%; right: 15%; width: 8px; height: 8px; background-color: #F59E0B; border-radius: 50%; opacity: 0.6; animation: float4 4s ease-in-out infinite;"></div>
     </div>
 
     <!-- React App Root -->
@@ -113,40 +115,34 @@
         50% { opacity: 1; transform: scale(1.2); }
         animation-delay: 0.4s;
       }
-      @keyframes float1 {
-        0%, 100% { transform: translateY(0px); opacity: 0.6; }
-        50% { transform: translateY(-20px); opacity: 0.3; }
-      }
-      @keyframes float2 {
-        0%, 100% { transform: translateY(0px); opacity: 0.6; }
-        50% { transform: translateY(-15px); opacity: 0.4; }
-        animation-delay: 0.5s;
-      }
-      @keyframes float3 {
-        0%, 100% { transform: translateY(0px); opacity: 0.6; }
-        50% { transform: translateY(-25px); opacity: 0.2; }
-        animation-delay: 1s;
-      }
-      @keyframes float4 {
-        0%, 100% { transform: translateY(0px); opacity: 0.6; }
-        50% { transform: translateY(-18px); opacity: 0.5; }
-        animation-delay: 1.5s;
-      }
     </style>
+
+    <!-- Additional Telegram Configuration -->
+    <script>
+      // Additional Telegram WebApp configuration
+      if (window.Telegram && window.Telegram.WebApp) {
+        // Expand WebApp to full screen
+        window.Telegram.WebApp.expand();
+        
+        // Set header color to match our theme
+        window.Telegram.WebApp.setHeaderColor('#FDF6E3');
+        
+        // Disable vertical swipes to prevent accidental closure
+        window.Telegram.WebApp.disableVerticalSwipes();
+        
+        console.log('📱 Telegram WebApp configured for immediate display');
+      }
+    </script>
 
     <script type="module" src="/src/main.jsx"></script>
     
     <!-- Hide instant loading when React takes over -->
     <script>
-      // Hide instant loading screen when React mounts
-      let hideTimeout;
-      
       function checkAndHideLoading() {
         const instantLoading = document.getElementById('instant-loading');
         const root = document.getElementById('root');
         
         if (root && root.children.length > 0) {
-          // React has mounted, hide instant loading
           if (instantLoading) {
             instantLoading.style.opacity = '0';
             instantLoading.style.transition = 'opacity 0.3s ease';
@@ -159,9 +155,8 @@
         return false;
       }
       
-      // Check immediately
+      // Check immediately and periodically
       if (!checkAndHideLoading()) {
-        // Check every 50ms
         const checkInterval = setInterval(() => {
           if (checkAndHideLoading()) {
             clearInterval(checkInterval);
