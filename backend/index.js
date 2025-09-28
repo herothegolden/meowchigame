@@ -234,7 +234,7 @@ const setupDatabase = async () => {
     `);
     
     // 11. FIXED: PROPER CLEANUP OF ITEM ID 2 (Extra Time +20s)
-    console.log('🛒 Setting up shop items...');
+    console.log('🛠️ Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
@@ -1143,6 +1143,67 @@ app.post('/api/use-time-booster', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/use-time-booster:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// NEW: Use Cookie Bomb endpoint for mid-game bomb consumption
+app.post('/api/use-bomb', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    
+    if (!itemId || itemId !== 3) {
+      return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check and consume the item from inventory
+      const inventoryResult = await client.query(
+        `DELETE FROM user_inventory 
+         WHERE id = (
+           SELECT id FROM user_inventory 
+           WHERE user_id = $1 AND item_id = $2 
+           LIMIT 1
+         ) RETURNING id`,
+        [user.id, itemId]
+      );
+      
+      if (inventoryResult.rowCount === 0) {
+        throw new Error('You do not own this item.');
+      }
+
+      // Record usage in history
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Cookie Bomb')`,
+        [user.id, itemId]
+      );
+      
+      await client.query('COMMIT');
+      
+      console.log(`💥 Cookie Bomb used by user ${user.id}`);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Cookie Bomb used successfully!'
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const knownErrors = ['You do not own this item.'];
+      if (knownErrors.includes(error.message)) {
+          return res.status(400).json({ success: false, error: error.message });
+      }
+      console.error('🚨 Error in /api/use-bomb:', error);
+      res.status(500).json({ success: false, error: 'Internal server error.' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/use-bomb:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
