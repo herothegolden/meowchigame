@@ -233,12 +233,31 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 11. FIXED: Populate shop items with proper foreign key handling
+    // 11. FIXED: PROPER CLEANUP OF ITEM ID 2 (Extra Time +20s)
     console.log('🛒 Setting up shop items...');
     
     // Check if shop_items table has any data
     const existingItemsCount = await client.query('SELECT COUNT(*) FROM shop_items');
     const itemCount = parseInt(existingItemsCount.rows[0].count);
+    
+    // FIXED: Check if item ID 2 exists and needs cleanup
+    const item2Check = await client.query('SELECT id FROM shop_items WHERE id = 2');
+    
+    if (item2Check.rowCount > 0) {
+      console.log('🗑️ Cleaning up deprecated Extra Time +20s (item ID 2)...');
+      
+      // Step 1: Delete from item_usage_history first (dependent table)
+      const historyDeleteResult = await client.query('DELETE FROM item_usage_history WHERE item_id = 2');
+      console.log(`🗑️ Removed ${historyDeleteResult.rowCount} usage history records for item ID 2`);
+      
+      // Step 2: Delete from user_inventory (dependent table)
+      const inventoryDeleteResult = await client.query('DELETE FROM user_inventory WHERE item_id = 2');
+      console.log(`🗑️ Removed ${inventoryDeleteResult.rowCount} inventory records for item ID 2`);
+      
+      // Step 3: Now safe to delete from shop_items (parent table)
+      const itemDeleteResult = await client.query('DELETE FROM shop_items WHERE id = 2');
+      console.log(`🗑️ Removed item ID 2 from shop_items table (${itemDeleteResult.rowCount} record)`);
+    }
     
     if (itemCount === 0) {
       // Table is empty, safe to insert
@@ -255,9 +274,9 @@ const setupDatabase = async () => {
       
       await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
     } else {
-      console.log(`📦 Shop items already exist (${itemCount} items), updating if needed...`);
+      console.log(`📦 Shop items table updated, ensuring correct items exist...`);
       
-      // Update existing items without deleting (safe for production) - REMOVED item ID 2
+      // Update existing items without item ID 2 (safe upsert)
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -273,10 +292,6 @@ const setupDatabase = async () => {
         icon_name = EXCLUDED.icon_name,
         type = EXCLUDED.type
       `);
-      
-      // REMOVE Extra Time +20s (item ID 2) completely from shop_items if it exists
-      await client.query('DELETE FROM shop_items WHERE id = 2');
-      console.log('🗑️ Removed Extra Time +20s (item ID 2) from shop_items');
     }
 
     // 12. USER TASKS SYSTEM: User Tasks Table for Main Tasks tracking
@@ -295,7 +310,7 @@ const setupDatabase = async () => {
       );
     `);
 
-    console.log('✅ Enhanced database setup complete with tasks system!');
+    console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
     process.exit(1);
@@ -757,8 +772,8 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
 
       let inventory = inventoryResult.rows;
       
-      // FILTER OUT Extra Time +20s (item_id: 2) from inventory response
-      inventory = inventory.filter(item => item.item_id !== 2);
+      // FILTER OUT Extra Time +20s (item_id: 2) from inventory response - NOT NEEDED ANYMORE since we deleted the records
+      // inventory = inventory.filter(item => item.item_id !== 2);
 
       const shopData = {
         items: itemsResult.rows,
@@ -1296,18 +1311,18 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
         client.query(`
           SELECT item_id, COUNT(*) as quantity 
           FROM user_inventory 
-          WHERE user_id = $1 AND item_id != 2
+          WHERE user_id = $1
           GROUP BY item_id
-        `, [user.id]), // FILTER OUT item_id 2
+        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
         client.query(`
           SELECT item_name, COUNT(*) as usage_count 
           FROM item_usage_history 
-          WHERE user_id = $1 AND item_id != 2
+          WHERE user_id = $1
           GROUP BY item_name 
           ORDER BY usage_count DESC 
           LIMIT 1
-        `, [user.id]), // FILTER OUT item_id 2
-        client.query('SELECT id, price FROM shop_items WHERE id != 2') // FILTER OUT item_id 2
+        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
+        client.query('SELECT id, price FROM shop_items') // No longer need to filter since item 2 is deleted
       ]);
       
       const inventory = inventoryResult.rows;
@@ -1347,10 +1362,10 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
       const historyResult = await client.query(`
         SELECT item_name, used_at, game_score
         FROM item_usage_history 
-        WHERE user_id = $1 AND item_id != 2
+        WHERE user_id = $1
         ORDER BY used_at DESC 
         LIMIT 20
-      `, [user.id]); // FILTER OUT item_id 2
+      `, [user.id]); // No longer need to filter item_id != 2 since records are deleted
       
       res.status(200).json(historyResult.rows);
 
