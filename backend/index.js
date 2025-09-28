@@ -386,18 +386,20 @@ app.post('/api/validate', async (req, res) => {
         );
       };
 
-      // REQUIREMENT 1 & 2: Block users without valid Telegram username
-      if (isInvalidUsername(user.username)) {
+      // Check if user exists first
+      let dbUserResult = await client.query(
+        'SELECT * FROM users WHERE telegram_id = $1',
+        [user.id]
+      );
+
+      // REQUIREMENT 1 & 2: Block NEW users without valid Telegram username
+      if (dbUserResult.rows.length === 0 && isInvalidUsername(user.username)) {
         return res.status(400).json({
           error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
           requiresUsername: true,
         });
       }
 
-      let dbUserResult = await client.query(
-        'SELECT * FROM users WHERE telegram_id = $1',
-        [user.id]
-      );
       let appUser;
       let dailyBonus = null;
 
