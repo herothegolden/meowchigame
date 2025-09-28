@@ -37,19 +37,12 @@ function App() {
     return () => clearInterval(textInterval);
   }, [isLoading, loadingTexts.length]);
 
-  // Hide static loading and start React loading
+  // React takes over from instant loading
   useEffect(() => {
-    // Hide static loading immediately when React mounts
-    const staticLoading = document.getElementById('static-loading');
-    if (staticLoading) {
-      staticLoading.style.display = 'none';
-    }
-    document.body.classList.add('react-loaded');
-
-    // Continue with React loading for 2.5 more seconds
+    // Start React loading immediately (instant loading will fade out automatically)
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
-    }, 2500); // Reduced since static loading already showed for ~1s
+    }, 2500); // Total loading time
 
     return () => clearTimeout(loadingTimer);
   }, []);
