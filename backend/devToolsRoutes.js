@@ -1,10 +1,10 @@
 // devToolsRoutes.js
 import express from "express";
-import { pool } from "./db.js"; // adjust path if your pool is exported differently
+import { pool } from "./index.js"; // 👈 reuse same pool from index.js
 
 const router = express.Router();
 
-// Developer-only: Cleanup demo accounts
+// ⚠️ Developer-only: Cleanup demo accounts
 router.post("/cleanup-demo-users", async (req, res) => {
   try {
     const client = await pool.connect();
@@ -24,7 +24,7 @@ router.post("/cleanup-demo-users", async (req, res) => {
 
       res.status(200).json({
         message: `Cleanup complete. ${result.rowCount} accounts reset.`,
-        cleaned: result.rows
+        cleanedAccounts: result.rows
       });
     } finally {
       client.release();
