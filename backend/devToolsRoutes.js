@@ -1,42 +1,50 @@
 // devToolsRoutes.js
-import express from "express";
-import { pool } from "./index.js"; // reuse same DB pool from index.js
+import express from 'express';
+import pg from 'pg';
 
+const { Pool } = pg;
 const router = express.Router();
 
-/**
- * Developer-only endpoint:
- * Cleanup all demo accounts (demoUser / user_12345).
- * Resets username and stats, so they will sync real Telegram usernames
- * on next login.
- */
-router.post("/cleanup-demo-users", async (req, res) => {
+// ---- DATABASE ----
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// 🛠️ Health check for DevTools
+router.get('/health', async (req, res) => {
+  try {
+    res.json({ status: '✅ DevTools API is running' });
+  } catch (error) {
+    console.error('❌ DevTools health check error:', error);
+    res.status(500).json({ error: 'Health check failed' });
+  }
+});
+
+// 🗑️ Cleanup demo accounts
+router.post('/cleanup-demo-users', async (req, res) => {
   try {
     const client = await pool.connect();
-    try {
-      const result = await client.query(
-        `UPDATE users
-         SET username = NULL,
-             points = 0,
-             level = 1,
-             daily_streak = 0,
-             games_played = 0,
-             high_score = 0,
-             total_play_time = 0
-         WHERE username = 'demoUser' OR username LIKE 'user_%'
-         RETURNING telegram_id, username;`
-      );
 
-      res.status(200).json({
-        message: `Cleanup complete. ${result.rowCount} accounts reset.`,
-        cleanedAccounts: result.rows,
-      });
-    } finally {
-      client.release();
-    }
+    // Reset demo accounts instead of deleting, so they sync properly on next login
+    const result = await client.query(`
+      UPDATE users
+      SET username = NULL,
+          points = 0,
+          level = 1,
+          daily_streak = 0,
+          games_played = 0,
+          high_score = 0,
+          total_play_time = 0
+      WHERE username = 'demoUser'
+         OR username ILIKE 'user_%'
+    `);
+
+    client.release();
+
+    res.json({ message: `✅ Reset ${result.rowCount} demo accounts` });
   } catch (error) {
-    console.error("🚨 Error in demo user cleanup:", error);
-    res.status(500).json({ error: "Cleanup failed" });
+    console.error('❌ Error resetting demo accounts:', error);
+    res.status(500).json({ error: 'Failed to reset demo accounts' });
   }
 });
 
