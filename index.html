@@ -6,24 +6,193 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <title>Meowchi Cookie Club</title>
     <style>
-      /* Immediate loading screen background - no intermediate steps */
+      /* Immediate loading screen - shows before React loads */
       body, html {
         background-color: #FDF6E3 !important;
         margin: 0;
         padding: 0;
         height: 100%;
         overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       
       #root {
         background-color: #FDF6E3 !important;
         min-height: 100vh;
         width: 100vw;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Static loading screen styles */
+      .static-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        width: 100vw;
+        background-color: #FDF6E3;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 9999;
+      }
+
+      .meowchi-image {
+        width: 128px;
+        height: 128px;
+        object-fit: contain;
+        border-radius: 16px;
+        margin-bottom: 32px;
+        animation: fadeInScale 0.6s ease-out;
+      }
+
+      .loading-text {
+        font-size: 18px;
+        font-weight: bold;
+        color: #D97706;
+        text-align: center;
+        margin-bottom: 8px;
+        max-width: 320px;
+        padding: 0 24px;
+        animation: fadeInUp 0.4s ease-out;
+      }
+
+      .loading-dots {
+        display: flex;
+        gap: 8px;
+        margin-top: 32px;
+      }
+
+      .loading-dot {
+        width: 12px;
+        height: 12px;
+        background-color: #F59E0B;
+        border-radius: 50%;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      .loading-dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      .loading-dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      /* Floating cookie crumbs */
+      .cookie-crumb {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background-color: #F59E0B;
+        border-radius: 50%;
+        opacity: 0.6;
+        animation: float 4s ease-in-out infinite;
+      }
+
+      .cookie-crumb:nth-child(1) { top: 10%; left: 15%; animation-delay: 0s; }
+      .cookie-crumb:nth-child(2) { top: 20%; right: 20%; animation-delay: 0.5s; }
+      .cookie-crumb:nth-child(3) { bottom: 30%; left: 10%; animation-delay: 1s; }
+      .cookie-crumb:nth-child(4) { bottom: 15%; right: 15%; animation-delay: 1.5s; }
+      .cookie-crumb:nth-child(5) { top: 40%; left: 80%; animation-delay: 2s; }
+      .cookie-crumb:nth-child(6) { top: 60%; left: 5%; animation-delay: 2.5s; }
+
+      @keyframes fadeInScale {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+      }
+
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.6; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.2); }
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.6; }
+        25% { transform: translateY(-20px) translateX(10px); opacity: 0.3; }
+        50% { transform: translateY(0px) translateX(-10px); opacity: 0.6; }
+        75% { transform: translateY(-15px) translateX(5px); opacity: 0.4; }
+      }
+
+      /* Hide static loading when React loads */
+      .react-loaded .static-loading {
+        display: none;
       }
     </style>
   </head>
   <body>
+    <!-- Static Loading Screen - Shows Immediately -->
+    <div class="static-loading" id="static-loading">
+      <!-- Floating Cookie Crumbs -->
+      <div class="cookie-crumb"></div>
+      <div class="cookie-crumb"></div>
+      <div class="cookie-crumb"></div>
+      <div class="cookie-crumb"></div>
+      <div class="cookie-crumb"></div>
+      <div class="cookie-crumb"></div>
+
+      <!-- Meowchi Image -->
+      <img
+        src="/3f4ea614-4f4d-47f5-9569-a5a81818cc6f.png"
+        alt="Meowchi Loading"
+        class="meowchi-image"
+        onerror="this.src='https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672'"
+      />
+
+      <!-- Loading Text -->
+      <div class="loading-text">Summoning sprinkle storms…</div>
+
+      <!-- Loading Dots -->
+      <div class="loading-dots">
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+      </div>
+    </div>
+
+    <!-- React App Root -->
     <div id="root"></div>
+
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Hide static loading when React mounts -->
+    <script>
+      // Hide static loading screen when React takes over
+      window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          const staticLoading = document.getElementById('static-loading');
+          const root = document.getElementById('root');
+          
+          // Check if React has rendered content
+          const checkReactLoaded = setInterval(function() {
+            if (root && root.children.length > 0) {
+              document.body.classList.add('react-loaded');
+              if (staticLoading) {
+                staticLoading.style.display = 'none';
+              }
+              clearInterval(checkReactLoaded);
+            }
+          }, 100);
+          
+          // Fallback: hide after 1 second regardless
+          setTimeout(function() {
+            document.body.classList.add('react-loaded');
+            if (staticLoading) {
+              staticLoading.style.display = 'none';
+            }
+            clearInterval(checkReactLoaded);
+          }, 1000);
+        }, 50);
+      });
+    </script>
   </body>
 </html>
