@@ -41,6 +41,9 @@ function App() {
   useEffect(() => {
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
+      // Transition body background to app theme after loading
+      document.body.style.backgroundColor = '#181A1B';
+      document.body.style.color = '#FFFFFF';
     }, 3500); // Show loading for 3.5 seconds
 
     return () => clearTimeout(loadingTimer);
@@ -50,10 +53,11 @@ function App() {
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden relative">
       <AnimatePresence mode="wait">
         {isLoading ? (
-          // Loading Screen
+          // Loading Screen - matches body pastel background
           <motion.div
             key="loading"
-            className="absolute inset-0 bg-background flex flex-col items-center justify-center z-50"
+            className="absolute inset-0 flex flex-col items-center justify-center z-50"
+            style={{ backgroundColor: '#FDF6E3' }} // Matches body background
             initial={{ opacity: 1 }}
             exit={{
               opacity: 0,
@@ -87,7 +91,7 @@ function App() {
                 className="w-32 h-32 object-contain rounded-2xl"
                 onError={(e) => {
                   // Fallback if local image fails
-                  e.target.src = "https://ik.imagekit.io/59r2kpz8r/Splash.png?updatedAt=1759055243885";
+                  e.target.src = "https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672";
                 }}
               />
             </motion.div>
@@ -101,7 +105,7 @@ function App() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.4 }}
             >
-              <p className="text-lg font-bold text-accent mb-2">
+              <p className="text-lg font-bold text-amber-600 mb-2">
                 {loadingTexts[currentTextIndex]}
               </p>
             </motion.div>
@@ -116,7 +120,7 @@ function App() {
               {[0, 1, 2].map((i) => (
                 <motion.div
                   key={i}
-                  className="w-3 h-3 bg-accent rounded-full"
+                  className="w-3 h-3 bg-amber-500 rounded-full"
                   animate={{
                     scale: [1, 1.2, 1],
                     opacity: [0.6, 1, 0.6]
@@ -141,7 +145,7 @@ function App() {
               {[...Array(12)].map((_, i) => (
                 <motion.div
                   key={i}
-                  className="absolute w-2 h-2 bg-accent rounded-full opacity-60"
+                  className="absolute w-2 h-2 bg-amber-400 rounded-full opacity-60"
                   style={{
                     left: `${Math.random() * 100}%`,
                     top: `${Math.random() * 100}%`,
