@@ -246,7 +246,6 @@ const setupDatabase = async () => {
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
         (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
         (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
         (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
@@ -258,11 +257,10 @@ const setupDatabase = async () => {
     } else {
       console.log(`📦 Shop items already exist (${itemCount} items), updating if needed...`);
       
-      // Update existing items without deleting (safe for production)
+      // Update existing items without deleting (safe for production) - REMOVED item ID 2
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (2, 'Extra Time +20s', '+20 seconds to your next game', 1500, 'Timer', 'consumable'),
         (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
         (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
         (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
@@ -275,6 +273,10 @@ const setupDatabase = async () => {
         icon_name = EXCLUDED.icon_name,
         type = EXCLUDED.type
       `);
+      
+      // REMOVE Extra Time +20s (item ID 2) completely from shop_items if it exists
+      await client.query('DELETE FROM shop_items WHERE id = 2');
+      console.log('🗑️ Removed Extra Time +20s (item ID 2) from shop_items');
     }
 
     // 12. USER TASKS SYSTEM: User Tasks Table for Main Tasks tracking
@@ -753,10 +755,15 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
+      let inventory = inventoryResult.rows;
+      
+      // FILTER OUT Extra Time +20s (item_id: 2) from inventory response
+      inventory = inventory.filter(item => item.item_id !== 2);
+
       const shopData = {
         items: itemsResult.rows,
         userPoints: userResult.rows[0].points,
-        inventory: inventoryResult.rows,
+        inventory: inventory,
         boosterActive: userResult.rows[0].point_booster_active,
         ownedBadges: badgesResult.rows.map(row => row.badge_name)
       };
@@ -781,6 +788,11 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
     
     if (!itemId) {
       return res.status(400).json({ error: 'itemId is required' });
+    }
+
+    // PREVENT purchasing Extra Time +20s (item ID 2)
+    if (itemId === 2) {
+      return res.status(400).json({ error: 'This item is no longer available for purchase' });
     }
 
     const client = await pool.connect();
@@ -842,7 +854,7 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       await client.query('ROLLBACK');
       console.log(`💥 Purchase failed: ${error.message}`);
       
-      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.'];
+      const knownErrors = ['Insufficient points.', 'Item already owned.', 'Badge already owned.', 'Item not found.', 'User not found.', 'This item is no longer available for purchase'];
       if (knownErrors.includes(error.message)) {
           return res.status(400).json({ success: false, error: error.message });
       }
@@ -875,6 +887,12 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     for (const itemId of selectedItems) {
       console.log(`🔄 Processing selected item: ${itemId}`);
       
+      // SKIP Extra Time +20s (item ID 2) if somehow present
+      if (itemId === 2) {
+        console.log(`⚠️ Skipping deprecated item ID 2 (Extra Time +20s)`);
+        continue;
+      }
+      
       const consumeResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
@@ -891,7 +909,7 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
         
         switch (itemId) {
           case 1: totalTimeBonus += 10; break;
-          case 2: totalTimeBonus += 20; break;
+          // REMOVED: case 2 (Extra Time +20s)
           case 3: hasBomb = true; break;
           case 4: 
             console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
@@ -957,15 +975,7 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
       [user.id]
     );
 
-    const timeBooster20Result = await client.query(
-      `DELETE FROM user_inventory 
-       WHERE id = (
-         SELECT id FROM user_inventory 
-         WHERE user_id = $1 AND item_id = 2 
-         LIMIT 1
-       ) RETURNING item_id`,
-      [user.id]
-    );
+    // REMOVED: Extra Time +20s logic (item ID 2)
 
     const bombBoosterResult = await client.query(
       `DELETE FROM user_inventory 
@@ -980,7 +990,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
     await client.query('COMMIT');
     
     if (timeBooster10Result.rowCount > 0) totalTimeBonus += 10;
-    if (timeBooster20Result.rowCount > 0) totalTimeBonus += 20;
     hasBomb = bombBoosterResult.rowCount > 0;
     
     console.log(`🎯 Legacy game session: +${totalTimeBonus}s time, bomb: ${hasBomb}`);
@@ -1053,6 +1062,72 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/activate-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// NEW: Use Time Booster endpoint for mid-game Extra Time +10s consumption
+app.post('/api/use-time-booster', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId, timeBonus } = req.body;
+    
+    if (!itemId || itemId !== 1) {
+      return res.status(400).json({ error: 'Only Extra Time +10s can be used this way.' });
+    }
+    
+    if (!timeBonus || timeBonus !== 10) {
+      return res.status(400).json({ error: 'Invalid time bonus value.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check and consume the item from inventory
+      const inventoryResult = await client.query(
+        `DELETE FROM user_inventory 
+         WHERE id = (
+           SELECT id FROM user_inventory 
+           WHERE user_id = $1 AND item_id = $2 
+           LIMIT 1
+         ) RETURNING id`,
+        [user.id, itemId]
+      );
+      
+      if (inventoryResult.rowCount === 0) {
+        throw new Error('You do not own this item.');
+      }
+
+      // Record usage in history
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
+        [user.id, itemId]
+      );
+      
+      await client.query('COMMIT');
+      
+      console.log(`⏰ Extra Time +10s used by user ${user.id}`);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Extra Time +10s used successfully!',
+        timeBonus: timeBonus
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const knownErrors = ['You do not own this item.'];
+      if (knownErrors.includes(error.message)) {
+          return res.status(400).json({ success: false, error: error.message });
+      }
+      console.error('🚨 Error in /api/use-time-booster:', error);
+      res.status(500).json({ success: false, error: 'Internal server error.' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/use-time-booster:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1221,18 +1296,18 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
         client.query(`
           SELECT item_id, COUNT(*) as quantity 
           FROM user_inventory 
-          WHERE user_id = $1 
+          WHERE user_id = $1 AND item_id != 2
           GROUP BY item_id
-        `, [user.id]),
+        `, [user.id]), // FILTER OUT item_id 2
         client.query(`
           SELECT item_name, COUNT(*) as usage_count 
           FROM item_usage_history 
-          WHERE user_id = $1 
+          WHERE user_id = $1 AND item_id != 2
           GROUP BY item_name 
           ORDER BY usage_count DESC 
           LIMIT 1
-        `, [user.id]),
-        client.query('SELECT id, price FROM shop_items')
+        `, [user.id]), // FILTER OUT item_id 2
+        client.query('SELECT id, price FROM shop_items WHERE id != 2') // FILTER OUT item_id 2
       ]);
       
       const inventory = inventoryResult.rows;
@@ -1272,10 +1347,10 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
       const historyResult = await client.query(`
         SELECT item_name, used_at, game_score
         FROM item_usage_history 
-        WHERE user_id = $1 
+        WHERE user_id = $1 AND item_id != 2
         ORDER BY used_at DESC 
         LIMIT 20
-      `, [user.id]);
+      `, [user.id]); // FILTER OUT item_id 2
       
       res.status(200).json(historyResult.rows);
 
