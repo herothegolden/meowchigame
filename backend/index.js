@@ -365,11 +365,15 @@ app.post('/api/validate', validateUser, async (req, res) => {
             let dailyBonus = null;
 
             if (dbUserResult.rows.length === 0) {
-                // NEW USER: Create with Telegram data
+                // NEW USER: Create with Telegram data and fallback username
                 console.log(`🆕 Creating new user: ${user.first_name} (${user.id})`);
+                
+                // FIXED: Generate fallback username if Telegram username is missing
+                const finalUsername = user.username || `user_${user.id}`;
+                
                 const insertResult = await client.query(
                     `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
-                    [user.id, user.first_name, user.last_name, user.username]
+                    [user.id, user.first_name, user.last_name, finalUsername]
                 );
                 appUser = insertResult.rows[0];
             } else {
