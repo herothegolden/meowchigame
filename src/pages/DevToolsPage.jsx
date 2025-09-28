@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, RotateCcw, LoaderCircle, AlertTriangle, CheckCircle, User } from 'lucide-react';
+import { Settings, RotateCcw, LoaderCircle, AlertTriangle, CheckCircle, User, Trash2 } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const DEV_USER_ID = 6998637798;
@@ -10,11 +10,14 @@ const DevToolsPage = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
+
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
   
   const tg = window.Telegram?.WebApp;
 
   useEffect(() => {
-    // Check if current user is authorized developer
+    // Check if current user is authorized developer - SAME CHECK AS BEFORE
     const telegramUser = tg?.initDataUnsafe?.user;
     const userId = telegramUser?.id;
     
@@ -39,7 +42,7 @@ const DevToolsPage = () => {
     try {
       console.log('🔧 Resetting tasks for dev account...');
 
-      const response = await fetch(`${BACKEND_URL}/api/dev/reset-tasks`, {
+      const response = await fetch(`${BACKEND_URL}/api/dev-reset-tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg.initData }),
@@ -77,6 +80,56 @@ const DevToolsPage = () => {
     }
   };
 
+  const handleCleanupDemoUsers = async () => {
+    if (!isAuthorized || !tg?.initData || !BACKEND_URL) {
+      alert('Not authorized or backend unavailable');
+      return;
+    }
+
+    setIsCleaning(true);
+    setCleanupResult(null);
+
+    try {
+      console.log('🧹 Cleaning up demo accounts...');
+
+      const response = await fetch(`${BACKEND_URL}/api/dev/cleanup-demo-users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Demo accounts cleaned:', result);
+        setCleanupResult({
+          success: true,
+          message: result.message,
+          cleanedAccounts: result.cleanedAccounts
+        });
+
+        if (tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('success');
+        }
+      } else {
+        throw new Error(result.error || 'Cleanup failed');
+      }
+    } catch (error) {
+      console.error('❌ Cleanup error:', error);
+      setCleanupResult({
+        success: false,
+        message: error.message
+      });
+
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  // SAME AUTHORIZATION CHECK - Access denied for non-developers
   if (!isAuthorized) {
     return (
       <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
@@ -204,19 +257,91 @@ const DevToolsPage = () => {
         </div>
       </motion.div>
 
-      {/* Production Mode Notice */}
+      {/* Cleanup Demo Accounts */}
+      <motion.div
+        className="bg-nav p-6 rounded-lg border border-gray-700"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <h2 className="text-xl font-bold text-primary mb-4 flex items-center">
+          <Trash2 className="w-6 h-6 mr-2 text-accent" />
+          Cleanup Demo Accounts
+        </h2>
+        
+        <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
+          <h3 className="font-bold text-primary mb-2">Remove Demo Users</h3>
+          <p className="text-sm text-secondary mb-4">
+            This will reset all demo accounts (<code>demouser</code> / <code>user_12345</code>). 
+            This utility keeps the system clean by removing test accounts.
+          </p>
+          
+          <button
+            onClick={handleCleanupDemoUsers}
+            disabled={isCleaning}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCleaning ? (
+              <>
+                <LoaderCircle className="w-5 h-5 animate-spin" />
+                <span>Cleaning...</span>
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-5 h-5" />
+                <span>Reset Demo Accounts</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Result Display */}
+        {cleanupResult && (
+          <motion.div
+            className={`p-4 mt-4 rounded-lg border ${
+              cleanupResult.success 
+                ? 'bg-green-600/20 border-green-500 text-green-300' 
+                : 'bg-red-600/20 border-red-500 text-red-300'
+            }`}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex items-start space-x-3">
+              {cleanupResult.success ? (
+                <CheckCircle className="w-6 h-6 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-6 h-6 mt-0.5" />
+              )}
+              <div>
+                <p className="font-bold">
+                  {cleanupResult.success ? 'Cleanup Successful' : 'Cleanup Failed'}
+                </p>
+                <p className="text-sm mt-1">{cleanupResult.message}</p>
+                {cleanupResult.success && (
+                  <div className="text-xs mt-2 space-y-1">
+                    <p>Cleaned accounts: {cleanupResult.cleanedAccounts}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </motion.div>
+
+      {/* Status Notice */}
       <motion.div
         className="bg-blue-600/10 border border-blue-500 text-blue-300 p-4 rounded-lg"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.4 }}
       >
         <div className="flex items-start space-x-3">
           <CheckCircle className="w-5 h-5 mt-0.5" />
           <div>
-            <p className="font-bold text-sm">Production Mode Only</p>
+            <p className="font-bold text-sm">Universal Access Mode</p>
             <p className="text-xs mt-1">
-              Demo accounts have been removed. All users must have valid Telegram usernames.
+              All users now have the same app experience. Only these dev tools are restricted.
             </p>
           </div>
         </div>
@@ -227,7 +352,7 @@ const DevToolsPage = () => {
         className="bg-red-600/10 border border-red-500 text-red-300 p-4 rounded-lg"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: 0.5 }}
       >
         <div className="flex items-start space-x-3">
           <AlertTriangle className="w-5 h-5 mt-0.5" />
