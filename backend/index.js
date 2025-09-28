@@ -39,6 +39,28 @@ app.use(express.json());
 // ---- DEV TOOLS ROUTES ----
 app.use('/api/dev', devToolsRoutes); // 👈 All dev-only routes under /api/dev
 
+// ---- MIDDLEWARE ----
+const validateUser = (req, res, next) => {
+  const { initData } = req.body;
+  if (!initData) {
+    return res.status(400).json({ error: 'initData is required' });
+  }
+
+  if (!validate(initData, BOT_TOKEN)) {
+    return res.status(401).json({ error: 'Invalid data' });
+  }
+
+  const params = new URLSearchParams(initData);
+  const user = JSON.parse(params.get('user'));
+
+  if (!user || !user.id) {
+    return res.status(400).json({ error: 'Invalid user data in initData' });
+  }
+  
+  req.user = user;
+  next();
+};
+
 // ---- FILE UPLOAD SETUP ----
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
@@ -78,6 +100,9 @@ const uploadAvatar = multer({
   },
   fileFilter: fileFilter
 });
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // FIXED: COMPREHENSIVE DATABASE SETUP WITH PROPER FOREIGN KEY HANDLING
 const setupDatabase = async () => {
@@ -327,6 +352,11 @@ const setupDatabase = async () => {
     client.release();
   }
 };
+
+// ---- ROUTES ----
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // ✅ Correct /api/validate route using validate from utils.js
 app.post('/api/validate', async (req, res) => {
