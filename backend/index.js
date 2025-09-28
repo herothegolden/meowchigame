@@ -358,138 +358,134 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// FIXED: /api/validate now reads Telegram data directly from initDataUnsafe.user
-app.post('/api/validate', async (req, res) => {
+// FIXED: Enhanced /api/validate with strict username requirements + NULL handling
+app.post('/api/validate', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
     try {
-        const client = await pool.connect();
-        try {
-            // Always pull fresh Telegram data
-            const tgUser = req.body?.initDataUnsafe?.user;
-            if (!tgUser) {
-                return res.status(400).json({ error: "Invalid Telegram initData" });
-            }
+      // Helper function to check if username is invalid
+      const isInvalidUsername = (username) => {
+        return !username ||
+               username.toLowerCase() === 'demouser' ||
+               username.toLowerCase().startsWith('user_') ||
+               username.trim() === '';
+      };
 
-            const telegramId = tgUser.id;
-            const telegramUsername = tgUser.username || null;
-            const telegramFirstName = tgUser.first_name || "";
-            const telegramLastName = tgUser.last_name || "";
+      // REQUIREMENT 1 & 2: Block users without valid Telegram username
+      if (isInvalidUsername(user.username)) {
+        return res.status(400).json({
+          error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
+          requiresUsername: true
+        });
+      }
 
-            // Helper function to check if username is invalid
-            const isInvalidUsername = (username) => {
-                return !username || 
-                       username === 'demoUser' || 
-                       username.startsWith('user_') ||
-                       username.trim() === '';
-            };
+      let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.id]);
+      let appUser;
+      let dailyBonus = null;
 
-            // REQUIREMENT 1 & 2: Block users without valid Telegram username
-            if (isInvalidUsername(telegramUsername)) {
-                return res.status(400).json({ 
-                    error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
-                    requiresUsername: true 
-                });
-            }
+      if (dbUserResult.rows.length === 0) {
+        // NEW USER: Create with valid Telegram username
+        console.log(`🆕 Creating new user: ${user.first_name} (@${user.username}) (${user.id})`);
 
-            let dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [telegramId]);
-            let appUser;
-            let dailyBonus = null;
+        const insertResult = await client.query(
+          `INSERT INTO users (telegram_id, first_name, last_name, username) 
+           VALUES ($1, $2, $3, $4) RETURNING *`,
+          [user.id, user.first_name, user.last_name, user.username]
+        );
+        appUser = insertResult.rows[0];
+      } else {
+        // EXISTING USER
+        appUser = dbUserResult.rows[0];
 
-            if (dbUserResult.rows.length === 0) {
-                // NEW USER: Create with valid Telegram username
-                console.log(`🆕 Creating new user: ${telegramFirstName} (@${telegramUsername}) (${telegramId})`);
-                
-                const insertResult = await client.query(
-                    `INSERT INTO users (telegram_id, first_name, last_name, username) VALUES ($1, $2, $3, $4) RETURNING *`,
-                    [telegramId, telegramFirstName, telegramLastName, telegramUsername]
-                );
-                appUser = insertResult.rows[0];
-            } else {
-                // EXISTING USER
-                appUser = dbUserResult.rows[0];
-                
-                // REQUIREMENT 4: Check if existing user has bad username - reset immediately
-                if (isInvalidUsername(appUser.username)) {
-                    console.log(`🔄 User ${telegramId} has invalid username "${appUser.username}" - resetting account`);
-                    
-                    const resetResult = await client.query(
-                        `UPDATE users SET 
-                         first_name = $1, last_name = $2, username = $3,
-                         points = 0, level = 1, daily_streak = 0, 
-                         games_played = 0, high_score = 0, total_play_time = 0
-                         WHERE telegram_id = $4 RETURNING *`,
-                        [telegramFirstName, telegramLastName, telegramUsername, telegramId]
-                    );
-                    appUser = resetResult.rows[0];
-                    console.log(`✅ Account reset completed for user ${telegramId}`);
-                }
-                // REQUIREMENT 3: Check if username changed - reset account
-                else if (telegramUsername !== appUser.username) {
-                    console.log(`🔄 Username changed for user ${telegramId}: "${appUser.username}" → "${telegramUsername}" - resetting account`);
-                    
-                    const resetResult = await client.query(
-                        `UPDATE users SET 
-                         first_name = $1, last_name = $2, username = $3,
-                         points = 0, level = 1, daily_streak = 0, 
-                         games_played = 0, high_score = 0, total_play_time = 0
-                         WHERE telegram_id = $4 RETURNING *`,
-                        [telegramFirstName, telegramLastName, telegramUsername, telegramId]
-                    );
-                    appUser = resetResult.rows[0];
-                    console.log(`✅ Account reset for username change completed for user ${telegramId}`);
-                }
-                // Normal name sync (no username change)
-                else {
-                    const nameNeedsUpdate = (
-                        telegramFirstName !== appUser.first_name ||
-                        telegramLastName !== appUser.last_name
-                    );
-                    
-                    if (nameNeedsUpdate) {
-                        console.log(`🔄 Syncing name for user ${telegramId}: "${appUser.first_name}" → "${telegramFirstName}"`);
-                        
-                        const nameUpdateResult = await client.query(
-                            `UPDATE users SET first_name = $1, last_name = $2 WHERE telegram_id = $3 RETURNING *`,
-                            [telegramFirstName, telegramLastName, telegramId]
-                        );
-                        appUser = nameUpdateResult.rows[0];
-                        
-                        console.log(`✅ Name sync completed for user ${telegramId}`);
-                    }
-                    
-                    // Handle daily bonus logic (only if no reset occurred)
-                    const now = new Date();
-                    const lastLogin = new Date(appUser.last_login_at);
+        // REQUIREMENT 4: Reset account if username is invalid OR NULL
+        if (isInvalidUsername(appUser.username) || !appUser.username) {
+          console.log(`🔄 User ${user.id} has invalid/NULL username "${appUser.username}" - resetting account`);
 
-                    const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
-                    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                    
-                    if (nowDate > lastLoginDate) {
-                        const diffTime = Math.abs(nowDate - lastLoginDate);
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        
-                        let newStreak = (diffDays === 1) ? appUser.daily_streak + 1 : 1;
-                        const bonusPoints = 100 * newStreak;
-                        const newPoints = appUser.points + bonusPoints;
-                        dailyBonus = { points: bonusPoints, streak: newStreak };
-                        
-                        const updateResult = await client.query(
-                            'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
-                            [telegramId, newStreak, newPoints]
-                        );
-                        appUser = updateResult.rows[0];
-                    }
-                }
-            }
-            
-            res.status(200).json({ ...appUser, dailyBonus });
-
-        } finally {
-            client.release();
+          const resetResult = await client.query(
+            `UPDATE users SET 
+             first_name = $1, last_name = $2, username = $3,
+             points = 100, level = 1, daily_streak = 0, 
+             games_played = 0, high_score = 0, total_play_time = 0,
+             last_login_at = CURRENT_TIMESTAMP
+             WHERE telegram_id = $4 RETURNING *`,
+            [user.first_name, user.last_name, user.username, user.id]
+          );
+          appUser = resetResult.rows[0];
+          console.log(`✅ Account reset completed for user ${user.id}`);
         }
-    } catch (error) {
-        console.error('🚨 Error in /api/validate:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        // REQUIREMENT 3: Username changed → reset account
+        else if (user.username !== appUser.username) {
+          console.log(`🔄 Username changed for user ${user.id}: "${appUser.username}" → "${user.username}" - resetting account`);
+
+          const resetResult = await client.query(
+            `UPDATE users SET 
+             first_name = $1, last_name = $2, username = $3,
+             points = 100, level = 1, daily_streak = 0, 
+             games_played = 0, high_score = 0, total_play_time = 0,
+             last_login_at = CURRENT_TIMESTAMP
+             WHERE telegram_id = $4 RETURNING *`,
+            [user.first_name, user.last_name, user.username, user.id]
+          );
+          appUser = resetResult.rows[0];
+          console.log(`✅ Account reset for username change completed for user ${user.id}`);
+        }
+        // Normal case → just sync names & handle daily bonus
+        else {
+          const telegramFirstName = user.first_name || appUser.first_name;
+          const telegramLastName = user.last_name || appUser.last_name;
+
+          const nameNeedsUpdate = (
+            telegramFirstName !== appUser.first_name ||
+            telegramLastName !== appUser.last_name
+          );
+
+          if (nameNeedsUpdate) {
+            console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
+
+            const nameUpdateResult = await client.query(
+              `UPDATE users SET first_name = $1, last_name = $2 WHERE telegram_id = $3 RETURNING *`,
+              [telegramFirstName, telegramLastName, user.id]
+            );
+            appUser = nameUpdateResult.rows[0];
+
+            console.log(`✅ Name sync completed for user ${user.id}`);
+          }
+
+          // Daily bonus logic (only if no reset occurred)
+          const now = new Date();
+          const lastLogin = new Date(appUser.last_login_at);
+
+          const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
+          const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+          if (nowDate > lastLoginDate) {
+            const diffTime = Math.abs(nowDate - lastLoginDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            let newStreak = (diffDays === 1) ? appUser.daily_streak + 1 : 1;
+            const bonusPoints = 100 * newStreak;
+            const newPoints = appUser.points + bonusPoints;
+            dailyBonus = { points: bonusPoints, streak: newStreak };
+
+            const updateResult = await client.query(
+              'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
+              [user.id, newStreak, newPoints]
+            );
+            appUser = updateResult.rows[0];
+          }
+        }
+      }
+
+      res.status(200).json({ ...appUser, dailyBonus });
+
+    } finally {
+      client.release();
     }
+  } catch (error) {
+    console.error('🚨 Error in /api/validate:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // PHASE 3: Enhanced update-score with session tracking
