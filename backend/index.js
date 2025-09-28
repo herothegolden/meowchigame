@@ -328,21 +328,18 @@ const setupDatabase = async () => {
   }
 };
 
-// FIXED: Enhanced /api/validate with strict username requirements + safe NULL handling
+// FIXED: Enhanced /api/validate with strict username requirements + NULL handling
 app.post('/api/validate', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
     try {
-      // ✅ Safe helper: handle nulls before .toLowerCase()
+      // Helper function to check if username is invalid
       const isInvalidUsername = (username) => {
-        if (!username) return true; // null, undefined, or empty
-        const lower = username.toLowerCase();
-        return (
-          lower === 'demouser' ||
-          lower.startsWith('user_') ||
-          username.trim() === ''
-        );
+        return !username ||
+               username.toLowerCase() === 'demouser' ||
+               username.toLowerCase().startsWith('user_') ||
+               username.trim() === '';
       };
 
       // REQUIREMENT 1 & 2: Block users without valid Telegram username
@@ -371,7 +368,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
         // EXISTING USER
         appUser = dbUserResult.rows[0];
 
-        // REQUIREMENT 4: Reset if username invalid OR NULL
+        // REQUIREMENT 4: Reset account if username is invalid OR NULL
         if (isInvalidUsername(appUser.username) || !appUser.username) {
           console.log(`🔄 User ${user.id} has invalid/NULL username "${appUser.username}" - resetting account`);
 
@@ -403,14 +400,15 @@ app.post('/api/validate', validateUser, async (req, res) => {
           appUser = resetResult.rows[0];
           console.log(`✅ Account reset for username change completed for user ${user.id}`);
         }
-        // Normal case → sync names & handle daily bonus
+        // Normal case → just sync names & handle daily bonus
         else {
           const telegramFirstName = user.first_name || appUser.first_name;
           const telegramLastName = user.last_name || appUser.last_name;
 
-          const nameNeedsUpdate =
+          const nameNeedsUpdate = (
             telegramFirstName !== appUser.first_name ||
-            telegramLastName !== appUser.last_name;
+            telegramLastName !== appUser.last_name
+          );
 
           if (nameNeedsUpdate) {
             console.log(`🔄 Syncing name for user ${user.id}: "${appUser.first_name}" → "${telegramFirstName}"`);
@@ -435,7 +433,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
             const diffTime = Math.abs(nowDate - lastLoginDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            let newStreak = diffDays === 1 ? appUser.daily_streak + 1 : 1;
+            let newStreak = (diffDays === 1) ? appUser.daily_streak + 1 : 1;
             const bonusPoints = 100 * newStreak;
             const newPoints = appUser.points + bonusPoints;
             dailyBonus = { points: bonusPoints, streak: newStreak };
@@ -450,6 +448,7 @@ app.post('/api/validate', validateUser, async (req, res) => {
       }
 
       res.status(200).json({ ...appUser, dailyBonus });
+
     } finally {
       client.release();
     }
@@ -458,7 +457,6 @@ app.post('/api/validate', validateUser, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 // PHASE 3: Enhanced update-score with session tracking
 app.post('/api/update-score', validateUser, async (req, res) => {
