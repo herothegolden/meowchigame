@@ -548,6 +548,7 @@ const ProfilePage = () => {
           ownedBadges: []
         });
         setIsConnected(false);
+        setError(''); // Clear any previous errors
         setLoading(false);
         return;
       }
