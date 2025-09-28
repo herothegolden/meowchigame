@@ -163,10 +163,10 @@ const ProfilePage = () => {
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode - FIXED: changed username value but kept the field
+  // Mock data for demo mode
   const MOCK_STATS = {
     first_name: 'Demo User',
-    username: 'user',
+    username: 'demouser',
     points: 4735,
     level: 1,
     daily_streak: 1,
@@ -549,7 +549,6 @@ const ProfilePage = () => {
           ownedBadges: []
         });
         setIsConnected(false);
-        setError(''); // Clear any previous errors
         setLoading(false);
         return;
       }
@@ -592,6 +591,15 @@ const ProfilePage = () => {
     } catch (err) {
       console.error('Profile fetch error:', err);
       setError(err.message);
+      
+      // Fallback to demo data
+      setProfileData({
+        stats: MOCK_STATS,
+        inventory: [],
+        allItems: MOCK_ITEMS,
+        boosterActive: false,
+        ownedBadges: []
+      });
       setIsConnected(false);
     } finally {
       setLoading(false);
