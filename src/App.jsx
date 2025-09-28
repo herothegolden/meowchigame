@@ -15,33 +15,41 @@ import DevToolsPage from './pages/DevToolsPage';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
-  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const [currentTextIndex, setCurrentTextIndex] = useState(1); // Start from second message
 
   // Chaotic loading text messages
   const loadingTexts = [
-    "Summoning sprinkle storms…",
+    "Summoning sprinkle storms…", // This shows in static loading
     "Oops! Dropped a marshmallow (again).",
     "Whisking up Pi secrets…",
     "Meowchi is hiding your cookies (don't tell).",
     "Glitter detonation in 3… 2… 💥"
   ];
 
-  // Cycle through chaotic text every 2.5 seconds
+  // Cycle through chaotic text every 2 seconds (faster since we have less time)
   useEffect(() => {
     if (!isLoading) return;
 
     const textInterval = setInterval(() => {
       setCurrentTextIndex((prev) => (prev + 1) % loadingTexts.length);
-    }, 2500);
+    }, 2000); // Reduced from 2500ms to 2000ms
 
     return () => clearInterval(textInterval);
   }, [isLoading, loadingTexts.length]);
 
-  // Simulate loading time and finish loading
+  // Hide static loading and start React loading
   useEffect(() => {
+    // Hide static loading immediately when React mounts
+    const staticLoading = document.getElementById('static-loading');
+    if (staticLoading) {
+      staticLoading.style.display = 'none';
+    }
+    document.body.classList.add('react-loaded');
+
+    // Continue with React loading for 2.5 more seconds
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
-    }, 3500); // Show loading for 3.5 seconds
+    }, 2500); // Reduced since static loading already showed for ~1s
 
     return () => clearTimeout(loadingTimer);
   }, []);
