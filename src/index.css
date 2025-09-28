@@ -3,5 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-background text-primary;
+  background-color: #FDF6E3; /* Soft cream pastel - matches loading screen */
+  color: #181A1B; /* Dark text for contrast */
+  transition: background-color 0.3s ease; /* Smooth transition when app loads */
 }
