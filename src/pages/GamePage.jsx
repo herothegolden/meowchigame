@@ -227,7 +227,7 @@ const GamePage = () => {
         
         // Calculate standardized mock stats
         const totalItems = mockItems.reduce((sum, item) => sum + item.quantity, 0);
-        const itemValues = { 1: 750, 2: 1500, 3: 1000, 4: 1500 };
+        const itemValues = { 1: 750, 3: 1000, 4: 1500 }; // REMOVED item 2
         const totalValue = mockItems.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
         
         setInventoryStats({
@@ -249,7 +249,10 @@ const GamePage = () => {
 
       if (res.ok) {
         const shopData = await res.json();
-        const userInventory = shopData.inventory || [];
+        let userInventory = shopData.inventory || [];
+        
+        // FILTER OUT Extra Time +20s (item_id: 2) completely
+        userInventory = userInventory.filter(item => item.item_id !== 2);
         
         console.log('Inventory loaded:', userInventory);
         
@@ -267,7 +270,7 @@ const GamePage = () => {
 
         // Calculate basic inventory stats
         const totalItems = userInventory.reduce((sum, item) => sum + item.quantity, 0);
-        const itemValues = { 1: 750, 2: 1500, 3: 1000, 4: 1500 }; // Hard-coded for simplicity
+        const itemValues = { 1: 750, 3: 1000, 4: 1500 }; // REMOVED item 2
         const totalValue = userInventory.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
         
         setInventoryStats({
@@ -304,7 +307,7 @@ const GamePage = () => {
         
         selectedItems.forEach(itemId => {
           if (itemId === 1) totalTimeBonus += 10;
-          if (itemId === 2) totalTimeBonus += 20;
+          // REMOVED: Extra Time +20s logic
           if (itemId === 3) hasBomb = true;
         });
         
@@ -478,35 +481,123 @@ const GamePage = () => {
     await loadInventory();
   };
 
-  // Handle item usage during game
+  // FIXED: Handle item usage during game with backend persistence
   const handleUseItem = async (itemId) => {
     const item = availableItems.find(item => item.item_id === itemId);
     if (!item || item.quantity <= 0) return;
 
-    const details = getItemDetails(itemId);
-    
-    // Handle Extra Time items
-    if (itemId === 1) { // Extra Time +10s
-      // 🎵 SOUND: Power up usage
-      soundManager.playCore('power_up', { volume: 0.9 });
-      
-      setTimeLeft(prev => prev + 10);
-      
-      // Update inventory locally
-      setAvailableItems(prev => 
-        prev.map(invItem => 
-          invItem.item_id === itemId 
-            ? { ...invItem, quantity: invItem.quantity - 1 }
-            : invItem
-        ).filter(invItem => invItem.quantity > 0)
-      );
-      
-      // Haptic feedback
-      if (window.Telegram?.WebApp?.HapticFeedback) {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    const tg = window.Telegram?.WebApp;
+    setIsActivatingItem(itemId);
+
+    try {
+      if (itemId === 1) { // Extra Time +10s
+        if (!tg || !tg.initData || !BACKEND_URL) {
+          // Demo mode - only local update
+          soundManager.playCore('power_up', { volume: 0.9 });
+          setTimeLeft(prev => prev + 10);
+          
+          setAvailableItems(prev => 
+            prev.map(invItem => 
+              invItem.item_id === itemId 
+                ? { ...invItem, quantity: invItem.quantity - 1 }
+                : invItem
+            ).filter(invItem => invItem.quantity > 0)
+          );
+          
+          if (window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+          }
+          
+          console.log('Demo: Used Extra Time +10s, added 10 seconds');
+          return;
+        }
+
+        // Real mode - call backend to consume item
+        const res = await fetch(`${BACKEND_URL}/api/use-time-booster`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData, itemId: 1, timeBonus: 10 }),
+        });
+
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to use time booster');
+        }
+
+        // Success - update game state
+        soundManager.playCore('power_up', { volume: 0.9 });
+        setTimeLeft(prev => prev + 10);
+        
+        // Remove item from local inventory
+        setAvailableItems(prev => 
+          prev.map(invItem => 
+            invItem.item_id === itemId 
+              ? { ...invItem, quantity: invItem.quantity - 1 }
+              : invItem
+          ).filter(invItem => invItem.quantity > 0)
+        );
+        
+        if (tg.HapticFeedback) {
+          tg.HapticFeedback.impactOccurred('medium');
+        }
+        
+        console.log('Used Extra Time +10s, added 10 seconds');
+
+      } else if (itemId === 4) { // Double Points
+        if (!tg || !tg.initData || !BACKEND_URL) {
+          // Demo mode
+          alert('Demo: Double Points activated for this game!');
+          setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+          return;
+        }
+
+        // Use existing /api/activate-item endpoint
+        const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData, itemId: 4 }),
+        });
+
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || 'Failed to activate Double Points');
+        }
+
+        // Success - update game state
+        setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+        
+        // Remove item from local inventory
+        setAvailableItems(prev => 
+          prev.map(invItem => 
+            invItem.item_id === itemId 
+              ? { ...invItem, quantity: invItem.quantity - 1 }
+              : invItem
+          ).filter(invItem => invItem.quantity > 0)
+        );
+
+        if (tg.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('success');
+        }
+
+        console.log('Double Points activated for this game');
       }
+
+    } catch (error) {
+      console.error('Item usage error:', error);
       
-      console.log('Used Extra Time +10s, added 10 seconds');
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: error.message,
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert(error.message);
+      }
+    } finally {
+      setIsActivatingItem(null);
     }
   };
 
@@ -630,11 +721,11 @@ const GamePage = () => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-  // Get item details helper
+  // FIXED: Get item details helper - REMOVED Extra Time +20s
   const getItemDetails = (itemId) => {
     const itemMap = {
       1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds', value: 750 },
-      2: { name: 'Extra Time +20s', icon: Timer, color: 'text-blue-400', description: '+20 seconds', value: 1500 },
+      // REMOVED: Item 2 (Extra Time +20s) completely
       3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb', value: 1000 },
       4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier', value: 1500 }
     };
@@ -893,7 +984,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* Inline Items Toolbar - TMA-Compatible with Pointer Events */}
+      {/* FIXED: Inline Items Toolbar - FILTERED items, proper click handlers */}
       {gameStarted && !isGameOver && availableItems.length > 0 && (
         <motion.div 
           className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4"
@@ -901,7 +992,7 @@ const GamePage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
         >
-          {availableItems.map((item) => {
+          {availableItems.filter(item => [1, 3, 4].includes(item.item_id)).map((item) => {
             const details = getItemDetails(item.item_id);
             const ItemIcon = details.icon;
             
@@ -909,7 +1000,7 @@ const GamePage = () => {
               <motion.button
                 key={item.item_id}
                 onClick={() => {
-                  if (item.item_id === 1) {
+                  if (item.item_id === 1 || item.item_id === 4) {
                     handleUseItem(item.item_id);
                   }
                 }}
@@ -918,24 +1009,29 @@ const GamePage = () => {
                     startDraggingBomb(e);
                   }
                 }}
+                disabled={isActivatingItem === item.item_id}
                 className={`flex flex-col items-center p-3 rounded-lg border transition-all duration-200 relative ${
-                  item.item_id === 1 
+                  item.item_id === 1 || item.item_id === 4
                     ? 'bg-blue-600/20 border-blue-500 hover:bg-blue-600/30 cursor-pointer'
                     : item.item_id === 3
                     ? 'bg-red-600/20 border-red-500 hover:bg-red-600/30 cursor-grab'
                     : 'bg-gray-600/20 border-gray-600 opacity-50'
-                }`}
-                whileTap={item.item_id === 1 ? { scale: 0.95 } : {}}
-                disabled={item.quantity <= 0}
+                } ${isActivatingItem === item.item_id ? 'opacity-50 cursor-wait' : ''}`}
+                whileTap={item.item_id === 1 || item.item_id === 4 ? { scale: 0.95 } : {}}
                 style={{ touchAction: 'none' }}
               >
-                <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
+                {isActivatingItem === item.item_id ? (
+                  <LoaderCircle className="w-6 h-6 mb-1 animate-spin text-accent" />
+                ) : (
+                  <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
+                )}
                 <span className="text-xs text-primary font-medium">{item.quantity}</span>
                 
                 {/* Usage hint */}
                 <div className="absolute -top-2 -right-2 text-xs">
                   {item.item_id === 1 && '⏰'}
                   {item.item_id === 3 && '💥'}
+                  {item.item_id === 4 && '2️⃣'}
                 </div>
               </motion.button>
             );
