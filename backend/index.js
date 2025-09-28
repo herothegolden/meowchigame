@@ -47,7 +47,7 @@ const validateUser = (req, res, next) => {
   }
 
   if (!validate(initData, BOT_TOKEN)) {
-    return res.status(401).json({ error: 'Invalid data' });
+    return res.status(401).json({ error: 'Invalid Telegram authentication' });
   }
 
   const params = new URLSearchParams(initData);
@@ -55,6 +55,23 @@ const validateUser = (req, res, next) => {
 
   if (!user || !user.id) {
     return res.status(400).json({ error: 'Invalid user data in initData' });
+  }
+  
+  // STRICT: Require valid username - no exceptions
+  if (!user.username || user.username.trim() === '') {
+    return res.status(400).json({ 
+      error: 'Valid Telegram username required to use this app',
+      requiresUsername: true 
+    });
+  }
+  
+  // Block suspicious demo patterns
+  const username = user.username.toLowerCase();
+  if (username === 'demouser' || username.startsWith('user_')) {
+    return res.status(400).json({ 
+      error: 'Invalid username pattern. Please set a proper Telegram username.',
+      requiresUsername: true 
+    });
   }
   
   req.user = user;
@@ -358,42 +375,40 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// ✅ Correct /api/validate route using validate from utils.js
+// REPLACE the entire /api/validate route
 app.post('/api/validate', async (req, res) => {
   try {
-    // 1. Verify Telegram initData with validate()
+    // 1. Verify Telegram initData
     const isValid = validate(req.body.initData, process.env.BOT_TOKEN);
     if (!isValid) {
       return res.status(403).json({ error: 'Invalid Telegram initData' });
     }
 
-    // 2. Extract user info (Telegram attaches it via initDataUnsafe)
+    // 2. Extract and validate user info
     const { user } = req.body;
     if (!user || !user.id) {
       return res.status(400).json({ error: 'Missing Telegram user info' });
     }
 
+    // 3. STRICT USERNAME VALIDATION - No compromises
+    if (!user.username || user.username.trim() === '') {
+      return res.status(400).json({
+        error: 'You must create a Telegram username in Settings to use this app.',
+        requiresUsername: true,
+      });
+    }
+
+    // 4. Block demo patterns entirely
+    const username = user.username.toLowerCase();
+    if (username === 'demouser' || username.startsWith('user_') || username.includes('demo')) {
+      return res.status(400).json({
+        error: 'Invalid username detected. Please set a proper Telegram username.',
+        requiresUsername: true,
+      });
+    }
+
     const client = await pool.connect();
     try {
-      // ✅ Null-safe username validation
-      const isInvalidUsername = (username) => {
-        if (!username) return true; // null, undefined, or empty
-        const lower = username.toLowerCase();
-        return (
-          lower === 'demouser' ||
-          lower.startsWith('user_') ||
-          username.trim() === ''
-        );
-      };
-
-      // REQUIREMENT 1 & 2: Block users without valid Telegram username
-      if (isInvalidUsername(user.username)) {
-        return res.status(400).json({
-          error: 'You must create a Telegram username in Settings to participate in the leaderboard.',
-          requiresUsername: true,
-        });
-      }
-
       let dbUserResult = await client.query(
         'SELECT * FROM users WHERE telegram_id = $1',
         [user.id]
@@ -402,7 +417,7 @@ app.post('/api/validate', async (req, res) => {
       let dailyBonus = null;
 
       if (dbUserResult.rows.length === 0) {
-        // 🆕 NEW USER
+        // NEW USER - Create only with valid data
         console.log(`🆕 Creating new user: ${user.first_name} (@${user.username}) (${user.id})`);
         const insertResult = await client.query(
           `INSERT INTO users (telegram_id, first_name, last_name, username)
@@ -411,74 +426,52 @@ app.post('/api/validate', async (req, res) => {
         );
         appUser = insertResult.rows[0];
       } else {
-        // EXISTING USER
+        // EXISTING USER - Update if needed
         appUser = dbUserResult.rows[0];
 
-        // REQUIREMENT 4: Reset if username invalid OR NULL
-        if (isInvalidUsername(appUser.username) || !appUser.username) {
-          console.log(`🔄 Resetting invalid/NULL username for user ${user.id}`);
-          const resetResult = await client.query(
+        // Verify existing user still has valid username
+        if (!appUser.username || appUser.username.trim() === '') {
+          return res.status(400).json({
+            error: 'Account requires valid Telegram username. Please set one in Telegram Settings.',
+            requiresUsername: true,
+          });
+        }
+
+        // Update user info if changed
+        if (appUser.first_name !== user.first_name || 
+            appUser.last_name !== user.last_name || 
+            appUser.username !== user.username) {
+          
+          console.log(`🔄 Updating user info for ${user.id}`);
+          const updateResult = await client.query(
             `UPDATE users SET
              first_name = $1, last_name = $2, username = $3,
-             points = 100, level = 1, daily_streak = 0,
-             games_played = 0, high_score = 0, total_play_time = 0,
-             last_login_at = CURRENT_TIMESTAMP
+             updated_at = CURRENT_TIMESTAMP
              WHERE telegram_id = $4 RETURNING *`,
             [user.first_name, user.last_name, user.username, user.id]
           );
-          appUser = resetResult.rows[0];
+          appUser = updateResult.rows[0];
         }
-        // REQUIREMENT 3: Username changed → reset
-        else if (user.username !== appUser.username) {
-          console.log(`🔄 Username changed for user ${user.id}: "${appUser.username}" → "${user.username}"`);
-          const resetResult = await client.query(
-            `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3,
-             points = 100, level = 1, daily_streak = 0,
-             games_played = 0, high_score = 0, total_play_time = 0,
-             last_login_at = CURRENT_TIMESTAMP
-             WHERE telegram_id = $4 RETURNING *`,
-            [user.first_name, user.last_name, user.username, user.id]
+
+        // Daily login bonus (24+ hours since last login)
+        const lastLogin = appUser.last_login_at;
+        const now = new Date();
+        
+        if (!lastLogin || (now - new Date(lastLogin)) >= 24 * 60 * 60 * 1000) {
+          console.log(`🎁 Daily bonus for user ${user.id}`);
+          
+          const hoursSinceLastLogin = lastLogin ? (now - new Date(lastLogin)) / (1000 * 60 * 60) : null;
+          const streakValid = hoursSinceLastLogin && hoursSinceLastLogin < 48;
+          const newStreak = streakValid ? appUser.daily_streak + 1 : 1;
+          const bonusPoints = 100 * newStreak;
+          const newPoints = appUser.points + bonusPoints;
+          dailyBonus = { points: bonusPoints, streak: newStreak };
+
+          const updateResult = await client.query(
+            'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
+            [user.id, newStreak, newPoints]
           );
-          appUser = resetResult.rows[0];
-        }
-        // Normal sync + daily bonus
-        else {
-          const telegramFirstName = user.first_name || appUser.first_name;
-          const telegramLastName = user.last_name || appUser.last_name;
-
-          const nameNeedsUpdate =
-            telegramFirstName !== appUser.first_name ||
-            telegramLastName !== appUser.last_name;
-
-          if (nameNeedsUpdate) {
-            console.log(`🔄 Syncing names for user ${user.id}`);
-            const nameUpdateResult = await client.query(
-              `UPDATE users SET first_name = $1, last_name = $2 WHERE telegram_id = $3 RETURNING *`,
-              [telegramFirstName, telegramLastName, user.id]
-            );
-            appUser = nameUpdateResult.rows[0];
-          }
-
-          // Daily bonus check
-          const now = new Date();
-          const lastLogin = new Date(appUser.last_login_at);
-          const lastLoginDate = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
-          const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-          if (nowDate > lastLoginDate) {
-            const diffDays = Math.ceil((nowDate - lastLoginDate) / (1000 * 60 * 60 * 24));
-            let newStreak = diffDays === 1 ? appUser.daily_streak + 1 : 1;
-            const bonusPoints = 100 * newStreak;
-            const newPoints = appUser.points + bonusPoints;
-            dailyBonus = { points: bonusPoints, streak: newStreak };
-
-            const updateResult = await client.query(
-              'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
-              [user.id, newStreak, newPoints]
-            );
-            appUser = updateResult.rows[0];
-          }
+          appUser = updateResult.rows[0];
         }
       }
 
@@ -609,7 +602,7 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
   }
 };
 
-app.post('/api/user-stats', validateUser, async (req, res) => {
+app.post('/api/get-user-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
@@ -640,7 +633,7 @@ app.post('/api/user-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('🚨 Error in /api/user-stats:', error);
+    console.error('🚨 Error in /api/get-user-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -757,54 +750,6 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
-});
-
-// DEV-ONLY: Reset tasks for developer account
-app.post('/api/dev-reset-tasks', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-
-    if (user.id !== 6998637798) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const result = await client.query(
-        'DELETE FROM user_tasks WHERE user_id = $1 RETURNING reward_points',
-        [user.id]
-      );
-
-      const tasksDeleted = result.rowCount;
-      const pointsFromTasks = result.rows.reduce((sum, row) => sum + row.reward_points, 0);
-
-      if (pointsFromTasks > 0) {
-        await client.query(
-          'UPDATE users SET points = GREATEST(points - $1, 0) WHERE telegram_id = $2',
-          [pointsFromTasks, user.id]
-        );
-      }
-
-      await client.query('COMMIT');
-
-      res.status(200).json({
-        success: true,
-        message: `Reset ${tasksDeleted} tasks and subtracted ${pointsFromTasks} points.`,
-        tasksDeleted,
-        pointsFromTasks
-      });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/dev-reset-tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
 });
 
 app.post('/api/get-shop-data', validateUser, async (req, res) => {
