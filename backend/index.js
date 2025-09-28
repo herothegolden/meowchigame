@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { validate } from './utils.js';
+import devToolsRoutes from './devToolsRoutes.js'; // 👈 NEW import
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,9 +27,17 @@ if (!DATABASE_URL || !BOT_TOKEN) {
 }
 
 // ---- DATABASE ----
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: DATABASE_URL,
 });
+
+// ---- EXPRESS APP ----
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// ---- DEV TOOLS ROUTES ----
+app.use('/api/dev', devToolsRoutes); // 👈 All dev-only routes under /api/dev
 
 // ---- FILE UPLOAD SETUP ----
 // Ensure uploads directory exists
