@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Star, Flame, Award, Calendar, Package, Zap, LoaderCircle, ChevronsUp, Badge, Trophy, Crown, Medal, Users, Clock, CheckSquare } from 'lucide-react';
+import { 
+  User, Edit2, Save, X, Crown, Star, Trophy, Clock, Target, Users, 
+  Gamepad2, Medal, Shield, Zap, Award, Plus, Trash2, LoaderCircle, 
+  RefreshCw, Upload, Camera, Flame, Package, Calendar, ChevronsUp, Badge, CheckSquare
+} from 'lucide-react';
 import TasksPage from './TasksPage';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-const DEFAULT_AVATAR = "/default-cat.png"; // NEW: fallback image for missing/broken avatars
 
 // --- Helper Components ---
 
@@ -121,166 +124,156 @@ const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
 // --- Main Profile Page Component ---
 
 const ProfilePage = () => {
-  const [profileData, setProfileData] = useState({ 
-    stats: null, 
-    inventory: [], 
-    allItems: [], 
-    boosterActive: false,
-    ownedBadges: []
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
+  const [profileData, setProfileData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   
-  // Leaderboard state
+  // Profile editing states
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  
+  // Leaderboard states
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState('global');
   
-  // Friends system state
+  // Friend management states
   const [friendUsername, setFriendUsername] = useState('');
   const [isAddingFriend, setIsAddingFriend] = useState(false);
-  const [friendsList, setFriendsList] = useState([]);
-  
-  // Profile management state
-  const [badgeProgress, setBadgeProgress] = useState({});
-  const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editNameValue, setEditNameValue] = useState('');
-  const [isUpdatingName, setIsUpdatingName] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState(null);
   
-  // FIXED: Avatar & Name sync state
-  const [displayAvatar, setDisplayAvatar] = useState(null);
-  const [displayName, setDisplayName] = useState('');
-  const [isSyncingAvatar, setIsSyncingAvatar] = useState(false);
+  // Badge progress states
+  const [badgeProgress, setBadgeProgress] = useState({});
+  const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
   
   const tg = window.Telegram?.WebApp;
 
-  // FIXED: Get Telegram user data with fallback
+  // Get Telegram user data
   const telegramUser = tg?.initDataUnsafe?.user;
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Mock data for demo mode
-  const MOCK_STATS = {
-    first_name: 'Demo User',
-    username: 'demouser',
-    points: 4735,
-    level: 1,
-    daily_streak: 1,
-    created_at: new Date().toISOString(),
-    avatar_url: null
-  };
+  // Fetch profile data from backend
+  const fetchProfileData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-  const MOCK_ITEMS = [
-    { id: 4, name: 'Double Points', description: '2x points for your next game', category: 'multiplier' }
-  ];
-
-  const MOCK_LEADERBOARD = [
-    { rank: 1, player: { name: 'Alex', level: 3 }, score: 12450, isCurrentUser: true, badge: 'Legend' },
-    { rank: 2, player: { name: 'Maria', level: 4 }, score: 11200, isCurrentUser: false, badge: 'Epic' },
-    { rank: 3, player: { name: 'John', level: 2 }, score: 9800, isCurrentUser: false, badge: 'Epic' },
-    { rank: 4, player: { name: 'Sarah', level: 3 }, score: 8500, isCurrentUser: false, badge: 'Rare' },
-    { rank: 5, player: { name: 'Mike', level: 2 }, score: 7200, isCurrentUser: false, badge: 'Rare' },
-    { rank: 6, player: { name: 'Emma', level: 1 }, score: 6100, isCurrentUser: false, badge: null },
-    { rank: 7, player: { name: 'David', level: 2 }, score: 5800, isCurrentUser: false, badge: null },
-    { rank: 8, player: { name: 'Lisa', level: 1 }, score: 4900, isCurrentUser: false, badge: null }
-  ];
-
-  // FIXED: Sync avatar from Telegram to backend (only when static URL exists)
-  const syncTelegramAvatar = async () => {
-    // CHANGE: early return if no static avatar URL provided by Telegram
-    if (!telegramPhotoUrl || !isConnected || !tg?.initData || !BACKEND_URL) {
-      return;
-    }
-
-    setIsSyncingAvatar(true);
     try {
-      console.log('📸 Syncing Telegram avatar to backend:', telegramPhotoUrl);
+      if (!tg?.initData || !BACKEND_URL) {
+        throw new Error('Connection not available. Please check your internet connection and try again.');
+      }
+
+      console.log('Fetching profile data...');
       
-      const res = await fetch(`${BACKEND_URL}/api/update-avatar`, {
+      const [statsRes, shopDataRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/get-user-stats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        }),
+        fetch(`${BACKEND_URL}/api/get-shop-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        })
+      ]);
+
+      if (!statsRes.ok || !shopDataRes.ok) {
+        throw new Error('Failed to fetch profile data. Please try again.');
+      }
+
+      const stats = await statsRes.json();
+      const shopData = await shopDataRes.json();
+      
+      console.log('Profile data loaded:', { stats, shopData });
+      
+      setProfileData({
+        stats,
+        inventory: shopData.inventory,
+        allItems: shopData.items,
+        boosterActive: shopData.boosterActive,
+        ownedBadges: shopData.ownedBadges || []
+      });
+      
+      setIsConnected(true);
+
+    } catch (err) {
+      console.error('Profile fetch error:', err);
+      setError(err.message);
+      setIsConnected(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [tg]);
+
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
+
+  // Load leaderboard when leaderboard tab is accessed
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
+      fetchLeaderboard(leaderboardTab);
+    }
+  }, [activeTab]);
+
+  // Load badge progress when badges tab is accessed
+  useEffect(() => {
+    if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
+      fetchBadgeProgress();
+    }
+  }, [activeTab]);
+
+  const handleActivateItem = async (itemId) => {
+    try {
+      if (!isConnected || !tg?.initData || !BACKEND_URL) {
+        throw new Error('Connection not available. Cannot activate items offline.');
+      }
+
+      console.log('Activating item:', itemId);
+      
+      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg.initData, 
-          avatarUrl: telegramPhotoUrl 
-        }),
+        body: JSON.stringify({ initData: tg.initData, itemId }),
       });
 
-      if (res.ok) {
-        const result = await res.json();
-        console.log('✅ Avatar synced successfully:', result.avatarUrl);
-        
-        // Update local state
-        setProfileData(prev => ({
-          ...prev,
-          stats: { ...prev.stats, avatar_url: result.avatarUrl }
-        }));
-      } else {
-        console.warn('⚠️ Avatar sync failed:', res.status);
-      }
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Activation failed.');
+
+      console.log('Item activated successfully:', result);
+
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showPopup({ 
+        title: 'Success!',
+        message: result.message,
+        buttons: [{ type: 'ok' }]
+      });
+
+      // Refresh profile data
+      fetchProfileData();
+
     } catch (error) {
-      console.error('❌ Avatar sync error:', error);
-    } finally {
-      setIsSyncingAvatar(false);
+      console.error('Activation error:', error);
+      tg?.HapticFeedback?.notificationOccurred('error');
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
     }
   };
 
-  // FIXED: Update display values based on Telegram + DB data
-  useEffect(() => {
-    if (profileData.stats) {
-      // Name: Use Telegram if available, otherwise DB
-      const finalName = telegramFirstName || profileData.stats.first_name || 'User';
-      setDisplayName(finalName);
-      
-      // CHANGE: Avatar selection with safe fallback
-      const finalAvatar = (telegramPhotoUrl && telegramPhotoUrl.trim() !== '')
-        ? telegramPhotoUrl
-        : (profileData.stats.avatar_url || DEFAULT_AVATAR);
-      setDisplayAvatar(finalAvatar);
-      
-      // CHANGE: Only sync when Telegram actually provided a static photo URL
-      if (telegramPhotoUrl && telegramPhotoUrl !== profileData.stats.avatar_url) {
-        syncTelegramAvatar();
-      }
-    }
-  }, [profileData.stats, telegramPhotoUrl, telegramFirstName, isConnected]);
-
-  // Leaderboard helper functions
-  const getRankIcon = (rank) => {
-    switch(rank) {
-      case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
-      case 2: return <Medal className="w-5 h-5 text-gray-300" />;
-      case 3: return <Medal className="w-5 h-5 text-amber-600" />;
-      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
-    }
-  };
-
-  const getBadgeColor = (badge) => {
-    switch(badge) {
-      case 'Legend': return 'text-purple-400 bg-purple-400/20';
-      case 'Epic': return 'text-blue-400 bg-blue-400/20';
-      case 'Rare': return 'text-green-400 bg-green-400/20';
-      default: return 'text-gray-400 bg-gray-400/20';
-    }
-  };
-
-  // Badge progress fetching
   const fetchBadgeProgress = async () => {
     setBadgeProgressLoading(true);
     
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        // Demo mode - mock progress data
-        setBadgeProgress({
-          'Cookie Master': 75,
-          'Speed Demon': 45,
-          'Champion': 20
-        });
-        setBadgeProgressLoading(false);
-        return;
+        throw new Error('Connection not available');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/get-badge-progress`, {
@@ -293,26 +286,17 @@ const ProfilePage = () => {
         const data = await res.json();
         setBadgeProgress(data.progress || {});
       } else {
-        // Fallback to mock data
-        setBadgeProgress({
-          'Cookie Master': 75,
-          'Speed Demon': 45, 
-          'Champion': 20
-        });
+        throw new Error('Failed to fetch badge progress');
       }
     } catch (err) {
       console.error('Badge progress fetch error:', err);
-      setBadgeProgress({
-        'Cookie Master': 75,
-        'Speed Demon': 45,
-        'Champion': 20
-      });
+      setBadgeProgress({});
     } finally {
       setBadgeProgressLoading(false);
     }
   };
 
-  // FIXED: Profile name update handler - use displayName
+  // Profile name update handler
   const handleUpdateProfile = async () => {
     if (!editNameValue.trim() || editNameValue.trim() === displayName) {
       setIsEditingName(false);
@@ -323,19 +307,7 @@ const ProfilePage = () => {
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
-        const message = `Demo: Updated name to "${editNameValue}"\n\n⚠️ This is demo mode only.`;
-        if (tg && tg.showPopup) {
-          tg.showPopup({ title: 'Demo Update', message: message, buttons: [{ type: 'ok' }] });
-        } else {
-          alert(message);
-        }
-        
-        // Update display name in demo
-        setDisplayName(editNameValue.trim());
-        setIsEditingName(false);
-        setIsUpdatingName(false);
-        return;
+        throw new Error('Connection not available. Cannot update profile offline.');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/update-profile`, {
@@ -381,15 +353,7 @@ const ProfilePage = () => {
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
-        const message = `Demo: Removed @${friendUsername} from friends\n\n⚠️ This is demo mode only.`;
-        if (tg && tg.showPopup) {
-          tg.showPopup({ title: 'Demo Action', message: message, buttons: [{ type: 'ok' }] });
-        } else {
-          alert(message);
-        }
-        setRemovingFriendId(null);
-        return;
+        throw new Error('Connection not available. Cannot manage friends offline.');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/remove-friend`, {
@@ -429,9 +393,7 @@ const ProfilePage = () => {
     
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        setLeaderboardData(MOCK_LEADERBOARD);
-        setLeaderboardLoading(false);
-        return;
+        throw new Error('Connection not available');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
@@ -444,10 +406,11 @@ const ProfilePage = () => {
         const data = await res.json();
         setLeaderboardData(data.leaderboard || []);
       } else {
-        setLeaderboardData(MOCK_LEADERBOARD);
+        throw new Error('Failed to fetch leaderboard');
       }
     } catch (err) {
-      setLeaderboardData(MOCK_LEADERBOARD);
+      console.error('Leaderboard fetch error:', err);
+      setLeaderboardData([]);
     } finally {
       setLeaderboardLoading(false);
     }
@@ -471,21 +434,7 @@ const ProfilePage = () => {
 
     try {
       if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
-        console.log('Demo: Adding friend:', friendUsername);
-        const message = `Demo: Added @${friendUsername} as friend!\n\n⚠️ This is demo mode only.`;
-        if (tg && tg.showPopup) {
-          tg.showPopup({
-            title: 'Demo Mode',
-            message: message,
-            buttons: [{ type: 'ok' }]
-          });
-        } else {
-          alert(message);
-        }
-        setFriendUsername('');
-        setIsAddingFriend(false);
-        return;
+        throw new Error('Connection not available. Cannot add friends offline.');
       }
 
       console.log('Adding friend:', friendUsername);
@@ -515,191 +464,93 @@ const ProfilePage = () => {
         buttons: [{ type: 'ok' }]
       });
 
-      // Clear input and refresh leaderboard
+      // Clear input and refresh friends leaderboard
       setFriendUsername('');
-      fetchLeaderboard('friends');
+      if (leaderboardTab === 'friends') {
+        fetchLeaderboard('friends');
+      }
 
     } catch (error) {
       console.error('Add friend error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
-      
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Error',
-          message: error.message,
-          buttons: [{ type: 'ok' }]
-        });
-      } else {
-        alert(error.message);
-      }
+      tg?.showPopup({
+        title: 'Error',
+        message: error.message,
+        buttons: [{ type: 'ok' }]
+      });
     } finally {
       setIsAddingFriend(false);
     }
   };
 
-  const fetchProfileData = useCallback(async () => {
-    try {
-      if (!tg?.initData || !BACKEND_URL) {
-        console.log('Demo mode: Using mock profile data');
-        setProfileData({
-          stats: MOCK_STATS,
-          inventory: [],
-          allItems: MOCK_ITEMS,
-          boosterActive: false,
-          ownedBadges: []
-        });
-        setIsConnected(false);
-        setLoading(false);
-        return;
-      }
-
-      console.log('Fetching real profile data...');
-
-      // Fetch both user stats and shop/inventory data in parallel
-      const [statsRes, shopDataRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/user-stats`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        }),
-        fetch(`${BACKEND_URL}/api/get-shop-data`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        })
-      ]);
-
-      if (!statsRes.ok || !shopDataRes.ok) {
-        throw new Error('Failed to fetch profile data.');
-      }
-
-      const stats = await statsRes.json();
-      const shopData = await shopDataRes.json();
-      
-      console.log('Profile data loaded:', { stats, shopData });
-      
-      setProfileData({
-        stats,
-        inventory: shopData.inventory,
-        allItems: shopData.items,
-        boosterActive: shopData.boosterActive,
-        ownedBadges: shopData.ownedBadges || []
-      });
-      
-      setIsConnected(true);
-
-    } catch (err) {
-      console.error('Profile fetch error:', err);
-      setError(err.message);
-      
-      // Fallback to demo data
-      setProfileData({
-        stats: MOCK_STATS,
-        inventory: [],
-        allItems: MOCK_ITEMS,
-        boosterActive: false,
-        ownedBadges: []
-      });
-      setIsConnected(false);
-    } finally {
-      setLoading(false);
-    }
-  }, [tg]);
-
+  // Initialize display name when profile data loads
   useEffect(() => {
-    fetchProfileData();
-  }, [fetchProfileData]);
-
-  // Load leaderboard when leaderboard tab is accessed
-  useEffect(() => {
-    if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
-      fetchLeaderboard(leaderboardTab);
+    if (profileData?.stats?.first_name) {
+      setDisplayName(profileData.stats.first_name);
+      setEditNameValue(profileData.stats.first_name);
     }
-  }, [activeTab]);
+  }, [profileData]);
 
-  // Load badge progress when badges tab is accessed
-  useEffect(() => {
-    if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
-      fetchBadgeProgress();
-    }
-  }, [activeTab]);
-
-  const handleActivateItem = async (itemId) => {
-    try {
-      if (!isConnected || !tg?.initData || !BACKEND_URL) {
-        // Demo mode
-        console.log('Demo: Activating item', itemId);
-        
-        const message = 'Demo: Double Points activated!\n\n⚠️ This is demo mode only.';
-        if (tg && tg.showPopup) {
-          tg.showPopup({ 
-            title: 'Demo Activation', 
-            message: message, 
-            buttons: [{ type: 'ok' }] 
-          });
-        } else {
-          alert(message);
-        }
-        return;
-      }
-
-      console.log('Activating item:', itemId);
-      
-      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, itemId }),
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Activation failed.');
-
-      console.log('Item activated successfully:', result);
-
-      tg.HapticFeedback?.notificationOccurred('success');
-      tg.showPopup({ 
-        title: 'Success!', 
-        message: result.message, 
-        buttons: [{ type: 'ok' }] 
-      });
-
-      // Refresh profile data
-      fetchProfileData();
-
-    } catch (err) {
-      console.error('Activation error:', err);
-      tg?.HapticFeedback?.notificationOccurred('error');
-      tg?.showPopup({ 
-        title: 'Error', 
-        message: err.message, 
-        buttons: [{ type: 'ok' }] 
-      });
+  // Leaderboard helper functions
+  const getRankIcon = (rank) => {
+    switch(rank) {
+      case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
+      case 2: return <Medal className="w-5 h-5 text-gray-300" />;
+      case 3: return <Medal className="w-5 h-5 text-amber-600" />;
+      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
     }
   };
 
+  const getBadgeColor = (badge) => {
+    switch(badge) {
+      case 'Legend': return 'text-purple-400 bg-purple-400/20';
+      case 'Epic': return 'text-blue-400 bg-blue-400/20';
+      case 'Rare': return 'text-green-400 bg-green-400/20';
+      default: return 'text-gray-400 bg-gray-400/20';
+    }
+  };
+
+  // Show loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <LoaderCircle className="w-12 h-12 text-accent animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <LoaderCircle className="w-8 h-8 text-accent" />
+        </motion.div>
       </div>
     );
   }
 
-  if (error && !profileData.stats) {
+  // Show error state
+  if (error) {
     return (
-      <div className="p-4 text-center text-red-400">
-        <p>Could not load profile.</p>
-        <p className="text-sm text-secondary">{error}</p>
-        <button 
-          onClick={fetchProfileData}
-          className="mt-4 bg-accent text-background py-2 px-4 rounded-lg font-bold"
+      <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
+        <motion.div
+          className="text-center max-w-md"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
         >
-          Retry
-        </button>
+          <div className="bg-red-600/20 border border-red-500 rounded-lg p-6">
+            <Trophy className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h1 className="text-xl font-bold text-primary mb-2">Connection Error</h1>
+            <p className="text-secondary text-sm mb-4">{error}</p>
+            <button
+              onClick={fetchProfileData}
+              className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-colors flex items-center space-x-2 mx-auto"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }
-  
+
   const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
   
   // Get activatable items (Double Points only)
@@ -1052,8 +903,8 @@ const ProfilePage = () => {
   };
 
   return (
-    <div className="p-4 space-y-6 bg-background text-primary">
-      {/* FIXED: Profile Header with Video Avatar Support -> simplified to always use IMG with fallback */}
+    <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
+      {/* Profile Header */}
       <motion.div 
         className="p-4 bg-nav rounded-lg border border-gray-700" 
         initial={{ opacity: 0, y: -20 }} 
@@ -1061,26 +912,19 @@ const ProfilePage = () => {
       >
         {/* Profile Section */}
         <div className="flex items-center space-x-4">
-          {/* FIXED: Profile Photo - now static IMG with safe fallback */}
+          {/* Profile Photo */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border-2 border-gray-600 overflow-hidden">
               <img
-                src={displayAvatar}
+                src={telegramPhotoUrl || '/default-avatar.png'}
                 alt="Profile"
                 className="w-full h-full object-cover"
-                onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+                onError={(e) => { e.currentTarget.src = '/default-avatar.png'; }}
               />
             </div>
-            
-            {/* Sync indicator */}
-            {isSyncingAvatar && (
-              <div className="absolute -bottom-1 -right-1 bg-accent rounded-full p-1">
-                <LoaderCircle className="w-3 h-3 animate-spin text-background" />
-              </div>
-            )}
           </div>
           
-          {/* FIXED: User Info - EDITABLE with hybrid name */}
+          {/* User Info */}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
               <div className="flex items-center space-x-2">
@@ -1107,7 +951,7 @@ const ProfilePage = () => {
                   onClick={() => setIsEditingName(false)}
                   className="bg-gray-600 text-white px-3 py-1 rounded font-bold hover:bg-gray-700 transition-colors flex items-center"
                 >
-                  <Star className="w-4 h-4" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             ) : (
@@ -1141,22 +985,6 @@ const ProfilePage = () => {
               <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
             </div>
           </div>
-        </div>
-        
-        {/* FIXED: Note about sync sources */}
-        <div className="mt-3 pt-3 border-t border-gray-700 text-center">
-          <p className="text-xs text-secondary">
-            {telegramPhotoUrl || telegramFirstName ? (
-              <>
-                {telegramPhotoUrl && telegramFirstName ? 'Avatar & name synced from Telegram' :
-                 telegramPhotoUrl ? 'Avatar synced from Telegram' :
-                 'Name synced from Telegram'}
-                {(stats.avatar_url || stats.first_name) && ' • DB backup available'}
-              </>
-            ) : (
-              'Using stored profile data'
-            )}
-          </p>
         </div>
       </motion.div>
 
