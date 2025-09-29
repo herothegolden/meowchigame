@@ -42,7 +42,8 @@ const DevToolsPage = () => {
     try {
       console.log('🔧 Resetting tasks for dev account...');
 
-      const response = await fetch(`${BACKEND_URL}/api/dev-reset-tasks`, {
+      // 🔥 FIXED: Call the correct endpoint /api/dev/reset-tasks
+      const response = await fetch(`${BACKEND_URL}/api/dev/reset-tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData: tg.initData }),
