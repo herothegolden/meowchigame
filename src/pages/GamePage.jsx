@@ -215,27 +215,11 @@ const GamePage = () => {
     
     try {
       if (!tg || !tg.initData || !BACKEND_URL) {
-        // Browser mode - use standardized mock data
-        console.log('Browser mode: Using standardized mock inventory');
-        const mockItems = [
-          { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
-          { item_id: 3, quantity: 1 },  // 1x Cookie Bomb
-          { item_id: 4, quantity: 1 }   // 1x Double Points
-        ];
-        setAvailableItems(mockItems);
-        setInventory(mockItems.filter(item => item.item_id === 4));
-        
-        // Calculate standardized mock stats
-        const totalItems = mockItems.reduce((sum, item) => sum + item.quantity, 0);
-        const itemValues = { 1: 750, 3: 1000, 4: 1500 }; // REMOVED item 2
-        const totalValue = mockItems.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
-        
-        setInventoryStats({
-          totalItems,
-          totalValue,
-          mostUsedItem: 'Extra Time +10s',
-          efficiency: 85
-        });
+        // Unified: No demo fallback. In Telegram-less/browser mode, expose empty inventory.
+        console.warn('Inventory unavailable: missing Telegram initData or BACKEND_URL');
+        setAvailableItems([]);
+        setInventory([]);
+        setInventoryStats({ totalItems: 0, totalValue: 0, mostUsedItem: 'None', efficiency: 0 });
         return;
       }
 
@@ -299,29 +283,10 @@ const GamePage = () => {
     
     try {
       if (!tg || !tg.initData || !BACKEND_URL) {
-        // Browser mode - simulate item usage
-        console.log('Browser mode: Simulating item configuration');
-        
-        let totalTimeBonus = 0;
-        let hasBomb = false;
-        
-        selectedItems.forEach(itemId => {
-          if (itemId === 1) totalTimeBonus += 10;
-          // REMOVED: Extra Time +20s logic
-          if (itemId === 3) hasBomb = true;
-        });
-        
-        setGameConfig({ 
-          startTime: 30 + totalTimeBonus, 
-          startWithBomb: hasBomb 
-        });
-        
-        setActiveBoosts({
-          timeBoost: totalTimeBonus,
-          bomb: hasBomb,
-          pointMultiplier: selectedItems.has(4)
-        });
-        
+        // Unified: No demo fallback. Use safe defaults and no boosters.
+        console.warn('Game configuration unavailable: missing Telegram initData or BACKEND_URL');
+        setGameConfig({ startTime: 30, startWithBomb: false });
+        setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
         return;
       }
 
@@ -373,7 +338,7 @@ const GamePage = () => {
     const tg = window.Telegram?.WebApp;
     
     if (!tg || !tg.initData || !BACKEND_URL) {
-      alert('Demo mode: Item activation not available');
+      console.warn('Activation unavailable: missing Telegram initData or BACKEND_URL');
       return;
     }
 
@@ -492,23 +457,8 @@ const GamePage = () => {
     try {
       if (itemId === 1) { // Extra Time +10s
         if (!tg || !tg.initData || !BACKEND_URL) {
-          // Demo mode - only local update
-          soundManager.playCore('power_up', { volume: 0.9 });
-          setTimeLeft(prev => prev + 10);
-          
-          setAvailableItems(prev => 
-            prev.map(invItem => 
-              invItem.item_id === itemId 
-                ? { ...invItem, quantity: invItem.quantity - 1 }
-                : invItem
-            ).filter(invItem => invItem.quantity > 0)
-          );
-          
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-          }
-          
-          console.log('Demo: Used Extra Time +10s, added 10 seconds');
+          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
+          tg?.HapticFeedback?.notificationOccurred('error');
           return;
         }
 
@@ -516,20 +466,15 @@ const GamePage = () => {
         const res = await fetch(`${BACKEND_URL}/api/use-time-booster`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData, itemId: 1, timeBonus: 10 }),
+          body: JSON.stringify({ initData: tg.initData, seconds: 10 }),
         });
 
         const result = await res.json();
-        
-        if (!res.ok) {
-          throw new Error(result.error || 'Failed to use time booster');
-        }
+        if (!res.ok) throw new Error(result.error || 'Failed to use time booster');
 
-        // Success - update game state
+        // SUCCESS: Apply time boost locally
         soundManager.playCore('power_up', { volume: 0.9 });
         setTimeLeft(prev => prev + 10);
-        
-        // Remove item from local inventory
         setAvailableItems(prev => 
           prev.map(invItem => 
             invItem.item_id === itemId 
@@ -537,22 +482,21 @@ const GamePage = () => {
               : invItem
           ).filter(invItem => invItem.quantity > 0)
         );
-        
-        if (tg.HapticFeedback) {
-          tg.HapticFeedback.impactOccurred('medium');
+
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         }
-        
+
         console.log('Used Extra Time +10s, added 10 seconds');
 
       } else if (itemId === 4) { // Double Points
         if (!tg || !tg.initData || !BACKEND_URL) {
-          // Demo mode
-          alert('Demo: Double Points activated for this game!');
-          setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
+          tg?.HapticFeedback?.notificationOccurred('error');
           return;
         }
 
-        // Use existing /api/activate-item endpoint
+        // Use existing backend logic
         const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -560,534 +504,235 @@ const GamePage = () => {
         });
 
         const result = await res.json();
-        
-        if (!res.ok) {
-          throw new Error(result.error || 'Failed to activate Double Points');
-        }
+        if (!res.ok) throw new Error(result.error || 'Failed to activate Double Points');
 
-        // Success - update game state
         setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
-        
-        // Remove item from local inventory
         setAvailableItems(prev => 
           prev.map(invItem => 
-            invItem.item_id === itemId 
-              ? { ...invItem, quantity: invItem.quantity - 1 }
+            invItem.item_id === 4 
+              ? { ...invItem, quantity: Math.max(0, invItem.quantity - 1) }
               : invItem
           ).filter(invItem => invItem.quantity > 0)
         );
 
-        if (tg.HapticFeedback) {
-          tg.HapticFeedback.notificationOccurred('success');
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+        console.log('Activated Double Points');
+
+      } else if (itemId === 3) { // Cookie Bomb
+        if (!tg || !tg.initData || !BACKEND_URL) {
+          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
+          tg?.HapticFeedback?.notificationOccurred('error');
+          return;
         }
 
-        console.log('Double Points activated for this game');
+        // Real mode - call backend to consume bomb
+        const res = await fetch(`${BACKEND_URL}/api/use-bomb`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        });
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed to use bomb');
+
+        setAvailableItems(prev => 
+          prev.map(invItem => 
+            invItem.item_id === 3 
+              ? { ...invItem, quantity: invItem.quantity - 1 }
+              : invItem
+          ).filter(invItem => invItem.quantity > 0)
+        );
+        console.log('Bomb consumed (backend)');
+
       }
 
     } catch (error) {
-      console.error('Item usage error:', error);
-      
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Error',
-          message: error.message,
-          buttons: [{ type: 'ok' }]
-        });
-      } else {
-        alert(error.message);
-      }
+      console.error('Use item error:', error);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
     } finally {
       setIsActivatingItem(null);
     }
   };
 
-  // TMA-compatible bomb dragging implementation
-  const startDraggingBomb = useCallback((e) => {
-    const bombItem = availableItems.find(item => item.item_id === 3);
-    if (!bombItem || bombItem.quantity <= 0 || isDraggingBomb) return;
-
-    console.log('Starting bomb drag');
-    setIsDraggingBomb(true);
-    
-    // Get initial pointer position
-    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
-    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
-    
-    setGhostBombPosition({ x: clientX, y: clientY });
-    
-    // Haptic feedback
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-    }
-    
-    // Prevent default to avoid selection
-    e.preventDefault();
-  }, [availableItems, isDraggingBomb]);
-
-  // Handle pointer move during bomb drag
-  const handlePointerMove = useCallback((e) => {
-    if (!isDraggingBomb) return;
-    
-    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
-    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
-    
-    setGhostBombPosition({ x: clientX, y: clientY });
-    e.preventDefault();
-  }, [isDraggingBomb]);
-
-  // Handle pointer release - bomb drop
-  const handlePointerUp = useCallback((e) => {
-    if (!isDraggingBomb) return;
-    
-    console.log('Ending bomb drag');
-    setIsDraggingBomb(false);
-    
-    // Get drop position
-    const clientX = e.clientX || (e.changedTouches && e.changedTouches[0]?.clientX) || 0;
-    const clientY = e.clientY || (e.changedTouches && e.changedTouches[0]?.clientY) || 0;
-    
-    // Find element under pointer
-    const elementUnder = document.elementFromPoint(clientX, clientY);
-    
-    if (elementUnder && gameBoardRef) {
-      // Check if we're over the game board
-      const boardElement = gameBoardRef.getBoardElement ? gameBoardRef.getBoardElement() : null;
-      
-      if (boardElement && boardElement.contains(elementUnder)) {
-        // Calculate board position
-        const boardRect = boardElement.getBoundingClientRect();
-        const cellSize = boardRect.width / 6; // Assuming 6x6 board
-        
-        const relativeX = clientX - boardRect.left;
-        const relativeY = clientY - boardRect.top;
-        
-        const col = Math.floor(relativeX / cellSize);
-        const row = Math.floor(relativeY / cellSize);
-        
-        // Validate position
-        if (row >= 0 && row < 6 && col >= 0 && col < 6) {
-          console.log('Dropping bomb at:', { row, col });
-          
-          // FIXED: Consume bomb from inventory (both locally and backend)
-          const consumeBombFromInventory = async () => {
-            const tg = window.Telegram?.WebApp;
-            
-            try {
-              if (!tg || !tg.initData || !BACKEND_URL) {
-                // Demo mode - only local update
-                setAvailableItems(prev => 
-                  prev.map(invItem => 
-                    invItem.item_id === 3 
-                      ? { ...invItem, quantity: invItem.quantity - 1 }
-                      : invItem
-                  ).filter(invItem => invItem.quantity > 0)
-                );
-                return;
-              }
-
-              // Real mode - call backend to consume bomb
-              const res = await fetch(`${BACKEND_URL}/api/use-bomb`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData: tg.initData, itemId: 3 }),
-              });
-
-              const result = await res.json();
-              
-              if (!res.ok) {
-                throw new Error(result.error || 'Failed to use bomb');
-              }
-
-              // Success - update local state
-              setAvailableItems(prev => 
-                prev.map(invItem => 
-                  invItem.item_id === 3 
-                    ? { ...invItem, quantity: invItem.quantity - 1 }
-                    : invItem
-                ).filter(invItem => invItem.quantity > 0)
-              );
-              
-              console.log('Cookie Bomb used successfully');
-
-            } catch (error) {
-              console.error('Bomb usage error:', error);
-              
-              if (tg && tg.showPopup) {
-                tg.showPopup({
-                  title: 'Error',
-                  message: error.message,
-                  buttons: [{ type: 'ok' }]
-                });
-              } else {
-                alert(error.message);
-              }
-            }
-          };
-
-          // Call the function
-          consumeBombFromInventory();
-          
-          // Trigger bomb drop on game board
-          if (gameBoardRef && gameBoardRef.handleBombDrop) {
-            gameBoardRef.handleBombDrop({ row, col });
-          }
-          
-          // Heavy haptic feedback for successful drop
-          if (window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-          }
-        }
-      }
-    }
-    
-    e.preventDefault();
-  }, [isDraggingBomb, gameBoardRef, availableItems]);
-
-  // Add global pointer event listeners during drag
-  useEffect(() => {
-    if (isDraggingBomb) {
-      document.addEventListener('pointermove', handlePointerMove, { passive: false });
-      document.addEventListener('pointerup', handlePointerUp, { passive: false });
-      document.addEventListener('touchmove', handlePointerMove, { passive: false });
-      document.addEventListener('touchend', handlePointerUp, { passive: false });
-      
-      return () => {
-        document.removeEventListener('pointermove', handlePointerMove);
-        document.removeEventListener('pointerup', handlePointerUp);
-        document.removeEventListener('touchmove', handlePointerMove);
-        document.removeEventListener('touchend', handlePointerUp);
-      };
-    }
-  }, [isDraggingBomb, handlePointerMove, handlePointerUp]);
-
-  // Load inventory on component mount
-  useEffect(() => {
-    loadInventory();
-  }, []);
-
-  const formatTime = (seconds) => {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-};
-
-  // FIXED: Get item details helper - REMOVED Extra Time +20s
-  const getItemDetails = (itemId) => {
-    const itemMap = {
-      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds', value: 750 },
-      // REMOVED: Item 2 (Extra Time +20s) completely
-      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb', value: 1000 },
-      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier', value: 1500 }
-    };
-    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect', value: 0 };
-  };
-
   return (
-    <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
-      
-      {/* Ghost Bomb Element - follows pointer during drag */}
-      {isDraggingBomb && (
-        <motion.div
-          className="fixed pointer-events-none z-50 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-2 border-red-400"
-          style={{
-            left: ghostBombPosition.x - 24,
-            top: ghostBombPosition.y - 24,
-          }}
-          initial={{ scale: 0.8, opacity: 0.8 }}
-          animate={{ scale: 1, opacity: 1 }}
-        >
-          <Bomb className="w-6 h-6 text-white" />
-        </motion.div>
-      )}
-      
-      {/* Game Over Overlay */}
-      {isGameOver && (
-        <motion.div 
-          className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
-            <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
-            <div className="text-6xl mb-4">🎉</div>
-            <p className="text-2xl font-bold text-accent mb-2">
-              {score.toLocaleString()} Points
-            </p>
-            {activeBoosts.pointMultiplier && (
-              <p className="text-sm text-green-400 mb-2">🔥 Double Points Applied!</p>
-            )}
-            {shuffleCount > 0 && (
-              <p className="text-sm text-blue-400 mb-2">🔀 Shuffles used: {shuffleCount}</p>
-            )}
-            
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={restartGame}
-                className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors"
-              >
-                <RotateCcw size={20} />
-                <span>Play Again</span>
-              </button>
-              <button
-                onClick={() => {
-                  // 🎵 SOUND: Button click for navigation
-                  soundManager.playUI('button_click', { volume: 0.8 });
-                  navigate('/');
-                }}
-                className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
-              >
-                Home
-              </button>
-            </div>
+    <div className="p-4 bg-background text-primary min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-gray-700">
+            <Star className="w-4 h-4 text-yellow-400" />
+            <span className="font-bold">{score}</span>
           </div>
-        </motion.div>
-      )}
+          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-gray-700">
+            <Clock className="w-4 h-4 text-yellow-400" />
+            <span className="font-bold">{String(Math.floor(timeLeft / 60)).padStart(1, '0')}:{String(timeLeft % 60).padStart(2, '0')}</span>
+          </div>
+        </div>
 
-      {/* Pre-game Setup */}
-      {!gameStarted && !isGameOver && (
-        <motion.div 
-          className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
-            <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
-            <div className="flex justify-center mb-6">
-              <img 
-                src="https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672" 
-                alt="Meowchi Cat" 
-                className="w-20 h-20 object-contain"
-              />
-            </div>
-            
-            <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
-              <p className="text-lg font-bold text-accent mb-2">Meowchi Match Game</p>
-              <p className="text-sm text-secondary">Match 3 or more pieces to score points!</p>
-            </div>
-            
-            <button
-              onClick={startGame}
-              className="w-full py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 bg-accent text-background hover:bg-accent/90 transition-colors"
+        <div className="flex items-center space-x-2">
+          {!gameStarted && (
+            <button 
+              onClick={async () => {
+                setIsLoadingConfig(true);
+                await loadInventory();
+                await configureGameWithSelectedItems();
+                setIsLoadingConfig(false);
+              }}
+              className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
             >
-              <Play size={24} />
-              <span>Start Game</span>
+              {isLoadingConfig ? <LoaderCircle className="w-4 h-4 animate-spin mr-2" /> : <Settings className="w-4 h-4 mr-2" />}
+              Configure
             </button>
-          </div>
-        </motion.div>
-      )}
+          )}
 
-      {/* Game Header - CLEANED UP (no inventory button) */}
-      <motion.div 
-        className="flex justify-between items-center"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700">
-          <Star className="w-6 h-6 text-accent" />
-          <span className="text-xl font-bold text-primary">{score.toLocaleString()}</span>
-          {activeBoosts.pointMultiplier && (
-            <ChevronsUp className="w-5 h-5 text-green-400" />
+          {!gameStarted ? (
+            <button 
+              onClick={startGame}
+              className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
+            >
+              <Play className="w-4 h-4 mr-2" /> Start
+            </button>
+          ) : (
+            <button 
+              onClick={restartGame}
+              className="bg-surface text-primary border border-gray-700 px-4 py-2 rounded-lg font-bold flex items-center"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" /> Restart
+            </button>
           )}
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
-            <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
-            <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>
-              {formatTime(timeLeft)}
-            </span>
-          </div>
-        </div>
-      </motion.div>
+      </div>
 
-      {/* Shuffle Alert ABOVE the board - ONLY VISUAL, NO CLICK */}
-      <AnimatePresence>
-        {shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0 && (
-          <motion.div
-            className="bg-red-600/90 backdrop-blur-sm rounded-xl p-3 border border-red-500 pointer-events-none"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="flex items-center justify-center space-x-3 text-sm text-white">
-              <Shuffle className="w-5 h-5" />
-              <span className="font-bold">No moves available! Use shuffle button below</span>
-              <Shuffle className="w-5 h-5" />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Visual Boost Indicators */}
-      <AnimatePresence>
-        {gameStarted && !isGameOver && (activeBoosts.timeBoost > 0 || activeBoosts.bomb || activeBoosts.pointMultiplier) && (
-          <motion.div
-            className="bg-nav/90 backdrop-blur-sm rounded-xl p-3 border border-gray-700"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="flex items-center justify-center space-x-4 text-sm">
-              {activeBoosts.timeBoost > 0 && (
-                <div className="flex items-center space-x-1 text-blue-400">
-                  <Clock className="w-4 h-4" />
-                  <span>+{activeBoosts.timeBoost}s Time</span>
-                </div>
-              )}
-              {activeBoosts.bomb && (
-                <div className="flex items-center space-x-1 text-red-400">
-                  <Bomb className="w-4 h-4" />
-                  <span>Bomb Ready</span>
-                </div>
-              )}
-              {activeBoosts.pointMultiplier && (
-                <motion.div 
-                  className="flex items-center space-x-1 text-green-400"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <ChevronsUp className="w-4 h-4" />
-                  <span>2x Points</span>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Game Board Container */}
-      <motion.div 
-        className="flex-1 flex flex-col items-center justify-center"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-      >
-        <GameBoard 
-          setScore={setScore} 
-          gameStarted={gameStarted}
-          startWithBomb={gameConfig.startWithBomb}
-          onGameEnd={() => setIsGameOver(true)}
+      {/* Game Board */}
+      <div className="mb-4">
+        <GameBoard
+          onScoreChange={setScore}
+          onTimeChange={setTimeLeft}
+          onGameOver={() => setIsGameOver(true)}
           onShuffleNeeded={handleShuffleNeeded}
           onBoardReady={handleBoardReady}
           onGameBoardRef={handleGameBoardRef}
+          gameStarted={gameStarted}
+          activeBoosts={activeBoosts}
         />
-      </motion.div>
-      
-      {/* FIXED: Enhanced Shuffle Button with better debugging */}
-      {gameStarted && !isGameOver && (
-        <motion.div 
-          className="flex items-center justify-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
-          <motion.button
-            onClick={() => {
-              // 🎵 SOUND: Button click for shuffle
-              soundManager.playUI('button_click', { volume: 0.8 });
-              handleShuffle();
-            }}
-            disabled={shuffleCooldown > 0 || !shuffleFunction}
-            className={`flex items-center space-x-3 px-6 py-3 rounded-xl shadow-lg border transition-all duration-200 relative ${
-              shuffleNeeded && shuffleCooldown === 0 && shuffleFunction
-                ? 'bg-red-600 hover:bg-red-700 border-red-500 animate-pulse text-white' 
-                : shuffleCooldown > 0 || !shuffleFunction
-                ? 'bg-gray-600 border-gray-500 cursor-not-allowed opacity-50 text-gray-300'
-                : 'bg-nav border-gray-700 hover:bg-gray-600 text-primary'
-            }`}
-            whileTap={shuffleCooldown === 0 && shuffleFunction ? { scale: 0.95 } : {}}
-            title={
-              !shuffleFunction ? 'Shuffle function not ready' :
-              shuffleNeeded ? 'No moves available! Click to shuffle' : 
-              'Shuffle board when stuck'
-            }
-          >
-            <Shuffle className={`w-6 h-6 ${
-              shuffleNeeded && shuffleCooldown === 0 && shuffleFunction ? 'text-white' : 
-              shuffleCooldown > 0 || !shuffleFunction ? 'text-gray-400' : 'text-accent'
-            }`} />
-            
-            <span className="font-bold">
-              {!shuffleFunction ? 'Loading...' :
-               shuffleCooldown > 0 ? `Shuffle (${shuffleCooldown}s)` : 
-               shuffleNeeded ? 'Shuffle Now!' : 'Shuffle'}
-            </span>
-            
-            {shuffleCount > 0 && shuffleCooldown === 0 && shuffleFunction && (
-              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-1 ml-2">
-                {shuffleCount}
-              </span>
-            )}
-            
-            {/* Debug indicator for function availability */}
-            {!shuffleFunction && gameStarted && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3 h-3 flex items-center justify-center">
-                !
-              </span>
-            )}
-          </motion.button>
-        </motion.div>
-      )}
+      </div>
 
-      {/* FIXED: Inline Items Toolbar - FILTERED items, proper click handlers */}
-      {gameStarted && !isGameOver && availableItems.length > 0 && (
-        <motion.div 
-          className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-        >
-          {availableItems.filter(item => [1, 3, 4].includes(item.item_id)).map((item) => {
-            const details = getItemDetails(item.item_id);
-            const ItemIcon = details.icon;
-            
-            return (
-              <motion.button
-                key={item.item_id}
-                onClick={() => {
-                  if (item.item_id === 1 || item.item_id === 4) {
-                    handleUseItem(item.item_id);
-                  }
-                }}
-                onPointerDown={(e) => {
-                  if (item.item_id === 3) {
-                    startDraggingBomb(e);
-                  }
-                }}
-                disabled={isActivatingItem === item.item_id}
-                className={`flex flex-col items-center p-3 rounded-lg border transition-all duration-200 relative ${
-                  item.item_id === 1 || item.item_id === 4
-                    ? 'bg-blue-600/20 border-blue-500 hover:bg-blue-600/30 cursor-pointer'
-                    : item.item_id === 3
-                    ? 'bg-red-600/20 border-red-500 hover:bg-red-600/30 cursor-grab'
-                    : 'bg-gray-600/20 border-gray-600 opacity-50'
-                } ${isActivatingItem === item.item_id ? 'opacity-50 cursor-wait' : ''}`}
-                whileTap={item.item_id === 1 || item.item_id === 4 ? { scale: 0.95 } : {}}
-                style={{ touchAction: 'none' }}
+      {/* Controls & Inventory */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-center">
+          <button
+            className={`px-6 py-3 rounded-lg font-bold flex items-center border ${shuffleCooldown > 0 || !gameStarted || isGameOver ? 'bg-gray-700 text-gray-400 border-gray-600 cursor-not-allowed' : 'bg-surface text-primary border-gray-700 hover:scale-105 transition-transform'}`}
+            onClick={handleShuffle}
+            disabled={shuffleCooldown > 0 || !gameStarted || isGameOver}
+          >
+            <Shuffle className="w-5 h-5 mr-2" />
+            Shuffle
+            {shuffleCooldown > 0 && (
+              <span className="ml-2 text-secondary">({shuffleCooldown})</span>
+            )}
+          </button>
+        </div>
+
+        <div className="bg-surface rounded-xl p-4 border border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Package className="w-5 h-5 text-accent" />
+              <h3 className="font-bold">Items</h3>
+            </div>
+            <button
+              className="text-secondary text-sm underline"
+              onClick={() => setShowInventory(prev => !prev)}
+            >
+              {showInventory ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          {showInventory && (
+            <div className="grid grid-cols-2 gap-3">
+              {/* Extra Time +10s */}
+              <button
+                onClick={() => handleUseItem(1)}
+                disabled={!availableItems.some(i => i.item_id === 1)}
+                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 1) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
               >
-                {isActivatingItem === item.item_id ? (
-                  <LoaderCircle className="w-6 h-6 mb-1 animate-spin text-accent" />
-                ) : (
-                  <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
-                )}
-                <span className="text-xs text-primary font-medium">{item.quantity}</span>
-                
-                {/* Usage hint */}
-                <div className="absolute -top-2 -right-2 text-xs">
-                  {item.item_id === 1 && '⏰'}
-                  {item.item_id === 3 && '💥'}
-                  {item.item_id === 4 && '2️⃣'}
+                <div className="flex items-center space-x-2">
+                  <Timer className="w-5 h-5 text-blue-400" />
+                  <span className="font-bold">+10s</span>
                 </div>
-              </motion.button>
-            );
-          })}
-        </motion.div>
-      )}
+                <span className="text-xs text-secondary">
+                  {availableItems.find(i => i.item_id === 1)?.quantity || 0}
+                </span>
+              </button>
+
+              {/* Double Points */}
+              <button
+                onClick={() => handleUseItem(4)}
+                disabled={!availableItems.some(i => i.item_id === 4)}
+                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 4) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
+              >
+                <div className="flex items-center space-x-2">
+                  <ChevronsUp className="w-5 h-5 text-green-400" />
+                  <span className="font-bold">2× Points</span>
+                </div>
+                <span className="text-xs text-secondary">
+                  {availableItems.find(i => i.item_id === 4)?.quantity || 0}
+                </span>
+              </button>
+
+              {/* Cookie Bomb */}
+              <button
+                onClick={() => handleUseItem(3)}
+                disabled={!availableItems.some(i => i.item_id === 3)}
+                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 3) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Bomb className="w-5 h-5 text-red-400" />
+                  <span className="font-bold">Bomb</span>
+                </div>
+                <span className="text-xs text-secondary">
+                  {availableItems.find(i => i.item_id === 3)?.quantity || 0}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Game Over Modal */}
+      <AnimatePresence>
+        {isGameOver && (
+          <motion.div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="bg-surface border border-gray-700 rounded-2xl p-6 w-80 text-center"
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+            >
+              <h3 className="text-xl font-bold mb-2">Game Over</h3>
+              <p className="text-secondary mb-4">Final Score: <span className="font-bold text-primary">{score}</span></p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  onClick={restartGame}
+                  className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" /> Play Again
+                </button>
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="bg-nav text-primary border border-gray-700 px-4 py-2 rounded-lg font-bold flex items-center"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" /> Profile
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
