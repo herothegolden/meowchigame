@@ -15,7 +15,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">Total Points</p>
           <p className="text-lg font-bold text-primary">{stats.points.toLocaleString()}</p>
-          <p className="text-xs text-green-400 mt-1">+15% this week</p>
+          <p className="text-xs text-green-400 mt-1">Keep earning!</p>
         </div>
       </div>
 
@@ -24,7 +24,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">Daily Streak</p>
           <p className="text-lg font-bold text-primary">{stats.daily_streak} Days</p>
-          <p className="text-xs text-green-400 mt-1">Personal best!</p>
+          <p className="text-xs text-green-400 mt-1">Stay consistent!</p>
         </div>
       </div>
 
@@ -33,7 +33,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">High Score</p>
           <p className="text-lg font-bold text-primary">{stats.high_score || 0}</p>
-          <p className="text-xs text-green-400 mt-1">New record!</p>
+          <p className="text-xs text-green-400 mt-1">Beat your record!</p>
         </div>
       </div>
 
@@ -42,7 +42,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">Games Played</p>
           <p className="text-lg font-bold text-primary">{stats.games_played || 0}</p>
-          <p className="text-xs text-green-400 mt-1">+5 this week</p>
+          <p className="text-xs text-green-400 mt-1">Keep playing!</p>
         </div>
       </div>
 
@@ -51,7 +51,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">Average Score</p>
           <p className="text-lg font-bold text-primary">{stats.averageScore || 0}</p>
-          <p className="text-xs text-green-400 mt-1">Improving!</p>
+          <p className="text-xs text-green-400 mt-1">Nice work!</p>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ const OverviewTab = ({ stats }) => {
         <div>
           <p className="text-sm text-secondary">Play Time</p>
           <p className="text-lg font-bold text-primary">{stats.totalPlayTime || '0h 0m'}</p>
-          <p className="text-xs text-green-400 mt-1">Getting better!</p>
+          <p className="text-xs text-green-400 mt-1">Time well spent!</p>
         </div>
       </div>
     </motion.div>
