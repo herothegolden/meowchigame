@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import GameBoard from '../components/game/GameBoard';
 import { Star, Clock, LoaderCircle, Play, RotateCcw, Bomb, ChevronsUp, Package, Zap, Timer, CheckCircle, Settings, BarChart3, History, Shuffle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import soundManager from '../utils/SoundManager'; // 🎵 SOUND INTEGRATION
+import soundManager from '../utils/SoundManager';
 
-// Get the backend URL from the environment variables
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const GamePage = () => {
@@ -18,41 +17,29 @@ const GamePage = () => {
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   
-  // Phase 1 & 2: Inventory state
+  // Inventory state
   const [inventory, setInventory] = useState([]);
   const [isActivatingItem, setIsActivatingItem] = useState(null);
-  const [showInventory, setShowInventory] = useState(false);
   const [availableItems, setAvailableItems] = useState([]);
-  const [selectedItems, setSelectedItems] = useState(new Set());
-  const [showItemSelection, setShowItemSelection] = useState(false);
-  const [isConfiguringGame, setIsConfiguringGame] = useState(false);
+  const [inventoryError, setInventoryError] = useState(null);
   
-  // PHASE 3: Simplified inventory management
-  const [inventoryStats, setInventoryStats] = useState({
-    totalItems: 0,
-    totalValue: 0,
-    mostUsedItem: 'None',
-    efficiency: 0
-  });
-  const [showInventoryStats, setShowInventoryStats] = useState(false);
-  
-  // FIXED: Improved shuffle state management
+  // Shuffle state
   const [shuffleNeeded, setShuffleNeeded] = useState(false);
   const [shuffleCount, setShuffleCount] = useState(0);
   const [shuffleCooldown, setShuffleCooldown] = useState(0);
   const [shuffleFunction, setShuffleFunction] = useState(null);
   
-  // TMA-compatible bomb dragging state
+  // Bomb dragging state
   const [isDraggingBomb, setIsDraggingBomb] = useState(false);
   const [ghostBombPosition, setGhostBombPosition] = useState({ x: 0, y: 0 });
   const [gameBoardRef, setGameBoardRef] = useState(null);
   
   const navigate = useNavigate();
+  const tg = window.Telegram?.WebApp;
 
   // Timer effect
   useEffect(() => {
     if (!gameStarted || isGameOver || timeLeft <= 0) return;
-
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -62,14 +49,12 @@ const GamePage = () => {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [gameStarted, isGameOver, timeLeft]);
 
-  // 🎵 SOUND: Game over trigger
+  // Game over sound
   useEffect(() => {
     if (isGameOver && !isSubmitting) {
-      // Play game over sound
       soundManager.playCore('game_over', { volume: 1.0 });
     }
   }, [isGameOver, isSubmitting]);
@@ -87,14 +72,8 @@ const GamePage = () => {
   // Handle game over submission
   useEffect(() => {
     if (!isGameOver || isSubmitting) return;
-
     const submitScore = async () => {
       setIsSubmitting(true);
-      
-      // React overlay modal will handle the Game Over display
-      const tg = window.Telegram?.WebApp;
-      
-      // Submit score silently in background (no popups)
       if (score > 0 && tg && tg.initData && BACKEND_URL) {
         try {
           const response = await fetch(`${BACKEND_URL}/api/update-score`, {
@@ -102,7 +81,6 @@ const GamePage = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ initData: tg.initData, score: score }),
           });
-          
           const data = await response.json();
           if (response.ok) {
             console.log('Score submitted successfully:', data);
@@ -111,120 +89,66 @@ const GamePage = () => {
           }
         } catch (error) {
           console.error('Error submitting score:', error);
-          // No popup - just log the error
         }
       }
-      
       setIsSubmitting(false);
     };
-
-    // Delay submission by 1 second to show final score
     const timeoutId = setTimeout(submitScore, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isGameOver, score, isSubmitting]);
+  }, [isGameOver, score, isSubmitting, tg]);
 
-  // Disable Telegram swipes during game
+  // Disable Telegram swipes
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
     if (tg) {
       tg.disableVerticalSwipes();
       return () => tg.enableVerticalSwipes();
     }
-  }, []);
+  }, [tg]);
 
-  // FIXED: Stable shuffle needed handler - memoized to prevent infinite loops
+  // Shuffle handlers
   const handleShuffleNeeded = useCallback((needed) => {
-    console.log(`🔍 Shuffle needed status: ${needed}`);
     setShuffleNeeded(needed);
   }, []);
 
-  // FIXED: Improved board ready handler - properly stores function reference
   const handleBoardReady = useCallback((shuffleFn) => {
-    console.log('🎮 Board ready, setting shuffle function');
-    console.log('🔧 Shuffle function type:', typeof shuffleFn);
-    
-    // FIXED: Store function reference properly for React state
     setShuffleFunction(() => shuffleFn);
   }, []);
 
-  // NEW: Handle game board ref for bomb drop detection
   const handleGameBoardRef = useCallback((ref) => {
     setGameBoardRef(ref);
   }, []);
 
-  // FIXED: Enhanced manual shuffle handler with better error handling
   const handleShuffle = useCallback(() => {
-    console.log('🔀 Shuffle button clicked');
-    console.log('🔧 Current state:', { 
-      hasFunction: !!shuffleFunction, 
-      functionType: typeof shuffleFunction,
-      cooldown: shuffleCooldown, 
-      gameStarted, 
-      isGameOver 
-    });
-    
-    if (!shuffleFunction) {
-      console.log('🚫 No shuffle function available');
-      return;
-    }
-    
-    if (shuffleCooldown > 0) {
-      console.log('🚫 Shuffle on cooldown:', shuffleCooldown);
-      return;
-    }
-    
-    if (!gameStarted || isGameOver) {
-      console.log('🚫 Game not active:', { gameStarted, isGameOver });
-      return;
-    }
-    
-    console.log('🔀 Executing shuffle...');
-    
+    if (!shuffleFunction || shuffleCooldown > 0 || !gameStarted || isGameOver) return;
     try {
-      // Call the shuffle function and check if it was successful
       const shuffleResult = shuffleFunction();
-      
       if (shuffleResult !== false) {
-        // Shuffle was successful or attempted
-        setShuffleCount(prev => {
-          const newCount = prev + 1;
-          console.log(`📊 Shuffle count: ${newCount}`);
-          return newCount;
-        });
-        
-        setShuffleCooldown(10); // 10 second cooldown
+        setShuffleCount(prev => prev + 1);
+        setShuffleCooldown(10);
         setShuffleNeeded(false);
-        
-        console.log('✅ Shuffle executed successfully');
-        
-        // Haptic feedback
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
         }
-      } else {
-        console.log('⚠️ Shuffle was blocked or failed');
       }
     } catch (error) {
-      console.error('🚨 Error executing shuffle:', error);
+      console.error('Error executing shuffle:', error);
     }
   }, [shuffleFunction, shuffleCooldown, gameStarted, isGameOver]);
 
-  // PHASE 3: Simplified loadInventory with basic statistics
+  // ✅ CLEANED UP: Load inventory with proper error handling (NO MOCK DATA)
   const loadInventory = async () => {
-    const tg = window.Telegram?.WebApp;
-    
     try {
+      // ❌ REMOVED: Mock data fallback for browser mode
+      // Now we REQUIRE backend connection
       if (!tg || !tg.initData || !BACKEND_URL) {
-        // Unified: No demo fallback. In Telegram-less/browser mode, expose empty inventory.
-        console.warn('Inventory unavailable: missing Telegram initData or BACKEND_URL');
+        console.error('Cannot load inventory: Missing Telegram data or backend URL');
+        setInventoryError('Connection required. Please open from Telegram.');
         setAvailableItems([]);
         setInventory([]);
-        setInventoryStats({ totalItems: 0, totalValue: 0, mostUsedItem: 'None', efficiency: 0 });
         return;
       }
 
       console.log('Loading inventory from backend...');
-
       const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,14 +158,9 @@ const GamePage = () => {
       if (res.ok) {
         const shopData = await res.json();
         let userInventory = shopData.inventory || [];
-        
-        // FILTER OUT Extra Time +20s (item_id: 2) completely
         userInventory = userInventory.filter(item => item.item_id !== 2);
         
-        console.log('Inventory loaded:', userInventory);
-        
         setAvailableItems(userInventory);
-        
         const consumableItems = userInventory.filter(item => 
           item.item_id === 4 && item.quantity > 0
         );
@@ -251,228 +170,69 @@ const GamePage = () => {
         if (pointMultiplier) {
           setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         }
-
-        // Calculate basic inventory stats
-        const totalItems = userInventory.reduce((sum, item) => sum + item.quantity, 0);
-        const itemValues = { 1: 750, 3: 1000, 4: 1500 }; // REMOVED item 2
-        const totalValue = userInventory.reduce((sum, item) => sum + (item.quantity * (itemValues[item.item_id] || 0)), 0);
         
-        setInventoryStats({
-          totalItems,
-          totalValue,
-          mostUsedItem: 'Double Points', // Simplified
-          efficiency: Math.min(95, Math.max(50, totalItems * 10))
-        });
-
+        setInventoryError(null);
       } else {
         console.error('Failed to fetch inventory:', res.status);
+        setInventoryError('Failed to load inventory from server.');
         setAvailableItems([]);
         setInventory([]);
       }
-
     } catch (error) {
       console.error('Error loading inventory:', error);
+      setInventoryError('Network error. Please check your connection.');
       setAvailableItems([]);
       setInventory([]);
     }
   };
 
-  const configureGameWithSelectedItems = async () => {
-    const tg = window.Telegram?.WebApp;
-    setIsConfiguringGame(true);
-    
-    try {
-      if (!tg || !tg.initData || !BACKEND_URL) {
-        // Unified: No demo fallback. Use safe defaults and no boosters.
-        console.warn('Game configuration unavailable: missing Telegram initData or BACKEND_URL');
-        setGameConfig({ startTime: 30, startWithBomb: false });
-        setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
-        return;
-      }
-
-      console.log('Configuring game with selected items:', Array.from(selectedItems));
-
-      // FIXED: Use new endpoint only - no fallback to auto-consumption endpoint
-      let sessionData = { startTime: 30, startWithBomb: false };
-      
-      const sessionRes = await fetch(`${BACKEND_URL}/api/start-game-session-with-items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: tg.initData, 
-          selectedItems: Array.from(selectedItems)
-        }),
-      });
-      
-      if (sessionRes.ok) {
-        sessionData = await sessionRes.json();
-        console.log('Game configured with items:', sessionData);
-      } else {
-        console.error('Game session configuration failed:', sessionRes.status);
-        // Use default values instead of auto-consuming items
-        console.log('Using default game configuration - no items consumed');
-        sessionData = { startTime: 30, startWithBomb: false };
-      }
-      
-      setGameConfig(sessionData);
-      
-      const timeBoost = sessionData.startTime - 30;
-      
-      setActiveBoosts({
-        timeBoost,
-        bomb: sessionData.startWithBomb,
-        pointMultiplier: selectedItems.has(4)
-      });
-
-    } catch (error) {
-      console.error('Error configuring game:', error);
-      // Use safe defaults on any error
-      setGameConfig({ startTime: 30, startWithBomb: false });
-      setActiveBoosts({ timeBoost: 0, bomb: false, pointMultiplier: false });
-    } finally {
-      setIsConfiguringGame(false);
-    }
-  };
-
-  const handleActivateItem = async (itemId) => {
-    const tg = window.Telegram?.WebApp;
-    
-    if (!tg || !tg.initData || !BACKEND_URL) {
-      console.warn('Activation unavailable: missing Telegram initData or BACKEND_URL');
-      return;
-    }
-
-    setIsActivatingItem(itemId);
-
-    try {
-      console.log('Activating item:', itemId);
-      
-      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, itemId }),
-      });
-
-      const result = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(result.error || 'Activation failed');
-      }
-
-      console.log('Item activated successfully:', result);
-
-      if (itemId === 4) {
-        setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
-        
-        setInventory(prev => {
-          return prev.map(item => 
-            item.item_id === itemId && item.quantity > 1
-              ? { ...item, quantity: item.quantity - 1 }
-              : item
-          ).filter(item => !(item.item_id === itemId && item.quantity <= 1));
-        });
-      }
-
-      // Silent success - only haptic feedback, no popup
-      tg.HapticFeedback?.notificationOccurred('success');
-
-    } catch (error) {
-      console.error('Activation error:', error);
-      // Silent error handling - only haptic feedback, no popup
-      tg?.HapticFeedback?.notificationOccurred('error');
-    } finally {
-      setIsActivatingItem(null);
-    }
-  };
-
-  const handleItemSelection = (itemId) => {
-    setSelectedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  };
-
   const startGame = async () => {
-    // 🎵 SOUND: Game start
     soundManager.playCore('power_up', { volume: 0.8 });
-    
-    // Auto-configure with no selected items (skip item selection entirely)
-    setSelectedItems(new Set());
-    await configureGameWithSelectedItems();
-    
     setGameStarted(true);
     setScore(0);
-    setTimeLeft(gameConfig.startTime);
+    setTimeLeft(30);
     setIsGameOver(false);
     setIsSubmitting(false);
-    setShowInventory(false);
-    
-    // Reset shuffle state
     setShuffleNeeded(false);
     setShuffleCount(0);
     setShuffleCooldown(0);
   };
 
   const restartGame = async () => {
-    console.log('Restarting game...');
-    
-    // 🎵 SOUND: Button click for restart
     soundManager.playUI('button_click', { volume: 0.8 });
-    
     setGameStarted(false);
     setScore(0);
     setIsGameOver(false);
     setIsSubmitting(false);
-    setShowInventory(false);
-    setShowItemSelection(false);
-    setShowInventoryStats(false);
-    setSelectedItems(new Set());
-    
-    // Reset shuffle state
     setShuffleNeeded(false);
     setShuffleCount(0);
     setShuffleCooldown(0);
     setShuffleFunction(null);
-    
-    // Reset bomb drag state
     setIsDraggingBomb(false);
     setGhostBombPosition({ x: 0, y: 0 });
-    
     await loadInventory();
   };
 
-  // FIXED: Handle item usage during game with backend persistence
   const handleUseItem = async (itemId) => {
     const item = availableItems.find(item => item.item_id === itemId);
     if (!item || item.quantity <= 0) return;
 
-    const tg = window.Telegram?.WebApp;
     setIsActivatingItem(itemId);
 
     try {
-      if (itemId === 1) { // Extra Time +10s
-        if (!tg || !tg.initData || !BACKEND_URL) {
-          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
-          tg?.HapticFeedback?.notificationOccurred('error');
-          return;
-        }
+      if (!tg || !tg.initData || !BACKEND_URL) {
+        throw new Error('Connection required. Please open from Telegram.');
+      }
 
-        // Real mode - call backend to consume item
+      if (itemId === 1) { // Extra Time +10s
         const res = await fetch(`${BACKEND_URL}/api/use-time-booster`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData, seconds: 10 }),
+          body: JSON.stringify({ initData: tg.initData, itemId: 1, timeBonus: 10 }),
         });
-
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'Failed to use time booster');
 
-        // SUCCESS: Apply time boost locally
         soundManager.playCore('power_up', { volume: 0.9 });
         setTimeLeft(prev => prev + 10);
         setAvailableItems(prev => 
@@ -482,257 +242,329 @@ const GamePage = () => {
               : invItem
           ).filter(invItem => invItem.quantity > 0)
         );
-
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        }
-
-        console.log('Used Extra Time +10s, added 10 seconds');
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
       } else if (itemId === 4) { // Double Points
-        if (!tg || !tg.initData || !BACKEND_URL) {
-          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
-          tg?.HapticFeedback?.notificationOccurred('error');
-          return;
-        }
-
-        // Use existing backend logic
         const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ initData: tg.initData, itemId: 4 }),
         });
-
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'Failed to activate Double Points');
 
         setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
         setAvailableItems(prev => 
           prev.map(invItem => 
-            invItem.item_id === 4 
-              ? { ...invItem, quantity: Math.max(0, invItem.quantity - 1) }
-              : invItem
-          ).filter(invItem => invItem.quantity > 0)
-        );
-
-        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
-        console.log('Activated Double Points');
-
-      } else if (itemId === 3) { // Cookie Bomb
-        if (!tg || !tg.initData || !BACKEND_URL) {
-          console.warn('Use item blocked: missing Telegram initData or BACKEND_URL');
-          tg?.HapticFeedback?.notificationOccurred('error');
-          return;
-        }
-
-        // Real mode - call backend to consume bomb
-        const res = await fetch(`${BACKEND_URL}/api/use-bomb`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData }),
-        });
-
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || 'Failed to use bomb');
-
-        setAvailableItems(prev => 
-          prev.map(invItem => 
-            invItem.item_id === 3 
+            invItem.item_id === itemId 
               ? { ...invItem, quantity: invItem.quantity - 1 }
               : invItem
           ).filter(invItem => invItem.quantity > 0)
         );
-        console.log('Bomb consumed (backend)');
-
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
       }
-
     } catch (error) {
-      console.error('Use item error:', error);
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+      console.error('Item usage error:', error);
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: error.message,
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert(error.message);
+      }
     } finally {
       setIsActivatingItem(null);
     }
   };
 
+  // Bomb dragging implementation
+  const startDraggingBomb = useCallback((e) => {
+    const bombItem = availableItems.find(item => item.item_id === 3);
+    if (!bombItem || bombItem.quantity <= 0 || isDraggingBomb) return;
+
+    setIsDraggingBomb(true);
+    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    setGhostBombPosition({ x: clientX, y: clientY });
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    }
+    e.preventDefault();
+  }, [availableItems, isDraggingBomb]);
+
+  const handlePointerMove = useCallback((e) => {
+    if (!isDraggingBomb) return;
+    const clientX = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+    setGhostBombPosition({ x: clientX, y: clientY });
+    e.preventDefault();
+  }, [isDraggingBomb]);
+
+  const handlePointerUp = useCallback(async (e) => {
+    if (!isDraggingBomb) return;
+    setIsDraggingBomb(false);
+    
+    const clientX = e.clientX || (e.changedTouches && e.changedTouches[0]?.clientX) || 0;
+    const clientY = e.clientY || (e.changedTouches && e.changedTouches[0]?.clientY) || 0;
+    const elementUnder = document.elementFromPoint(clientX, clientY);
+    
+    if (elementUnder && gameBoardRef) {
+      const boardElement = gameBoardRef.getBoardElement ? gameBoardRef.getBoardElement() : null;
+      if (boardElement && boardElement.contains(elementUnder)) {
+        const boardRect = boardElement.getBoundingClientRect();
+        const cellSize = boardRect.width / 6;
+        const relativeX = clientX - boardRect.left;
+        const relativeY = clientY - boardRect.top;
+        const col = Math.floor(relativeX / cellSize);
+        const row = Math.floor(relativeY / cellSize);
+        
+        if (row >= 0 && row < 6 && col >= 0 && col < 6) {
+          try {
+            if (!tg || !tg.initData || !BACKEND_URL) {
+              throw new Error('Connection required');
+            }
+
+            const res = await fetch(`${BACKEND_URL}/api/use-bomb`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ initData: tg.initData, itemId: 3 }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to use bomb');
+
+            setAvailableItems(prev => 
+              prev.map(invItem => 
+                invItem.item_id === 3 
+                  ? { ...invItem, quantity: invItem.quantity - 1 }
+                  : invItem
+              ).filter(invItem => invItem.quantity > 0)
+            );
+
+            if (gameBoardRef && gameBoardRef.handleBombDrop) {
+              gameBoardRef.handleBombDrop({ row, col });
+            }
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
+            }
+          } catch (error) {
+            console.error('Bomb usage error:', error);
+            if (tg && tg.showPopup) {
+              tg.showPopup({
+                title: 'Error',
+                message: error.message,
+                buttons: [{ type: 'ok' }]
+              });
+            }
+          }
+        }
+      }
+    }
+    e.preventDefault();
+  }, [isDraggingBomb, gameBoardRef, availableItems, tg]);
+
+  useEffect(() => {
+    if (isDraggingBomb) {
+      document.addEventListener('pointermove', handlePointerMove, { passive: false });
+      document.addEventListener('pointerup', handlePointerUp, { passive: false });
+      document.addEventListener('touchmove', handlePointerMove, { passive: false });
+      document.addEventListener('touchend', handlePointerUp, { passive: false });
+      return () => {
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('touchmove', handlePointerMove);
+        document.removeEventListener('touchend', handlePointerUp);
+      };
+    }
+  }, [isDraggingBomb, handlePointerMove, handlePointerUp]);
+
+  useEffect(() => {
+    loadInventory();
+  }, []);
+
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const getItemDetails = (itemId) => {
+    const itemMap = {
+      1: { name: 'Extra Time +10s', icon: Clock, color: 'text-blue-400', description: '+10 seconds', value: 750 },
+      3: { name: 'Cookie Bomb', icon: Bomb, color: 'text-red-400', description: 'Start with bomb', value: 1000 },
+      4: { name: 'Double Points', icon: ChevronsUp, color: 'text-green-400', description: '2x score multiplier', value: 1500 }
+    };
+    return itemMap[itemId] || { name: 'Unknown Item', icon: Package, color: 'text-gray-400', description: 'Unknown effect', value: 0 };
+  };
+
   return (
-    <div className="p-4 bg-background text-primary min-h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-gray-700">
-            <Star className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{score}</span>
+    <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary">
+      {isDraggingBomb && (
+        <motion.div
+          className="fixed pointer-events-none z-50 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-2 border-red-400"
+          style={{ left: ghostBombPosition.x - 24, top: ghostBombPosition.y - 24 }}
+          initial={{ scale: 0.8, opacity: 0.8 }}
+          animate={{ scale: 1, opacity: 1 }}
+        >
+          <Bomb className="w-6 h-6 text-white" />
+        </motion.div>
+      )}
+      
+      {isGameOver && (
+        <motion.div 
+          className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
+            <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
+            <div className="text-6xl mb-4">🎉</div>
+            <p className="text-2xl font-bold text-accent mb-2">{score.toLocaleString()} Points</p>
+            {activeBoosts.pointMultiplier && <p className="text-sm text-green-400 mb-2">🔥 Double Points Applied!</p>}
+            {shuffleCount > 0 && <p className="text-sm text-blue-400 mb-2">🔀 Shuffles used: {shuffleCount}</p>}
+            <div className="flex space-x-3 mt-6">
+              <button onClick={restartGame} className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors">
+                <RotateCcw size={20} />
+                <span>Play Again</span>
+              </button>
+              <button onClick={() => { soundManager.playUI('button_click', { volume: 0.8 }); navigate('/'); }} className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors">
+                Home
+              </button>
+            </div>
           </div>
-          <div className="flex items-center space-x-2 bg-surface px-3 py-2 rounded-lg border border-gray-700">
-            <Clock className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{String(Math.floor(timeLeft / 60)).padStart(1, '0')}:{String(timeLeft % 60).padStart(2, '0')}</span>
-          </div>
-        </div>
+        </motion.div>
+      )}
 
+      {!gameStarted && !isGameOver && (
+        <motion.div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-40 p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
+            <h2 className="text-3xl font-bold text-primary mb-4">Ready to Play?</h2>
+            <div className="flex justify-center mb-6">
+              <img src="https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672" alt="Meowchi Cat" className="w-20 h-20 object-contain" />
+            </div>
+            <div className="bg-background/50 p-4 rounded-xl mb-6 border border-gray-700">
+              <p className="text-lg font-bold text-accent mb-2">Meowchi Match Game</p>
+              <p className="text-sm text-secondary">Match 3 or more pieces to score points!</p>
+            </div>
+            <button onClick={startGame} className="w-full py-4 rounded-xl font-bold text-xl flex items-center justify-center space-x-2 bg-accent text-background hover:bg-accent/90 transition-colors">
+              <Play size={24} />
+              <span>Start Game</span>
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      <motion.div className="flex justify-between items-center" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <div className="flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700">
+          <Star className="w-6 h-6 text-accent" />
+          <span className="text-xl font-bold text-primary">{score.toLocaleString()}</span>
+          {activeBoosts.pointMultiplier && <ChevronsUp className="w-5 h-5 text-green-400" />}
+        </div>
         <div className="flex items-center space-x-2">
-          {!gameStarted && (
-            <button 
-              onClick={async () => {
-                setIsLoadingConfig(true);
-                await loadInventory();
-                await configureGameWithSelectedItems();
-                setIsLoadingConfig(false);
-              }}
-              className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
-            >
-              {isLoadingConfig ? <LoaderCircle className="w-4 h-4 animate-spin mr-2" /> : <Settings className="w-4 h-4 mr-2" />}
-              Configure
-            </button>
-          )}
-
-          {!gameStarted ? (
-            <button 
-              onClick={startGame}
-              className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
-            >
-              <Play className="w-4 h-4 mr-2" /> Start
-            </button>
-          ) : (
-            <button 
-              onClick={restartGame}
-              className="bg-surface text-primary border border-gray-700 px-4 py-2 rounded-lg font-bold flex items-center"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" /> Restart
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div className="mb-4">
-        <GameBoard
-          onScoreChange={setScore}
-          onTimeChange={setTimeLeft}
-          onGameOver={() => setIsGameOver(true)}
-          onShuffleNeeded={handleShuffleNeeded}
-          onBoardReady={handleBoardReady}
-          onGameBoardRef={handleGameBoardRef}
-          gameStarted={gameStarted}
-          activeBoosts={activeBoosts}
-        />
-      </div>
-
-      {/* Controls & Inventory */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-center">
-          <button
-            className={`px-6 py-3 rounded-lg font-bold flex items-center border ${shuffleCooldown > 0 || !gameStarted || isGameOver ? 'bg-gray-700 text-gray-400 border-gray-600 cursor-not-allowed' : 'bg-surface text-primary border-gray-700 hover:scale-105 transition-transform'}`}
-            onClick={handleShuffle}
-            disabled={shuffleCooldown > 0 || !gameStarted || isGameOver}
-          >
-            <Shuffle className="w-5 h-5 mr-2" />
-            Shuffle
-            {shuffleCooldown > 0 && (
-              <span className="ml-2 text-secondary">({shuffleCooldown})</span>
-            )}
-          </button>
-        </div>
-
-        <div className="bg-surface rounded-xl p-4 border border-gray-700">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <Package className="w-5 h-5 text-accent" />
-              <h3 className="font-bold">Items</h3>
-            </div>
-            <button
-              className="text-secondary text-sm underline"
-              onClick={() => setShowInventory(prev => !prev)}
-            >
-              {showInventory ? 'Hide' : 'Show'}
-            </button>
+          <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
+            <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
+            <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>{formatTime(timeLeft)}</span>
           </div>
-
-          {showInventory && (
-            <div className="grid grid-cols-2 gap-3">
-              {/* Extra Time +10s */}
-              <button
-                onClick={() => handleUseItem(1)}
-                disabled={!availableItems.some(i => i.item_id === 1)}
-                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 1) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Timer className="w-5 h-5 text-blue-400" />
-                  <span className="font-bold">+10s</span>
-                </div>
-                <span className="text-xs text-secondary">
-                  {availableItems.find(i => i.item_id === 1)?.quantity || 0}
-                </span>
-              </button>
-
-              {/* Double Points */}
-              <button
-                onClick={() => handleUseItem(4)}
-                disabled={!availableItems.some(i => i.item_id === 4)}
-                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 4) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
-              >
-                <div className="flex items-center space-x-2">
-                  <ChevronsUp className="w-5 h-5 text-green-400" />
-                  <span className="font-bold">2× Points</span>
-                </div>
-                <span className="text-xs text-secondary">
-                  {availableItems.find(i => i.item_id === 4)?.quantity || 0}
-                </span>
-              </button>
-
-              {/* Cookie Bomb */}
-              <button
-                onClick={() => handleUseItem(3)}
-                disabled={!availableItems.some(i => i.item_id === 3)}
-                className={`p-3 rounded-lg border flex items-center justify-between ${availableItems.some(i => i.item_id === 3) ? 'bg-nav border-gray-700' : 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'}`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Bomb className="w-5 h-5 text-red-400" />
-                  <span className="font-bold">Bomb</span>
-                </div>
-                <span className="text-xs text-secondary">
-                  {availableItems.find(i => i.item_id === 3)?.quantity || 0}
-                </span>
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      </motion.div>
 
-      {/* Game Over Modal */}
       <AnimatePresence>
-        {isGameOver && (
-          <motion.div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="bg-surface border border-gray-700 rounded-2xl p-6 w-80 text-center"
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
-            >
-              <h3 className="text-xl font-bold mb-2">Game Over</h3>
-              <p className="text-secondary mb-4">Final Score: <span className="font-bold text-primary">{score}</span></p>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  onClick={restartGame}
-                  className="bg-accent text-background px-4 py-2 rounded-lg font-bold flex items-center"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" /> Play Again
-                </button>
-                <button
-                  onClick={() => navigate('/profile')}
-                  className="bg-nav text-primary border border-gray-700 px-4 py-2 rounded-lg font-bold flex items-center"
-                >
-                  <BarChart3 className="w-4 h-4 mr-2" /> Profile
-                </button>
-              </div>
-            </motion.div>
+        {shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0 && (
+          <motion.div className="bg-red-600/90 backdrop-blur-sm rounded-xl p-3 border border-red-500 pointer-events-none" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+            <div className="flex items-center justify-center space-x-3 text-sm text-white">
+              <Shuffle className="w-5 h-5" />
+              <span className="font-bold">No moves available! Use shuffle button below</span>
+              <Shuffle className="w-5 h-5" />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <motion.div className="flex-1 flex flex-col items-center justify-center" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, delay: 0.2 }}>
+        <GameBoard 
+          setScore={setScore} 
+          gameStarted={gameStarted}
+          startWithBomb={gameConfig.startWithBomb}
+          onGameEnd={() => setIsGameOver(true)}
+          onShuffleNeeded={handleShuffleNeeded}
+          onBoardReady={handleBoardReady}
+          onGameBoardRef={handleGameBoardRef}
+        />
+      </motion.div>
+      
+      {gameStarted && !isGameOver && (
+        <motion.div className="flex items-center justify-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}>
+          <motion.button
+            onClick={() => { soundManager.playUI('button_click', { volume: 0.8 }); handleShuffle(); }}
+            disabled={shuffleCooldown > 0 || !shuffleFunction}
+            className={`flex items-center space-x-3 px-6 py-3 rounded-xl shadow-lg border transition-all duration-200 relative ${
+              shuffleNeeded && shuffleCooldown === 0 && shuffleFunction ? 'bg-red-600 hover:bg-red-700 border-red-500 animate-pulse text-white' : 
+              shuffleCooldown > 0 || !shuffleFunction ? 'bg-gray-600 border-gray-500 cursor-not-allowed opacity-50 text-gray-300' : 
+              'bg-nav border-gray-700 hover:bg-gray-600 text-primary'
+            }`}
+            whileTap={shuffleCooldown === 0 && shuffleFunction ? { scale: 0.95 } : {}}
+          >
+            <Shuffle className={`w-6 h-6 ${shuffleNeeded && shuffleCooldown === 0 && shuffleFunction ? 'text-white' : shuffleCooldown > 0 || !shuffleFunction ? 'text-gray-400' : 'text-accent'}`} />
+            <span className="font-bold">
+              {!shuffleFunction ? 'Loading...' : shuffleCooldown > 0 ? `Shuffle (${shuffleCooldown}s)` : shuffleNeeded ? 'Shuffle Now!' : 'Shuffle'}
+            </span>
+            {shuffleCount > 0 && shuffleCooldown === 0 && shuffleFunction && (
+              <span className="bg-blue-500 text-white text-xs font-bold rounded-full px-2 py-1 ml-2">{shuffleCount}</span>
+            )}
+          </motion.button>
+        </motion.div>
+      )}
+
+      {/* ✅ CLEANED UP: Show error or items */}
+      {gameStarted && !isGameOver && inventoryError && (
+        <motion.div className="flex items-center justify-center p-3 bg-red-600/20 rounded-xl border border-red-500" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <p className="text-sm text-red-300">{inventoryError}</p>
+        </motion.div>
+      )}
+
+      {gameStarted && !isGameOver && !inventoryError && availableItems.length > 0 && (
+        <motion.div className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }}>
+          {availableItems.filter(item => [1, 3, 4].includes(item.item_id)).map((item) => {
+            const details = getItemDetails(item.item_id);
+            const ItemIcon = details.icon;
+            return (
+              <motion.button
+                key={item.item_id}
+                onClick={() => { if (item.item_id === 1 || item.item_id === 4) handleUseItem(item.item_id); }}
+                onPointerDown={(e) => { if (item.item_id === 3) startDraggingBomb(e); }}
+                disabled={isActivatingItem === item.item_id}
+                className={`flex flex-col items-center p-3 rounded-lg border transition-all duration-200 relative ${
+                  item.item_id === 1 || item.item_id === 4 ? 'bg-blue-600/20 border-blue-500 hover:bg-blue-600/30 cursor-pointer' :
+                  item.item_id === 3 ? 'bg-red-600/20 border-red-500 hover:bg-red-600/30 cursor-grab' :
+                  'bg-gray-600/20 border-gray-600 opacity-50'
+                } ${isActivatingItem === item.item_id ? 'opacity-50 cursor-wait' : ''}`}
+                whileTap={item.item_id === 1 || item.item_id === 4 ? { scale: 0.95 } : {}}
+                style={{ touchAction: 'none' }}
+              >
+                {isActivatingItem === item.item_id ? (
+                  <LoaderCircle className="w-6 h-6 mb-1 animate-spin text-accent" />
+                ) : (
+                  <ItemIcon className={`w-6 h-6 mb-1 ${details.color}`} />
+                )}
+                <span className="text-xs text-primary font-medium">{item.quantity}</span>
+                <div className="absolute -top-2 -right-2 text-xs">
+                  {item.item_id === 1 && '⏰'}
+                  {item.item_id === 3 && '💥'}
+                  {item.item_id === 4 && '2️⃣'}
+                </div>
+              </motion.button>
+            );
+          })}
+        </motion.div>
+      )}
+
+      {gameStarted && !isGameOver && !inventoryError && availableItems.length === 0 && (
+        <motion.div className="flex items-center justify-center p-3 bg-nav rounded-xl border border-gray-700" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <p className="text-sm text-secondary">No items available. Visit the Shop!</p>
+        </motion.div>
+      )}
     </div>
   );
 };
