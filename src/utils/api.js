@@ -1,5 +1,43 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+/**
+ * Initialize user in database via /api/validate
+ * Called once on app startup to ensure user exists
+ */
+export const initializeUser = async () => {
+  const tg = window.Telegram?.WebApp;
+  
+  if (!tg?.initData || !BACKEND_URL) {
+    throw new Error('Connection required. Please open from Telegram.');
+  }
+
+  // Extract user from Telegram initData
+  const params = new URLSearchParams(tg.initData);
+  const userParam = params.get('user');
+  
+  if (!userParam) {
+    throw new Error('Invalid Telegram user data');
+  }
+  
+  const user = JSON.parse(userParam);
+
+  const response = await fetch(`${BACKEND_URL}/api/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      initData: tg.initData,
+      user: user
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || `Initialization failed: ${response.status}`);
+  }
+
+  return response.json();
+};
+
 export const apiCall = async (endpoint, data = {}) => {
   const tg = window.Telegram?.WebApp;
   
