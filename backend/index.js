@@ -639,6 +639,7 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+console.log('✅ /api/get-user-stats route registered');
 
 // NEW: Update Avatar endpoint - handles both file uploads and URLs
 app.post('/api/update-avatar', validateUser, (req, res) => {
