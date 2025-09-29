@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle, Sparkles } from 'lucide-react';
+import { ShoppingCart, Star, LoaderCircle, Clock, Timer, Bomb, ChevronsUp, Badge, Zap, Trophy, CheckCircle, Sparkles, AlertTriangle } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -14,6 +14,15 @@ const iconComponents = {
   Trophy: <Trophy size={28} />,
   Default: <Star size={28} />
 };
+
+const FALLBACK_SHOP_ITEMS = [
+  { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
+  { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
+  { id: 4, name: 'Double Points', description: '2x points for your next game', price: 1500, icon_name: 'ChevronsUp', type: 'consumable', category: 'multiplier' },
+  { id: 5, name: 'Cookie Master', description: 'Golden cookie profile', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
+  { id: 6, name: 'Speed Demon', description: 'Lightning bolt profile', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
+  { id: 7, name: 'Champion', description: 'Trophy profile', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
+];
 
 const categoryConfig = {
   time: { name: 'Time Boosters', icon: '⏰', color: 'text-blue-400' },
@@ -34,7 +43,6 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
       transition={{ duration: 0.5 }}
       layout
     >
-      {/* Purchase success animation */}
       <AnimatePresence>
         {justPurchased && (
           <motion.div
@@ -167,62 +175,67 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
 };
 
 const ShopPage = () => {
-  const [shopItems, setShopItems] = useState([]);
+  const [shopItems, setShopItems] = useState(FALLBACK_SHOP_ITEMS);
   const [userPoints, setUserPoints] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [ownedBadges, setOwnedBadges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [error, setError] = useState(null);
   const [purchasingId, setPurchasingId] = useState(null);
   const [justPurchasedId, setJustPurchasedId] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
+  
   const tg = window.Telegram?.WebApp;
 
   useEffect(() => {
     const loadShopData = async () => {
       try {
-        if (tg && tg.initData && BACKEND_URL) {
-          setConnectionStatus('Fetching shop data...');
-          console.log('Connecting to backend:', BACKEND_URL);
-          
-          const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ initData: tg.initData }),
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            console.log('Shop data loaded:', data);
-            
-            if (data.items && data.items.length > 0) {
-              const mappedItems = data.items.map(item => ({
-                ...item,
-                description: item.description ? item.description.replace(/\bbadge\b/gi, '').trim() : item.description,
-                category: getCategoryFromItem(item)
-              })).filter(item => item.id !== 2); // remove deleted item
-              setShopItems(mappedItems);
-            }
-            
-            setUserPoints(data.userPoints);
-            const normalizedInventory = (data.inventory || []).map(it => ({
-              ...it,
-              quantity: Number(it.quantity || 0)
-            }));
-            setInventory(normalizedInventory);
-            setOwnedBadges(data.ownedBadges || []);
-            setConnectionStatus('Connected to server');
-            setIsConnected(true);
-          } else {
-            throw new Error(`API Error: ${res.status}`);
-          }
-        } else {
-          throw new Error('No Telegram data or backend URL');
+        // ❌ REMOVED: Demo mode fallback
+        if (!tg || !tg.initData || !BACKEND_URL) {
+          throw new Error('Connection required. Please open from Telegram.');
         }
-      } catch (error) {
-        console.error('Failed to load shop data:', error);
-        setConnectionStatus('Failed to connect');
-        setIsConnected(false);
+
+        console.log('Fetching shop data from backend...');
+        
+        const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          console.log('Shop data loaded:', data);
+          
+          if (data.items && data.items.length > 0) {
+            const mappedItems = data.items.map(item => ({
+              ...item,
+              description: item.description ? item.description.replace(/\bbadge\b/gi, '').trim() : item.description,
+              category: getCategoryFromItem(item)
+            })).filter(item => item.id !== 2);
+            setShopItems(mappedItems);
+          }
+          
+          setUserPoints(data.userPoints);
+          const normalizedInventory = (data.inventory || []).map(it => ({
+            ...it,
+            quantity: Number(it.quantity || 0)
+          }));
+          setInventory(normalizedInventory);
+          setOwnedBadges(data.ownedBadges || []);
+          setError(null);
+        } else {
+          throw new Error(`API Error: ${res.status}`);
+        }
+      } catch (err) {
+        console.error('Failed to load shop data:', err);
+        setError(err.message);
+        
+        // ❌ REMOVED: Fallback to demo data
+        // Now we show error instead
+        setShopItems(FALLBACK_SHOP_ITEMS);
+        setUserPoints(0);
+        setInventory([]);
+        setOwnedBadges([]);
       } finally {
         setLoading(false);
       }
@@ -246,51 +259,63 @@ const ShopPage = () => {
     setPurchasingId(itemId);
 
     try {
-      if (isConnected && tg && tg.initData && BACKEND_URL) {
-        console.log('Making real purchase for item:', itemId);
-        
-        const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData, itemId }),
-        });
-
-        const result = await res.json();
-        
-        if (!res.ok) {
-          const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
-          throw new Error(errorMessage);
-        }
-
-        console.log('Purchase successful:', result);
-
-        setUserPoints(result.newPoints);
-        
-        if (item.category === 'badge') {
-          setOwnedBadges(prev => [...prev, item.name]);
-        } else {
-          setInventory(prev => {
-            const existingItem = prev.find(inv => inv.item_id === itemId);
-            if (existingItem) {
-              return prev.map(inv => 
-                inv.item_id === itemId 
-                  ? { ...inv, quantity: inv.quantity + 1 }
-                  : inv
-              );
-            } else {
-              return [...prev, { item_id: itemId, quantity: 1 }];
-            }
-          });
-        }
-
-        setJustPurchasedId(itemId);
-        setTimeout(() => setJustPurchasedId(null), 1500);
-
-        tg.HapticFeedback?.notificationOccurred('success');
+      // ❌ REMOVED: Demo mode purchase logic
+      if (!tg || !tg.initData || !BACKEND_URL) {
+        throw new Error('Connection required. Please open from Telegram.');
       }
+
+      console.log('Making purchase for item:', itemId);
+      
+      const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData, itemId }),
+      });
+
+      const result = await res.json();
+      
+      if (!res.ok) {
+        const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
+        throw new Error(errorMessage);
+      }
+
+      console.log('Purchase successful:', result);
+
+      // Update points immediately
+      setUserPoints(result.newPoints);
+      
+      // Update inventory/badges
+      if (item.category === 'badge') {
+        setOwnedBadges(prev => [...prev, item.name]);
+      } else {
+        setInventory(prev => {
+          const existingItem = prev.find(inv => inv.item_id === itemId);
+          if (existingItem) {
+            return prev.map(inv => 
+              inv.item_id === itemId 
+                ? { ...inv, quantity: inv.quantity + 1 }
+                : inv
+            );
+          } else {
+            return [...prev, { item_id: itemId, quantity: 1 }];
+          }
+        });
+      }
+
+      // Success animation
+      setJustPurchasedId(itemId);
+      setTimeout(() => setJustPurchasedId(null), 1500);
+
+      // Haptic feedback
+      if (tg && tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
     } catch (error) {
       console.error('Purchase error:', error);
-      tg?.HapticFeedback?.notificationOccurred('error');
+      if (tg && tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
       
       const message = error.message || 'Purchase failed';
       if (tg && tg.showPopup) {
@@ -312,6 +337,40 @@ const ShopPage = () => {
     acc[item.category].push(item);
     return acc;
   }, {});
+
+  // ✅ SHOW ERROR STATE
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <LoaderCircle className="w-8 h-8 text-accent animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
+        <motion.div
+          className="text-center max-w-md"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-red-600/20 border border-red-500 rounded-lg p-6">
+            <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h1 className="text-xl font-bold text-primary mb-2">Connection Error</h1>
+            <p className="text-secondary text-sm mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
@@ -337,7 +396,6 @@ const ShopPage = () => {
         </motion.div>
       </motion.div>
 
-      {/* Shop Categories */}
       <motion.div className="space-y-8" layout>
         {Object.entries(categoryConfig).map(([category, categoryData]) => (
           <CategorySection
