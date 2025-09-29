@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from './components/BottomNav';
+import { initializeUser } from './utils/api';
 
 // Import all page components
 import HomePage from './pages/HomePage';
@@ -15,7 +16,9 @@ import DevToolsPage from './pages/DevToolsPage';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
-  const [currentTextIndex, setCurrentTextIndex] = useState(1); // Start from second message
+  const [currentTextIndex, setCurrentTextIndex] = useState(1);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState(null);
 
   // Chaotic loading text messages
   const loadingTexts = [
@@ -37,15 +40,58 @@ function App() {
     return () => clearInterval(textInterval);
   }, [isLoading, loadingTexts.length]);
 
-  // React takes over from instant loading
+  // Animation loading phase (2.5s)
   useEffect(() => {
-    // Start React loading immediately (instant loading will fade out automatically)
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
-    }, 2500); // Total loading time
+    }, 2500);
 
     return () => clearTimeout(loadingTimer);
   }, []);
+
+  // User initialization phase (runs after animation)
+  useEffect(() => {
+    // Only initialize after loading animation completes
+    if (isLoading) return;
+
+    const initialize = async () => {
+      try {
+        console.log('🔐 Initializing user...');
+        const userData = await initializeUser();
+        console.log('✅ User initialized:', userData);
+        setIsInitialized(true);
+        setInitError(null);
+      } catch (error) {
+        console.error('❌ Initialization failed:', error);
+        setInitError(error.message);
+        setIsInitialized(false);
+      }
+    };
+
+    initialize();
+  }, [isLoading]);
+
+  // Retry initialization
+  const handleRetry = () => {
+    setInitError(null);
+    setIsInitialized(false);
+    
+    const initialize = async () => {
+      try {
+        console.log('🔄 Retrying initialization...');
+        const userData = await initializeUser();
+        console.log('✅ User initialized:', userData);
+        setIsInitialized(true);
+        setInitError(null);
+      } catch (error) {
+        console.error('❌ Retry failed:', error);
+        setInitError(error.message);
+        setIsInitialized(false);
+      }
+    };
+
+    initialize();
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden relative">
@@ -163,6 +209,49 @@ function App() {
                 />
               ))}
             </motion.div>
+          </motion.div>
+        ) : initError ? (
+          // Initialization Error Screen
+          <motion.div
+            key="init-error"
+            className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-background p-4"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="bg-red-600/20 border border-red-500 rounded-lg p-6 max-w-sm w-full">
+              <div className="text-center">
+                <div className="text-6xl mb-4">⚠️</div>
+                <h1 className="text-xl font-bold text-primary mb-2">Initialization Error</h1>
+                <p className="text-secondary text-sm mb-4">{initError}</p>
+                <button
+                  onClick={handleRetry}
+                  className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ) : !isInitialized ? (
+          // Initializing User Screen (brief)
+          <motion.div
+            key="initializing"
+            className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-background"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="text-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="mb-4"
+              >
+                <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full" />
+              </motion.div>
+              <p className="text-lg font-bold text-primary">Initializing...</p>
+            </div>
           </motion.div>
         ) : (
           // Main App Content
