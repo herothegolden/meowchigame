@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { validate } from './utils.js';
-import devToolsRoutes from './devToolsRoutes.js'; // 👈 NEW import
+import devToolsRoutes from './devToolsRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +37,7 @@ app.use(cors());
 app.use(express.json());
 
 // ---- DEV TOOLS ROUTES ----
-app.use('/api/dev', devToolsRoutes); // 👈 All dev-only routes under /api/dev
+app.use('/api/dev', devToolsRoutes);
 
 // ---- MIDDLEWARE ----
 const validateUser = (req, res, next) => {
@@ -144,7 +144,7 @@ const setupDatabase = async () => {
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'VARCHAR(500)' } // Avatar URL column
+      { name: 'avatar_url', type: 'VARCHAR(500)' }
     ];
 
     for (const column of columnsToAdd) {
@@ -535,13 +535,13 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
       name: 'Speed Demon Badge', 
       current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
       target: 100,
-      condition: false // Requires specific game duration tracking
+      condition: false
     },
     {
       name: 'Champion Badge',
       current: Math.floor(highScore >= 3000 ? 25 : Math.floor(highScore / 120)),
       target: 100,
-      condition: false // Requires leaderboard position
+      condition: false
     }
   ];
 
@@ -554,7 +554,6 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
       [userId, badge.name, badge.current, badge.target]
     );
 
-    // Award badge if condition met
     if (badge.condition) {
       await client.query(
         `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -585,8 +584,13 @@ app.post('/api/get-user-stats', validateUser, async (req, res) => {
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       
-      // Calculate additional stats
-      userData.averageScore = userData.games_played > 0 ? Math.floor(userData.points / userData.games_played) : 0;
+      // FIXED: Calculate actual average score from game_sessions table
+      const avgResult = await client.query(
+        'SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1',
+        [user.id]
+      );
+      userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
+      
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       
       res.status(200).json(userData);
@@ -643,7 +647,6 @@ console.log('✅ /api/get-user-stats route registered');
 
 // NEW: Update Avatar endpoint - handles both file uploads and URLs
 app.post('/api/update-avatar', validateUser, (req, res) => {
-  // Use multer to handle potential file upload
   uploadAvatar.single('avatar')(req, res, async (err) => {
     try {
       const { user } = req;
@@ -659,20 +662,16 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
         return res.status(400).json({ error: err.message });
       }
 
-      // Check if file was uploaded
       if (req.file) {
-        // File upload mode
         console.log('📸 File uploaded:', req.file.filename);
         avatarUrl = `/uploads/avatars/${req.file.filename}`;
       } else {
-        // URL input mode (existing functionality)
         const { avatarUrl: inputUrl } = req.body;
         
         if (!inputUrl || typeof inputUrl !== 'string') {
           return res.status(400).json({ error: 'Avatar URL or file is required' });
         }
         
-        // Basic URL validation
         try {
           new URL(inputUrl);
         } catch {
@@ -737,9 +736,6 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       }
 
       let inventory = inventoryResult.rows;
-      
-      // FILTER OUT Extra Time +20s (item_id: 2) from inventory response - NOT NEEDED ANYMORE since we deleted the records
-      // inventory = inventory.filter(item => item.item_id !== 2);
 
       const shopData = {
         items: itemsResult.rows,
@@ -771,7 +767,6 @@ app.post('/api/buy-item', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'itemId is required' });
     }
 
-    // PREVENT purchasing Extra Time +20s (item ID 2)
     if (itemId === 2) {
       return res.status(400).json({ error: 'This item is no longer available for purchase' });
     }
@@ -868,7 +863,6 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
     for (const itemId of selectedItems) {
       console.log(`🔄 Processing selected item: ${itemId}`);
       
-      // SKIP Extra Time +20s (item ID 2) if somehow present
       if (itemId === 2) {
         console.log(`⚠️ Skipping deprecated item ID 2 (Extra Time +20s)`);
         continue;
@@ -890,7 +884,6 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
         
         switch (itemId) {
           case 1: totalTimeBonus += 10; break;
-          // REMOVED: case 2 (Extra Time +20s)
           case 3: hasBomb = true; break;
           case 4: 
             console.log(`⚠️ Double Points (${itemId}) should be activated manually`);
@@ -899,7 +892,6 @@ app.post('/api/start-game-session-with-items', validateUser, async (req, res) =>
       }
     }
 
-    // Record item usage
     for (const itemId of usedItems) {
       const itemName = await client.query('SELECT name FROM shop_items WHERE id = $1', [itemId]);
       if (itemName.rowCount > 0) {
@@ -955,8 +947,6 @@ app.post('/api/start-game-session', validateUser, async (req, res) => {
        ) RETURNING item_id`,
       [user.id]
     );
-
-    // REMOVED: Extra Time +20s logic (item ID 2)
 
     const bombBoosterResult = await client.query(
       `DELETE FROM user_inventory 
@@ -1018,7 +1008,6 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
 
       await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
       
-      // Record usage
       await client.query(
         `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
         [user.id, itemId]
@@ -1047,7 +1036,6 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Use Time Booster endpoint for mid-game Extra Time +10s consumption
 app.post('/api/use-time-booster', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1065,7 +1053,6 @@ app.post('/api/use-time-booster', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Check and consume the item from inventory
       const inventoryResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
@@ -1080,7 +1067,6 @@ app.post('/api/use-time-booster', validateUser, async (req, res) => {
         throw new Error('You do not own this item.');
       }
 
-      // Record usage in history
       await client.query(
         `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
         [user.id, itemId]
@@ -1113,7 +1099,6 @@ app.post('/api/use-time-booster', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Use Cookie Bomb endpoint for mid-game bomb consumption
 app.post('/api/use-bomb', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1127,7 +1112,6 @@ app.post('/api/use-bomb', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Check and consume the item from inventory
       const inventoryResult = await client.query(
         `DELETE FROM user_inventory 
          WHERE id = (
@@ -1142,7 +1126,6 @@ app.post('/api/use-bomb', validateUser, async (req, res) => {
         throw new Error('You do not own this item.');
       }
 
-      // Record usage in history
       await client.query(
         `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Cookie Bomb')`,
         [user.id, itemId]
@@ -1174,7 +1157,6 @@ app.post('/api/use-bomb', validateUser, async (req, res) => {
   }
 });
 
-// FRIENDS SYSTEM: Add Friend by Username
 app.post('/api/add-friend', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1194,7 +1176,6 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // Check if friend exists by username
       const friendResult = await client.query(
         'SELECT telegram_id, first_name, username FROM users WHERE LOWER(username) = $1',
         [cleanUsername]
@@ -1206,7 +1187,6 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
 
       const friend = friendResult.rows[0];
       
-      // Check if already friends
       const existingFriend = await client.query(
         'SELECT id FROM user_friends WHERE user_id = $1 AND friend_username = $2',
         [user.id, cleanUsername]
@@ -1216,7 +1196,6 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
         throw new Error('Already friends with this user');
       }
 
-      // Add friend
       await client.query(
         'INSERT INTO user_friends (user_id, friend_username, friend_telegram_id) VALUES ($1, $2, $3)',
         [user.id, cleanUsername, friend.telegram_id]
@@ -1256,7 +1235,6 @@ app.post('/api/add-friend', validateUser, async (req, res) => {
   }
 });
 
-// FRIENDS SYSTEM: Get Friends List
 app.post('/api/get-friends', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1289,7 +1267,6 @@ app.post('/api/get-friends', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Remove Friend endpoint
 app.post('/api/remove-friend', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1327,8 +1304,6 @@ app.post('/api/remove-friend', validateUser, async (req, res) => {
   }
 });
 
-// PHASE 3: NEW ENDPOINTS
-
 app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1340,7 +1315,7 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
           FROM user_inventory 
           WHERE user_id = $1
           GROUP BY item_id
-        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
+        `, [user.id]),
         client.query(`
           SELECT item_name, COUNT(*) as usage_count 
           FROM item_usage_history 
@@ -1348,8 +1323,8 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
           GROUP BY item_name 
           ORDER BY usage_count DESC 
           LIMIT 1
-        `, [user.id]), // No longer need to filter item_id != 2 since records are deleted
-        client.query('SELECT id, price FROM shop_items') // No longer need to filter since item 2 is deleted
+        `, [user.id]),
+        client.query('SELECT id, price FROM shop_items')
       ]);
       
       const inventory = inventoryResult.rows;
@@ -1362,7 +1337,6 @@ app.post('/api/get-inventory-stats', validateUser, async (req, res) => {
       const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (items[item.item_id] || 0)), 0);
       const mostUsedItem = usageResult.rows[0]?.item_name || 'None';
       
-      // Simple efficiency calculation
       const efficiency = Math.min(95, Math.max(50, totalItems * 10 + Math.random() * 20));
       
       res.status(200).json({
@@ -1392,7 +1366,7 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
         WHERE user_id = $1
         ORDER BY used_at DESC 
         LIMIT 20
-      `, [user.id]); // No longer need to filter item_id != 2 since records are deleted
+      `, [user.id]);
       
       res.status(200).json(historyResult.rows);
 
@@ -1497,7 +1471,7 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
           params = [user.id];
           break;
           
-        default: // global
+        default:
           query = `
             SELECT u.first_name as name, u.points as score, u.level,
                    ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank,
@@ -1530,7 +1504,6 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
   }
 });
 
-// TASKS SYSTEM: Get user task status
 app.post('/api/get-user-tasks', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1541,7 +1514,6 @@ app.post('/api/get-user-tasks', validateUser, async (req, res) => {
         [user.id]
       );
       
-      // Define available main tasks
       const availableTasks = [
         {
           id: 1,
@@ -1559,10 +1531,8 @@ app.post('/api/get-user-tasks', validateUser, async (req, res) => {
         }
       ];
       
-      // Map completed tasks
       const completedTasks = new Set(tasksResult.rows.map(row => row.task_name));
       
-      // Return task status
       const taskStatus = availableTasks.map(task => ({
         ...task,
         completed: completedTasks.has(task.task_name),
@@ -1580,7 +1550,6 @@ app.post('/api/get-user-tasks', validateUser, async (req, res) => {
   }
 });
 
-// TASKS SYSTEM: Verify task completion
 app.post('/api/verify-task', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1601,7 +1570,6 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
       let verificationData = {};
 
       if (taskName === 'telegram_group_join') {
-        // Verify Telegram group membership
         const membershipResult = await verifyTelegramGroupMembership(user.id);
         isCompleted = membershipResult.isMember;
         rewardPoints = 500;
@@ -1615,15 +1583,12 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
         console.log(`📱 Telegram verification result:`, membershipResult);
         
       } else if (taskName === 'instagram_follow') {
-        // Instagram verification (simplified - requires manual verification)
-        // For now, we'll mark as completed after click and require periodic re-verification
         const existingTask = await client.query(
           'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
           [user.id, taskName]
         );
         
         if (existingTask.rowCount === 0) {
-          // First time - mark as completed (honor system + manual verification)
           isCompleted = true;
           rewardPoints = 300;
           verificationData = {
@@ -1634,7 +1599,6 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
           };
           console.log(`📸 Instagram task marked for manual verification`);
         } else {
-          // Return existing status
           isCompleted = existingTask.rows[0].completed;
           rewardPoints = existingTask.rows[0].reward_points;
         }
@@ -1643,21 +1607,18 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
       }
 
       if (isCompleted) {
-        // Check if task already completed
         const existingResult = await client.query(
           'SELECT * FROM user_tasks WHERE user_id = $1 AND task_name = $2',
           [user.id, taskName]
         );
 
         if (existingResult.rowCount === 0) {
-          // First completion - insert new record and award points
           await client.query(
             `INSERT INTO user_tasks (user_id, task_name, completed, completed_at, reward_points, verification_data) 
              VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)`,
             [user.id, taskName, true, rewardPoints, JSON.stringify(verificationData)]
           );
 
-          // Award points to user
           await client.query(
             'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
             [rewardPoints, user.id]
@@ -1666,14 +1627,12 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
           console.log(`🎉 Task completed! Awarded ${rewardPoints} points to user ${user.id}`);
 
         } else if (!existingResult.rows[0].completed) {
-          // Task exists but wasn't completed before - update it
           await client.query(
             `UPDATE user_tasks SET completed = true, completed_at = CURRENT_TIMESTAMP, 
              reward_points = $3, verification_data = $4 WHERE user_id = $1 AND task_name = $2`,
             [user.id, taskName, rewardPoints, JSON.stringify(verificationData)]
           );
 
-          // Award points to user
           await client.query(
             'UPDATE users SET points = points + $1 WHERE telegram_id = $2',
             [rewardPoints, user.id]
@@ -1684,7 +1643,6 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
           console.log(`ℹ️ Task already completed for user ${user.id}`);
         }
       } else {
-        // Task not completed - update or insert failed verification
         await client.query(
           `INSERT INTO user_tasks (user_id, task_name, completed, verification_data) 
            VALUES ($1, $2, false, $3)
@@ -1717,7 +1675,6 @@ app.post('/api/verify-task', validateUser, async (req, res) => {
   }
 });
 
-// TASKS SYSTEM: Open task link and track attempt
 app.post('/api/start-task', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1737,7 +1694,6 @@ app.post('/api/start-task', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'Unknown task name' });
     }
 
-    // Track that user started this task
     const client = await pool.connect();
     try {
       await client.query(
@@ -1769,9 +1725,6 @@ app.post('/api/start-task', validateUser, async (req, res) => {
   }
 });
 
-// ✂️ REMOVED: /api/dev-reset-tasks route - moved to devToolsRoutes.js
-
-// HELPER FUNCTION: Verify Telegram group membership using Bot API
 async function verifyTelegramGroupMembership(userId) {
   try {
     if (!BOT_TOKEN) {
@@ -1779,7 +1732,7 @@ async function verifyTelegramGroupMembership(userId) {
       return { isMember: false, status: 'bot_token_missing' };
     }
 
-    const chatId = '@meowchi_lab'; // The group/channel username
+    const chatId = '@meowchi_lab';
     const apiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember`;
     
     const response = await fetch(apiUrl, {
@@ -1807,7 +1760,6 @@ async function verifyTelegramGroupMembership(userId) {
     } else {
       console.error(`❌ Telegram API error:`, data);
       
-      // Handle common errors
       if (data.error_code === 400 && data.description.includes('chat not found')) {
         return { isMember: false, status: 'chat_not_found' };
       } else if (data.error_code === 400 && data.description.includes('user not found')) {
@@ -1831,7 +1783,6 @@ const startServer = () => {
   });
 };
 
-// Start the application
 setupDatabase().then(startServer).catch(err => {
   console.error('💥 Failed to start application:', err);
   process.exit(1);
