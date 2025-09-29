@@ -9,6 +9,12 @@ import TasksPage from './TasksPage';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+// 🔍 DEBUG: Log the BACKEND_URL value
+console.log('🔍 BACKEND_URL value:', BACKEND_URL);
+console.log('🔍 Environment variables:', import.meta.env);
+console.log('🔍 Is BACKEND_URL defined?', BACKEND_URL ? 'YES' : 'NO');
+console.log('🔍 BACKEND_URL type:', typeof BACKEND_URL);
+
 // --- Helper Components ---
 
 const StatCard = ({ icon, label, value, color }) => (
@@ -163,10 +169,17 @@ const ProfilePage = () => {
 
     try {
       if (!tg?.initData || !BACKEND_URL) {
+        console.error('❌ Missing required data:', { 
+          hasInitData: !!tg?.initData, 
+          hasBACKEND_URL: !!BACKEND_URL,
+          BACKEND_URL 
+        });
         throw new Error('Connection not available. Please check your internet connection and try again.');
       }
 
-      console.log('Fetching profile data...');
+      console.log('📡 Fetching profile data...');
+      console.log('🔍 Full API URL for get-user-stats:', `${BACKEND_URL}/api/get-user-stats`);
+      console.log('🔍 Full API URL for get-shop-data:', `${BACKEND_URL}/api/get-shop-data`);
       
       const [statsRes, shopDataRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/get-user-stats`, {
@@ -181,6 +194,8 @@ const ProfilePage = () => {
         })
       ]);
 
+      console.log('📥 Response status - stats:', statsRes.status, 'shop:', shopDataRes.status);
+
       if (!statsRes.ok || !shopDataRes.ok) {
         throw new Error('Failed to fetch profile data. Please try again.');
       }
@@ -188,7 +203,7 @@ const ProfilePage = () => {
       const stats = await statsRes.json();
       const shopData = await shopDataRes.json();
       
-      console.log('Profile data loaded:', { stats, shopData });
+      console.log('✅ Profile data loaded:', { stats, shopData });
       
       setProfileData({
         stats,
@@ -199,7 +214,7 @@ const ProfilePage = () => {
       });
 
     } catch (err) {
-      console.error('Profile fetch error:', err);
+      console.error('❌ Profile fetch error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -230,7 +245,8 @@ const ProfilePage = () => {
         throw new Error('Connection not available. Cannot activate items offline.');
       }
 
-      console.log('Activating item:', itemId);
+      console.log('⚡ Activating item:', itemId);
+      console.log('🔍 API URL:', `${BACKEND_URL}/api/activate-item`);
       
       const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
         method: 'POST',
@@ -241,7 +257,7 @@ const ProfilePage = () => {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Activation failed.');
 
-      console.log('Item activated successfully:', result);
+      console.log('✅ Item activated successfully:', result);
 
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({ 
@@ -254,7 +270,7 @@ const ProfilePage = () => {
       fetchProfileData();
 
     } catch (error) {
-      console.error('Activation error:', error);
+      console.error('❌ Activation error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
       tg?.showPopup({
         title: 'Error',
@@ -272,6 +288,8 @@ const ProfilePage = () => {
         throw new Error('Connection not available');
       }
 
+      console.log('🔍 Fetching badge progress from:', `${BACKEND_URL}/api/get-badge-progress`);
+
       const res = await fetch(`${BACKEND_URL}/api/get-badge-progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -285,7 +303,7 @@ const ProfilePage = () => {
         throw new Error('Failed to fetch badge progress');
       }
     } catch (err) {
-      console.error('Badge progress fetch error:', err);
+      console.error('❌ Badge progress fetch error:', err);
       setBadgeProgress({});
     } finally {
       setBadgeProgressLoading(false);
@@ -305,6 +323,8 @@ const ProfilePage = () => {
       if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot update profile offline.');
       }
+
+      console.log('🔍 Updating profile at:', `${BACKEND_URL}/api/update-profile`);
 
       const res = await fetch(`${BACKEND_URL}/api/update-profile`, {
         method: 'POST',
@@ -331,7 +351,7 @@ const ProfilePage = () => {
       });
 
     } catch (error) {
-      console.error('Profile update error:', error);
+      console.error('❌ Profile update error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
       tg?.showPopup({
         title: 'Error',
@@ -351,6 +371,8 @@ const ProfilePage = () => {
       if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available. Cannot manage friends offline.');
       }
+
+      console.log('🔍 Removing friend at:', `${BACKEND_URL}/api/remove-friend`);
 
       const res = await fetch(`${BACKEND_URL}/api/remove-friend`, {
         method: 'POST',
@@ -372,7 +394,7 @@ const ProfilePage = () => {
       });
 
     } catch (error) {
-      console.error('Remove friend error:', error);
+      console.error('❌ Remove friend error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
       tg?.showPopup({
         title: 'Error',
@@ -392,6 +414,8 @@ const ProfilePage = () => {
         throw new Error('Connection not available');
       }
 
+      console.log('🔍 Fetching leaderboard from:', `${BACKEND_URL}/api/get-leaderboard`);
+
       const res = await fetch(`${BACKEND_URL}/api/get-leaderboard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -405,7 +429,7 @@ const ProfilePage = () => {
         throw new Error('Failed to fetch leaderboard');
       }
     } catch (err) {
-      console.error('Leaderboard fetch error:', err);
+      console.error('❌ Leaderboard fetch error:', err);
       setLeaderboardData([]);
     } finally {
       setLeaderboardLoading(false);
@@ -433,7 +457,8 @@ const ProfilePage = () => {
         throw new Error('Connection not available. Cannot add friends offline.');
       }
 
-      console.log('Adding friend:', friendUsername);
+      console.log('👥 Adding friend:', friendUsername);
+      console.log('🔍 API URL:', `${BACKEND_URL}/api/add-friend`);
 
       const res = await fetch(`${BACKEND_URL}/api/add-friend`, {
         method: 'POST',
@@ -450,7 +475,7 @@ const ProfilePage = () => {
         throw new Error(result.error || 'Failed to add friend');
       }
 
-      console.log('Friend added successfully:', result);
+      console.log('✅ Friend added successfully:', result);
 
       // Success feedback
       tg.HapticFeedback?.notificationOccurred('success');
@@ -467,7 +492,7 @@ const ProfilePage = () => {
       }
 
     } catch (error) {
-      console.error('Add friend error:', error);
+      console.error('❌ Add friend error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
       tg?.showPopup({
         title: 'Error',
