@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Edit2, Save, X, Crown, Star, Trophy, Clock, Target, Users, 
   Gamepad2, Medal, Shield, Zap, Award, Plus, Trash2, LoaderCircle, 
-  RefreshCw, Upload, Camera, Flame, Package, Calendar, ChevronsUp, Badge, CheckSquare
+  RefreshCw, Upload, Camera, Flame, Package, Calendar, ChevronsUp, Badge, CheckSquare, AlertTriangle
 } from 'lucide-react';
 import TasksPage from './TasksPage';
 
@@ -79,48 +79,6 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   );
 };
 
-const InventoryItemCard = ({ item, quantity, onActivate, disabled }) => {
-  const [isActivating, setIsActivating] = useState(false);
-
-  const handleActivate = async () => {
-    setIsActivating(true);
-    await onActivate(item.id);
-    setIsActivating(false);
-  };
-
-  const getItemIcon = (itemId) => {
-    switch(itemId) {
-      case 4: return <ChevronsUp size={28} />; // Double Points
-      default: return <Star size={28} />;
-    }
-  };
-
-  return (
-    <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
-      <div className="flex items-center">
-        <div className="mr-4 text-accent">{getItemIcon(item.id)}</div>
-        <div>
-          <p className="font-bold text-primary">{item.name}</p>
-          <p className="text-sm text-secondary">{item.description}</p>
-          <p className="text-xs text-accent mt-1">Quantity: {quantity}</p>
-        </div>
-      </div>
-      
-      <button 
-        onClick={handleActivate}
-        disabled={disabled || isActivating}
-        className={`font-bold py-2 px-4 rounded-lg flex items-center transition-all duration-200 ${
-          disabled 
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : 'bg-accent text-background hover:scale-105'
-        }`}
-      >
-        {isActivating ? <LoaderCircle className="w-5 h-5 animate-spin" /> : 'Activate'}
-      </button>
-    </div>
-  );
-};
-
 // --- Main Profile Page Component ---
 
 const ProfilePage = () => {
@@ -150,20 +108,19 @@ const ProfilePage = () => {
   const [badgeProgressLoading, setBadgeProgressLoading] = useState(false);
   
   const tg = window.Telegram?.WebApp;
-
-  // Get Telegram user data
   const telegramUser = tg?.initDataUnsafe?.user;
   const telegramPhotoUrl = telegramUser?.photo_url;
   const telegramFirstName = telegramUser?.first_name;
 
-  // Fetch profile data from backend
+  // ✅ CLEANED UP: Fetch profile data (NO MOCK DATA)
   const fetchProfileData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
+      // ❌ REMOVED: Mock data fallback
       if (!tg?.initData || !BACKEND_URL) {
-        throw new Error('Connection not available. Please check your internet connection and try again.');
+        throw new Error('Connection required. Please open from Telegram.');
       }
 
       console.log('Fetching profile data...');
@@ -210,63 +167,20 @@ const ProfilePage = () => {
     fetchProfileData();
   }, [fetchProfileData]);
 
-  // Load leaderboard when leaderboard tab is accessed
   useEffect(() => {
     if (activeTab === 'leaderboard' && leaderboardData.length === 0) {
       fetchLeaderboard(leaderboardTab);
     }
   }, [activeTab]);
 
-  // Load badge progress when badges tab is accessed
   useEffect(() => {
     if (activeTab === 'badges' && Object.keys(badgeProgress).length === 0) {
       fetchBadgeProgress();
     }
   }, [activeTab]);
 
-  const handleActivateItem = async (itemId) => {
-    try {
-      if (!tg?.initData || !BACKEND_URL) {
-        throw new Error('Connection not available. Cannot activate items offline.');
-      }
-
-      console.log('Activating item:', itemId);
-      
-      const res = await fetch(`${BACKEND_URL}/api/activate-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: tg.initData, itemId }),
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Activation failed.');
-
-      console.log('Item activated successfully:', result);
-
-      tg.HapticFeedback?.notificationOccurred('success');
-      tg.showPopup({ 
-        title: 'Success!',
-        message: result.message,
-        buttons: [{ type: 'ok' }]
-      });
-
-      // Refresh profile data
-      fetchProfileData();
-
-    } catch (error) {
-      console.error('Activation error:', error);
-      tg?.HapticFeedback?.notificationOccurred('error');
-      tg?.showPopup({
-        title: 'Error',
-        message: error.message,
-        buttons: [{ type: 'ok' }]
-      });
-    }
-  };
-
   const fetchBadgeProgress = async () => {
     setBadgeProgressLoading(true);
-    
     try {
       if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available');
@@ -292,7 +206,6 @@ const ProfilePage = () => {
     }
   };
 
-  // Profile name update handler
   const handleUpdateProfile = async () => {
     if (!editNameValue.trim() || editNameValue.trim() === displayName) {
       setIsEditingName(false);
@@ -303,7 +216,7 @@ const ProfilePage = () => {
 
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        throw new Error('Connection not available. Cannot update profile offline.');
+        throw new Error('Connection required.');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/update-profile`, {
@@ -315,7 +228,6 @@ const ProfilePage = () => {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Update failed');
 
-      // Update local state
       setProfileData(prev => ({
         ...prev,
         stats: { ...prev.stats, first_name: result.firstName }
@@ -343,13 +255,12 @@ const ProfilePage = () => {
     }
   };
 
-  // Friend removal handler
   const handleRemoveFriend = async (friendUsername) => {
     setRemovingFriendId(friendUsername);
 
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        throw new Error('Connection not available. Cannot manage friends offline.');
+        throw new Error('Connection required.');
       }
 
       const res = await fetch(`${BACKEND_URL}/api/remove-friend`, {
@@ -361,9 +272,7 @@ const ProfilePage = () => {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Remove failed');
 
-      // Refresh friends leaderboard
       fetchLeaderboard('friends');
-
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
         title: 'Success!',
@@ -386,7 +295,6 @@ const ProfilePage = () => {
 
   const fetchLeaderboard = async (type = 'global') => {
     setLeaderboardLoading(true);
-    
     try {
       if (!tg?.initData || !BACKEND_URL) {
         throw new Error('Connection not available');
@@ -430,10 +338,8 @@ const ProfilePage = () => {
 
     try {
       if (!tg?.initData || !BACKEND_URL) {
-        throw new Error('Connection not available. Cannot add friends offline.');
+        throw new Error('Connection required.');
       }
-
-      console.log('Adding friend:', friendUsername);
 
       const res = await fetch(`${BACKEND_URL}/api/add-friend`, {
         method: 'POST',
@@ -445,14 +351,8 @@ const ProfilePage = () => {
       });
 
       const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to add friend');
 
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to add friend');
-      }
-
-      console.log('Friend added successfully:', result);
-
-      // Success feedback
       tg.HapticFeedback?.notificationOccurred('success');
       tg.showPopup({
         title: 'Success!',
@@ -460,7 +360,6 @@ const ProfilePage = () => {
         buttons: [{ type: 'ok' }]
       });
 
-      // Clear input and refresh friends leaderboard
       setFriendUsername('');
       if (leaderboardTab === 'friends') {
         fetchLeaderboard('friends');
@@ -479,7 +378,6 @@ const ProfilePage = () => {
     }
   };
 
-  // Initialize display name when profile data loads
   useEffect(() => {
     if (profileData?.stats?.first_name) {
       setDisplayName(profileData.stats.first_name);
@@ -487,7 +385,6 @@ const ProfilePage = () => {
     }
   }, [profileData]);
 
-  // Leaderboard helper functions
   const getRankIcon = (rank) => {
     switch(rank) {
       case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
@@ -506,7 +403,6 @@ const ProfilePage = () => {
     }
   };
 
-  // Show loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -520,7 +416,7 @@ const ProfilePage = () => {
     );
   }
 
-  // Show error state
+  // ✅ SHOW ERROR STATE
   if (error) {
     return (
       <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
@@ -531,7 +427,7 @@ const ProfilePage = () => {
           transition={{ duration: 0.3 }}
         >
           <div className="bg-red-600/20 border border-red-500 rounded-lg p-6">
-            <Trophy className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
             <h1 className="text-xl font-bold text-primary mb-2">Connection Error</h1>
             <p className="text-secondary text-sm mb-4">{error}</p>
             <button
@@ -547,7 +443,6 @@ const ProfilePage = () => {
     );
   }
 
-  // If no profile data, show error
   if (!profileData?.stats) {
     return (
       <div className="p-4 min-h-screen bg-background text-primary flex items-center justify-center">
@@ -566,19 +461,7 @@ const ProfilePage = () => {
   }
 
   const { stats, inventory, allItems, boosterActive, ownedBadges } = profileData;
-  
-  // Get activatable items (Double Points only)
-  const activatableItems = allItems.filter(item => 
-    item.id === 4 && // Double Points item
-    inventory.some(inv => inv.item_id === item.id && inv.quantity > 0)
-  );
-
-  // Get all possible badges
-  const allBadges = [
-    'Cookie Master',
-    'Speed Demon', 
-    'Champion'
-  ];
+  const allBadges = ['Cookie Master', 'Speed Demon', 'Champion'];
 
   const renderTabContent = () => {
     switch(activeTab) {
@@ -590,7 +473,6 @@ const ProfilePage = () => {
             animate={{ opacity: 1, scale: 1 }} 
             transition={{ delay: 0.2 }}
           >
-            {/* Total Points */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-accent"><Star size={24} /></div>
               <div>
@@ -600,7 +482,6 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* Daily Streak */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-accent"><Flame size={24} /></div>
               <div>
@@ -610,7 +491,6 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* High Score */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Trophy size={24} /></div>
               <div>
@@ -620,7 +500,6 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* Games Played */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Package size={24} /></div>
               <div>
@@ -630,7 +509,6 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* Average Score */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Award size={24} /></div>
               <div>
@@ -640,7 +518,6 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            {/* Play Time */}
             <div className="bg-nav p-4 rounded-lg flex items-center border border-gray-700">
               <div className="mr-4 text-primary"><Calendar size={24} /></div>
               <div>
@@ -662,7 +539,6 @@ const ProfilePage = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Badge Progress Summary */}
                 <div className="bg-background/50 p-4 rounded-lg border border-gray-600">
                   <h3 className="text-lg font-bold text-primary mb-2">Badge Progress</h3>
                   <div className="grid grid-cols-3 gap-4 text-center text-sm">
@@ -687,7 +563,6 @@ const ProfilePage = () => {
                   </div>
                 </div>
 
-                {/* Badge Cards with Progress */}
                 <div className="grid grid-cols-1 gap-3">
                   {allBadges.map(badgeName => {
                     const isOwned = ownedBadges.includes(badgeName);
@@ -724,7 +599,6 @@ const ProfilePage = () => {
       case 'leaderboard':
         return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            {/* Leaderboard Tabs */}
             <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
               {[
                 { id: 'global', label: 'Global', icon: Users },
@@ -752,7 +626,6 @@ const ProfilePage = () => {
               })}
             </div>
 
-            {/* Add Friend Section - Only show in Friends tab */}
             {leaderboardTab === 'friends' && (
               <div className="bg-background rounded-lg border border-gray-600 p-3 mb-4">
                 <h4 className="text-sm font-bold text-primary mb-2">Add Friend</h4>
@@ -788,7 +661,6 @@ const ProfilePage = () => {
               </div>
             )}
 
-            {/* Leaderboard Content */}
             {leaderboardLoading ? (
               <div className="flex items-center justify-center py-8">
                 <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
@@ -821,12 +693,10 @@ const ProfilePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
-                    {/* Rank */}
                     <div className="flex items-center justify-center w-8 h-8 mr-3">
                       {getRankIcon(entry.rank)}
                     </div>
 
-                    {/* Player Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
@@ -853,7 +723,6 @@ const ProfilePage = () => {
                       </div>
                     </div>
 
-                    {/* Score */}
                     <div className="text-right mr-2">
                       <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
                         {entry.score.toLocaleString()}
@@ -861,7 +730,6 @@ const ProfilePage = () => {
                       <p className="text-xs text-secondary">pts</p>
                     </div>
 
-                    {/* Remove Friend Button (only in friends tab for non-current users) */}
                     {leaderboardTab === 'friends' && !entry.isCurrentUser && (
                       <button
                         onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
@@ -881,7 +749,6 @@ const ProfilePage = () => {
               </div>
             )}
 
-            {/* Stats Footer */}
             {!leaderboardLoading && leaderboardData.length > 0 && (
               <div className="bg-background rounded-lg p-3 border border-gray-600 text-center mt-4">
                 <div className="flex items-center justify-center space-x-4 text-xs text-secondary">
@@ -918,7 +785,6 @@ const ProfilePage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
-      {/* Profile Header - Improved from second file */}
       <motion.div
         className="bg-nav p-6 rounded-lg border border-gray-700"
         initial={{ opacity: 0, scale: 0.95 }}
@@ -926,7 +792,6 @@ const ProfilePage = () => {
         transition={{ duration: 0.3 }}
       >
         <div className="flex items-start space-x-4">
-          {/* Avatar */}
           <div className="relative">
             <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
               {stats.avatar_url || telegramPhotoUrl ? (
@@ -944,7 +809,6 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* User Info */}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
               <div className="flex items-center space-x-2">
@@ -987,7 +851,7 @@ const ProfilePage = () => {
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
-                {/* Dev Tools Button - Only for authorized developer */}
+                {/* ✅ KEEP: Dev Tools Button - Only for authorized developer */}
                 {telegramUser?.id === 6998637798 && (
                   <button 
                     onClick={() => window.location.href = '/dev-tools'}
@@ -1007,7 +871,6 @@ const ProfilePage = () => {
           </div>
         </div>
         
-        {/* Avatar/Name Sync Info */}
         <div className="mt-3 pt-3 border-t border-gray-700 text-center">
           <p className="text-xs text-secondary">
             {telegramPhotoUrl || telegramFirstName ? (
@@ -1022,7 +885,6 @@ const ProfilePage = () => {
         </div>
       </motion.div>
 
-      {/* Tab Navigation */}
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -1053,7 +915,6 @@ const ProfilePage = () => {
         })}
       </motion.div>
 
-      {/* Tab Content */}
       <div className="min-h-[400px]">
         {renderTabContent()}
       </div>
