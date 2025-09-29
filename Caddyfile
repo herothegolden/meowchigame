@@ -1,0 +1,48 @@
+:8080 {
+    # Set root directory to the built dist folder
+    root * /app/dist
+    
+    # SPA routing: try to serve the requested file,
+    # if it doesn't exist, serve index.html instead
+    # This allows React Router to handle all routes
+    try_files {path} /index.html
+    
+    # Enable file serving
+    file_server
+    
+    # Enable gzip compression for faster loading
+    encode gzip
+    
+    # Security headers
+    header {
+        # Prevent MIME type sniffing
+        X-Content-Type-Options nosniff
+        
+        # Prevent clickjacking
+        X-Frame-Options DENY
+        
+        # Control referrer information
+        Referrer-Policy strict-origin-when-cross-origin
+        
+        # Enable browser XSS protection
+        X-XSS-Protection "1; mode=block"
+    }
+    
+    # Cache static assets (JS, CSS, images) for 1 year
+    @static {
+        path *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.woff *.woff2 *.ttf *.eot
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+    
+    # Don't cache HTML files
+    @html {
+        path *.html
+    }
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+    
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
