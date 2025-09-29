@@ -1769,54 +1769,7 @@ app.post('/api/start-task', validateUser, async (req, res) => {
   }
 });
 
-// KEEP dev-reset-tasks restricted to developer ID only
-app.post('/api/dev-reset-tasks', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-
-    // Only developer can access this
-    if (user.id !== 6998637798) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const result = await client.query(
-        'DELETE FROM user_tasks WHERE user_id = $1 RETURNING reward_points',
-        [user.id]
-      );
-
-      const tasksDeleted = result.rowCount;
-      const pointsFromTasks = result.rows.reduce((sum, row) => sum + row.reward_points, 0);
-
-      if (pointsFromTasks > 0) {
-        await client.query(
-          'UPDATE users SET points = GREATEST(points - $1, 0) WHERE telegram_id = $2',
-          [pointsFromTasks, user.id]
-        );
-      }
-
-      await client.query('COMMIT');
-
-      res.status(200).json({
-        success: true,
-        message: `Reset ${tasksDeleted} tasks and subtracted ${pointsFromTasks} points.`,
-        tasksDeleted,
-        pointsFromTasks
-      });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/dev-reset-tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// ✂️ REMOVED: /api/dev-reset-tasks route - moved to devToolsRoutes.js
 
 // HELPER FUNCTION: Verify Telegram group membership using Bot API
 async function verifyTelegramGroupMembership(userId) {
