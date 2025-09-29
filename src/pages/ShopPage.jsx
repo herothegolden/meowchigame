@@ -183,6 +183,8 @@ const ShopPage = () => {
       try {
         if (tg && tg.initData && BACKEND_URL) {
           setConnectionStatus('Fetching shop data...');
+          console.log('Connecting to backend:', BACKEND_URL);
+          
           const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -191,14 +193,17 @@ const ShopPage = () => {
 
           if (res.ok) {
             const data = await res.json();
+            console.log('Shop data loaded:', data);
+            
             if (data.items && data.items.length > 0) {
               const mappedItems = data.items.map(item => ({
                 ...item,
                 description: item.description ? item.description.replace(/\bbadge\b/gi, '').trim() : item.description,
                 category: getCategoryFromItem(item)
-              })).filter(item => item.id !== 2);
+              })).filter(item => item.id !== 2); // remove deleted item
               setShopItems(mappedItems);
             }
+            
             setUserPoints(data.userPoints);
             const normalizedInventory = (data.inventory || []).map(it => ({
               ...it,
@@ -216,12 +221,8 @@ const ShopPage = () => {
         }
       } catch (error) {
         console.error('Failed to load shop data:', error);
-        setConnectionStatus('Connection failed');
+        setConnectionStatus('Failed to connect');
         setIsConnected(false);
-        setShopItems([]);
-        setUserPoints(0);
-        setInventory([]);
-        setOwnedBadges([]);
       } finally {
         setLoading(false);
       }
@@ -246,6 +247,8 @@ const ShopPage = () => {
 
     try {
       if (isConnected && tg && tg.initData && BACKEND_URL) {
+        console.log('Making real purchase for item:', itemId);
+        
         const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -253,13 +256,16 @@ const ShopPage = () => {
         });
 
         const result = await res.json();
+        
         if (!res.ok) {
           const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
           throw new Error(errorMessage);
         }
 
-        setUserPoints(result.newPoints);
+        console.log('Purchase successful:', result);
 
+        setUserPoints(result.newPoints);
+        
         if (item.category === 'badge') {
           setOwnedBadges(prev => [...prev, item.name]);
         } else {
@@ -285,6 +291,7 @@ const ShopPage = () => {
     } catch (error) {
       console.error('Purchase error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
+      
       const message = error.message || 'Purchase failed';
       if (tg && tg.showPopup) {
         tg.showPopup({
@@ -330,6 +337,7 @@ const ShopPage = () => {
         </motion.div>
       </motion.div>
 
+      {/* Shop Categories */}
       <motion.div className="space-y-8" layout>
         {Object.entries(categoryConfig).map(([category, categoryData]) => (
           <CategorySection
