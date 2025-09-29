@@ -15,16 +15,6 @@ const iconComponents = {
   Default: <Star size={28} />
 };
 
-// STANDARDIZED FALLBACK SHOP ITEMS - Complete catalog with consistent pricing
-const FALLBACK_SHOP_ITEMS = [
-  { id: 1, name: 'Extra Time +10s', description: '+10 seconds to your next game', price: 750, icon_name: 'Clock', type: 'consumable', category: 'time' },
-  { id: 3, name: 'Cookie Bomb', description: 'Start with a bomb that clears 3x3 area', price: 1000, icon_name: 'Bomb', type: 'consumable', category: 'bomb' },
-  { id: 4, name: 'Double Points', description: '2x points for your next game', price: 1500, icon_name: 'ChevronsUp', type: 'consumable', category: 'multiplier' },
-  { id: 5, name: 'Cookie Master', description: 'Golden cookie profile', price: 5000, icon_name: 'Badge', type: 'permanent', category: 'badge' },
-  { id: 6, name: 'Speed Demon', description: 'Lightning bolt profile', price: 7500, icon_name: 'Zap', type: 'permanent', category: 'badge' },
-  { id: 7, name: 'Champion', description: 'Trophy profile', price: 10000, icon_name: 'Trophy', type: 'permanent', category: 'badge' }
-];
-
 const categoryConfig = {
   time: { name: 'Time Boosters', icon: '⏰', color: 'text-blue-400' },
   bomb: { name: 'Cookie Bombs', icon: '💣', color: 'text-red-400' },
@@ -81,7 +71,7 @@ const ShopItemCard = ({ item, userPoints, onPurchase, isOwned, ownedQuantity = 0
           {item.type === 'consumable' && ownedQuantity > 0 && (
             <motion.p 
               className="text-xs text-accent mt-1"
-              key={ownedQuantity} // Re-animate when quantity changes
+              key={ownedQuantity}
               initial={{ scale: 1.2, color: '#10B981' }}
               animate={{ scale: 1, color: '#EAB308' }}
               transition={{ duration: 0.3 }}
@@ -177,8 +167,8 @@ const CategorySection = ({ category, categoryData, items, userPoints, onPurchase
 };
 
 const ShopPage = () => {
-  const [shopItems, setShopItems] = useState(FALLBACK_SHOP_ITEMS);
-  const [userPoints, setUserPoints] = useState(4735);
+  const [shopItems, setShopItems] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [ownedBadges, setOwnedBadges] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -188,22 +178,11 @@ const ShopPage = () => {
   const [isConnected, setIsConnected] = useState(false);
   const tg = window.Telegram?.WebApp;
 
-  // STANDARDIZED DEMO STATE - consistent with other pages
-  const [demoPoints, setDemoPoints] = useState(4735);
-  const [demoInventory, setDemoInventory] = useState([
-    { item_id: 1, quantity: 2 },  // 2x Extra Time +10s
-    { item_id: 3, quantity: 1 },  // 1x Cookie Bomb
-    { item_id: 4, quantity: 1 }   // 1x Double Points
-  ]);
-  const [demoBadges, setDemoBadges] = useState([]);
-
   useEffect(() => {
     const loadShopData = async () => {
       try {
         if (tg && tg.initData && BACKEND_URL) {
           setConnectionStatus('Fetching shop data...');
-          console.log('Connecting to backend:', BACKEND_URL);
-          
           const res = await fetch(`${BACKEND_URL}/api/get-shop-data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -212,8 +191,6 @@ const ShopPage = () => {
 
           if (res.ok) {
             const data = await res.json();
-            console.log('Shop data loaded:', data);
-            
             if (data.items && data.items.length > 0) {
               const mappedItems = data.items.map(item => ({
                 ...item,
@@ -222,7 +199,6 @@ const ShopPage = () => {
               })).filter(item => item.id !== 2);
               setShopItems(mappedItems);
             }
-            
             setUserPoints(data.userPoints);
             const normalizedInventory = (data.inventory || []).map(it => ({
               ...it,
@@ -240,21 +216,19 @@ const ShopPage = () => {
         }
       } catch (error) {
         console.error('Failed to load shop data:', error);
-        setConnectionStatus('Demo mode - purchases won\'t persist');
+        setConnectionStatus('Connection failed');
         setIsConnected(false);
-        
-        // Use standardized fallback data
-        setShopItems(FALLBACK_SHOP_ITEMS);
-        setUserPoints(demoPoints);
-        setInventory(demoInventory);
-        setOwnedBadges(demoBadges);
+        setShopItems([]);
+        setUserPoints(0);
+        setInventory([]);
+        setOwnedBadges([]);
       } finally {
         setLoading(false);
       }
     };
 
     loadShopData();
-  }, [tg, demoPoints, demoInventory, demoBadges]);
+  }, [tg]);
 
   const getCategoryFromItem = (item) => {
     if (item.name.includes('Time') || item.name.includes('time')) return 'time';
@@ -264,7 +238,6 @@ const ShopPage = () => {
     return 'other';
   };
 
-  // SMOOTH & FAST PURCHASE FUNCTION - NO MORE RELOADS!
   const handlePurchase = async (itemId) => {
     const item = shopItems.find(i => i.id === itemId);
     if (!item) return;
@@ -273,8 +246,6 @@ const ShopPage = () => {
 
     try {
       if (isConnected && tg && tg.initData && BACKEND_URL) {
-        console.log('Making real purchase for item:', itemId);
-        
         const res = await fetch(`${BACKEND_URL}/api/buy-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -282,20 +253,13 @@ const ShopPage = () => {
         });
 
         const result = await res.json();
-        
         if (!res.ok) {
           const errorMessage = result.error || `Error ${res.status}: ${res.statusText}`;
           throw new Error(errorMessage);
         }
 
-        console.log('Purchase successful:', result);
-
-        // INSTANT UI UPDATES - NO RELOAD!
-        
-        // 1. Update points immediately
         setUserPoints(result.newPoints);
-        
-        // 2. Update inventory/badges state locally
+
         if (item.category === 'badge') {
           setOwnedBadges(prev => [...prev, item.name]);
         } else {
@@ -313,64 +277,14 @@ const ShopPage = () => {
           });
         }
 
-        // 3. Show success animation
         setJustPurchasedId(itemId);
         setTimeout(() => setJustPurchasedId(null), 1500);
 
-        // 4. Haptic feedback
         tg.HapticFeedback?.notificationOccurred('success');
-        
-      } else {
-        console.log('Demo purchase for item:', itemId);
-        
-        // Demo mode - instant updates with standardized inventory
-        if (userPoints >= item.price) {
-          const newPoints = userPoints - item.price;
-          setUserPoints(newPoints);
-          setDemoPoints(newPoints);
-          
-          // Update demo state instantly
-          if (item.category === 'badge') {
-            const newBadges = [...demoBadges, item.name];
-            setOwnedBadges(newBadges);
-            setDemoBadges(newBadges);
-          } else {
-            const existingItem = demoInventory.find(inv => inv.item_id === itemId);
-            if (existingItem) {
-              const newInventory = demoInventory.map(inv => 
-                inv.item_id === itemId 
-                  ? { ...inv, quantity: inv.quantity + 1 }
-                  : inv
-              );
-              setInventory(newInventory);
-              setDemoInventory(newInventory);
-            } else {
-              const newInventory = [...demoInventory, { item_id: itemId, quantity: 1 }];
-              setInventory(newInventory);
-              setDemoInventory(newInventory);
-            }
-          }
-          
-          // Show success animation
-          setJustPurchasedId(itemId);
-          setTimeout(() => setJustPurchasedId(null), 1500);
-        } else {
-          const message = 'Not enough points!';
-          if (tg && tg.showPopup) {
-            tg.showPopup({
-              title: 'Error',
-              message: message,
-              buttons: [{ type: 'ok' }]
-            });
-          } else {
-            alert(message);
-          }
-        }
       }
     } catch (error) {
       console.error('Purchase error:', error);
       tg?.HapticFeedback?.notificationOccurred('error');
-      
       const message = error.message || 'Purchase failed';
       if (tg && tg.showPopup) {
         tg.showPopup({
@@ -386,7 +300,6 @@ const ShopPage = () => {
     }
   };
 
-  // Group items by category
   const itemsByCategory = shopItems.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
@@ -407,7 +320,7 @@ const ShopPage = () => {
         </div>
         <motion.div 
           className="bg-nav p-2 px-4 rounded-lg flex items-center border border-gray-700"
-          key={userPoints} // Re-animate when points change
+          key={userPoints}
           initial={{ scale: 1.1, backgroundColor: '#10B981' }}
           animate={{ scale: 1, backgroundColor: '#212426' }}
           transition={{ duration: 0.4 }}
@@ -417,7 +330,6 @@ const ShopPage = () => {
         </motion.div>
       </motion.div>
 
-      {/* Shop Categories */}
       <motion.div className="space-y-8" layout>
         {Object.entries(categoryConfig).map(([category, categoryData]) => (
           <CategorySection
