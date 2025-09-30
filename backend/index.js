@@ -657,11 +657,31 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Update Avatar endpoint - handles both file uploads and URLs
-app.post('/api/update-avatar', validateUser, (req, res) => {
+// Manual Avatar Upload endpoint - handles both file uploads and URLs
+app.post('/api/update-avatar', (req, res) => {
+  // FIXED: Extract initData from FormData
   uploadAvatar.single('avatar')(req, res, async (err) => {
     try {
-      const { user } = req;
+      // Get initData from FormData
+      const initData = req.body.initData;
+      
+      if (!initData) {
+        return res.status(400).json({ error: 'initData is required' });
+      }
+
+      // Validate initData
+      if (!validate(initData, BOT_TOKEN)) {
+        return res.status(401).json({ error: 'Invalid authentication' });
+      }
+
+      // Extract user from initData
+      const params = new URLSearchParams(initData);
+      const userString = params.get('user');
+      if (!userString) {
+        return res.status(400).json({ error: 'Invalid user data' });
+      }
+      const user = JSON.parse(userString);
+
       let avatarUrl;
 
       if (err) {
@@ -681,7 +701,7 @@ app.post('/api/update-avatar', validateUser, (req, res) => {
         const { avatarUrl: inputUrl } = req.body;
         
         if (!inputUrl || typeof inputUrl !== 'string') {
-          return res.status(400).json({ error: 'Avatar URL or file is required' });
+          return res.status(400).json({ error: 'Avatar file is required' });
         }
         
         try {
