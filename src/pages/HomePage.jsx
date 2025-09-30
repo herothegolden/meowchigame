@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
+import GlobalPulse from "../components/GlobalPulse";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
@@ -11,7 +12,7 @@ const HomePage = () => {
       title: "День любви и бесконечной сладости",
       content: `🍰 White Day в Корее + Pi Day во всём мире. 
 14 марта — официальный день рождения Meowchi. 
-На “Pi Party” всё круглое: пончики, макаруны, даже пицца с маршмеллоу. 
+На "Pi Party" всё круглое: пончики, макаруны, даже пицца с маршмеллоу. 
 Каждый год Meowchi выкладывает 3.14 из маршмеллоу на огромном торте.`,
       tagline: "«Бесконечность на вкус как маршмеллоу.»",
     },
@@ -116,14 +117,12 @@ Meowchi верит: счастье приходит парами — двойн�
           </div>
         </motion.div>
 
-        {/* Magic Number Section */}
+        {/* Global Pulse + Magic Number Cards */}
         <div className="space-y-8">
-          <h2 className="text-center text-2xl font-extrabold mb-2 tracking-widest text-gray-200">
-            MAGIC NUMBER:
-          </h2>
-          <h3 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg tracking-[0.2em]">
-            314 11 42
-          </h3>
+          {/* REPLACED: Magic Number header with Global Pulse */}
+          <GlobalPulse />
+          
+          {/* UNTOUCHED: Original 314/11/42 cards */}
           {cards.map((item, i) => (
             <motion.div
               key={i}
@@ -198,7 +197,7 @@ Meowchi верит: счастье приходит парами — двойн�
           <p>❄️ Хранение: 30 дней в холодильнике</p>
           <p>
             ☎️ Телефон:{" "}
-            <a
+            
               href="tel:+998913141142"
               className="text-emerald-300 hover:underline"
             >
@@ -219,7 +218,7 @@ Meowchi верит: счастье приходит парами — двойн�
       <footer className="border-t border-white/10 py-6 mt-8">
         <div className="flex justify-center space-x-6 text-2xl">
           {/* Telegram */}
-          <a
+          
             href="https://t.me/meowchi_lab"
             target="_blank"
             rel="noopener noreferrer"
@@ -236,7 +235,7 @@ Meowchi верит: счастье приходит парами — двойн�
           </a>
 
           {/* Instagram */}
-          <a
+          
             href="https://www.instagram.com/meowchi.lab/"
             target="_blank"
             rel="noopener noreferrer"
