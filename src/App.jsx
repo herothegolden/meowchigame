@@ -40,23 +40,11 @@ function App() {
     return () => clearInterval(textInterval);
   }, [isLoading, loadingTexts.length]);
 
-  // Animation loading phase (2.5s)
+  // User initialization phase (runs immediately)
   useEffect(() => {
-    const loadingTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2500);
-
-    return () => clearTimeout(loadingTimer);
-  }, []);
-
-  // User initialization phase (runs after animation)
-  useEffect(() => {
-    // Only initialize after loading animation completes
-    if (isLoading) return;
-
     const initialize = async () => {
       try {
-        console.log('🔐 Initializing user...');
+        console.log('🔍 Initializing user...');
         const userData = await initializeUser();
         console.log('✅ User initialized:', userData);
         setIsInitialized(true);
@@ -69,12 +57,38 @@ function App() {
     };
 
     initialize();
-  }, [isLoading]);
+  }, []);
+
+  // Hide loading screen only after BOTH animation (2.5s) AND initialization complete
+  useEffect(() => {
+    const minimumLoadingTime = 2500;
+    const startTime = Date.now();
+
+    const checkAndHideLoading = () => {
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = minimumLoadingTime - elapsedTime;
+
+      if (isInitialized) {
+        // If initialization finished early, wait for minimum loading time
+        if (remainingTime > 0) {
+          setTimeout(() => {
+            setIsLoading(false);
+          }, remainingTime);
+        } else {
+          // Initialization took longer than minimum, hide immediately
+          setIsLoading(false);
+        }
+      }
+    };
+
+    checkAndHideLoading();
+  }, [isInitialized]);
 
   // Retry initialization
   const handleRetry = () => {
     setInitError(null);
     setIsInitialized(false);
+    setIsLoading(true);
     
     const initialize = async () => {
       try {
@@ -87,6 +101,7 @@ function App() {
         console.error('❌ Retry failed:', error);
         setInitError(error.message);
         setIsInitialized(false);
+        setIsLoading(false);
       }
     };
 
@@ -96,7 +111,7 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden relative">
       <AnimatePresence mode="wait">
-        {isLoading ? (
+        {isLoading && !initError ? (
           // Loading Screen - matches body pastel background
           <motion.div
             key="loading"
@@ -231,26 +246,6 @@ function App() {
                   Retry
                 </button>
               </div>
-            </div>
-          </motion.div>
-        ) : !isInitialized ? (
-          // Initializing User Screen (brief)
-          <motion.div
-            key="initializing"
-            className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-background"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="mb-4"
-              >
-                <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full" />
-              </motion.div>
-              <p className="text-lg font-bold text-primary">Initializing...</p>
             </div>
           </motion.div>
         ) : (
