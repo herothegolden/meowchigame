@@ -369,10 +369,18 @@ app.post('/api/validate', async (req, res) => {
       return res.status(403).json({ error: 'Invalid Telegram initData' });
     }
 
-    // 2. Extract user info (Telegram attaches it via initDataUnsafe)
-    const { user } = req.body;
+    // 2. Extract user info from initData (FIXED: parse from initData string)
+    const params = new URLSearchParams(req.body.initData);
+    const userString = params.get('user');
+    
+    if (!userString) {
+      return res.status(400).json({ error: 'Missing user data in initData' });
+    }
+    
+    const user = JSON.parse(userString);
+    
     if (!user || !user.id) {
-      return res.status(400).json({ error: 'Missing Telegram user info' });
+      return res.status(400).json({ error: 'Invalid user data in initData' });
     }
 
     const client = await pool.connect();
@@ -402,7 +410,7 @@ app.post('/api/validate', async (req, res) => {
         // EXISTING USER
         appUser = dbUserResult.rows[0];
 
-        // FIXED: Update user info AND avatar from Telegram (removed updated_at)
+        // FIXED: Update user info AND avatar from Telegram
         const needsUpdate = 
           appUser.first_name !== user.first_name || 
           appUser.last_name !== user.last_name || 
@@ -656,7 +664,6 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-console.log('✅ /api/get-user-stats route registered');
 
 // NEW: Update Avatar endpoint - handles both file uploads and URLs
 app.post('/api/update-avatar', validateUser, (req, res) => {
