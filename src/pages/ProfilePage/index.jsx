@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { User, Award, Trophy, CheckSquare } from 'lucide-react';
 import { apiCall } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
-import { LoadingState } from '../../components/LoadingState';
 import ProfileHeader from './ProfileHeader';
 import { OverviewTab, BadgesTab, LeaderboardTab, TasksTab } from './tabs';
 
@@ -13,6 +12,37 @@ const TABS = [
   { id: 'leaderboard', label: 'Board', icon: Trophy },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare }
 ];
+
+// Loading skeleton component
+const ProfileSkeleton = () => (
+  <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
+    {/* Header skeleton */}
+    <div className="bg-nav p-6 rounded-lg border border-gray-700 animate-pulse">
+      <div className="flex items-start space-x-4">
+        <div className="w-20 h-20 rounded-full bg-gray-700"></div>
+        <div className="flex-1 space-y-3">
+          <div className="h-6 bg-gray-700 rounded w-1/3"></div>
+          <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-700 rounded w-1/4"></div>
+        </div>
+      </div>
+    </div>
+    
+    {/* Tabs skeleton */}
+    <div className="flex bg-nav rounded-lg border border-gray-700 p-1 animate-pulse">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="flex-1 h-16 bg-gray-700 rounded-md mx-1"></div>
+      ))}
+    </div>
+    
+    {/* Content skeleton */}
+    <div className="grid grid-cols-2 gap-4 animate-pulse">
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <div key={i} className="bg-nav p-4 rounded-lg border border-gray-700 h-24"></div>
+      ))}
+    </div>
+  </div>
+);
 
 const ProfilePage = () => {
   const [data, setData] = useState(null);
@@ -25,15 +55,14 @@ const ProfilePage = () => {
       setLoading(true);
       setError(null);
       
-      const [stats, shopData] = await Promise.all([
-        apiCall('/api/get-user-stats'),
-        apiCall('/api/get-shop-data')
-      ]);
+      // Single API call for all data
+      const profileData = await apiCall('/api/get-profile-complete');
       
       setData({
-        stats,
-        inventory: shopData.inventory || [],
-        ownedBadges: shopData.ownedBadges || []
+        stats: profileData.stats,
+        inventory: profileData.shopData.inventory || [],
+        ownedBadges: profileData.shopData.ownedBadges || [],
+        badgeProgress: profileData.badgeProgress || { progress: {} }
       });
     } catch (err) {
       console.error('Failed to load profile data:', err);
@@ -47,7 +76,7 @@ const ProfilePage = () => {
     fetchData();
   }, [fetchData]);
 
-  if (loading) return <LoadingState />;
+  if (loading) return <ProfileSkeleton />;
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
   if (!data) return <ErrorState error="No data available" onRetry={fetchData} />;
 
@@ -82,7 +111,7 @@ const ProfilePage = () => {
 
       <div className="min-h-[400px]">
         {activeTab === 'overview' && <OverviewTab stats={data.stats} />}
-        {activeTab === 'badges' && <BadgesTab ownedBadges={data.ownedBadges} />}
+        {activeTab === 'badges' && <BadgesTab ownedBadges={data.ownedBadges} badgeProgress={data.badgeProgress} />}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
         {activeTab === 'tasks' && <TasksTab />}
       </div>
