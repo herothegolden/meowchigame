@@ -346,11 +346,13 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 13. Physical Product Orders Table
+    // 13. PHYSICAL PRODUCT ORDERS TABLE
+    console.log('🛒 Setting up orders table...');
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
+        user_id BIGINT NOT NULL,
         product_id VARCHAR(100) NOT NULL,
         product_name VARCHAR(255) NOT NULL,
         product_description TEXT,
@@ -361,10 +363,23 @@ const setupDatabase = async () => {
         delivery_address TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         paid_at TIMESTAMP WITH TIME ZONE,
-        delivered_at TIMESTAMP WITH TIME ZONE
+        delivered_at TIMESTAMP WITH TIME ZONE,
+        CONSTRAINT fk_user_orders FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
       );
     `);
 
+    // Add indexes for faster queries
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_payment_charge ON orders(telegram_payment_charge_id);
+    `);
+
+    console.log('✅ Orders table created with indexes');
     console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
