@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
-import { LoaderCircle, Award } from 'lucide-react';
-import { apiCall } from '../../../utils/api';
+import { Award } from 'lucide-react';
 
 const badgeConfig = {
   'Cookie Master Badge': { 
@@ -61,36 +60,9 @@ const BadgeCard = ({ badgeName, isOwned }) => {
   );
 };
 
-const BadgesTab = ({ ownedBadges }) => {
-  const [badgeProgress, setBadgeProgress] = useState({});
-  const [loading, setLoading] = useState(true);
-
+const BadgesTab = ({ ownedBadges, badgeProgress }) => {
   const allBadges = ['Cookie Master Badge', 'Speed Demon Badge', 'Champion Badge'];
-
-  useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const result = await apiCall('/api/get-badge-progress');
-        setBadgeProgress(result.progress || {});
-      } catch (error) {
-        console.error('Failed to load badge progress:', error);
-        setBadgeProgress({});
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProgress();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
-        <span className="text-secondary text-sm">Loading progress...</span>
-      </div>
-    );
-  }
+  const progress = badgeProgress?.progress || {};
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
@@ -105,8 +77,8 @@ const BadgesTab = ({ ownedBadges }) => {
             <div>
               <p className="text-secondary">Average Progress</p>
               <p className="text-accent font-bold">
-                {Object.keys(badgeProgress).length > 0 
-                  ? Math.round(Object.values(badgeProgress).reduce((a, b) => a + b, 0) / Object.values(badgeProgress).length)
+                {Object.keys(progress).length > 0 
+                  ? Math.round(Object.values(progress).reduce((a, b) => a + b, 0) / Object.values(progress).length)
                   : 0}%
               </p>
             </div>
@@ -122,22 +94,22 @@ const BadgesTab = ({ ownedBadges }) => {
         <div className="grid grid-cols-1 gap-3">
           {allBadges.map(badgeName => {
             const isOwned = ownedBadges.includes(badgeName);
-            const progress = badgeProgress[badgeName] || 0;
+            const progressValue = progress[badgeName] || 0;
             
             return (
               <div key={badgeName}>
                 <BadgeCard badgeName={badgeName} isOwned={isOwned} />
-                {!isOwned && progress > 0 && (
+                {!isOwned && progressValue > 0 && (
                   <div className="mt-2 px-4">
                     <div className="flex items-center justify-between text-xs text-secondary mb-1">
                       <span>Progress</span>
-                      <span>{progress}%</span>
+                      <span>{progressValue}%</span>
                     </div>
                     <div className="w-full bg-gray-700 rounded-full h-2">
                       <motion.div
                         className="bg-accent h-2 rounded-full"
                         initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
+                        animate={{ width: `${progressValue}%` }}
                         transition={{ duration: 1, delay: 0.2 }}
                       />
                     </div>
