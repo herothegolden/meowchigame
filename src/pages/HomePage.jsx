@@ -193,14 +193,14 @@ Meowchi верит: счастье приходит парами — двойн�
           <p>🚚 Доставка по Ташкенту (Yandex Taxi)</p>
           <p>❄️ Хранение: 30 дней в холодильнике</p>
           <p>
-            ☎️ Телефон:{" "}
-            
-              href="tel:+998913141142"
-              className="text-emerald-300 hover:underline"
-            >
-              +998 91 314 11 42
-            </a>
-          </p>
+  ☎️ Телефон:{" "}
+  <a
+    href="tel:+998913141142"
+    className="text-emerald-300 hover:underline"
+  >
+    +998 91 314 11 42
+  </a>
+</p>
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={openTelegramOrder}
