@@ -346,6 +346,25 @@ const setupDatabase = async () => {
       );
     `);
 
+    // 13. Physical Product Orders Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        product_id VARCHAR(100) NOT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        product_description TEXT,
+        price_stars INT NOT NULL,
+        telegram_payment_charge_id VARCHAR(255) UNIQUE,
+        status VARCHAR(50) DEFAULT 'pending',
+        user_contact JSONB,
+        delivery_address TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        paid_at TIMESTAMP WITH TIME ZONE,
+        delivered_at TIMESTAMP WITH TIME ZONE
+      );
+    `);
+
     console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
@@ -1874,6 +1893,178 @@ async function verifyTelegramGroupMembership(userId) {
     return { isMember: false, status: 'network_error', error: error.message };
   }
 }
+
+// Create Telegram Stars Invoice
+app.post('/api/create-stars-invoice', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { productId, productName, productDescription, price } = req.body;
+
+    if (!productId || !productName || !price) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!BOT_TOKEN) {
+      return res.status(500).json({ error: 'Bot token not configured' });
+    }
+
+    console.log(`💳 Creating Stars invoice for user ${user.id}: ${productName} (${price} stars)`);
+
+    // Create invoice using Telegram Bot API
+    const invoicePayload = {
+      title: productName,
+      description: productDescription || 'Meowchi Cookie',
+      payload: JSON.stringify({
+        userId: user.id,
+        productId: productId,
+        timestamp: Date.now()
+      }),
+      currency: 'XTR', // Telegram Stars currency code
+      prices: [{ label: productName, amount: price }]
+    };
+
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(invoicePayload)
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error('❌ Telegram API error:', data);
+      throw new Error(data.description || 'Failed to create invoice');
+    }
+
+    const invoiceLink = data.result;
+    console.log('✅ Invoice created:', invoiceLink);
+
+    // Store pending order in database
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO orders (user_id, product_id, product_name, product_description, price_stars, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        [user.id, productId, productName, productDescription, price]
+      );
+    } finally {
+      client.release();
+    }
+
+    res.status(200).json({ 
+      success: true,
+      invoiceLink: invoiceLink
+    });
+
+  } catch (error) {
+    console.error('🚨 Error creating invoice:', error);
+    res.status(500).json({ error: error.message || 'Failed to create invoice' });
+  }
+});
+
+// Telegram Stars Payment Webhook
+app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
+  try {
+    console.log('💰 Received payment webhook:', JSON.stringify(req.body, null, 2));
+
+    const { pre_checkout_query, successful_payment } = req.body;
+
+    // Handle pre-checkout query (optional - answer yes to all)
+    if (pre_checkout_query) {
+      const { id } = pre_checkout_query;
+      
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pre_checkout_query_id: id, ok: true })
+      });
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // Handle successful payment
+    if (successful_payment) {
+      const { 
+        telegram_payment_charge_id,
+        total_amount,
+        invoice_payload 
+      } = successful_payment;
+
+      // Parse payload to get order info
+      const payload = JSON.parse(invoice_payload);
+      const { userId, productId } = payload;
+
+      console.log(`✅ Payment confirmed: User ${userId}, Product ${productId}, Amount ${total_amount} stars`);
+
+      // Update order in database
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Update order status
+        const updateResult = await client.query(
+          `UPDATE orders 
+           SET status = 'paid', 
+               telegram_payment_charge_id = $1, 
+               paid_at = CURRENT_TIMESTAMP
+           WHERE user_id = $2 
+             AND product_id = $3 
+             AND status = 'pending'
+           RETURNING *`,
+          [telegram_payment_charge_id, userId, productId]
+        );
+
+        if (updateResult.rowCount === 0) {
+          console.warn('⚠️ No pending order found to update');
+        } else {
+          console.log('✅ Order updated:', updateResult.rows[0]);
+        }
+
+        // Get user contact info for delivery
+        const userResult = await client.query(
+          'SELECT first_name, username FROM users WHERE telegram_id = $1',
+          [userId]
+        );
+
+        if (userResult.rowCount > 0) {
+          const user = userResult.rows[0];
+          
+          // Update order with user contact
+          await client.query(
+            `UPDATE orders 
+             SET user_contact = $1
+             WHERE telegram_payment_charge_id = $2`,
+            [JSON.stringify({ 
+              first_name: user.first_name, 
+              username: user.username 
+            }), telegram_payment_charge_id]
+          );
+        }
+
+        await client.query('COMMIT');
+
+        // TODO: Send notification to admin/delivery system
+        // TODO: Send confirmation message to user via bot
+        console.log('🚚 Order ready for delivery processing');
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // Unknown webhook type
+    res.status(200).json({ ok: true });
+
+  } catch (error) {
+    console.error('🚨 Webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
 
 const startServer = () => {
   app.listen(PORT, () => {
