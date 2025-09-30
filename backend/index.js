@@ -617,6 +617,73 @@ app.post('/api/get-user-stats', validateUser, async (req, res) => {
   }
 });
 
+// NEW ENDPOINT: Combined profile data (replaces 4 separate calls)
+app.post('/api/get-profile-complete', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      // Execute all queries in parallel
+      const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult] = await Promise.all([
+        // User stats
+        client.query(
+          `SELECT first_name, username, points, level, daily_streak, created_at,
+           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
+          [user.id]
+        ),
+        // Owned badges
+        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
+        // Average score
+        client.query('SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1', [user.id]),
+        // Badge progress
+        client.query('SELECT badge_name, current_progress, target_progress FROM badge_progress WHERE user_id = $1', [user.id]),
+        // Inventory
+        client.query('SELECT item_id, COUNT(item_id) as quantity FROM user_inventory WHERE user_id = $1 GROUP BY item_id', [user.id]),
+        // Shop items
+        client.query('SELECT * FROM shop_items ORDER BY id ASC'),
+        // User shop data
+        client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id])
+      ]);
+      
+      if (userResult.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      const userData = userResult.rows[0];
+      userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
+      userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
+      userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
+      
+      // Badge progress
+      const progress = {};
+      progressResult.rows.forEach(row => {
+        progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
+      });
+      
+      // Shop data
+      const shopData = {
+        items: shopItemsResult.rows,
+        userPoints: userShopResult.rows[0]?.points || 0,
+        inventory: inventoryResult.rows,
+        boosterActive: userShopResult.rows[0]?.point_booster_active || false,
+        ownedBadges: badgesResult.rows.map(row => row.badge_name)
+      };
+      
+      res.status(200).json({
+        stats: userData,
+        badgeProgress: { progress },
+        shopData: shopData
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-profile-complete:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // NEW: Update Profile (Name) endpoint
 app.post('/api/update-profile', validateUser, async (req, res) => {
   try {
