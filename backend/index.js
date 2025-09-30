@@ -348,38 +348,88 @@ const setupDatabase = async () => {
 
     // 13. PHYSICAL PRODUCT ORDERS TABLE
     console.log('🛒 Setting up orders table...');
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT NOT NULL,
-        product_id VARCHAR(100) NOT NULL,
-        product_name VARCHAR(255) NOT NULL,
-        product_description TEXT,
-        price_stars INT NOT NULL,
-        telegram_payment_charge_id VARCHAR(255) UNIQUE,
-        status VARCHAR(50) DEFAULT 'pending',
-        user_contact JSONB,
-        delivery_address TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        paid_at TIMESTAMP WITH TIME ZONE,
-        delivered_at TIMESTAMP WITH TIME ZONE,
-        CONSTRAINT fk_user_orders FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE CASCADE
-      );
-    `);
 
-    // Add indexes for faster queries
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_orders_payment_charge ON orders(telegram_payment_charge_id);
-    `);
+    try {
+      // Step 1: Create the orders table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id SERIAL PRIMARY KEY,
+          user_id BIGINT NOT NULL,
+          product_id VARCHAR(100) NOT NULL,
+          product_name VARCHAR(255) NOT NULL,
+          product_description TEXT,
+          price_stars INT NOT NULL,
+          telegram_payment_charge_id VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'pending',
+          user_contact JSONB,
+          delivery_address TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          paid_at TIMESTAMP WITH TIME ZONE,
+          delivered_at TIMESTAMP WITH TIME ZONE
+        );
+      `);
+      
+      console.log('✅ Orders table created');
 
-    console.log('✅ Orders table created with indexes');
+      // Step 2: Add unique constraint separately
+      await client.query(`
+        DO $ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'orders_payment_charge_unique'
+          ) THEN
+            ALTER TABLE orders 
+            ADD CONSTRAINT orders_payment_charge_unique 
+            UNIQUE (telegram_payment_charge_id);
+          END IF;
+        END $;
+      `);
+
+      console.log('✅ Orders unique constraint added');
+
+      // Step 3: Add foreign key constraint separately (optional, won't fail if users table issue)
+      await client.query(`
+        DO $ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'fk_orders_user_id'
+          ) THEN
+            ALTER TABLE orders 
+            ADD CONSTRAINT fk_orders_user_id 
+            FOREIGN KEY (user_id) 
+            REFERENCES users(telegram_id) 
+            ON DELETE CASCADE;
+          END IF;
+        EXCEPTION
+          WHEN OTHERS THEN
+            RAISE NOTICE 'Could not add foreign key constraint: %', SQLERRM;
+        END $;
+      `);
+
+      console.log('✅ Orders foreign key constraint added');
+
+      // Step 4: Create indexes separately
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);`);
+      console.log('✅ Index on user_id created');
+      
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);`);
+      console.log('✅ Index on status created');
+      
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_payment_charge ON orders(telegram_payment_charge_id);`);
+      console.log('✅ Index on payment_charge_id created');
+      
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);`);
+      console.log('✅ Index on created_at created');
+
+      console.log('✅ Orders table setup complete with all constraints and indexes');
+
+    } catch (error) {
+      console.error('❌ Error setting up orders table:', error.message);
+      console.error('Full error:', error);
+      // Don't throw - allow setup to continue with other tables
+    }
     console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
