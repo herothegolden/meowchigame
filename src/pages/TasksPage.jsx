@@ -188,12 +188,9 @@ const TasksPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        >
+        <div>
           <LoaderCircle className="w-8 h-8 text-accent" />
-        </motion.div>
+        </div>
       </div>
     );
   }
