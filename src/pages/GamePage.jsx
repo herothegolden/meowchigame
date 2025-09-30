@@ -135,9 +135,11 @@ const GamePage = () => {
     }
   }, [shuffleFunction, shuffleCooldown, gameStarted, isGameOver]);
 
-  // Load inventory with proper error handling
+  // âœ… CLEANED UP: Load inventory with proper error handling (NO MOCK DATA)
   const loadInventory = async () => {
     try {
+      // âŒ REMOVED: Mock data fallback for browser mode
+      // Now we REQUIRE backend connection
       if (!tg || !tg.initData || !BACKEND_URL) {
         console.error('Cannot load inventory: Missing Telegram data or backend URL');
         setInventoryError('Connection required. Please open from Telegram.');
@@ -411,32 +413,28 @@ const GamePage = () => {
       
       {isGameOver && (
         <motion.div 
-  className="flex-1 flex flex-col items-center justify-center relative"
-  initial={{ opacity: 0, scale: 0.9 }} 
-  animate={{ opacity: 1, scale: 1 }} 
-  transition={{ duration: 0.5, delay: 0.2 }}
->
-  <div className="relative flex items-center justify-center min-h-[420px] min-w-[420px]">
-    {/* Frying Pan Background */}
-    <img 
-      src="https://ik.imagekit.io/59r2kpz8r/FryPan.webp?updatedAt=1759245049994" 
-      alt="Frying Pan" 
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] object-contain pointer-events-none z-0 drop-shadow-2xl"
-    />
-    {/* GameBoard on top */}
-    <div className="relative z-10">
-      <GameBoard 
-        setScore={setScore} 
-        gameStarted={gameStarted}
-        startWithBomb={gameConfig.startWithBomb}
-        onGameEnd={() => setIsGameOver(true)}
-        onShuffleNeeded={handleShuffleNeeded}
-        onBoardReady={handleBoardReady}
-        onGameBoardRef={handleGameBoardRef}
-      />
-    </div>
-  </div>
-</motion.div>
+          className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
+            <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
+            <div className="text-6xl mb-4">ðŸŽ‰</div>
+            <p className="text-2xl font-bold text-accent mb-2">{score.toLocaleString()} Points</p>
+            {activeBoosts.pointMultiplier && <p className="text-sm text-green-400 mb-2">ðŸ”¥ Double Points Applied!</p>}
+            {shuffleCount > 0 && <p className="text-sm text-blue-400 mb-2">ðŸ”€ Shuffles used: {shuffleCount}</p>}
+            <div className="flex space-x-3 mt-6">
+              <button onClick={restartGame} className="flex-1 bg-accent text-background py-3 px-4 rounded-xl font-bold flex items-center justify-center space-x-2 hover:bg-accent/90 transition-colors">
+                <RotateCcw size={20} />
+                <span>Play Again</span>
+              </button>
+              <button onClick={() => { soundManager.playUI('button_click', { volume: 0.8 }); navigate('/'); }} className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors">
+                Home
+              </button>
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {!gameStarted && !isGameOver && (
@@ -484,33 +482,16 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      {/* Frying Pan with GameBoard */}
-      <motion.div 
-        className="flex-1 flex flex-col items-center justify-center relative"
-        initial={{ opacity: 0, scale: 0.9 }} 
-        animate={{ opacity: 1, scale: 1 }} 
-        transition={{ duration: 0.5, delay: 0.2 }}
-      >
-        <div className="relative flex items-center justify-center">
-          {/* Frying Pan Background */}
-          <img 
-            src="https://ik.imagekit.io/59r2kpz8r/FryPan.webp?updatedAt=1759245049994" 
-            alt="Frying Pan" 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] object-contain pointer-events-none z-1 opacity-75 drop-shadow-2xl"
-          />
-          {/* GameBoard on top */}
-          <div className="relative z-10">
-            <GameBoard 
-              setScore={setScore} 
-              gameStarted={gameStarted}
-              startWithBomb={gameConfig.startWithBomb}
-              onGameEnd={() => setIsGameOver(true)}
-              onShuffleNeeded={handleShuffleNeeded}
-              onBoardReady={handleBoardReady}
-              onGameBoardRef={handleGameBoardRef}
-            />
-          </div>
-        </div>
+      <motion.div className="flex-1 flex flex-col items-center justify-center" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, delay: 0.2 }}>
+        <GameBoard 
+          setScore={setScore} 
+          gameStarted={gameStarted}
+          startWithBomb={gameConfig.startWithBomb}
+          onGameEnd={() => setIsGameOver(true)}
+          onShuffleNeeded={handleShuffleNeeded}
+          onBoardReady={handleBoardReady}
+          onGameBoardRef={handleGameBoardRef}
+        />
       </motion.div>
       
       {gameStarted && !isGameOver && (
@@ -536,6 +517,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
+      {/* âœ… CLEANED UP: Show error or items */}
       {gameStarted && !isGameOver && inventoryError && (
         <motion.div className="flex items-center justify-center p-3 bg-red-600/20 rounded-xl border border-red-500" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-sm text-red-300">{inventoryError}</p>
@@ -568,9 +550,9 @@ const GamePage = () => {
                 )}
                 <span className="text-xs text-primary font-medium">{item.quantity}</span>
                 <div className="absolute -top-2 -right-2 text-xs">
-                  {item.item_id === 1 && '⏰'}
-                  {item.item_id === 3 && '💥'}
-                  {item.item_id === 4 && '2️⃣'}
+                  {item.item_id === 1 && 'â°'}
+                  {item.item_id === 3 && 'ðŸ’¥'}
+                  {item.item_id === 4 && '2ï¸âƒ£'}
                 </div>
               </motion.button>
             );
