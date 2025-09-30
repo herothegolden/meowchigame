@@ -144,7 +144,8 @@ const setupDatabase = async () => {
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'VARCHAR(500)' }
+      { name: 'avatar_url', type: 'VARCHAR(500)' },
+      { name: 'updated_at', type: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP' }
     ];
 
     for (const column of columnsToAdd) {
@@ -401,7 +402,7 @@ app.post('/api/validate', async (req, res) => {
         // EXISTING USER
         appUser = dbUserResult.rows[0];
 
-        // FIXED: Update user info AND avatar from Telegram
+        // FIXED: Update user info AND avatar from Telegram (removed updated_at)
         const needsUpdate = 
           appUser.first_name !== user.first_name || 
           appUser.last_name !== user.last_name || 
@@ -413,8 +414,7 @@ app.post('/api/validate', async (req, res) => {
           
           const updateResult = await client.query(
             `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3, avatar_url = $4,
-             updated_at = CURRENT_TIMESTAMP
+             first_name = $1, last_name = $2, username = $3, avatar_url = $4
              WHERE telegram_id = $5 RETURNING *`,
             [user.first_name, user.last_name, user.username, user.photo_url || null, user.id]
           );
