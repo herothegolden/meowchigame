@@ -115,6 +115,13 @@ Meowchi верит: счастье приходит парами — двойн�
         <div className="space-y-8">
           <GlobalPulse />
           
+          <h2 className="text-center text-2xl font-extrabold mb-2 tracking-widest text-gray-200">
+            MAGIC NUMBER:
+          </h2>
+          <h3 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg tracking-[0.2em]">
+            314 11 42
+          </h3>
+          
           {cards.map((item, i) => (
             <motion.div
               key={i}
@@ -183,9 +190,9 @@ Meowchi верит: счастье приходит парами — двойн�
           className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
         >
           <h2 className="text-xl font-bold">Как заказать?</h2>
-          <p className="text-gray-300">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
-          <p className="text-gray-300">❄️ Хранение: 30 дней в холодильнике</p>
-          <p className="text-gray-300">
+          <p>🚚 Доставка по Ташкенту (Yandex Taxi)</p>
+          <p>❄️ Хранение: 30 дней в холодильнике</p>
+          <p>
             ☎️ Телефон:{" "}
             
               href="tel:+998913141142"
