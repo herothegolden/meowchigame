@@ -14,6 +14,20 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
+  // FIXED: Helper function to get full avatar URL
+  const getAvatarUrl = (avatarPath) => {
+    if (!avatarPath) return null;
+    
+    // If already a full URL, return as-is
+    if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+      return avatarPath;
+    }
+    
+    // Otherwise, prepend backend URL
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+    return `${BACKEND_URL}${avatarPath}`;
+  };
+
   const handleUpdate = async () => {
     if (!editValue.trim() || editValue.trim() === stats.first_name) {
       setIsEditing(false);
@@ -41,13 +55,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       showError('Please select an image file');
       return;
     }
 
-    // Validate file size (2MB)
     if (file.size > 2 * 1024 * 1024) {
       showError('File too large. Maximum size is 2MB');
       return;
@@ -59,7 +71,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       const formData = new FormData();
       formData.append('avatar', file);
 
-      // Get initData for authentication
       const initData = tg?.initData;
       if (!initData) {
         throw new Error('Telegram data not available');
@@ -68,11 +79,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
       const response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
-        headers: {
-          // Don't set Content-Type - let browser set it with boundary for FormData
-        },
         body: (() => {
-          // Create new FormData with both avatar and initData
           const fd = new FormData();
           fd.append('avatar', file);
           fd.append('initData', initData);
@@ -87,9 +94,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
       const result = await response.json();
       showSuccess('Avatar uploaded successfully!');
-      onUpdate(); // Refresh profile data
+      onUpdate();
       
-      // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -102,6 +108,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     }
   };
 
+  // FIXED: Get full avatar URL
+  const avatarUrl = getAvatarUrl(stats.avatar_url);
+
   return (
     <motion.div
       className="bg-nav p-6 rounded-lg border border-gray-700"
@@ -111,14 +120,14 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     >
       <div className="flex items-start space-x-4">
         <div className="relative">
-          {/* Avatar Display */}
           <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
-            {stats.avatar_url ? (
+            {avatarUrl ? (
               <img 
-                src={stats.avatar_url} 
+                src={avatarUrl}
                 alt="Avatar"
                 className="w-full h-full object-cover"
                 onError={(e) => {
+                  console.error('Avatar load error:', e.target.src);
                   e.target.style.display = 'none';
                   e.target.nextSibling.style.display = 'flex';
                 }}
@@ -126,11 +135,10 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             ) : null}
             <User 
               className="w-10 h-10 text-accent" 
-              style={{ display: stats.avatar_url ? 'none' : 'block' }} 
+              style={{ display: avatarUrl ? 'none' : 'block' }} 
             />
           </div>
           
-          {/* Upload Button Overlay */}
           <motion.button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
@@ -145,7 +153,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             )}
           </motion.button>
 
-          {/* Hidden File Input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -218,7 +225,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       
       <div className="mt-3 pt-3 border-t border-gray-700 text-center">
         <p className="text-xs text-secondary">
-          {stats.avatar_url ? 'Tap camera icon to change avatar' : 'Tap camera icon to upload avatar'}
+          {avatarUrl ? 'Tap camera icon to change avatar' : 'Tap camera icon to upload avatar'}
         </p>
       </div>
     </motion.div>
