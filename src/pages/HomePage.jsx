@@ -114,14 +114,14 @@ Meowchi верит: счастье приходит парами — двойн�
 
         <div className="space-y-8">
           <GlobalPulse />
-          
+
           <h2 className="text-center text-2xl font-extrabold mb-2 tracking-widest text-gray-200">
             MAGIC NUMBER:
           </h2>
           <h3 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg tracking-[0.2em]">
             314 11 42
           </h3>
-          
+
           {cards.map((item, i) => (
             <motion.div
               key={i}
@@ -193,14 +193,14 @@ Meowchi верит: счастье приходит парами — двойн�
           <p>🚚 Доставка по Ташкенту (Yandex Taxi)</p>
           <p>❄️ Хранение: 30 дней в холодильнике</p>
           <p>
-  ☎️ Телефон:{" "}
-  <a
-    href="tel:+998913141142"
-    className="text-emerald-300 hover:underline"
-  >
-    +998 91 314 11 42
-  </a>
-</p>
+            ☎️ Телефон:{" "}
+            <a
+              href="tel:+998913141142"
+              className="text-emerald-300 hover:underline"
+            >
+              +998 91 314 11 42
+            </a>
+          </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={openTelegramOrder}
@@ -213,7 +213,7 @@ Meowchi верит: счастье приходит парами — двойн�
 
       <footer className="border-t border-white/10 py-6 mt-8">
         <div className="flex justify-center space-x-6 text-2xl">
-          
+          <a
             href="https://t.me/meowchi_lab"
             target="_blank"
             rel="noopener noreferrer"
@@ -229,7 +229,7 @@ Meowchi верит: счастье приходит парами — двойн�
             </svg>
           </a>
 
-          
+          <a
             href="https://www.instagram.com/meowchi.lab/"
             target="_blank"
             rel="noopener noreferrer"
