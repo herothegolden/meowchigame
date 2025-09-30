@@ -359,7 +359,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// REPLACE the entire /api/validate route - Remove ALL username restrictions
+// FIXED: Auto-sync Telegram photo on every login
 app.post('/api/validate', async (req, res) => {
   try {
     // 1. Verify Telegram initData
@@ -384,32 +384,45 @@ app.post('/api/validate', async (req, res) => {
       let dailyBonus = null;
 
       if (dbUserResult.rows.length === 0) {
-        // 🆕 NEW USER - Create with ANY username (including null)
+        // 🆕 NEW USER - Create with Telegram photo
         console.log(`🆕 Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
+        
         const insertResult = await client.query(
-          `INSERT INTO users (telegram_id, first_name, last_name, username)
-           VALUES ($1, $2, $3, $4) RETURNING *`,
-          [user.id, user.first_name, user.last_name, user.username]
+          `INSERT INTO users (telegram_id, first_name, last_name, username, avatar_url)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [user.id, user.first_name, user.last_name, user.username, user.photo_url || null]
         );
         appUser = insertResult.rows[0];
+        
+        if (user.photo_url) {
+          console.log(`📸 Synced Telegram avatar for new user ${user.id}`);
+        }
       } else {
         // EXISTING USER
         appUser = dbUserResult.rows[0];
 
-        // Update user info if Telegram data changed
-        if (appUser.first_name !== user.first_name || 
-            appUser.last_name !== user.last_name || 
-            appUser.username !== user.username) {
-          
+        // FIXED: Update user info AND avatar from Telegram
+        const needsUpdate = 
+          appUser.first_name !== user.first_name || 
+          appUser.last_name !== user.last_name || 
+          appUser.username !== user.username ||
+          appUser.avatar_url !== (user.photo_url || null);
+        
+        if (needsUpdate) {
           console.log(`🔄 Updating user info for ${user.id}`);
+          
           const updateResult = await client.query(
             `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3,
+             first_name = $1, last_name = $2, username = $3, avatar_url = $4,
              updated_at = CURRENT_TIMESTAMP
-             WHERE telegram_id = $4 RETURNING *`,
-            [user.first_name, user.last_name, user.username, user.id]
+             WHERE telegram_id = $5 RETURNING *`,
+            [user.first_name, user.last_name, user.username, user.photo_url || null, user.id]
           );
           appUser = updateResult.rows[0];
+          
+          if (user.photo_url && appUser.avatar_url !== dbUserResult.rows[0].avatar_url) {
+            console.log(`📸 Synced updated Telegram avatar for user ${user.id}`);
+          }
         }
 
         // Daily login bonus (24+ hours since last login)
