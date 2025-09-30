@@ -125,10 +125,89 @@ const ShopPage = () => {
     }
   };
 
-  const handlePhysicalProductPurchase = (productId) => {
-    // Placeholder for Telegram Stars payment integration
-    console.log('Physical product purchase:', productId);
-    // TODO: Integrate Telegram Stars payment
+  const handlePhysicalProductPurchase = async (productId) => {
+    const product = PHYSICAL_PRODUCTS.find(p => p.id === productId);
+    if (!product) return;
+
+    try {
+      const tg = window.Telegram?.WebApp;
+      if (!tg) {
+        throw new Error('Telegram WebApp not available');
+      }
+
+      console.log('Creating invoice for:', product.name);
+
+      // Request invoice creation from backend
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/create-stars-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          initData: tg.initData,
+          productId: product.id,
+          productName: product.name,
+          productDescription: product.description,
+          price: product.price
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create invoice');
+      }
+
+      const { invoiceLink } = await response.json();
+      console.log('Invoice created:', invoiceLink);
+
+      // Open Telegram Stars payment interface
+      tg.openInvoice(invoiceLink, (status) => {
+        console.log('Payment status:', status);
+        
+        if (status === 'paid') {
+          // Payment successful
+          if (tg.HapticFeedback) {
+            tg.HapticFeedback.notificationOccurred('success');
+          }
+          
+          if (tg.showPopup) {
+            tg.showPopup({
+              title: 'Order Placed! 🎉',
+              message: `Your ${product.name} order has been confirmed. We'll contact you for delivery details.`,
+              buttons: [{ type: 'ok' }]
+            });
+          } else {
+            alert(`Order confirmed! Your ${product.name} will be delivered soon.`);
+          }
+        } else if (status === 'cancelled') {
+          // Payment cancelled by user
+          console.log('Payment cancelled by user');
+        } else if (status === 'failed') {
+          // Payment failed
+          if (tg.showPopup) {
+            tg.showPopup({
+              title: 'Payment Failed',
+              message: 'Something went wrong with your payment. Please try again.',
+              buttons: [{ type: 'ok' }]
+            });
+          } else {
+            alert('Payment failed. Please try again.');
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Physical product purchase error:', error);
+      
+      const tg = window.Telegram?.WebApp;
+      if (tg && tg.showPopup) {
+        tg.showPopup({
+          title: 'Error',
+          message: error.message || 'Failed to process purchase',
+          buttons: [{ type: 'ok' }]
+        });
+      } else {
+        alert(error.message || 'Failed to process purchase');
+      }
+    }
   };
 
   if (loading) return <LoadingState />;
