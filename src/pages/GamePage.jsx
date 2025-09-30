@@ -492,7 +492,7 @@ const GamePage = () => {
           <img 
             src="https://ik.imagekit.io/59r2kpz8r/FryPan.webp?updatedAt=1759245049994" 
             alt="Frying Pan" 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] object-contain pointer-events-none z-0 opacity-75 drop-shadow-2xl"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] object-contain pointer-events-none z-5 opacity-75 drop-shadow-2xl"
           />
           {/* GameBoard on top */}
           <div className="relative z-10">
