@@ -4,6 +4,8 @@ import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import ShopHeader from './ShopHeader';
 import CategorySection from './CategorySection';
+import { ShoppingBag, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const getCategoryFromItem = (item) => {
   if (item.name.includes('Time') || item.name.includes('time')) return 'time';
@@ -12,6 +14,26 @@ const getCategoryFromItem = (item) => {
   if (item.name.includes('Badge') || item.type === 'permanent') return 'badge';
   return 'other';
 };
+
+// Physical products data (static for now)
+const PHYSICAL_PRODUCTS = [
+  {
+    id: 'cookie-classic',
+    name: 'Viral Classic',
+    description: 'oreo & strawberry',
+    price: 400, // Telegram Stars
+    image: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/3.webp?updatedAt=1758892681518',
+    type: 'physical'
+  },
+  {
+    id: 'cookie-matcha',
+    name: 'Viral Matcha',
+    description: 'matcha, oreo & strawberry',
+    price: 400, // Telegram Stars
+    image: 'https://ik.imagekit.io/59r2kpz8r/Meowchi/2.webp?updatedAt=1758888699837',
+    type: 'physical'
+  }
+];
 
 const ShopPage = () => {
   const [data, setData] = useState(null);
@@ -103,6 +125,12 @@ const ShopPage = () => {
     }
   };
 
+  const handlePhysicalProductPurchase = (productId) => {
+    // Placeholder for Telegram Stars payment integration
+    console.log('Physical product purchase:', productId);
+    // TODO: Integrate Telegram Stars payment
+  };
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
   if (!data) return <ErrorState error="No data available" onRetry={fetchData} />;
@@ -119,6 +147,74 @@ const ShopPage = () => {
     <div className="p-4 space-y-6 bg-background text-primary">
       <ShopHeader points={data.userPoints} />
       
+      {/* Physical Products Section */}
+      <motion.div 
+        className="space-y-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="flex items-center space-x-3">
+          <span className="text-2xl">🍪</span>
+          <h2 className="text-xl font-bold text-amber-400">Meowchi Marshmallow 쫀득쿠키</h2>
+        </div>
+        
+        <div className="space-y-3">
+          {PHYSICAL_PRODUCTS.map((product, index) => (
+            <motion.div
+              key={product.id}
+              className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700 relative overflow-hidden"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+            >
+              <div className="flex items-center space-x-4 flex-1">
+                {/* Product Image */}
+                <div className="w-20 h-20 rounded-lg overflow-hidden bg-background flex-shrink-0">
+                  <img 
+                    src={product.image} 
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                
+                {/* Product Info */}
+                <div className="flex-1">
+                  <p className="font-bold text-primary text-lg">{product.name}</p>
+                  <p className="text-sm text-secondary">{product.description}</p>
+                </div>
+              </div>
+              
+              {/* Purchase Button with Telegram Stars */}
+              <motion.button 
+                onClick={() => handlePhysicalProductPurchase(product.id)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg flex items-center space-x-2 transition-all duration-200 shadow-lg"
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.05 }}
+              >
+                <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                <span className="text-lg">{product.price}</span>
+              </motion.button>
+            </motion.div>
+          ))}
+        </div>
+        
+        {/* Info Badge */}
+        <div className="bg-blue-600/10 border border-blue-500/30 rounded-lg p-3 flex items-start space-x-2">
+          <ShoppingBag className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-blue-400 font-medium">Real Physical Cookies</p>
+            <p className="text-xs text-secondary mt-1">
+              Purchase with Telegram Stars • Delivery via Yandex Taxi in Tashkent
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Divider */}
+      <div className="border-t border-gray-700 my-6"></div>
+
+      {/* Digital Items Categories */}
       {['time', 'bomb', 'multiplier', 'badge'].map(category => (
         <CategorySection
           key={category}
