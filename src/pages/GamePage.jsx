@@ -135,11 +135,9 @@ const GamePage = () => {
     }
   }, [shuffleFunction, shuffleCooldown, gameStarted, isGameOver]);
 
-  // ✅ CLEANED UP: Load inventory with proper error handling (NO MOCK DATA)
+  // Load inventory with proper error handling
   const loadInventory = async () => {
     try {
-      // ❌ REMOVED: Mock data fallback for browser mode
-      // Now we REQUIRE backend connection
       if (!tg || !tg.initData || !BACKEND_URL) {
         console.error('Cannot load inventory: Missing Telegram data or backend URL');
         setInventoryError('Connection required. Please open from Telegram.');
@@ -482,16 +480,33 @@ const GamePage = () => {
         )}
       </AnimatePresence>
 
-      <motion.div className="flex-1 flex flex-col items-center justify-center" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, delay: 0.2 }}>
-        <GameBoard 
-          setScore={setScore} 
-          gameStarted={gameStarted}
-          startWithBomb={gameConfig.startWithBomb}
-          onGameEnd={() => setIsGameOver(true)}
-          onShuffleNeeded={handleShuffleNeeded}
-          onBoardReady={handleBoardReady}
-          onGameBoardRef={handleGameBoardRef}
-        />
+      {/* Frying Pan with GameBoard */}
+      <motion.div 
+        className="flex-1 flex flex-col items-center justify-center relative"
+        initial={{ opacity: 0, scale: 0.9 }} 
+        animate={{ opacity: 1, scale: 1 }} 
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <div className="relative flex items-center justify-center">
+          {/* Frying Pan Background */}
+          <img 
+            src="https://ik.imagekit.io/59r2kpz8r/FryPan.webp?updatedAt=1759245049994" 
+            alt="Frying Pan" 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] object-contain pointer-events-none z-0 opacity-75 drop-shadow-2xl"
+          />
+          {/* GameBoard on top */}
+          <div className="relative z-10">
+            <GameBoard 
+              setScore={setScore} 
+              gameStarted={gameStarted}
+              startWithBomb={gameConfig.startWithBomb}
+              onGameEnd={() => setIsGameOver(true)}
+              onShuffleNeeded={handleShuffleNeeded}
+              onBoardReady={handleBoardReady}
+              onGameBoardRef={handleGameBoardRef}
+            />
+          </div>
+        </div>
       </motion.div>
       
       {gameStarted && !isGameOver && (
@@ -517,7 +532,6 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* ✅ CLEANED UP: Show error or items */}
       {gameStarted && !isGameOver && inventoryError && (
         <motion.div className="flex items-center justify-center p-3 bg-red-600/20 rounded-xl border border-red-500" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-sm text-red-300">{inventoryError}</p>
