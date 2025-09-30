@@ -45,6 +45,7 @@ Meowchi верит: счастье приходит парами — двойн�
       <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
 
       <div className="flex-grow max-w-2xl mx-auto px-6 py-12 space-y-12">
+        {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -81,6 +82,7 @@ Meowchi верит: счастье приходит парами — двойн�
           </motion.button>
         </motion.div>
 
+        {/* Why Meowchi Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -112,15 +114,9 @@ Meowchi верит: счастье приходит парами — двойн�
           </div>
         </motion.div>
 
+        {/* Global Pulse + Cards */}
         <div className="space-y-8">
           <GlobalPulse />
-
-          <h2 className="text-center text-2xl font-extrabold mb-2 tracking-widest text-gray-200">
-            MAGIC NUMBER:
-          </h2>
-          <h3 className="text-center text-3xl font-extrabold mb-6 bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg tracking-[0.2em]">
-            314 11 42
-          </h3>
 
           {cards.map((item, i) => (
             <motion.div
@@ -149,6 +145,7 @@ Meowchi верит: счастье приходит парами — двойн�
           ))}
         </div>
 
+        {/* Products Section */}
         <div>
           <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
           <div className="grid grid-cols-1 gap-6">
@@ -182,6 +179,7 @@ Meowchi верит: счастье приходит парами — двойн�
           </div>
         </div>
 
+        {/* Order Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -211,6 +209,7 @@ Meowchi верит: счастье приходит парами — двойн�
         </motion.div>
       </div>
 
+      {/* Footer Section */}
       <footer className="border-t border-white/10 py-6 mt-8">
         <div className="flex justify-center space-x-6 text-2xl">
           <a
