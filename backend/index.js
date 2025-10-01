@@ -22,7 +22,7 @@ const {
 } = process.env;
 
 if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("â›" Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error("❌ Missing DATABASE_URL or BOT_TOKEN environment variables");
   process.exit(1);
 }
 
@@ -65,7 +65,7 @@ const validateUser = (req, res, next) => {
 const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('ðŸ" Created uploads/avatars directory');
+  console.log('📁 Created uploads/avatars directory');
 }
 
 const storage = multer.diskStorage({
@@ -102,7 +102,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
-    console.log('ðŸ"§ Setting up enhanced database tables...');
+    console.log('🗄️ Setting up enhanced database tables...');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -141,7 +141,7 @@ const setupDatabase = async () => {
 
     for (const column of columnsToAdd) {
       if (!existingColumns.includes(column.name)) {
-        console.log(`ðŸ"Š Adding ${column.name} column...`);
+        console.log(`📊 Adding ${column.name} column...`);
         await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
       }
     }
@@ -255,7 +255,7 @@ const setupDatabase = async () => {
     const itemCount = await client.query('SELECT COUNT(*) as count FROM shop_items');
     
     if (parseInt(itemCount.rows[0].count) === 0) {
-      console.log('ðŸ"¦ Seeding shop items...');
+      console.log('🛒 Seeding shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -267,7 +267,7 @@ const setupDatabase = async () => {
       `);
       await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
     } else {
-      console.log(`ðŸ"¦ Shop items table updated, ensuring correct items exist...`);
+      console.log(`🛒 Shop items table updated, ensuring correct items exist...`);
       
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
@@ -301,7 +301,7 @@ const setupDatabase = async () => {
       );
     `);
 
-    console.log('ðŸŒ Setting up global_stats table...');
+    console.log('📊 Setting up global_stats table...');
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS global_stats (
@@ -318,7 +318,7 @@ const setupDatabase = async () => {
 
     const statsCheck = await client.query('SELECT COUNT(*) as count FROM global_stats');
     if (parseInt(statsCheck.rows[0].count) === 0) {
-      console.log('ðŸŒ Initializing global stats with seed values...');
+      console.log('📊 Initializing global stats with seed values...');
       const initialEaten = Math.floor(Math.random() * 15) + 5;
       const initialPlayers = Math.floor(Math.random() * 20) + 10;
       const initialActive = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
@@ -328,13 +328,13 @@ const setupDatabase = async () => {
         VALUES (1, 'Viral Classic', $1, $2, $3)
       `, [initialEaten, initialActive, initialPlayers]);
       
-      console.log(`ðŸ"Š Seed values: Eaten=${initialEaten}, Active=${initialActive}, NewPlayers=${initialPlayers}`);
+      console.log(`📊 Seed values: Eaten=${initialEaten}, Active=${initialActive}, NewPlayers=${initialPlayers}`);
     }
 
-    console.log('âœ… Global stats table ready');
-    console.log('âœ… Enhanced database setup complete!');
+    console.log('✅ Global stats table ready');
+    console.log('✅ Enhanced database setup complete!');
   } catch (err) {
-    console.error('ðŸš¨ Database setup error:', err);
+    console.error('🚨 Database setup error:', err);
     process.exit(1);
   } finally {
     client.release();
@@ -376,7 +376,7 @@ app.post('/api/validate', async (req, res) => {
       let dailyBonus = null;
 
       if (dbUserResult.rows.length === 0) {
-        console.log(`ðŸ†• Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
+        console.log(`👤 Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
         
         const insertResult = await client.query(
           `INSERT INTO users (telegram_id, first_name, last_name, username)
@@ -401,7 +401,7 @@ app.post('/api/validate', async (req, res) => {
           appUser.username !== user.username;
         
         if (needsUpdate) {
-          console.log(`ðŸ"„ Updating user info for ${user.id}`);
+          console.log(`📝 Updating user info for ${user.id}`);
           
           const updateResult = await client.query(
             `UPDATE users SET
@@ -416,7 +416,7 @@ app.post('/api/validate', async (req, res) => {
         const now = new Date();
         
         if (!lastLogin || (now - new Date(lastLogin)) >= 24 * 60 * 60 * 1000) {
-          console.log(`ðŸŽ Daily bonus for user ${user.id}`);
+          console.log(`🎁 Daily bonus for user ${user.id}`);
           
           const hoursSinceLastLogin = lastLogin ? (now - new Date(lastLogin)) / (1000 * 60 * 60) : null;
           const streakValid = hoursSinceLastLogin && hoursSinceLastLogin < 48;
@@ -443,14 +443,14 @@ app.post('/api/validate', async (req, res) => {
         WHERE id = 1
       `, [activeCount]);
 
-      console.log(`âœ… User ${user.id} (@${user.username || 'no-username'}) validated successfully`);
+      console.log(`✅ User ${user.id} (@${user.username || 'no-username'}) validated successfully`);
       res.status(200).json({ ...appUser, dailyBonus });
       
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/validate:', error);
+    console.error('🚨 Error in /api/validate:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -520,7 +520,7 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/update-score:', error);
+    console.error('🚨 Error in /api/update-score:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -600,7 +600,7 @@ app.post('/api/get-user-stats', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-user-stats:', error);
+    console.error('🚨 Error in /api/get-user-stats:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -656,7 +656,7 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-profile-complete:', error);
+    console.error('🚨 Error in /api/get-profile-complete:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -695,7 +695,7 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/update-profile:', error);
+    console.error('🚨 Error in /api/update-profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -734,7 +734,7 @@ app.post('/api/update-avatar', (req, res) => {
       if (req.file) {
         const relativePath = `uploads/avatars/${req.file.filename}`;
         avatarUrl = `${process.env.BACKEND_URL || `http://localhost:${PORT}`}/${relativePath}`;
-        console.log(`ðŸ"¸ Avatar uploaded for user ${user.id}: ${avatarUrl}`);
+        console.log(`📸 Avatar uploaded for user ${user.id}: ${avatarUrl}`);
       } else {
         return res.status(400).json({ error: 'No file uploaded' });
       }
@@ -761,7 +761,7 @@ app.post('/api/update-avatar', (req, res) => {
       }
 
     } catch (error) {
-      console.error('ðŸš¨ Error in /api/update-avatar:', error);
+      console.error('🚨 Error in /api/update-avatar:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -786,7 +786,7 @@ app.post('/api/get-item-usage-history', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-item-usage-history:', error);
+    console.error('🚨 Error in /api/get-item-usage-history:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -835,7 +835,7 @@ app.post('/api/get-badge-progress', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-badge-progress:', error);
+    console.error('🚨 Error in /api/get-badge-progress:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -893,7 +893,7 @@ app.post('/api/get-leaderboard', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/get-leaderboard:', error);
+    console.error('🚨 Error in /api/get-leaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -963,7 +963,7 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/shop/purchase:', error);
+    console.error('🚨 Error in /api/shop/purchase:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1020,7 +1020,7 @@ app.post('/api/shop/use-item', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/shop/use-item:', error);
+    console.error('🚨 Error in /api/shop/use-item:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1066,7 +1066,7 @@ app.post('/api/friends/add', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/friends/add:', error);
+    console.error('🚨 Error in /api/friends/add:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1099,7 +1099,7 @@ app.post('/api/friends/list', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/friends/list:', error);
+    console.error('🚨 Error in /api/friends/list:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1129,7 +1129,7 @@ app.post('/api/tasks/list', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/tasks/list:', error);
+    console.error('🚨 Error in /api/tasks/list:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1198,7 +1198,7 @@ app.post('/api/tasks/complete', validateUser, async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error in /api/tasks/complete:', error);
+    console.error('🚨 Error in /api/tasks/complete:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1253,7 +1253,7 @@ app.get('/api/global-stats', async (req, res) => {
       const needsReset = resetCheck.rows[0]?.needs_reset || false;
 
       if (needsReset) {
-        console.log('ðŸ"„ Resetting daily stats for new day');
+        console.log('📝 Resetting daily stats for new day');
         await client.query(`
           UPDATE global_stats 
           SET total_eaten_today = 0,
@@ -1274,7 +1274,7 @@ app.get('/api/global-stats', async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error fetching global stats:', error);
+    console.error('🚨 Error fetching global stats:', error);
     res.status(500).json({ error: 'Failed to fetch global stats' });
   }
 });
@@ -1308,7 +1308,7 @@ app.get('/api/global-stats/debug', async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Debug endpoint error:', error);
+    console.error('🚨 Debug endpoint error:', error);
     res.status(500).json({ error: 'Debug failed' });
   }
 });
@@ -1336,7 +1336,7 @@ app.post('/api/global-stats/increment', async (req, res) => {
       `, [newProduct]);
 
       const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
-      console.log(`âœ… Incremented ${field} to ${result.rows[0][field]}`);
+      console.log(`✅ Incremented ${field} to ${result.rows[0][field]}`);
 
       res.status(200).json({ success: true, stats: result.rows[0] });
 
@@ -1344,7 +1344,7 @@ app.post('/api/global-stats/increment', async (req, res) => {
       client.release();
     }
   } catch (error) {
-    console.error('ðŸš¨ Error incrementing stats:', error);
+    console.error('🚨 Error incrementing stats:', error);
     res.status(500).json({ error: 'Failed to increment stats' });
   }
 });
@@ -1362,13 +1362,13 @@ let simulationActive = {
 };
 
 const startGlobalStatsSimulation = async () => {
-  console.log('ðŸŽ® Starting global stats simulation v4 with Tashkent timezone (UTC+5)...');
-  console.log(`â° Server UTC time: ${new Date().toISOString()}`);
-  console.log(`â° Tashkent hour: ${(new Date().getUTCHours() + 5) % 24}:${new Date().getUTCMinutes()}`);
-  console.log(`ðŸ" Active hours (Tashkent): ${isActiveHoursTashkent() ? 'YES âœ…' : 'NO âŒ'}`);
+  console.log('🎮 Starting global stats simulation v4 with Tashkent timezone (UTC+5)...');
+  console.log(`⏰ Server UTC time: ${new Date().toISOString()}`);
+  console.log(`⏰ Tashkent hour: ${(new Date().getUTCHours() + 5) % 24}:${new Date().getUTCMinutes()}`);
+  console.log(`🌍 Active hours (Tashkent): ${isActiveHoursTashkent() ? 'YES ✅' : 'NO ❌'}`);
   
   if (isActiveHoursTashkent()) {
-    console.log('âš¡ IN ACTIVE HOURS - Triggering immediate first increments...');
+    console.log('⚡ IN ACTIVE HOURS - Triggering immediate first increments...');
     
     try {
       await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
@@ -1376,9 +1376,9 @@ const startGlobalStatsSimulation = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ field: 'total_eaten_today' })
       });
-      console.log('âœ… IMMEDIATE: First Meowchi eaten increment done');
+      console.log('✅ IMMEDIATE: First Meowchi eaten increment done');
     } catch (error) {
-      console.error('âŒ IMMEDIATE: Failed first eaten increment:', error.message);
+      console.error('❌ IMMEDIATE: Failed first eaten increment:', error.message);
     }
     
     try {
@@ -1387,30 +1387,30 @@ const startGlobalStatsSimulation = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ field: 'new_players_today' })
       });
-      console.log('âœ… IMMEDIATE: First new player increment done');
+      console.log('✅ IMMEDIATE: First new player increment done');
     } catch (error) {
-      console.error('âŒ IMMEDIATE: Failed first player increment:', error.message);
+      console.error('❌ IMMEDIATE: Failed first player increment:', error.message);
     }
   } else {
-    console.log('â¸ï¸ OUTSIDE ACTIVE HOURS - Waiting for 10 AM Tashkent...');
+    console.log('⏸️ OUTSIDE ACTIVE HOURS - Waiting for 10 AM Tashkent...');
   }
   
   const scheduleEatenUpdate = () => {
     const checkAndSchedule = () => {
       if (!isActiveHoursTashkent()) {
-        console.log('â¸ï¸ [EATEN] Outside active hours, checking again in 10 min...');
+        console.log('⏸️ [EATEN] Outside active hours, checking again in 10 min...');
         simulationActive.eaten = false;
         setTimeout(checkAndSchedule, 600000);
         return;
       }
 
       if (!simulationActive.eaten) {
-        console.log('â–¶ï¸ [EATEN] Entering active hours - resuming simulation');
+        console.log('▶️ [EATEN] Entering active hours - resuming simulation');
         simulationActive.eaten = true;
       }
 
       const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
-      console.log(`â±ï¸ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
+      console.log(`⏱️ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
       
       setTimeout(async () => {
         try {
@@ -1420,9 +1420,9 @@ const startGlobalStatsSimulation = async () => {
             body: JSON.stringify({ field: 'total_eaten_today' })
           });
           const data = await response.json();
-          console.log('ðŸª Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+          console.log('🍪 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
         } catch (error) {
-          console.error('âŒ [EATEN] Increment failed:', error.message);
+          console.error('❌ [EATEN] Increment failed:', error.message);
         }
         checkAndSchedule();
       }, interval);
@@ -1434,19 +1434,19 @@ const startGlobalStatsSimulation = async () => {
   const scheduleNewPlayerUpdate = () => {
     const checkAndSchedule = () => {
       if (!isActiveHoursTashkent()) {
-        console.log('â¸ï¸ [PLAYERS] Outside active hours, checking again in 10 min...');
+        console.log('⏸️ [PLAYERS] Outside active hours, checking again in 10 min...');
         simulationActive.newPlayers = false;
         setTimeout(checkAndSchedule, 600000);
         return;
       }
 
       if (!simulationActive.newPlayers) {
-        console.log('â–¶ï¸ [PLAYERS] Entering active hours - resuming simulation');
+        console.log('▶️ [PLAYERS] Entering active hours - resuming simulation');
         simulationActive.newPlayers = true;
       }
 
       const interval = Math.floor(Math.random() * (1800000 - 120000 + 1)) + 120000;
-      console.log(`â±ï¸ [PLAYERS] Next increment in ${Math.round(interval/60000)} minutes`);
+      console.log(`⏱️ [PLAYERS] Next increment in ${Math.round(interval/60000)} minutes`);
       
       setTimeout(async () => {
         try {
@@ -1460,12 +1460,12 @@ const startGlobalStatsSimulation = async () => {
               body: JSON.stringify({ field: 'new_players_today' })
             });
             const data = await response.json();
-            console.log('ðŸŽ‰ Simulated new player joined - Total:', data.stats?.new_players_today);
+            console.log('🎉 Simulated new player joined - Total:', data.stats?.new_players_today);
           } else {
-            console.log('ðŸš« [PLAYERS] Daily limit reached (90)');
+            console.log('🚫 [PLAYERS] Daily limit reached (90)');
           }
         } catch (error) {
-          console.error('âŒ [PLAYERS] Increment failed:', error.message);
+          console.error('❌ [PLAYERS] Increment failed:', error.message);
         }
         checkAndSchedule();
       }, interval);
@@ -1476,11 +1476,11 @@ const startGlobalStatsSimulation = async () => {
 
   const scheduleActivePlayersUpdate = () => {
     simulationActive.activePlayers = true;
-    console.log('â–¶ï¸ [ACTIVE] 24/7 simulation started');
+    console.log('▶️ [ACTIVE] 24/7 simulation started');
     
     const updateAndSchedule = () => {
       const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
-      console.log(`â±ï¸ [ACTIVE] Next update in ${Math.round(interval/60000)} minutes`);
+      console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/60000)} minutes`);
       
       setTimeout(async () => {
         try {
@@ -1493,12 +1493,12 @@ const startGlobalStatsSimulation = async () => {
                   last_updated = CURRENT_TIMESTAMP
               WHERE id = 1
             `, [newCount]);
-            console.log(`ðŸ'¥ Updated active players: ${newCount}`);
+            console.log(`👥 Updated active players: ${newCount}`);
           } finally {
             client.release();
           }
         } catch (error) {
-          console.error('âŒ [ACTIVE] Update failed:', error.message);
+          console.error('❌ [ACTIVE] Update failed:', error.message);
         }
         updateAndSchedule();
       }, interval);
@@ -1511,21 +1511,21 @@ const startGlobalStatsSimulation = async () => {
   scheduleNewPlayerUpdate();
   scheduleActivePlayersUpdate();
   
-  console.log('âœ… All simulations scheduled');
+  console.log('✅ All simulations scheduled');
 };
 
 const startServer = async () => {
   app.listen(PORT, async () => {
-    console.log(`âœ… Server running on port ${PORT}`);
-    console.log(`ðŸ"— Health check: http://localhost:${PORT}/health`);
-    console.log(`ðŸ" Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
-    console.log(`ðŸŒ Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🔍 Health check: http://localhost:${PORT}/health`);
+    console.log(`🐛 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
+    console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
     await startGlobalStatsSimulation();
   });
 };
 
 setupDatabase().then(startServer).catch(err => {
-  console.error('ðŸ'¥ Failed to start application:', err);
+  console.error('💥 Failed to start application:', err);
   process.exit(1);
 });
