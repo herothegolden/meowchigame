@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import GlobalPulse from "../components/GlobalPulse";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
   const [lockedCardTextIndex, setLockedCardTextIndex] = useState(0);
+  const [hiFiveCount, setHiFiveCount] = useState(0);
+  const hiFiveTimerRef = useRef(null);
 
   const cards = [
     {
@@ -18,6 +20,7 @@ const HomePage = () => {
     {
       num: "11",
       teaser: "11 — Singles Day & Double Joy\n11% if single / 22% with a friend",
+      hiFiveRequired: true,
       content: `11 = Двойные лапки, двойная радость
 11/11 — День холостяка: друзья собираются вместе, чтобы праздновать свободу и угощаться вкусняшками.
 Потому что вдвоём всегда вкуснее.
@@ -61,13 +64,41 @@ const HomePage = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (hiFiveTimerRef.current) {
+        clearTimeout(hiFiveTimerRef.current);
+      }
+    };
+  }, []);
+
   const openTelegramOrder = () => {
     window.open("https://t.me/MeowchiOrders_Bot", "_blank");
   };
 
   const handleCardClick = (index, card) => {
-    if (card.locked) return;
+    if (card.locked || card.hiFiveRequired) return;
     setOpenCard(openCard === index ? null : index);
+  };
+
+  const handleHiFiveClick = (e) => {
+    e.stopPropagation();
+    
+    const newCount = hiFiveCount + 1;
+    setHiFiveCount(newCount);
+
+    if (newCount === 11) {
+      setOpenCard(1);
+      
+      if (hiFiveTimerRef.current) {
+        clearTimeout(hiFiveTimerRef.current);
+      }
+
+      hiFiveTimerRef.current = setTimeout(() => {
+        setOpenCard(null);
+        setHiFiveCount(0);
+      }, 11000);
+    }
   };
 
   return (
@@ -151,20 +182,44 @@ const HomePage = () => {
               whileHover={{ scale: item.locked ? 1.0 : 1.02 }}
               onClick={() => handleCardClick(i, item)}
               className={`p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
-                item.locked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                item.locked ? "cursor-not-allowed opacity-80" : item.hiFiveRequired ? "cursor-default" : "cursor-pointer"
               }`}
             >
               <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(0,255,200,0.6)]">
                 {item.num}
               </h3>
-              {openCard === i && !item.locked ? (
-                <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
-                  {item.content}
-                </p>
+              
+              {item.hiFiveRequired ? (
+                openCard === i ? (
+                  <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                    {item.content}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
+                    <motion.img
+                      src="https://ik.imagekit.io/59r2kpz8r/HiFive%20copy.webp?updatedAt=1759313478537"
+                      alt="HiFive Cat"
+                      onClick={handleHiFiveClick}
+                      whileTap={{ scale: 0.95 }}
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="w-32 h-32 mx-auto object-contain cursor-pointer"
+                    />
+                  </div>
+                )
               ) : (
-                <p className="text-gray-400 whitespace-pre-line">
-                  {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
-                </p>
+                <>
+                  {openCard === i && !item.locked ? (
+                    <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                      {item.content}
+                    </p>
+                  ) : (
+                    <p className="text-gray-400 whitespace-pre-line">
+                      {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
+                    </p>
+                  )}
+                </>
               )}
             </motion.div>
           ))}
