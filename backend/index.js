@@ -303,51 +303,26 @@ const setupDatabase = async () => {
     `);
 
     await client.query(`
-      CREATE TABLE IF NOT EXISTS leaderboard_cache (
-        id SERIAL PRIMARY KEY,
-        leaderboard_type VARCHAR(50) NOT NULL,
-        user_id BIGINT REFERENCES users(telegram_id),
-        rank INT NOT NULL,
-        score INT NOT NULL,
-        additional_data JSONB,
-        cached_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await client.query(`
       CREATE TABLE IF NOT EXISTS user_friends (
         id SERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(telegram_id),
         friend_username VARCHAR(255) NOT NULL,
         friend_telegram_id BIGINT,
         added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, friend_username)
+        UNIQUE(user_id, friend_telegram_id)
       );
     `);
-    
-    const itemCount = await client.query('SELECT COUNT(*) as count FROM shop_items');
-    
-    if (parseInt(itemCount.rows[0].count) === 0) {
-      console.log('🛒 Seeding shop items...');
+
+    const shopCheck = await client.query('SELECT COUNT(*) as count FROM shop_items');
+    if (parseInt(shopCheck.rows[0].count) === 0) {
+      console.log('🏪 Initializing shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
-      `);
-      await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
-    } else {
-      console.log(`🛒 Shop items table updated, ensuring correct items exist...`);
-      
-      await client.query(`
-        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
+        (1, 'Extra Time +10s', 'Extends game time by 10 seconds', 1000, 'Clock', 'consumable'),
+        (2, 'Meowchi Magnet', 'Attracts nearby Meowchis automatically', 1500, 'Magnet', 'consumable'),
+        (3, 'Cookie Bomb', 'Destroys all Meowchis on screen at once', 2000, 'Bomb', 'consumable'),
+        (4, 'Double Points', '2x points for 20 seconds', 2500, 'Zap', 'consumable'),
+        (5, 'Rising Star Badge', 'Star profile badge', 5000, 'Star', 'permanent'),
         (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
         (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
         ON CONFLICT (id) DO UPDATE SET
@@ -474,7 +449,7 @@ app.post('/api/validate', async (req, res) => {
           appUser.username !== user.username;
         
         if (needsUpdate) {
-          console.log(`📝 Updating user info for ${user.id}`);
+          console.log(`🔄 Updating user info for ${user.id}`);
           
           const updateResult = await client.query(
             `UPDATE users SET
@@ -561,36 +536,28 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [user.id, finalScore, duration, JSON.stringify(itemsUsed), point_booster_active ? 2.0 : 1.0]
+        [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2 : 1]
       );
-      
+
       const sessionId = sessionResult.rows[0].id;
 
-      const updateResult = await client.query(
-        `UPDATE users SET 
-         points = $1, 
-         point_booster_active = FALSE,
-         point_booster_expires_at = NULL,
-         high_score = $3, 
-         games_played = $4,
-         total_play_time = total_play_time + $5
-         WHERE telegram_id = $2 RETURNING points`,
-        [newPoints, user.id, newHighScore, newGamesPlayed, duration]
+      await client.query(
+        'UPDATE users SET points = $1, high_score = $2, games_played = $3, total_play_time = total_play_time + $4 WHERE telegram_id = $5',
+        [newPoints, newHighScore, newGamesPlayed, duration, user.id]
       );
-
-      await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
 
       await client.query('COMMIT');
 
-      return res.status(200).json({ 
-        new_points: updateResult.rows[0].points, 
-        score_awarded: finalScore,
-        session_id: sessionId
+      res.status(200).json({ 
+        success: true,
+        newPoints,
+        finalScore,
+        sessionId
       });
 
-    } catch(e){
+    } catch (err) {
       await client.query('ROLLBACK');
-      throw e;
+      throw err;
     } finally {
       client.release();
     }
@@ -600,71 +567,27 @@ app.post('/api/update-score', validateUser, async (req, res) => {
   }
 });
 
-const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
-  const badgeUpdates = [
-    {
-      name: 'Cookie Master Badge',
-      current: Math.floor(score),
-      target: 5000,
-      condition: score >= 5000
-    },
-    {
-      name: 'Speed Demon Badge', 
-      current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
-      target: 100,
-      condition: false
-    },
-    {
-      name: 'Champion Badge',
-      current: Math.floor(highScore >= 3000 ? 25 : Math.floor(highScore / 120)),
-      target: 100,
-      condition: false
-    }
-  ];
-
-  for (const badge of badgeUpdates) {
-    await client.query(
-      `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, badge_name) 
-       DO UPDATE SET current_progress = GREATEST(badge_progress.current_progress, $3), updated_at = CURRENT_TIMESTAMP`,
-      [userId, badge.name, badge.current, badge.target]
-    );
-
-    if (badge.condition) {
-      await client.query(
-        `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [userId, badge.name]
-      );
-    }
-  }
-};
-
 app.post('/api/get-user-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const [userResult, badgesResult] = await Promise.all([
-        client.query(
-          `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
-          [user.id]
-        ),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
-      ]);
+      const userResult = await client.query(
+        'SELECT * FROM users WHERE telegram_id = $1',
+        [user.id]
+      );
       
       if (userResult.rowCount === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       const userData = userResult.rows[0];
-      userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       
       const avgResult = await client.query(
         'SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1',
         [user.id]
       );
+      
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
@@ -1424,133 +1347,6 @@ app.post('/api/friends/list', validateUser, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/list', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        'SELECT task_name, completed, completed_at, reward_points FROM user_tasks WHERE user_id = $1',
-        [user.id]
-      );
-
-      const completedTasks = result.rows.map(row => row.task_name);
-
-      const allTasks = [
-        { name: 'Join Telegram Channel', points: 500, completed: completedTasks.includes('Join Telegram Channel') },
-        { name: 'Follow on Instagram', points: 300, completed: completedTasks.includes('Follow on Instagram') },
-        { name: 'Play 5 Games', points: 250, completed: completedTasks.includes('Play 5 Games') },
-        { name: 'Invite 3 Friends', points: 1000, completed: completedTasks.includes('Invite 3 Friends') }
-      ];
-
-      res.status(200).json({ tasks: allTasks });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/tasks/list:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/tasks/complete', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { taskName } = req.body;
-    
-    if (!taskName) {
-      return res.status(400).json({ error: 'Task name is required' });
-    }
-
-    const taskRewards = {
-      'Join Telegram Channel': 500,
-      'Follow on Instagram': 300,
-      'Play 5 Games': 250,
-      'Invite 3 Friends': 1000
-    };
-
-    const rewardPoints = taskRewards[taskName];
-    if (!rewardPoints) {
-      return res.status(400).json({ error: 'Invalid task name' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const checkResult = await client.query(
-        'SELECT completed FROM user_tasks WHERE user_id = $1 AND task_name = $2',
-        [user.id, taskName]
-      );
-
-      if (checkResult.rowCount > 0 && checkResult.rows[0].completed) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Task already completed' });
-      }
-
-      await client.query(
-        `INSERT INTO user_tasks (user_id, task_name, completed, completed_at, reward_points)
-         VALUES ($1, $2, TRUE, CURRENT_TIMESTAMP, $3)
-         ON CONFLICT (user_id, task_name) 
-         DO UPDATE SET completed = TRUE, completed_at = CURRENT_TIMESTAMP`,
-        [user.id, taskName, rewardPoints]
-      );
-
-      const updateResult = await client.query(
-        'UPDATE users SET points = points + $1 WHERE telegram_id = $2 RETURNING points',
-        [rewardPoints, user.id]
-      );
-
-      await client.query('COMMIT');
-
-      res.status(200).json({
-        success: true,
-        newPoints: updateResult.rows[0].points,
-        rewardPoints,
-        message: `Earned ${rewardPoints} points for completing ${taskName}`
-      });
-
-    } catch(e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/tasks/complete:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/get-shop-data', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const client = await pool.connect();
-    try {
-      const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
-        client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        client.query('SELECT points FROM users WHERE telegram_id = $1', [user.id]),
-        client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
-        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
-      ]);
-
-      res.status(200).json({
-        items: itemsResult.rows,
-        userPoints: userResult.rows[0]?.points || 0,
-        inventory: inventoryResult.rows,
-        ownedBadges: badgesResult.rows.map(row => row.badge_name)
-      });
-
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('Error in /api/get-shop-data:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // ---- GLOBAL STATS ENDPOINTS ----
 app.get('/api/global-stats', async (req, res) => {
   try {
@@ -1729,7 +1525,9 @@ const startGlobalStatsSimulation = async () => {
         simulationActive.eaten = true;
       }
 
-      const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
+      // 🔧 FIX #1: Changed interval from 1-20 minutes to 1-4 minutes
+      // Old: const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
+      const interval = Math.floor(Math.random() * (240000 - 60000 + 1)) + 60000;
       console.log(`⏱️ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
       
       setTimeout(async () => {
@@ -1740,7 +1538,7 @@ const startGlobalStatsSimulation = async () => {
             body: JSON.stringify({ field: 'total_eaten_today' })
           });
           const data = await response.json();
-          console.log('🍪 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+          console.log('🪐 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
         } catch (error) {
           console.error('❌ [EATEN] Increment failed:', error.message);
         }
@@ -1799,8 +1597,10 @@ const startGlobalStatsSimulation = async () => {
     console.log('▶️ [ACTIVE] 24/7 simulation started');
     
     const updateAndSchedule = () => {
-      const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
-      console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/60000)} minutes`);
+      // 🔧 FIX #2: Changed interval from 5-15 minutes to 2 seconds
+      // Old: const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
+      const interval = 2000;
+      console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/1000)} seconds`);
       
       setTimeout(async () => {
         try {
@@ -1837,7 +1637,7 @@ const startGlobalStatsSimulation = async () => {
 const startServer = async () => {
   app.listen(PORT, async () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🔍 Health check: http://localhost:${PORT}/health`);
+    console.log(`🏥 Health check: http://localhost:${PORT}/health`);
     console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
     console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
