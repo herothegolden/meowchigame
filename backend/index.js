@@ -22,7 +22,7 @@ const {
 } = process.env;
 
 if (!DATABASE_URL || !BOT_TOKEN) {
-  console.error("❌ Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
   process.exit(1);
 }
 
@@ -180,6 +180,78 @@ const setupDatabase = async () => {
         acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // ---- CRITICAL FIX: Database Migration for user_inventory ----
+    console.log('🔧 Checking and updating user_inventory table schema...');
+
+    // Check if quantity column exists
+    const inventoryColumns = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='user_inventory' AND table_schema='public'
+    `);
+
+    const hasQuantityColumn = inventoryColumns.rows.some(row => row.column_name === 'quantity');
+
+    if (!hasQuantityColumn) {
+      console.log('📊 Adding quantity column to user_inventory...');
+      
+      // Step 1: Add quantity column with default value 1
+      await client.query(`
+        ALTER TABLE user_inventory 
+        ADD COLUMN quantity INT DEFAULT 1 NOT NULL
+      `);
+      
+      // Step 2: Update existing rows to consolidate duplicates
+      console.log('🔄 Consolidating duplicate inventory entries...');
+      
+      // First, create a temporary table with consolidated quantities
+      await client.query(`
+        CREATE TEMP TABLE inventory_consolidated AS
+        SELECT 
+          user_id, 
+          item_id, 
+          COUNT(*) as total_quantity,
+          MIN(acquired_at) as first_acquired_at
+        FROM user_inventory 
+        GROUP BY user_id, item_id
+      `);
+      
+      // Delete all existing inventory records
+      await client.query(`DELETE FROM user_inventory`);
+      
+      // Insert consolidated records
+      await client.query(`
+        INSERT INTO user_inventory (user_id, item_id, quantity, acquired_at)
+        SELECT user_id, item_id, total_quantity, first_acquired_at
+        FROM inventory_consolidated
+      `);
+      
+      console.log('✅ Inventory consolidation complete');
+    }
+
+    // Check if unique constraint exists
+    const constraintCheck = await client.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_name='user_inventory' 
+      AND constraint_type='UNIQUE'
+      AND constraint_name='user_inventory_user_item_unique'
+    `);
+
+    if (constraintCheck.rowCount === 0) {
+      console.log('🔒 Adding unique constraint to prevent duplicate inventory entries...');
+      
+      await client.query(`
+        ALTER TABLE user_inventory 
+        ADD CONSTRAINT user_inventory_user_item_unique 
+        UNIQUE (user_id, item_id)
+      `);
+      
+      console.log('✅ Unique constraint added');
+    }
+
+    console.log('✅ user_inventory table schema updated successfully');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_badges (
@@ -619,7 +691,7 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
         client.query('SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1', [user.id]),
         client.query('SELECT badge_name, current_progress, target_progress FROM badge_progress WHERE user_id = $1', [user.id]),
-        client.query('SELECT item_id, COUNT(item_id) as quantity FROM user_inventory WHERE user_id = $1 GROUP BY item_id', [user.id]),
+        client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
         client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id])
       ]);
@@ -907,6 +979,8 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'Item ID is required' });
     }
 
+    console.log(`💰 Purchase request: User ${user.id}, Item ${itemId}`);
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -947,7 +1021,7 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
           [user.id, item.name]
         );
       } else {
-        // ✅ Increment quantity safely instead of inserting duplicate rows
+        // FIXED: Use proper UPSERT with quantity column
         await client.query(
           `INSERT INTO user_inventory (user_id, item_id, quantity)
            VALUES ($1, $2, 1)
@@ -958,6 +1032,8 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
       }
 
       await client.query('COMMIT');
+
+      console.log(`✅ Purchase completed: User ${user.id}, Item ${itemId}, New Points: ${newPoints}`);
 
       res.status(200).json({
         success: true,
@@ -992,7 +1068,7 @@ app.post('/api/shop/use-item', validateUser, async (req, res) => {
       await client.query('BEGIN');
 
       const inventoryResult = await client.query(
-        'SELECT ui.id, si.name FROM user_inventory ui JOIN shop_items si ON ui.item_id = si.id WHERE ui.user_id = $1 AND ui.item_id = $2 LIMIT 1',
+        'SELECT ui.quantity, si.name FROM user_inventory ui JOIN shop_items si ON ui.item_id = si.id WHERE ui.user_id = $1 AND ui.item_id = $2',
         [user.id, itemId]
       );
 
@@ -1001,10 +1077,21 @@ app.post('/api/shop/use-item', validateUser, async (req, res) => {
         return res.status(404).json({ error: 'Item not found in inventory' });
       }
 
-      const inventoryItemId = inventoryResult.rows[0].id;
-      const itemName = inventoryResult.rows[0].name;
+      const { quantity, name: itemName } = inventoryResult.rows[0];
 
-      await client.query('DELETE FROM user_inventory WHERE id = $1', [inventoryItemId]);
+      if (quantity > 1) {
+        // Decrease quantity by 1
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        // Remove item completely if quantity is 1
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
 
       if (itemName === 'Double Points') {
         await client.query('UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', [user.id]);
@@ -1221,7 +1308,6 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
         client.query('SELECT points FROM users WHERE telegram_id = $1', [user.id]),
-        // ✅ Use new quantity column instead of COUNT(*)
         client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
@@ -1229,7 +1315,7 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       res.status(200).json({
         items: itemsResult.rows,
         userPoints: userResult.rows[0]?.points || 0,
-        inventory: inventoryResult.rows,  // already has { item_id, quantity }
+        inventory: inventoryResult.rows,
         ownedBadges: badgesResult.rows.map(row => row.badge_name)
       });
 
@@ -1264,7 +1350,7 @@ app.get('/api/global-stats', async (req, res) => {
       const needsReset = resetCheck.rows[0]?.needs_reset || false;
 
       if (needsReset) {
-        console.log('📝 Resetting daily stats for new day');
+        console.log('📅 Resetting daily stats for new day');
         await client.query(`
           UPDATE global_stats 
           SET total_eaten_today = 0,
@@ -1529,7 +1615,7 @@ const startServer = async () => {
   app.listen(PORT, async () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔍 Health check: http://localhost:${PORT}/health`);
-    console.log(`🐛 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
+    console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
     console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
     await startGlobalStatsSimulation();
