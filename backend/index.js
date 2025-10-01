@@ -57,26 +57,22 @@ const validateUser = (req, res, next) => {
     return res.status(400).json({ error: 'Invalid user data in initData' });
   }
   
-  // NO USERNAME RESTRICTIONS - Allow any user
   req.user = user;
   next();
 };
 
 // ---- FILE UPLOAD SETUP ----
-// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Created uploads/avatars directory');
 }
 
-// Multer configuration for avatar uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    // Generate unique filename: userId_timestamp.extension
     const userId = req.user?.id || 'unknown';
     const timestamp = Date.now();
     const extension = path.extname(file.originalname);
@@ -84,7 +80,6 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter for images only
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
@@ -93,25 +88,22 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer middleware
 const uploadAvatar = multer({
   storage: storage,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB limit
+    fileSize: 2 * 1024 * 1024,
   },
   fileFilter: fileFilter
 });
 
-// Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// FIXED: COMPREHENSIVE DATABASE SETUP WITH PROPER FOREIGN KEY HANDLING
+// ---- DATABASE SETUP ----
 const setupDatabase = async () => {
   const client = await pool.connect();
   try {
     console.log('🔧 Setting up enhanced database tables...');
 
-    // 1. Create Users Table with enhanced fields
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -130,7 +122,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 2. Add new columns if they don't exist
     const userColumns = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -155,7 +146,6 @@ const setupDatabase = async () => {
       }
     }
 
-    // 3. Shop Items Table
     const tableCheck = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -182,7 +172,6 @@ const setupDatabase = async () => {
       }
     }
     
-    // 4. User Inventory Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
@@ -192,7 +181,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 5. User Badges Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_badges (
         id SERIAL PRIMARY KEY,
@@ -203,7 +191,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 6. PHASE 3: Game Sessions Table for detailed tracking
     await client.query(`
       CREATE TABLE IF NOT EXISTS game_sessions (
         id SERIAL PRIMARY KEY,
@@ -217,7 +204,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 7. PHASE 3: Item Usage History Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS item_usage_history (
         id SERIAL PRIMARY KEY,
@@ -230,7 +216,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 8. PHASE 3: Badge Progress Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS badge_progress (
         id SERIAL PRIMARY KEY,
@@ -244,7 +229,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 9. PHASE 3: Leaderboard Cache Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS leaderboard_cache (
         id SERIAL PRIMARY KEY,
@@ -257,7 +241,6 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 10. FRIENDS SYSTEM: User Friends Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_friends (
         id SERIAL PRIMARY KEY,
@@ -269,7 +252,6 @@ const setupDatabase = async () => {
       );
     `);
     
-    // 11. Shop Items Seed Data (without item ID 2)
     const itemCount = await client.query('SELECT COUNT(*) as count FROM shop_items');
     
     if (parseInt(itemCount.rows[0].count) === 0) {
@@ -287,7 +269,6 @@ const setupDatabase = async () => {
     } else {
       console.log(`📦 Shop items table updated, ensuring correct items exist...`);
       
-      // Update existing items without item ID 2 (safe upsert)
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
@@ -305,7 +286,6 @@ const setupDatabase = async () => {
       `);
     }
 
-    // 12. USER TASKS SYSTEM: User Tasks Table for Main Tasks tracking
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_tasks (
         id SERIAL PRIMARY KEY,
@@ -321,11 +301,9 @@ const setupDatabase = async () => {
       );
     `);
 
-    // 13. PHYSICAL PRODUCT ORDERS TABLE
     console.log('🛒 Setting up orders table...');
 
     try {
-      // Step 1: Create the orders table
       await client.query(`
         CREATE TABLE IF NOT EXISTS orders (
           id SERIAL PRIMARY KEY,
@@ -346,7 +324,6 @@ const setupDatabase = async () => {
       
       console.log('✅ Orders table created');
 
-      // Step 2: Add unique constraint separately
       await client.query(`
         DO $ 
         BEGIN
@@ -363,7 +340,6 @@ const setupDatabase = async () => {
 
       console.log('✅ Orders unique constraint added');
 
-      // Step 3: Add foreign key constraint separately (optional, won't fail if users table issue)
       await client.query(`
         DO $ 
         BEGIN
@@ -385,7 +361,6 @@ const setupDatabase = async () => {
 
       console.log('✅ Orders foreign key constraint added');
 
-      // Step 4: Create indexes separately
       await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);`);
       console.log('✅ Index on user_id created');
       
@@ -403,10 +378,8 @@ const setupDatabase = async () => {
     } catch (error) {
       console.error('❌ Error setting up orders table:', error.message);
       console.error('Full error:', error);
-      // Don't throw - allow setup to continue with other tables
     }
 
-    // 14. GLOBAL STATS TABLE - NEW FOR PERSISTENT STATS
     console.log('🌍 Setting up global_stats table...');
     
     await client.query(`
@@ -422,18 +395,23 @@ const setupDatabase = async () => {
       );
     `);
 
-    // Initialize global stats if empty
     const statsCheck = await client.query('SELECT COUNT(*) as count FROM global_stats');
     if (parseInt(statsCheck.rows[0].count) === 0) {
-      console.log('🌍 Initializing global stats...');
+      console.log('🌍 Initializing global stats with seed values...');
+      const initialEaten = Math.floor(Math.random() * 15) + 5;
+      const initialPlayers = Math.floor(Math.random() * 20) + 10;
+      const initialActive = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
+      
       await client.query(`
         INSERT INTO global_stats (id, just_sold, total_eaten_today, active_players, new_players_today)
-        VALUES (1, 'Viral Classic', 0, ${Math.floor(Math.random() * (150 - 37 + 1)) + 37}, 0)
-      `);
+        VALUES (1, 'Viral Classic', $1, $2, $3)
+      `, [initialEaten, initialActive, initialPlayers]);
+      
+      console.log(`📊 Seed values: Eaten=${initialEaten}, Active=${initialActive}, NewPlayers=${initialPlayers}`);
     }
 
     console.log('✅ Global stats table ready');
-    console.log('✅ Enhanced database setup complete with proper item ID 2 cleanup!');
+    console.log('✅ Enhanced database setup complete!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
     process.exit(1);
@@ -447,16 +425,13 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// PATCHED: User validation - NO avatar auto-sync
 app.post('/api/validate', async (req, res) => {
   try {
-    // 1. Verify Telegram initData
     const isValid = validate(req.body.initData, process.env.BOT_TOKEN);
     if (!isValid) {
       return res.status(403).json({ error: 'Invalid Telegram initData' });
     }
 
-    // 2. Extract user info from initData
     const params = new URLSearchParams(req.body.initData);
     const userString = params.get('user');
     
@@ -480,7 +455,6 @@ app.post('/api/validate', async (req, res) => {
       let dailyBonus = null;
 
       if (dbUserResult.rows.length === 0) {
-        // NEW USER - Create without avatar
         console.log(`🆕 Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
         
         const insertResult = await client.query(
@@ -490,7 +464,6 @@ app.post('/api/validate', async (req, res) => {
         );
         appUser = insertResult.rows[0];
         
-        // Increment new players count
         await client.query(`
           UPDATE global_stats 
           SET new_players_today = new_players_today + 1,
@@ -499,10 +472,8 @@ app.post('/api/validate', async (req, res) => {
         `);
         
       } else {
-        // EXISTING USER
         appUser = dbUserResult.rows[0];
 
-        // Update user info (NO avatar sync)
         const needsUpdate = 
           appUser.first_name !== user.first_name || 
           appUser.last_name !== user.last_name || 
@@ -520,7 +491,6 @@ app.post('/api/validate', async (req, res) => {
           appUser = updateResult.rows[0];
         }
 
-        // Daily login bonus (24+ hours since last login)
         const lastLogin = appUser.last_login_at;
         const now = new Date();
         
@@ -542,7 +512,6 @@ app.post('/api/validate', async (req, res) => {
         }
       }
 
-      // Update active players count
       const userCount = await client.query('SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL \'1 hour\'');
       const activeCount = Math.max(37, parseInt(userCount.rows[0].count));
       
@@ -553,7 +522,6 @@ app.post('/api/validate', async (req, res) => {
         WHERE id = 1
       `, [activeCount]);
 
-      // Success response for ALL users
       console.log(`✅ User ${user.id} (@${user.username || 'no-username'}) validated successfully`);
       res.status(200).json({ ...appUser, dailyBonus });
       
@@ -566,7 +534,6 @@ app.post('/api/validate', async (req, res) => {
   }
 });
 
-// PHASE 3: Enhanced update-score with session tracking
 app.post('/api/update-score', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -575,7 +542,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'Score is required' });
     }
 
-    // FIXED: Convert score to integer to avoid PostgreSQL type errors
     const baseScore = Math.floor(Number(score) || 0);
 
     const client = await pool.connect();
@@ -597,7 +563,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
 
       console.log("Saving score:", finalScore);
 
-      // Create game session record
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -606,7 +571,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       
       const sessionId = sessionResult.rows[0].id;
 
-      // Update user stats
       const updateResult = await client.query(
         `UPDATE users SET 
          points = $1, 
@@ -618,7 +582,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
         [newPoints, user.id, newHighScore, newGamesPlayed, duration]
       );
 
-      // Update badge progress
       await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
 
       await client.query('COMMIT');
@@ -641,7 +604,6 @@ app.post('/api/update-score', validateUser, async (req, res) => {
   }
 });
 
-// Helper function to update badge progress
 const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
   const badgeUpdates = [
     {
@@ -703,7 +665,6 @@ app.post('/api/get-user-stats', validateUser, async (req, res) => {
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       
-      // FIXED: Calculate actual average score from game_sessions table
       const avgResult = await client.query(
         'SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1',
         [user.id]
@@ -723,31 +684,22 @@ app.post('/api/get-user-stats', validateUser, async (req, res) => {
   }
 });
 
-// NEW ENDPOINT: Combined profile data (replaces 4 separate calls)
 app.post('/api/get-profile-complete', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
     try {
-      // Execute all queries in parallel
       const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult] = await Promise.all([
-        // User stats
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
            games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
-        // Owned badges
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
-        // Average score
         client.query('SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1', [user.id]),
-        // Badge progress
         client.query('SELECT badge_name, current_progress, target_progress FROM badge_progress WHERE user_id = $1', [user.id]),
-        // Inventory
         client.query('SELECT item_id, COUNT(item_id) as quantity FROM user_inventory WHERE user_id = $1 GROUP BY item_id', [user.id]),
-        // Shop items
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        // User shop data
         client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id])
       ]);
       
@@ -760,13 +712,11 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       
-      // Badge progress
       const progress = {};
       progressResult.rows.forEach(row => {
         progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
       });
       
-      // Shop data
       const shopData = {
         items: shopItemsResult.rows,
         userPoints: userShopResult.rows[0]?.points || 0,
@@ -790,7 +740,6 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
   }
 });
 
-// NEW: Update Profile (Name) endpoint
 app.post('/api/update-profile', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -830,24 +779,19 @@ app.post('/api/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// Manual Avatar Upload endpoint - handles both file uploads and URLs
 app.post('/api/update-avatar', (req, res) => {
-  // FIXED: Extract initData from FormData
   uploadAvatar.single('avatar')(req, res, async (err) => {
     try {
-      // Get initData from FormData
       const initData = req.body.initData;
       
       if (!initData) {
         return res.status(400).json({ error: 'initData is required' });
       }
 
-      // Validate initData
       if (!validate(initData, BOT_TOKEN)) {
         return res.status(401).json({ error: 'Invalid authentication' });
       }
 
-      // Extract user from initData
       const params = new URLSearchParams(initData);
       const userString = params.get('user');
       if (!userString) {
@@ -866,9 +810,7 @@ app.post('/api/update-avatar', (req, res) => {
         return res.status(400).json({ error: err.message || 'File upload failed' });
       }
 
-      // Check if file was uploaded
       if (req.file) {
-        // File upload path
         const relativePath = `uploads/avatars/${req.file.filename}`;
         avatarUrl = `${process.env.BACKEND_URL || `http://localhost:${PORT}`}/${relativePath}`;
         console.log(`📸 Avatar uploaded for user ${user.id}: ${avatarUrl}`);
@@ -876,7 +818,6 @@ app.post('/api/update-avatar', (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      // Update database
       const client = await pool.connect();
       try {
         const result = await client.query(
@@ -1341,7 +1282,6 @@ app.post('/api/tasks/complete', validateUser, async (req, res) => {
   }
 });
 
-// Telegram Stars Invoice Creation
 app.post('/api/create-invoice', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -1398,14 +1338,12 @@ app.post('/api/create-invoice', validateUser, async (req, res) => {
   }
 });
 
-// Telegram Stars Payment Webhook
 app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
   try {
     console.log('💰 Received payment webhook:', JSON.stringify(req.body, null, 2));
 
     const { pre_checkout_query, successful_payment } = req.body;
 
-    // Handle pre-checkout query (optional - answer yes to all)
     if (pre_checkout_query) {
       const { id } = pre_checkout_query;
       
@@ -1418,7 +1356,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Handle successful payment
     if (successful_payment) {
       const { 
         telegram_payment_charge_id,
@@ -1426,18 +1363,15 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
         invoice_payload 
       } = successful_payment;
 
-      // Parse payload to get order info
       const payload = JSON.parse(invoice_payload);
       const { userId, productId } = payload;
 
       console.log(`✅ Payment confirmed: User ${userId}, Product ${productId}, Amount ${total_amount} stars`);
 
-      // Update order in database
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
 
-        // Update order status
         const updateResult = await client.query(
           `UPDATE orders 
            SET status = 'paid', 
@@ -1456,7 +1390,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
           console.log('✅ Order updated:', updateResult.rows[0]);
         }
 
-        // Get user contact info for delivery
         const userResult = await client.query(
           'SELECT first_name, username FROM users WHERE telegram_id = $1',
           [userId]
@@ -1465,7 +1398,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
         if (userResult.rowCount > 0) {
           const user = userResult.rows[0];
           
-          // Update order with user contact
           await client.query(
             `UPDATE orders 
              SET user_contact = $1
@@ -1479,8 +1411,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
 
         await client.query('COMMIT');
 
-        // TODO: Send notification to admin/delivery system
-        // TODO: Send confirmation message to user via bot
         console.log('🚚 Order ready for delivery processing');
 
       } catch (error) {
@@ -1493,7 +1423,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Unknown webhook type
     res.status(200).json({ ok: true });
 
   } catch (error) {
@@ -1502,14 +1431,12 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
   }
 });
 
-// ---- NEW GLOBAL STATS ENDPOINTS ----
+// ---- GLOBAL STATS ENDPOINTS ----
 
-// GET Global Stats (Public - No Auth Required)
 app.get('/api/global-stats', async (req, res) => {
   try {
     const client = await pool.connect();
     try {
-      // Check if we need to reset daily stats
       const statsResult = await client.query('SELECT * FROM global_stats WHERE id = 1');
       
       if (statsResult.rowCount === 0) {
@@ -1520,7 +1447,6 @@ app.get('/api/global-stats', async (req, res) => {
       const today = new Date().toISOString().split('T')[0];
       const lastReset = stats.last_daily_reset;
 
-      // Reset daily stats if it's a new day
       if (lastReset !== today) {
         console.log('🔄 Resetting daily stats for new day');
         await client.query(`
@@ -1548,7 +1474,40 @@ app.get('/api/global-stats', async (req, res) => {
   }
 });
 
-// Internal endpoint to increment stats (called by simulation)
+app.get('/api/global-stats/debug', async (req, res) => {
+  try {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const tashkentHour = (utcHour + 5) % 24;
+    const isActive = tashkentHour >= 10 && tashkentHour < 22;
+    
+    const client = await pool.connect();
+    try {
+      const stats = await client.query('SELECT * FROM global_stats WHERE id = 1');
+      
+      res.status(200).json({
+        serverTime: {
+          utc: now.toISOString(),
+          utcHour: utcHour,
+          tashkentHour: tashkentHour,
+          isActiveHours: isActive
+        },
+        stats: stats.rows[0],
+        simulationStatus: {
+          eatenSimulation: isActive ? 'ACTIVE (10AM-10PM Tashkent)' : 'PAUSED (Outside active hours)',
+          newPlayersSimulation: isActive ? 'ACTIVE (10AM-10PM Tashkent)' : 'PAUSED (Outside active hours)',
+          activePlayersSimulation: 'ACTIVE (24/7)'
+        }
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Debug endpoint error:', error);
+    res.status(500).json({ error: 'Debug failed' });
+  }
+});
+
 app.post('/api/global-stats/increment', async (req, res) => {
   try {
     const { field } = req.body;
@@ -1559,7 +1518,6 @@ app.post('/api/global-stats/increment', async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // Alternate product
       const products = ['Viral Matcha', 'Viral Classic'];
       const newProduct = products[Math.floor(Math.random() * products.length)];
 
@@ -1569,9 +1527,13 @@ app.post('/api/global-stats/increment', async (req, res) => {
             just_sold = $1,
             last_updated = CURRENT_TIMESTAMP
         WHERE id = 1
+        RETURNING *
       `, [newProduct]);
 
-      res.status(200).json({ success: true });
+      const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
+      console.log(`✅ Incremented ${field} to ${result.rows[0][field]}`);
+
+      res.status(200).json({ success: true, stats: result.rows[0] });
 
     } finally {
       client.release();
@@ -1582,113 +1544,179 @@ app.post('/api/global-stats/increment', async (req, res) => {
   }
 });
 
-// FIXED: Helper function to check active hours in Tashkent timezone (UTC+5)
 const isActiveHoursTashkent = () => {
   const now = new Date();
-  // Get UTC time and add 5 hours for Tashkent (UTC+5)
   const tashkentHour = (now.getUTCHours() + 5) % 24;
-  const isActive = tashkentHour >= 10 && tashkentHour < 22;
-  return isActive;
+  return tashkentHour >= 10 && tashkentHour < 22;
 };
 
-// Background simulation process
-const startGlobalStatsSimulation = () => {
-  console.log('🎮 Starting global stats simulation with Tashkent timezone (UTC+5)...');
+let simulationActive = {
+  eaten: false,
+  newPlayers: false,
+  activePlayers: false
+};
+
+const startGlobalStatsSimulation = async () => {
+  console.log('🎮 Starting global stats simulation v4 with Tashkent timezone (UTC+5)...');
+  console.log(`⏰ Server UTC time: ${new Date().toISOString()}`);
+  console.log(`⏰ Tashkent hour: ${(new Date().getUTCHours() + 5) % 24}:${new Date().getUTCMinutes()}`);
+  console.log(`🔍 Active hours (Tashkent): ${isActiveHoursTashkent() ? 'YES ✅' : 'NO ❌'}`);
   
-  // FIXED: Simulate Meowchis Eaten (1-20 min intervals, 10AM-10PM Tashkent ONLY)
+  if (isActiveHoursTashkent()) {
+    console.log('⚡ IN ACTIVE HOURS - Triggering immediate first increments...');
+    
+    try {
+      await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: 'total_eaten_today' })
+      });
+      console.log('✅ IMMEDIATE: First Meowchi eaten increment done');
+    } catch (error) {
+      console.error('❌ IMMEDIATE: Failed first eaten increment:', error.message);
+    }
+    
+    try {
+      await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field: 'new_players_today' })
+      });
+      console.log('✅ IMMEDIATE: First new player increment done');
+    } catch (error) {
+      console.error('❌ IMMEDIATE: Failed first player increment:', error.message);
+    }
+  } else {
+    console.log('⏸️ OUTSIDE ACTIVE HOURS - Waiting for 10 AM Tashkent...');
+  }
+  
   const scheduleEatenUpdate = () => {
-    if (!isActiveHoursTashkent()) {
-      setTimeout(scheduleEatenUpdate, 600000); // Check again in 10 min
-      return;
-    }
-
-    const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
-    
-    setTimeout(async () => {
-      try {
-        await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ field: 'total_eaten_today' })
-        });
-        console.log('🍪 Simulated Meowchi eaten');
-      } catch (error) {
-        console.error('Error simulating eaten:', error.message);
+    const checkAndSchedule = () => {
+      if (!isActiveHoursTashkent()) {
+        console.log('⏸️ [EATEN] Outside active hours, checking again in 10 min...');
+        simulationActive.eaten = false;
+        setTimeout(checkAndSchedule, 600000);
+        return;
       }
-      scheduleEatenUpdate();
-    }, interval);
-  };
 
-  // FIXED: Simulate New Players (2-30 min intervals, max 90/day, 10AM-10PM Tashkent ONLY)
-  const scheduleNewPlayerUpdate = () => {
-    // Check active hours FIRST
-    if (!isActiveHoursTashkent()) {
-      setTimeout(scheduleNewPlayerUpdate, 600000); // Check again in 10 min
-      return;
-    }
+      if (!simulationActive.eaten) {
+        console.log('▶️ [EATEN] Entering active hours - resuming simulation');
+        simulationActive.eaten = true;
+      }
 
-    const interval = Math.floor(Math.random() * (1800000 - 120000 + 1)) + 120000;
-    
-    setTimeout(async () => {
-      try {
-        const statsRes = await fetch(`http://localhost:${PORT}/api/global-stats`);
-        const stats = await statsRes.json();
-        
-        if (stats.new_players_today < 90) {
-          await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
+      const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
+      console.log(`⏱️ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
+      
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ field: 'new_players_today' })
+            body: JSON.stringify({ field: 'total_eaten_today' })
           });
-          console.log('🎉 Simulated new player joined');
+          const data = await response.json();
+          console.log('🍪 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+        } catch (error) {
+          console.error('❌ [EATEN] Increment failed:', error.message);
         }
-      } catch (error) {
-        console.error('Error simulating new player:', error.message);
-      }
-      scheduleNewPlayerUpdate();
-    }, interval);
-  };
-
-  // FIXED: Update Active Players (5-15 min intervals, 24/7 - NO active hours check)
-  const scheduleActivePlayersUpdate = () => {
-    const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
+        checkAndSchedule();
+      }, interval);
+    };
     
-    setTimeout(async () => {
-      try {
-        const newCount = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
-        const client = await pool.connect();
-        try {
-          await client.query(`
-            UPDATE global_stats 
-            SET active_players = $1,
-                last_updated = CURRENT_TIMESTAMP
-            WHERE id = 1
-          `, [newCount]);
-          console.log(`👥 Updated active players: ${newCount}`);
-        } finally {
-          client.release();
-        }
-      } catch (error) {
-        console.error('Error updating active players:', error.message);
-      }
-      scheduleActivePlayersUpdate();
-    }, interval);
+    checkAndSchedule();
   };
 
-  // Start all simulations
+  const scheduleNewPlayerUpdate = () => {
+    const checkAndSchedule = () => {
+      if (!isActiveHoursTashkent()) {
+        console.log('⏸️ [PLAYERS] Outside active hours, checking again in 10 min...');
+        simulationActive.newPlayers = false;
+        setTimeout(checkAndSchedule, 600000);
+        return;
+      }
+
+      if (!simulationActive.newPlayers) {
+        console.log('▶️ [PLAYERS] Entering active hours - resuming simulation');
+        simulationActive.newPlayers = true;
+      }
+
+      const interval = Math.floor(Math.random() * (1800000 - 120000 + 1)) + 120000;
+      console.log(`⏱️ [PLAYERS] Next increment in ${Math.round(interval/60000)} minutes`);
+      
+      setTimeout(async () => {
+        try {
+          const statsRes = await fetch(`http://localhost:${PORT}/api/global-stats`);
+          const stats = await statsRes.json();
+          
+          if (stats.new_players_today < 90) {
+            const response = await fetch(`http://localhost:${PORT}/api/global-stats/increment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ field: 'new_players_today' })
+            });
+            const data = await response.json();
+            console.log('🎉 Simulated new player joined - Total:', data.stats?.new_players_today);
+          } else {
+            console.log('🚫 [PLAYERS] Daily limit reached (90)');
+          }
+        } catch (error) {
+          console.error('❌ [PLAYERS] Increment failed:', error.message);
+        }
+        checkAndSchedule();
+      }, interval);
+    };
+    
+    checkAndSchedule();
+  };
+
+  const scheduleActivePlayersUpdate = () => {
+    simulationActive.activePlayers = true;
+    console.log('▶️ [ACTIVE] 24/7 simulation started');
+    
+    const updateAndSchedule = () => {
+      const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
+      console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/60000)} minutes`);
+      
+      setTimeout(async () => {
+        try {
+          const newCount = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
+          const client = await pool.connect();
+          try {
+            await client.query(`
+              UPDATE global_stats 
+              SET active_players = $1,
+                  last_updated = CURRENT_TIMESTAMP
+              WHERE id = 1
+            `, [newCount]);
+            console.log(`👥 Updated active players: ${newCount}`);
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          console.error('❌ [ACTIVE] Update failed:', error.message);
+        }
+        updateAndSchedule();
+      }, interval);
+    };
+    
+    updateAndSchedule();
+  };
+
   scheduleEatenUpdate();
   scheduleNewPlayerUpdate();
   scheduleActivePlayersUpdate();
+  
+  console.log('✅ All simulations scheduled');
 };
 
-const startServer = () => {
-  app.listen(PORT, () => {
+const startServer = async () => {
+  app.listen(PORT, async () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    console.log(`🔍 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
     console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
-    // Start global stats simulation
-    startGlobalStatsSimulation();
+    await startGlobalStatsSimulation();
   });
 };
 
