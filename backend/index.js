@@ -1582,18 +1582,22 @@ app.post('/api/global-stats/increment', async (req, res) => {
   }
 });
 
+// FIXED: Helper function to check active hours in Tashkent timezone (UTC+5)
+const isActiveHoursTashkent = () => {
+  const now = new Date();
+  // Get UTC time and add 5 hours for Tashkent (UTC+5)
+  const tashkentHour = (now.getUTCHours() + 5) % 24;
+  const isActive = tashkentHour >= 10 && tashkentHour < 22;
+  return isActive;
+};
+
 // Background simulation process
 const startGlobalStatsSimulation = () => {
-  console.log('🎮 Starting global stats simulation...');
+  console.log('🎮 Starting global stats simulation with Tashkent timezone (UTC+5)...');
   
-  const isActiveHours = () => {
-    const hour = new Date().getHours();
-    return hour >= 10 && hour < 22;
-  };
-
-  // Simulate Meowchis Eaten (1-20 min intervals during active hours)
+  // FIXED: Simulate Meowchis Eaten (1-20 min intervals, 10AM-10PM Tashkent ONLY)
   const scheduleEatenUpdate = () => {
-    if (!isActiveHours()) {
+    if (!isActiveHoursTashkent()) {
       setTimeout(scheduleEatenUpdate, 600000); // Check again in 10 min
       return;
     }
@@ -1615,8 +1619,14 @@ const startGlobalStatsSimulation = () => {
     }, interval);
   };
 
-  // Simulate New Players (2-30 min intervals, max 90/day)
+  // FIXED: Simulate New Players (2-30 min intervals, max 90/day, 10AM-10PM Tashkent ONLY)
   const scheduleNewPlayerUpdate = () => {
+    // Check active hours FIRST
+    if (!isActiveHoursTashkent()) {
+      setTimeout(scheduleNewPlayerUpdate, 600000); // Check again in 10 min
+      return;
+    }
+
     const interval = Math.floor(Math.random() * (1800000 - 120000 + 1)) + 120000;
     
     setTimeout(async () => {
@@ -1639,13 +1649,8 @@ const startGlobalStatsSimulation = () => {
     }, interval);
   };
 
-  // Update Active Players (5-15 min intervals during active hours)
+  // FIXED: Update Active Players (5-15 min intervals, 24/7 - NO active hours check)
   const scheduleActivePlayersUpdate = () => {
-    if (!isActiveHours()) {
-      setTimeout(scheduleActivePlayersUpdate, 600000);
-      return;
-    }
-
     const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
     
     setTimeout(async () => {
@@ -1680,6 +1685,7 @@ const startServer = () => {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
     // Start global stats simulation
     startGlobalStatsSimulation();
