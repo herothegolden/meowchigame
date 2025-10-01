@@ -1221,14 +1221,15 @@ app.post('/api/get-shop-data', validateUser, async (req, res) => {
       const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
         client.query('SELECT points FROM users WHERE telegram_id = $1', [user.id]),
-        client.query('SELECT item_id, COUNT(item_id) as quantity FROM user_inventory WHERE user_id = $1 GROUP BY item_id', [user.id]),
+        // ✅ Use new quantity column instead of COUNT(*)
+        client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
 
       res.status(200).json({
         items: itemsResult.rows,
         userPoints: userResult.rows[0]?.points || 0,
-        inventory: inventoryResult.rows,
+        inventory: inventoryResult.rows,  // already has { item_id, quantity }
         ownedBadges: badgesResult.rows.map(row => row.badge_name)
       });
 
