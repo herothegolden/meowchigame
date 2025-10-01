@@ -17,6 +17,10 @@ const GamePage = () => {
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   
+  // ADDED: Booster timer states
+  const [boosterTimeLeft, setBoosterTimeLeft] = useState(0);
+  const [boosterActive, setBoosterActive] = useState(false);
+  
   // Inventory state
   const [inventory, setInventory] = useState([]);
   const [isActivatingItem, setIsActivatingItem] = useState(null);
@@ -68,6 +72,31 @@ const GamePage = () => {
       return () => clearInterval(timer);
     }
   }, [shuffleCooldown, gameStarted, isGameOver]);
+
+  // ADDED: Booster countdown timer
+  useEffect(() => {
+    if (boosterTimeLeft > 0 && gameStarted && !isGameOver) {
+      const timer = setInterval(() => {
+        setBoosterTimeLeft(prev => {
+          if (prev <= 1) {
+            setBoosterActive(false);
+            setActiveBoosts(prevBoosts => ({ ...prevBoosts, pointMultiplier: false }));
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [boosterTimeLeft, gameStarted, isGameOver]);
+
+  // ADDED: Cleanup booster on component unmount
+  useEffect(() => {
+    return () => {
+      setBoosterTimeLeft(0);
+      setBoosterActive(false);
+    };
+  }, []);
 
   // Handle game over submission
   useEffect(() => {
@@ -166,9 +195,16 @@ const GamePage = () => {
         );
         setInventory(consumableItems);
         
-        const pointMultiplier = shopData.boosterActive || false;
-        if (pointMultiplier) {
-          setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+        // UPDATED: Check for time-based booster instead of boolean
+        if (shopData.boosterExpiresAt) {
+          const expirationTime = new Date(shopData.boosterExpiresAt);
+          const now = new Date();
+          if (expirationTime > now) {
+            const secondsLeft = Math.ceil((expirationTime - now) / 1000);
+            setBoosterTimeLeft(secondsLeft);
+            setBoosterActive(true);
+            setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+          }
         }
         
         setInventoryError(null);
@@ -210,6 +246,9 @@ const GamePage = () => {
     setShuffleFunction(null);
     setIsDraggingBomb(false);
     setGhostBombPosition({ x: 0, y: 0 });
+    // Reset booster states
+    setBoosterTimeLeft(0);
+    setBoosterActive(false);
     await loadInventory();
   };
 
@@ -251,9 +290,18 @@ const GamePage = () => {
           body: JSON.stringify({ initData: tg.initData, itemId: 4 }),
         });
         const result = await res.json();
-        if (!res.ok) throw new Error(result.error || 'Failed to activate Double Points');
+        
+        // REMOVED: Error handling for "already active" popup
+        if (!res.ok) {
+          console.warn('Double Points activation warning:', result.error);
+          // Still continue with the activation
+        }
 
+        // ADDED: Start 20-second countdown timer
+        setBoosterTimeLeft(20);
+        setBoosterActive(true);
         setActiveBoosts(prev => ({ ...prev, pointMultiplier: true }));
+        
         setAvailableItems(prev => 
           prev.map(invItem => 
             invItem.item_id === itemId 
@@ -265,14 +313,17 @@ const GamePage = () => {
       }
     } catch (error) {
       console.error('Item usage error:', error);
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Error',
-          message: error.message,
-          buttons: [{ type: 'ok' }]
-        });
-      } else {
-        alert(error.message);
+      // Only show popup for actual errors, not "already active" warnings
+      if (!error.message.includes('already active')) {
+        if (tg && tg.showPopup) {
+          tg.showPopup({
+            title: 'Error',
+            message: error.message,
+            buttons: [{ type: 'ok' }]
+          });
+        } else {
+          alert(error.message);
+        }
       }
     } finally {
       setIsActivatingItem(null);
@@ -462,11 +513,27 @@ const GamePage = () => {
           <span className="text-xl font-bold text-primary">{score.toLocaleString()}</span>
           {activeBoosts.pointMultiplier && <ChevronsUp className="w-5 h-5 text-green-400" />}
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-col items-end space-y-2">
           <div className={`flex items-center space-x-2 bg-nav p-3 rounded-xl shadow-lg border border-gray-700 ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
             <Clock className={`w-6 h-6 ${timeLeft <= 10 ? 'text-red-500' : 'text-accent'}`} />
             <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-primary'}`}>{formatTime(timeLeft)}</span>
           </div>
+          
+          {/* ADDED: Booster timer display under main timer */}
+          <AnimatePresence>
+            {boosterActive && boosterTimeLeft > 0 && (
+              <motion.div 
+                className="flex items-center space-x-2 bg-green-600/20 border border-green-500 p-2 rounded-lg shadow-lg"
+                initial={{ opacity: 0, y: -10, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.9 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ChevronsUp className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-bold text-green-400">2x {boosterTimeLeft}s</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
 
