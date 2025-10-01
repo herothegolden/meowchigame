@@ -84,6 +84,11 @@ const HomePage = () => {
   const handleHiFiveClick = (e) => {
     e.stopPropagation();
     
+    // Trigger haptic feedback (Telegram WebApp)
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+    
     const newCount = hiFiveCount + 1;
     setHiFiveCount(newCount);
 
@@ -195,7 +200,7 @@ const HomePage = () => {
                     {item.content}
                   </p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
                     <motion.img
                       src="https://ik.imagekit.io/59r2kpz8r/HiFive%20copy.webp?updatedAt=1759313478537"
@@ -206,6 +211,26 @@ const HomePage = () => {
                       transition={{ duration: 1.5, repeat: Infinity }}
                       className="w-32 h-32 mx-auto object-contain cursor-pointer"
                     />
+                    
+                    {hiFiveCount > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-2"
+                      >
+                        <p className="text-emerald-300 text-sm font-semibold">
+                          {hiFiveCount} / 11
+                        </p>
+                        <div className="w-full max-w-xs mx-auto h-2 bg-white/10 rounded-full overflow-hidden">
+                          <motion.div
+                            className="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(hiFiveCount / 11) * 100}%` }}
+                            transition={{ duration: 0.3 }}
+                          />
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 )
               ) : (
