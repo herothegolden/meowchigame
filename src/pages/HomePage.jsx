@@ -10,7 +10,16 @@ const HomePage = () => {
   const [showBurst, setShowBurst] = useState(false);
   const hiFiveTimerRef = useRef(null);
 
-  const gameItems = ['🍓', '🍪', '🥤', '🍬', '🍼'];
+  const gameItems = [
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1758904443682',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Matcha.webp?updatedAt=1758904443599',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Milk.webp?updatedAt=1758904443453',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1758904443333',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ColourBomb.webp?updatedAt=1758905830618',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/HoneyJar.webp?updatedAt=1758905928332',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Butter.webp?updatedAt=1758904443280'
+  ];
 
   const cards = [
     {
@@ -187,7 +196,7 @@ const HomePage = () => {
           </h2>
           <p className="text-gray-300 leading-relaxed mb-3">
             Meowchi — больше, чем печенье. Это{" "}
-            <span className="font-semibold text-white">쫀득-텍스tura</span>,
+            <span className="font-semibold text-white">쫀득-текстура</span>,
             которая делает каждый укус{" "}
             <span className="italic">ASMR moment</span>. Мраморный рисунок,
             эстетика для Instagram, вкус, который объединяет друзей. Сделано в
@@ -256,10 +265,14 @@ const HomePage = () => {
                             }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 1 }}
-                            className="absolute top-1/2 left-1/2 text-4xl pointer-events-none"
+                            className="absolute top-1/2 left-1/2 pointer-events-none"
                             style={{ transform: 'translate(-50%, -50%)' }}
                           >
-                            {item.emoji}
+                            <img 
+                              src={item.emoji} 
+                              alt="Game Item" 
+                              className="w-12 h-12 object-contain"
+                            />
                           </motion.div>
                         ))}
                       </AnimatePresence>
@@ -267,21 +280,25 @@ const HomePage = () => {
                       {/* Celebratory burst */}
                       {showBurst && (
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                          {gameItems.map((emoji, idx) => (
+                          {gameItems.map((imageUrl, idx) => (
                             <motion.div
                               key={`burst-${idx}`}
                               initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
                               animate={{ 
                                 scale: [0, 2, 1.5], 
-                                x: (idx - 2) * 40, 
+                                x: (idx - 3.5) * 50, 
                                 y: -60 - Math.random() * 40,
                                 opacity: [1, 1, 0],
                                 rotate: Math.random() * 360
                               }}
-                              transition={{ duration: 0.8, delay: idx * 0.1 }}
-                              className="absolute text-5xl"
+                              transition={{ duration: 0.8, delay: idx * 0.08 }}
+                              className="absolute"
                             >
-                              {emoji}
+                              <img 
+                                src={imageUrl} 
+                                alt="Game Item" 
+                                className="w-16 h-16 object-contain"
+                              />
                             </motion.div>
                           ))}
                         </div>
