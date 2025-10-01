@@ -73,9 +73,7 @@ const ShopPage = () => {
     return badges;
   };
 
-  // FIXED: useCallback with dependency array to prevent recreation
   const handlePurchase = useCallback(async (itemId) => {
-    // FIXED: Early return if already purchasing ANY item
     if (purchasing !== null) {
       console.log('Purchase blocked - another purchase in progress:', purchasing);
       return;
@@ -88,20 +86,23 @@ const ShopPage = () => {
     }
 
     console.log('Starting purchase for item:', itemId);
-    
-    // FIXED: Set purchasing state IMMEDIATELY to block all other purchases
     setPurchasing(itemId);
 
     try {
       const result = await apiCall('/api/shop/purchase', { itemId });
       console.log('Purchase API completed for item:', itemId);
-      
-      setData(prev => ({
-        ...prev,
-        userPoints: result.newPoints,
-        inventory: updateInventory(prev.inventory, itemId),
-        ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
-      }));
+
+      setData(prev => {
+        // Prevent duplicate increments in strict mode or double-calls
+        if (justPurchased === itemId) return prev;
+
+        return {
+          ...prev,
+          userPoints: result.newPoints,
+          inventory: updateInventory(prev.inventory, itemId),
+          ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
+        };
+      });
 
       setJustPurchased(itemId);
       setTimeout(() => setJustPurchased(null), 800);
@@ -110,13 +111,12 @@ const ShopPage = () => {
       console.error('Purchase error for item:', itemId, err);
       showError(err.message);
     } finally {
-      // FIXED: Always clear purchasing state after delay
       setTimeout(() => {
         console.log('Clearing purchase lock for item:', itemId);
         setPurchasing(null);
       }, 1000);
     }
-  }, [purchasing, data?.items]); // Dependencies ensure function recreates when needed
+  }, [purchasing, justPurchased, data?.items]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
