@@ -1432,7 +1432,6 @@ app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
 });
 
 // ---- GLOBAL STATS ENDPOINTS ----
-
 app.get('/api/global-stats', async (req, res) => {
   try {
     const client = await pool.connect();
@@ -1444,10 +1443,17 @@ app.get('/api/global-stats', async (req, res) => {
       }
 
       const stats = statsResult.rows[0];
-      const today = new Date().toISOString().split('T')[0];
-      const lastReset = stats.last_daily_reset;
+      
+      // FIXED: Proper date comparison using PostgreSQL CURRENT_DATE
+      const resetCheck = await client.query(`
+        SELECT (last_daily_reset < CURRENT_DATE) as needs_reset 
+        FROM global_stats 
+        WHERE id = 1
+      `);
+      
+      const needsReset = resetCheck.rows[0]?.needs_reset || false;
 
-      if (lastReset !== today) {
+      if (needsReset) {
         console.log('🔄 Resetting daily stats for new day');
         await client.query(`
           UPDATE global_stats 
