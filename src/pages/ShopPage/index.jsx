@@ -80,7 +80,8 @@ const ShopPage = () => {
     setPurchasing(itemId);
 
     try {
-      const result = await apiCall('/api/buy-item', { itemId });
+      // FIXED: Changed from '/api/buy-item' to '/api/shop/purchase'
+      const result = await apiCall('/api/shop/purchase', { itemId });
       
       setData(prev => ({
         ...prev,
