@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiCall, showError } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -20,9 +20,6 @@ const ShopPage = () => {
   const [error, setError] = useState(null);
   const [purchasing, setPurchasing] = useState(null);
   const [justPurchased, setJustPurchased] = useState(null);
-  
-  // FIXED: Use ref for immediate, render-independent purchase blocking
-  const purchaseInProgress = useRef(new Set());
 
   const fetchData = async () => {
     try {
@@ -76,25 +73,29 @@ const ShopPage = () => {
     return badges;
   };
 
-  const handlePurchase = async (itemId) => {
-    // FIXED: Immediate synchronous blocking using ref
-    if (purchaseInProgress.current.has(itemId)) {
-      console.log('Purchase blocked - already in progress for item:', itemId);
+  // FIXED: useCallback with dependency array to prevent recreation
+  const handlePurchase = useCallback(async (itemId) => {
+    // FIXED: Early return if already purchasing ANY item
+    if (purchasing !== null) {
+      console.log('Purchase blocked - another purchase in progress:', purchasing);
       return;
     }
 
-    const item = data.items.find(i => i.id === itemId);
-    if (!item) return;
+    const item = data?.items.find(i => i.id === itemId);
+    if (!item) {
+      console.log('Purchase blocked - item not found:', itemId);
+      return;
+    }
 
-    // FIXED: Immediately add to blocking set (synchronous, no race condition possible)
-    purchaseInProgress.current.add(itemId);
+    console.log('Starting purchase for item:', itemId);
+    
+    // FIXED: Set purchasing state IMMEDIATELY to block all other purchases
     setPurchasing(itemId);
 
     try {
-      console.log('Making purchase API call for item:', itemId);
       const result = await apiCall('/api/shop/purchase', { itemId });
+      console.log('Purchase API completed for item:', itemId);
       
-      // Update local state with new data
       setData(prev => ({
         ...prev,
         userPoints: result.newPoints,
@@ -102,23 +103,20 @@ const ShopPage = () => {
         ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
       }));
 
-      // Visual feedback without popup
       setJustPurchased(itemId);
       setTimeout(() => setJustPurchased(null), 800);
-
-      console.log('Purchase completed successfully for item:', itemId);
 
     } catch (err) {
       console.error('Purchase error for item:', itemId, err);
       showError(err.message);
     } finally {
-      // FIXED: Always remove from blocking set and clear purchasing state
+      // FIXED: Always clear purchasing state after delay
       setTimeout(() => {
-        purchaseInProgress.current.delete(itemId);
-        setPurchasing(prevPurchasing => prevPurchasing === itemId ? null : prevPurchasing);
-      }, 1000); // Longer delay to ensure no rapid re-purchases
+        console.log('Clearing purchase lock for item:', itemId);
+        setPurchasing(null);
+      }, 1000);
     }
-  };
+  }, [purchasing, data?.items]); // Dependencies ensure function recreates when needed
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
