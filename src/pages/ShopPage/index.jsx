@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiCall, showError } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
@@ -20,6 +20,9 @@ const ShopPage = () => {
   const [error, setError] = useState(null);
   const [purchasing, setPurchasing] = useState(null);
   const [justPurchased, setJustPurchased] = useState(null);
+  
+  // FIXED: Use ref for immediate, render-independent purchase blocking
+  const purchaseInProgress = useRef(new Set());
 
   const fetchData = async () => {
     try {
@@ -74,19 +77,21 @@ const ShopPage = () => {
   };
 
   const handlePurchase = async (itemId) => {
-    // FIXED: Prevent multiple purchases with early return guard
-    if (purchasing === itemId) {
-      console.log('Purchase already in progress for item:', itemId);
+    // FIXED: Immediate synchronous blocking using ref
+    if (purchaseInProgress.current.has(itemId)) {
+      console.log('Purchase blocked - already in progress for item:', itemId);
       return;
     }
 
     const item = data.items.find(i => i.id === itemId);
     if (!item) return;
 
-    // FIXED: Immediately set purchasing state to prevent race condition
+    // FIXED: Immediately add to blocking set (synchronous, no race condition possible)
+    purchaseInProgress.current.add(itemId);
     setPurchasing(itemId);
 
     try {
+      console.log('Making purchase API call for item:', itemId);
       const result = await apiCall('/api/shop/purchase', { itemId });
       
       // Update local state with new data
@@ -97,18 +102,21 @@ const ShopPage = () => {
         ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
       }));
 
-      // FIXED: Smooth visual feedback without popup
+      // Visual feedback without popup
       setJustPurchased(itemId);
-      setTimeout(() => setJustPurchased(null), 1000);
+      setTimeout(() => setJustPurchased(null), 800);
 
-      // FIXED: Removed showSuccess popup for smoother experience
+      console.log('Purchase completed successfully for item:', itemId);
 
     } catch (err) {
-      console.error('Purchase error:', err);
+      console.error('Purchase error for item:', itemId, err);
       showError(err.message);
     } finally {
-      // FIXED: Shorter delay before allowing next purchase
-      setTimeout(() => setPurchasing(null), 500);
+      // FIXED: Always remove from blocking set and clear purchasing state
+      setTimeout(() => {
+        purchaseInProgress.current.delete(itemId);
+        setPurchasing(prevPurchasing => prevPurchasing === itemId ? null : prevPurchasing);
+      }, 1000); // Longer delay to ensure no rapid re-purchases
     }
   };
 
