@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const POLL_INTERVAL = 15000; // Poll every 15 seconds
+
 const GlobalPulse = () => {
-  // State for each metric
-  const [justSold, setJustSold] = useState('Viral Classic');
-  const [totalEaten, setTotalEaten] = useState(0);
-  const [activePlayers, setActivePlayers] = useState(Math.floor(Math.random() * (150 - 37 + 1)) + 37);
-  const [newPlayers, setNewPlayers] = useState(0);
+  // State for stats from backend
+  const [stats, setStats] = useState({
+    just_sold: 'Viral Classic',
+    total_eaten_today: 0,
+    active_players: 0,
+    new_players_today: 0
+  });
+  
+  // Loading and error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Previous stats for detecting changes
+  const prevStatsRef = useRef(stats);
   
   // Pulsate animation states
   const [pulsateJustSold, setPulsateJustSold] = useState(false);
@@ -14,143 +26,92 @@ const GlobalPulse = () => {
   const [pulsateActivePlayers, setPulsateActivePlayers] = useState(false);
   const [pulsateNewPlayers, setPulsateNewPlayers] = useState(false);
   
-  // Refs for cleanup
-  const justSoldTimeoutRef = useRef(null);
-  const activePlayersTimeoutRef = useRef(null);
-  const newPlayersTimeoutRef = useRef(null);
-  
-  // Check if current time is within active hours (10AM-10PM)
-  const isActiveHours = () => {
-    const hour = new Date().getHours();
-    return hour >= 10 && hour < 22;
-  };
-  
   // Trigger pulsate animation
   const triggerPulsate = (setter) => {
     setter(true);
     setTimeout(() => setter(false), 600);
   };
   
-  // Daily reset at midnight
-  useEffect(() => {
-    const checkDailyReset = () => {
-      const now = new Date();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
+  // Fetch stats from backend
+  const fetchStats = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/global-stats`);
       
-      // Reset at midnight (00:00)
-      if (hour === 0 && minute === 0) {
-        setTotalEaten(0);
-        setNewPlayers(0);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    };
-    
-    // Check every minute
-    const interval = setInterval(checkDailyReset, 60000);
+      
+      const data = await response.json();
+      
+      // Detect changes and trigger animations
+      const prevStats = prevStatsRef.current;
+      
+      if (data.just_sold !== prevStats.just_sold) {
+        triggerPulsate(setPulsateJustSold);
+      }
+      
+      if (data.total_eaten_today !== prevStats.total_eaten_today) {
+        triggerPulsate(setPulsateTotalEaten);
+      }
+      
+      if (data.active_players !== prevStats.active_players) {
+        triggerPulsate(setPulsateActivePlayers);
+      }
+      
+      if (data.new_players_today !== prevStats.new_players_today) {
+        triggerPulsate(setPulsateNewPlayers);
+      }
+      
+      // Update stats
+      prevStatsRef.current = data;
+      setStats(data);
+      setLoading(false);
+      setError(null);
+      
+    } catch (err) {
+      console.error('Failed to fetch global stats:', err);
+      setError('Unable to load stats');
+      setLoading(false);
+    }
+  };
+  
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchStats();
+  }, []);
+  
+  // Poll for updates every 15 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchStats();
+    }, POLL_INTERVAL);
     
     return () => clearInterval(interval);
   }, []);
   
-  // Just Sold updater (coupled with Total Eaten)
-  useEffect(() => {
-    const scheduleNextUpdate = () => {
-      // Only schedule if within active hours
-      if (!isActiveHours()) {
-        // Check again in 10 minutes
-        justSoldTimeoutRef.current = setTimeout(scheduleNextUpdate, 600000);
-        return;
-      }
-      
-      // Random interval between 1 min (60000ms) and 20 min (1200000ms)
-      const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
-      
-      justSoldTimeoutRef.current = setTimeout(() => {
-        // Alternate product randomly
-        const products = ['Viral Matcha', 'Viral Classic'];
-        setJustSold(products[Math.floor(Math.random() * products.length)]);
-        setTotalEaten(prev => prev + 1);
-        
-        triggerPulsate(setPulsateJustSold);
-        triggerPulsate(setPulsateTotalEaten);
-        
-        // Schedule next update
-        scheduleNextUpdate();
-      }, interval);
-    };
-    
-    scheduleNextUpdate();
-    
-    return () => {
-      if (justSoldTimeoutRef.current) {
-        clearTimeout(justSoldTimeoutRef.current);
-      }
-    };
-  }, []);
+  // Loading state
+  if (loading) {
+    return (
+      <div className="space-y-4 text-center mb-6">
+        <h2 className="text-2xl font-extrabold tracking-widest text-gray-200">
+          GLOBAL PULSE
+        </h2>
+        <div className="text-gray-400 animate-pulse">Loading stats...</div>
+      </div>
+    );
+  }
   
-  // Active Players updater
-  useEffect(() => {
-    const scheduleNextUpdate = () => {
-      // Only schedule if within active hours
-      if (!isActiveHours()) {
-        // Check again in 10 minutes
-        activePlayersTimeoutRef.current = setTimeout(scheduleNextUpdate, 600000);
-        return;
-      }
-      
-      // Random interval between 5 min (300000ms) and 15 min (900000ms)
-      const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
-      
-      activePlayersTimeoutRef.current = setTimeout(() => {
-        // Only update if still within active hours
-        if (isActiveHours()) {
-          const newCount = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
-          setActivePlayers(newCount);
-          triggerPulsate(setPulsateActivePlayers);
-        }
-        
-        // Schedule next update
-        scheduleNextUpdate();
-      }, interval);
-    };
-    
-    scheduleNextUpdate();
-    
-    return () => {
-      if (activePlayersTimeoutRef.current) {
-        clearTimeout(activePlayersTimeoutRef.current);
-      }
-    };
-  }, []);
-  
-  // New Players updater (independent)
-  useEffect(() => {
-    const scheduleNextUpdate = () => {
-      // Random interval between 2 min (120000ms) and 30 min (1800000ms)
-      const interval = Math.floor(Math.random() * (1800000 - 120000 + 1)) + 120000;
-      
-      newPlayersTimeoutRef.current = setTimeout(() => {
-        // Increment up to max 90 per day
-        setNewPlayers(prev => {
-          if (prev < 90) {
-            triggerPulsate(setPulsateNewPlayers);
-            return prev + 1;
-          }
-          return prev;
-        });
-        
-        // Schedule next update
-        scheduleNextUpdate();
-      }, interval);
-    };
-    
-    scheduleNextUpdate();
-    
-    return () => {
-      if (newPlayersTimeoutRef.current) {
-        clearTimeout(newPlayersTimeoutRef.current);
-      }
-    };
-  }, []);
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-4 text-center mb-6">
+        <h2 className="text-2xl font-extrabold tracking-widest text-gray-200">
+          GLOBAL PULSE
+        </h2>
+        <div className="text-red-400 text-sm">{error}</div>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-4 text-center mb-6">
@@ -167,7 +128,7 @@ const GlobalPulse = () => {
             animate={pulsateJustSold ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {justSold}
+            {stats.just_sold}
           </motion.span>
         </div>
         
@@ -179,7 +140,7 @@ const GlobalPulse = () => {
             animate={pulsateTotalEaten ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {totalEaten}
+            {stats.total_eaten_today}
           </motion.span>
         </div>
         
@@ -191,7 +152,7 @@ const GlobalPulse = () => {
             animate={pulsateActivePlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {activePlayers}
+            {stats.active_players}
           </motion.span>
         </div>
         
@@ -203,7 +164,7 @@ const GlobalPulse = () => {
             animate={pulsateNewPlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {newPlayers}
+            {stats.new_players_today}
           </motion.span>
         </div>
       </div>
