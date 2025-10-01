@@ -1,60 +1,73 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import GlobalPulse from "../components/GlobalPulse";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
+  const [lockedCardTextIndex, setLockedCardTextIndex] = useState(0);
 
   const cards = [
     {
       num: "3.14",
-      teaser: "👉 3.14 — White Day / Pi Day\n👉 💖 Girls get 42% OFF",
-      content: `🍰 3.14 = White Day, Pi Day и День Маршмеллоу
+      teaser: "3.14 — White Day / Pi Day\nGirls get 42% OFF",
+      content: `3.14 = White Day, Pi Day и День Маршмеллоу
 Наблюдается 14 марта — ровно через месяц после Дня Святого Валентина и через 6 дней после 8 марта.
-Традиция: девушки дарят подарки мужчинам, которые раньше угощали их шоколадом или цветами.
-💖 Бонус Meowchi: Все девушки получают скидку 42%.`,
+Традиция: девушки дарят подарки мужчинам, которые дарили подарки или цветы, или все вместе на 14 Февраля и 8 Марта.
+Бонус Meowchi: Все девушки получают скидку 42%.`,
     },
     {
       num: "11",
-      teaser: "👉 11 — Singles Day & Double Joy\n👉 🎉 11% if single / 22% with a friend",
-      content: `🐾 11 = Двойные лапки, двойная радость
-В Азии 11/11 — День холостяка: друзья собираются вместе, чтобы праздновать свободу и угощаться вкусняшками.
+      teaser: "11 — Singles Day & Double Joy\n11% if single / 22% with a friend",
+      content: `11 = Двойные лапки, двойная радость
+11/11 — День холостяка: друзья собираются вместе, чтобы праздновать свободу и угощаться вкусняшками.
 Потому что вдвоём всегда вкуснее.
-🎉 Бонус Meowchi:
+Бонус Meowchi:
 Если ты один — скидка 11%.
 Купи ещё для друга → скидка 22%.`,
     },
     {
       num: "42",
-      teaser: "👉 42 — The Ultimate Answer Pack\n👉 🍪 Buy 42 → Free Gift Box + Boosters",
-      content: `📖 42 = Ответ на жизнь, вселенную и десерт
+      teaser: "42 — The Ultimate Answer Pack\nBuy 42 → Free Gift Box + Boosters",
+      content: `42 = Ответ на жизнь, вселенную и десерт
 Вдохновлено книгой Дугласа Адамса «Автостопом по галактике».
 Для Meowchi 42 — это «формула идеального десерта».
-🍪 Легендарный бонус:
+Легендарный бонус:
 Купи 42 печенья Meowchi → получи:
 🎁 Подарочную коробку Meowchi
 ⚡ x2 Time Boosters
 💣 x2 Cookie Bombs
 ✨ x2 Double Points
-🌌 Доступно только 42 игрокам в месяц.`,
+Доступно только 42 игрокам в месяц.`,
     },
     {
       num: "🔒",
-      teaser: "👉 🔒 Mystery Locked Card\n👉 👀 Unlock at Level 11 or $49",
-      content: `🔒 The Secret Scroll
-Некоторые тайны нельзя подарить — их нужно заслужить.
-Открой на уровне 11 или купи за $49.
-📜 Внутри:
-«Секретная книга рецептов Meowchi» (эксклюзивная загрузка)
+      locked: true,
+      alternateTexts: [
+        "🔒 Mystery Locked Card\nUnlock at Level 11 or pay $49",
+        "🔒 Mystery Locked Card\nОткроется только самым любопытным."
+      ],
+      content: `«Секретная книга рецептов Meowchi» (эксклюзивная загрузка)
 ⚡ x3 Time Boosters
 💣 x3 Cookie Bombs
-✨ x3 Double Points
-👀 Откроется только самым любопытным.`,
+✨ x3 Double Points`,
     },
   ];
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLockedCardTextIndex((prev) => (prev === 0 ? 1 : 0));
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const openTelegramOrder = () => {
     window.open("https://t.me/MeowchiOrders_Bot", "_blank");
+  };
+
+  const handleCardClick = (index, card) => {
+    if (card.locked) return;
+    setOpenCard(openCard === index ? null : index);
   };
 
   return (
@@ -135,19 +148,23 @@ const HomePage = () => {
           {cards.map((item, i) => (
             <motion.div
               key={i}
-              whileHover={{ scale: 1.02 }}
-              onClick={() => setOpenCard(openCard === i ? null : i)}
-              className="cursor-pointer p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all"
+              whileHover={{ scale: item.locked ? 1.0 : 1.02 }}
+              onClick={() => handleCardClick(i, item)}
+              className={`p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
+                item.locked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+              }`}
             >
               <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(0,255,200,0.6)]">
                 {item.num}
               </h3>
-              {openCard === i ? (
+              {openCard === i && !item.locked ? (
                 <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
                   {item.content}
                 </p>
               ) : (
-                <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
+                <p className="text-gray-400 whitespace-pre-line">
+                  {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
+                </p>
               )}
             </motion.div>
           ))}
