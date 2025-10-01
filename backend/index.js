@@ -918,7 +918,10 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
       }
 
       const item = itemResult.rows[0];
-      const userResult = await client.query('SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE', [user.id]);
+      const userResult = await client.query(
+        'SELECT points FROM users WHERE telegram_id = $1 FOR UPDATE',
+        [user.id]
+      );
       
       if (userResult.rowCount === 0) {
         await client.query('ROLLBACK');
@@ -933,7 +936,10 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
       }
 
       const newPoints = userPoints - item.price;
-      await client.query('UPDATE users SET points = $1 WHERE telegram_id = $2', [newPoints, user.id]);
+      await client.query(
+        'UPDATE users SET points = $1 WHERE telegram_id = $2',
+        [newPoints, user.id]
+      );
 
       if (item.type === 'permanent') {
         await client.query(
@@ -941,8 +947,12 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
           [user.id, item.name]
         );
       } else {
+        // ✅ Increment quantity safely instead of inserting duplicate rows
         await client.query(
-          'INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)',
+          `INSERT INTO user_inventory (user_id, item_id, quantity)
+           VALUES ($1, $2, 1)
+           ON CONFLICT (user_id, item_id)
+           DO UPDATE SET quantity = user_inventory.quantity + 1`,
           [user.id, itemId]
         );
       }
@@ -956,7 +966,7 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
         message: `Successfully purchased ${item.name}`
       });
 
-    } catch(e) {
+    } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
