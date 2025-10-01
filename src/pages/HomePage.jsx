@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import GlobalPulse from "../components/GlobalPulse";
 
 const HomePage = () => {
   const [openCard, setOpenCard] = useState(null);
   const [lockedCardTextIndex, setLockedCardTextIndex] = useState(0);
   const [hiFiveCount, setHiFiveCount] = useState(0);
+  const [poppedItems, setPoppedItems] = useState([]);
+  const [showBurst, setShowBurst] = useState(false);
   const hiFiveTimerRef = useRef(null);
+
+  const gameItems = ['🍓', '🍪', '🥤', '🍬', '🍼'];
 
   const cards = [
     {
@@ -92,8 +96,31 @@ const HomePage = () => {
     const newCount = hiFiveCount + 1;
     setHiFiveCount(newCount);
 
+    if (newCount < 11) {
+      // Pop random item
+      const randomItem = gameItems[Math.floor(Math.random() * gameItems.length)];
+      const newItem = {
+        id: Date.now(),
+        emoji: randomItem,
+        x: Math.random() * 100 - 50, // Random position around center
+        y: Math.random() * 50 - 25,
+      };
+      setPoppedItems(prev => [...prev, newItem]);
+      
+      // Remove item after animation
+      setTimeout(() => {
+        setPoppedItems(prev => prev.filter(item => item.id !== newItem.id));
+      }, 1000);
+    }
+
     if (newCount === 11) {
-      setOpenCard(1);
+      // Celebratory burst - show all items
+      setShowBurst(true);
+      
+      setTimeout(() => {
+        setShowBurst(false);
+        setOpenCard(1);
+      }, 800);
       
       if (hiFiveTimerRef.current) {
         clearTimeout(hiFiveTimerRef.current);
@@ -102,6 +129,7 @@ const HomePage = () => {
       hiFiveTimerRef.current = setTimeout(() => {
         setOpenCard(null);
         setHiFiveCount(0);
+        setPoppedItems([]);
       }, 11000);
     }
   };
@@ -159,7 +187,7 @@ const HomePage = () => {
           </h2>
           <p className="text-gray-300 leading-relaxed mb-3">
             Meowchi — больше, чем печенье. Это{" "}
-            <span className="font-semibold text-white">쫀득-текстура</span>,
+            <span className="font-semibold text-white">쫀득-텍스tura</span>,
             которая делает каждый укус{" "}
             <span className="italic">ASMR moment</span>. Мраморный рисунок,
             эстетика для Instagram, вкус, который объединяет друзей. Сделано в
@@ -202,35 +230,63 @@ const HomePage = () => {
                 ) : (
                   <div className="space-y-4">
                     <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
-                    <motion.img
-                      src="https://ik.imagekit.io/59r2kpz8r/HiFive%20copy.webp?updatedAt=1759313478537"
-                      alt="HiFive Cat"
-                      onClick={handleHiFiveClick}
-                      whileTap={{ scale: 0.95 }}
-                      animate={{ scale: [1, 1.05, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-32 h-32 mx-auto object-contain cursor-pointer"
-                    />
                     
-                    {hiFiveCount > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-2"
-                      >
-                        <p className="text-emerald-300 text-sm font-semibold">
-                          {hiFiveCount} / 11
-                        </p>
-                        <div className="w-full max-w-xs mx-auto h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="relative inline-block">
+                      <motion.img
+                        src="https://ik.imagekit.io/59r2kpz8r/HiFive%20copy.webp?updatedAt=1759313478537"
+                        alt="HiFive Cat"
+                        onClick={handleHiFiveClick}
+                        whileTap={{ scale: 0.95 }}
+                        animate={{ scale: [1, 1.05, 1] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className="w-32 h-32 mx-auto object-contain cursor-pointer"
+                      />
+                      
+                      {/* Individual popped items */}
+                      <AnimatePresence>
+                        {poppedItems.map((item) => (
                           <motion.div
-                            className="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${(hiFiveCount / 11) * 100}%` }}
-                            transition={{ duration: 0.3 }}
-                          />
+                            key={item.id}
+                            initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                            animate={{ 
+                              scale: [0, 1.5, 1], 
+                              x: item.x, 
+                              y: item.y - 50, 
+                              opacity: [1, 1, 0] 
+                            }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 1 }}
+                            className="absolute top-1/2 left-1/2 text-4xl pointer-events-none"
+                            style={{ transform: 'translate(-50%, -50%)' }}
+                          >
+                            {item.emoji}
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                      
+                      {/* Celebratory burst */}
+                      {showBurst && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                          {gameItems.map((emoji, idx) => (
+                            <motion.div
+                              key={`burst-${idx}`}
+                              initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                              animate={{ 
+                                scale: [0, 2, 1.5], 
+                                x: (idx - 2) * 40, 
+                                y: -60 - Math.random() * 40,
+                                opacity: [1, 1, 0],
+                                rotate: Math.random() * 360
+                              }}
+                              transition={{ duration: 0.8, delay: idx * 0.1 }}
+                              className="absolute text-5xl"
+                            >
+                              {emoji}
+                            </motion.div>
+                          ))}
                         </div>
-                      </motion.div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )
               ) : (
