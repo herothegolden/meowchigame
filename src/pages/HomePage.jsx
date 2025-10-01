@@ -62,7 +62,6 @@ const HomePage = () => {
       <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
 
       <div className="flex-grow max-w-2xl mx-auto px-6 py-12 space-y-12">
-        {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -99,7 +98,6 @@ const HomePage = () => {
           </motion.button>
         </motion.div>
 
-        {/* Why Meowchi Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -131,7 +129,6 @@ const HomePage = () => {
           </div>
         </motion.div>
 
-        {/* Global Pulse + Cards */}
         <div className="space-y-8">
           <GlobalPulse />
 
@@ -156,7 +153,6 @@ const HomePage = () => {
           ))}
         </div>
 
-        {/* Products Section */}
         <div>
           <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
           <div className="grid grid-cols-1 gap-6">
@@ -190,7 +186,6 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Order Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -199,16 +194,10 @@ const HomePage = () => {
           className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
         >
           <h2 className="text-xl font-bold">Как заказать?</h2>
-          <p>🚚 Доставка по Ташкенту (Yandex Taxi)</p>
-          <p>❄️ Хранение: 30 дней в холодильнике</p>
-          <p>
-            ☎️ Телефон:{" "}
-            
-              href="tel:+998913141142"
-              className="text-emerald-300 hover:underline"
-            >
-              +998 91 314 11 42
-            </a>
+          <p className="text-gray-300">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
+          <p className="text-gray-300">❄️ Хранение: 30 дней в холодильнике</p>
+          <p className="text-gray-300">
+            ☎️ Телефон: <a href="tel:+998913141142" className="text-emerald-300 hover:underline">+998 91 314 11 42</a>
           </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -220,10 +209,9 @@ const HomePage = () => {
         </motion.div>
       </div>
 
-      {/* Footer Section */}
       <footer className="border-t border-white/10 py-6 mt-8">
         <div className="flex justify-center space-x-6 text-2xl">
-          
+          <a
             href="https://t.me/meowchi_lab"
             target="_blank"
             rel="noopener noreferrer"
@@ -239,7 +227,7 @@ const HomePage = () => {
             </svg>
           </a>
 
-          
+          <a
             href="https://www.instagram.com/meowchi.lab/"
             target="_blank"
             rel="noopener noreferrer"
