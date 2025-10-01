@@ -132,6 +132,7 @@ const setupDatabase = async () => {
     
     const columnsToAdd = [
       { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
+      { name: 'point_booster_expires_at', type: 'TIMESTAMP WITH TIME ZONE' },
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
@@ -542,14 +543,15 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       await client.query('BEGIN');
 
       const userResult = await client.query(
-        'SELECT points, point_booster_active, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
+        'SELECT points, point_booster_expires_at, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
       );
       
       if (userResult.rowCount === 0) throw new Error('User not found');
 
-      const { points, point_booster_active, high_score, games_played } = userResult.rows[0];
-      const finalScore = point_booster_active ? baseScore * 2 : baseScore;
+      const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
+      const boosterActive = point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
+      const finalScore = boosterActive ? baseScore * 2 : baseScore;
       const newPoints = points + finalScore;
       const newHighScore = Math.max(high_score || 0, finalScore);
       const newGamesPlayed = (games_played || 0) + 1;
@@ -567,7 +569,8 @@ app.post('/api/update-score', validateUser, async (req, res) => {
       const updateResult = await client.query(
         `UPDATE users SET 
          points = $1, 
-         point_booster_active = FALSE, 
+         point_booster_active = FALSE,
+         point_booster_expires_at = NULL,
          high_score = $3, 
          games_played = $4,
          total_play_time = total_play_time + $5
@@ -693,7 +696,7 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
         client.query('SELECT badge_name, current_progress, target_progress FROM badge_progress WHERE user_id = $1', [user.id]),
         client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        client.query('SELECT points, point_booster_active FROM users WHERE telegram_id = $1', [user.id])
+        client.query('SELECT points, point_booster_expires_at FROM users WHERE telegram_id = $1', [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -714,7 +717,9 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
         items: shopItemsResult.rows,
         userPoints: userShopResult.rows[0]?.points || 0,
         inventory: inventoryResult.rows,
-        boosterActive: userShopResult.rows[0]?.point_booster_active || false,
+        boosterActive: userShopResult.rows[0]?.point_booster_expires_at && 
+                      new Date(userShopResult.rows[0].point_booster_expires_at) > new Date(),
+        boosterExpiresAt: userShopResult.rows[0]?.point_booster_expires_at || null,
         ownedBadges: badgesResult.rows.map(row => row.badge_name)
       };
       
@@ -1209,20 +1214,7 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
-        'SELECT point_booster_active FROM users WHERE telegram_id = $1 FOR UPDATE', 
-        [user.id]
-      );
-      
-      if (userResult.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: 'User not found.' });
-      }
-      
-      if (userResult.rows[0].point_booster_active) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: 'A booster is already active.' });
-      }
+      // FIXED: Removed "already active" check - allow multiple activations
 
       // FIXED: Use new quantity-based logic instead of old row deletion
       const inventoryResult = await client.query(
@@ -1251,9 +1243,11 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
         );
       }
 
+      // FIXED: Set 20-second timer instead of boolean true
+      const expirationTime = new Date(Date.now() + 20000); // 20 seconds from now
       await client.query(
-        'UPDATE users SET point_booster_active = TRUE WHERE telegram_id = $1', 
-        [user.id]
+        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2', 
+        [expirationTime, user.id]
       );
       
       await client.query(
@@ -1263,11 +1257,12 @@ app.post('/api/activate-item', validateUser, async (req, res) => {
       
       await client.query('COMMIT');
       
-      console.log(`⚡ Point booster activated for user ${user.id}`);
+      console.log(`⚡ Point booster activated for user ${user.id} (expires in 20s)`);
       
       res.status(200).json({ 
         success: true, 
-        message: 'Point Booster activated for your next game!' 
+        message: 'Point Booster activated for 20 seconds!',
+        expiresAt: expirationTime.toISOString()
       });
 
     } catch (error) {
