@@ -301,86 +301,7 @@ const setupDatabase = async () => {
       );
     `);
 
-    console.log('🛒 Setting up orders table...');
-
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id SERIAL PRIMARY KEY,
-          user_id BIGINT NOT NULL,
-          product_id VARCHAR(100) NOT NULL,
-          product_name VARCHAR(255) NOT NULL,
-          product_description TEXT,
-          price_stars INT NOT NULL,
-          telegram_payment_charge_id VARCHAR(255),
-          status VARCHAR(50) DEFAULT 'pending',
-          user_contact JSONB,
-          delivery_address TEXT,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          paid_at TIMESTAMP WITH TIME ZONE,
-          delivered_at TIMESTAMP WITH TIME ZONE
-        );
-      `);
-      
-      console.log('✅ Orders table created');
-
-      await client.query(`
-        DO $ 
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint 
-            WHERE conname = 'orders_payment_charge_unique'
-          ) THEN
-            ALTER TABLE orders 
-            ADD CONSTRAINT orders_payment_charge_unique 
-            UNIQUE (telegram_payment_charge_id);
-          END IF;
-        END $;
-      `);
-
-      console.log('✅ Orders unique constraint added');
-
-      await client.query(`
-        DO $ 
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint 
-            WHERE conname = 'fk_orders_user_id'
-          ) THEN
-            ALTER TABLE orders 
-            ADD CONSTRAINT fk_orders_user_id 
-            FOREIGN KEY (user_id) 
-            REFERENCES users(telegram_id) 
-            ON DELETE CASCADE;
-          END IF;
-        EXCEPTION
-          WHEN OTHERS THEN
-            RAISE NOTICE 'Could not add foreign key constraint: %', SQLERRM;
-        END $;
-      `);
-
-      console.log('✅ Orders foreign key constraint added');
-
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);`);
-      console.log('✅ Index on user_id created');
-      
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);`);
-      console.log('✅ Index on status created');
-      
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_payment_charge ON orders(telegram_payment_charge_id);`);
-      console.log('✅ Index on payment_charge_id created');
-      
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);`);
-      console.log('✅ Index on created_at created');
-
-      console.log('✅ Orders table setup complete with all constraints and indexes');
-
-    } catch (error) {
-      console.error('❌ Error setting up orders table:', error.message);
-      console.error('Full error:', error);
-    }
-
-    console.log('🌍 Setting up global_stats table...');
+    console.log('🌐 Setting up global_stats table...');
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS global_stats (
@@ -397,7 +318,7 @@ const setupDatabase = async () => {
 
     const statsCheck = await client.query('SELECT COUNT(*) as count FROM global_stats');
     if (parseInt(statsCheck.rows[0].count) === 0) {
-      console.log('🌍 Initializing global stats with seed values...');
+      console.log('🌐 Initializing global stats with seed values...');
       const initialEaten = Math.floor(Math.random() * 15) + 5;
       const initialPlayers = Math.floor(Math.random() * 20) + 10;
       const initialActive = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
@@ -1282,155 +1203,6 @@ app.post('/api/tasks/complete', validateUser, async (req, res) => {
   }
 });
 
-app.post('/api/create-invoice', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { productId, productName, productDescription, priceStars } = req.body;
-    
-    if (!productId || !productName || !priceStars) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const payload = JSON.stringify({ userId: user.id, productId });
-    
-    const invoiceData = {
-      title: productName,
-      description: productDescription || productName,
-      payload: payload,
-      provider_token: '',
-      currency: 'XTR',
-      prices: [{ label: productName, amount: priceStars }]
-    };
-
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(invoiceData)
-    });
-
-    const result = await response.json();
-
-    if (!result.ok) {
-      throw new Error(result.description || 'Failed to create invoice');
-    }
-
-    const invoiceLink = result.result;
-
-    const client = await pool.connect();
-    try {
-      await client.query(
-        `INSERT INTO orders (user_id, product_id, product_name, product_description, price_stars, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending')`,
-        [user.id, productId, productName, productDescription, priceStars]
-      );
-    } finally {
-      client.release();
-    }
-
-    res.status(200).json({ 
-      success: true,
-      invoiceLink: invoiceLink
-    });
-
-  } catch (error) {
-    console.error('🚨 Error creating invoice:', error);
-    res.status(500).json({ error: error.message || 'Failed to create invoice' });
-  }
-});
-
-app.post('/api/stars-payment-webhook', express.json(), async (req, res) => {
-  try {
-    console.log('💰 Received payment webhook:', JSON.stringify(req.body, null, 2));
-
-    const { pre_checkout_query, successful_payment } = req.body;
-
-    if (pre_checkout_query) {
-      const { id } = pre_checkout_query;
-      
-      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pre_checkout_query_id: id, ok: true })
-      });
-
-      return res.status(200).json({ ok: true });
-    }
-
-    if (successful_payment) {
-      const { 
-        telegram_payment_charge_id,
-        total_amount,
-        invoice_payload 
-      } = successful_payment;
-
-      const payload = JSON.parse(invoice_payload);
-      const { userId, productId } = payload;
-
-      console.log(`✅ Payment confirmed: User ${userId}, Product ${productId}, Amount ${total_amount} stars`);
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-
-        const updateResult = await client.query(
-          `UPDATE orders 
-           SET status = 'paid', 
-               telegram_payment_charge_id = $1, 
-               paid_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2 
-             AND product_id = $3 
-             AND status = 'pending'
-           RETURNING *`,
-          [telegram_payment_charge_id, userId, productId]
-        );
-
-        if (updateResult.rowCount === 0) {
-          console.warn('⚠️ No pending order found to update');
-        } else {
-          console.log('✅ Order updated:', updateResult.rows[0]);
-        }
-
-        const userResult = await client.query(
-          'SELECT first_name, username FROM users WHERE telegram_id = $1',
-          [userId]
-        );
-
-        if (userResult.rowCount > 0) {
-          const user = userResult.rows[0];
-          
-          await client.query(
-            `UPDATE orders 
-             SET user_contact = $1
-             WHERE telegram_payment_charge_id = $2`,
-            [JSON.stringify({ 
-              first_name: user.first_name, 
-              username: user.username 
-            }), telegram_payment_charge_id]
-          );
-        }
-
-        await client.query('COMMIT');
-
-        console.log('🚚 Order ready for delivery processing');
-
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
-
-      return res.status(200).json({ ok: true });
-    }
-
-    res.status(200).json({ ok: true });
-
-  } catch (error) {
-    console.error('🚨 Webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
 // ---- GLOBAL STATS ENDPOINTS ----
 app.get('/api/global-stats', async (req, res) => {
   try {
@@ -1444,7 +1216,6 @@ app.get('/api/global-stats', async (req, res) => {
 
       const stats = statsResult.rows[0];
       
-      // FIXED: Proper date comparison using PostgreSQL CURRENT_DATE
       const resetCheck = await client.query(`
         SELECT (last_daily_reset < CURRENT_DATE) as needs_reset 
         FROM global_stats 
@@ -1720,7 +1491,7 @@ const startServer = async () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔗 Health check: http://localhost:${PORT}/health`);
     console.log(`🔍 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
-    console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
+    console.log(`🌐 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
     
     await startGlobalStatsSimulation();
   });
