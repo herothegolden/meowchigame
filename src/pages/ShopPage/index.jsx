@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiCall, showSuccess, showError } from '../../utils/api';
+import { apiCall, showError } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import { LoadingState } from '../../components/LoadingState';
 import ShopHeader from './ShopHeader';
@@ -74,15 +74,22 @@ const ShopPage = () => {
   };
 
   const handlePurchase = async (itemId) => {
+    // FIXED: Prevent multiple purchases with early return guard
+    if (purchasing === itemId) {
+      console.log('Purchase already in progress for item:', itemId);
+      return;
+    }
+
     const item = data.items.find(i => i.id === itemId);
     if (!item) return;
 
+    // FIXED: Immediately set purchasing state to prevent race condition
     setPurchasing(itemId);
 
     try {
-      // FIXED: Changed from '/api/buy-item' to '/api/shop/purchase'
       const result = await apiCall('/api/shop/purchase', { itemId });
       
+      // Update local state with new data
       setData(prev => ({
         ...prev,
         userPoints: result.newPoints,
@@ -90,15 +97,18 @@ const ShopPage = () => {
         ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
       }));
 
+      // FIXED: Smooth visual feedback without popup
       setJustPurchased(itemId);
-      setTimeout(() => setJustPurchased(null), 1500);
+      setTimeout(() => setJustPurchased(null), 1000);
 
-      showSuccess(result.message);
+      // FIXED: Removed showSuccess popup for smoother experience
+
     } catch (err) {
       console.error('Purchase error:', err);
       showError(err.message);
     } finally {
-      setPurchasing(null);
+      // FIXED: Shorter delay before allowing next purchase
+      setTimeout(() => setPurchasing(null), 500);
     }
   };
 
