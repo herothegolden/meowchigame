@@ -142,6 +142,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const placeholderVIP = 0;
   const placeholderAlliance = 'None';
   const placeholderAlliancePower = 0;
+  const placeholderAllianceRank = '--';
 
   return (
     <motion.div
@@ -259,42 +260,46 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             @{stats.username || 'user'} • Level {stats.level} • VIP {placeholderVIP}
           </p>
           
-          {/* Power Display (Prominent) */}
-          <div className="mt-3 mb-3 text-center">
-            <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 via-yellow-400/20 to-accent/20 border-2 border-accent rounded-lg px-6 py-3">
-              <Zap className="w-6 h-6 text-accent mr-2" />
-              <span className="text-2xl font-bold text-accent">
-                POWER: {placeholderPower.toLocaleString()}
+          {/* Power Display (Medium Size) */}
+          <div className="mt-2 mb-3">
+            <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
+              <Zap className="w-4 h-4 text-accent mr-2" />
+              <span className="text-lg font-bold text-accent">
+                POWER: {placeholderPower}
               </span>
-              <Zap className="w-6 h-6 text-accent ml-2" />
+              <Zap className="w-4 h-4 text-accent ml-2" />
             </div>
           </div>
 
-          {/* Rank + Points Row */}
-          <div className="flex items-center justify-between text-sm bg-background/30 rounded-lg px-4 py-2 mb-2">
+          {/* Rank (Left) + Points (Right) Row */}
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center">
               <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
-              <span className="text-secondary">Rank:</span>
-              <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
+              <span className="text-sm text-secondary">Rank:</span>
+              <span className="text-sm text-primary font-bold ml-1">#{placeholderRank}</span>
             </div>
-            <div className="text-secondary mx-2">|</div>
             <div className="flex items-center">
-              <span className="text-secondary">Points:</span>
-              <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+              <span className="text-sm text-secondary">Points:</span>
+              <span className="text-sm text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Alliance + Alliance Power Row */}
-          <div className="flex items-center justify-between text-sm bg-background/30 rounded-lg px-4 py-2">
-            <div className="flex items-center">
-              <Shield className="w-4 h-4 text-blue-400 mr-1" />
-              <span className="text-secondary">Alliance:</span>
-              <span className="text-primary font-bold ml-1 truncate">{placeholderAlliance}</span>
+          {/* Alliance Name */}
+          <div className="flex items-center mb-3">
+            <Shield className="w-4 h-4 text-blue-400 mr-1" />
+            <span className="text-sm text-secondary">Alliance:</span>
+            <span className="text-sm text-primary font-bold ml-1">{placeholderAlliance}</span>
+          </div>
+
+          {/* Alliance Rank (Left) + Alliance Power (Right) Row */}
+          <div className="flex items-center justify-between text-sm text-secondary">
+            <div>
+              <span className="font-medium">Alliance Rank</span>
+              <div className="text-primary font-bold text-base mt-1">#{placeholderAllianceRank}</div>
             </div>
-            <div className="text-secondary mx-2">|</div>
-            <div className="flex items-center">
-              <span className="text-secondary">Power:</span>
-              <span className="text-primary font-bold ml-1">{placeholderAlliancePower.toLocaleString()}</span>
+            <div className="text-right">
+              <span className="font-medium">Alliance Power</span>
+              <div className="text-primary font-bold text-base mt-1">{placeholderAlliancePower}</div>
             </div>
           </div>
         </div>
