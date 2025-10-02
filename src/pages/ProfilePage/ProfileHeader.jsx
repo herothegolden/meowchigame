@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Star, Camera, Lock } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
@@ -27,6 +27,17 @@ const ProfileHeader = ({ stats, onUpdate, activeBadge, onCloseBadge }) => {
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
     return `${BACKEND_URL}${avatarPath}`;
   };
+
+  // Auto-dismiss badge tooltip after 2 seconds
+  useEffect(() => {
+    if (activeBadge) {
+      const timer = setTimeout(() => {
+        onCloseBadge();
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [activeBadge, onCloseBadge]);
 
   // Calculate XP progress for current level
   const calculateXPProgress = () => {
@@ -167,7 +178,7 @@ const ProfileHeader = ({ stats, onUpdate, activeBadge, onCloseBadge }) => {
               onClick={onCloseBadge}
             />
             <motion.div
-              className="fixed top-[380px] left-1/2 -translate-x-1/2 z-50 w-[90vw] max-w-[400px]"
+              className="fixed top-[240px] left-1/2 -translate-x-1/2 z-50 w-[90vw] max-w-[400px]"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
