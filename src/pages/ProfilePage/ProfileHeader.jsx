@@ -147,7 +147,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       transition={{ duration: 0.3 }}
     >
       {/* Row 1: Avatar + Name/Edit/VIP */}
-      <div className="flex items-start space-x-4 mb-2">
+      <div className="flex items-start space-x-4 mb-1">
         <div className="relative flex-shrink-0">
           <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
             {avatarUrl && !avatarError ? (
@@ -252,29 +252,27 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               )}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Row 2: Username + Level + VIP */}
-      <div className="ml-24 mb-3">
-        <p className="text-sm text-secondary">
-          @{stats.username || 'user'} • Level {stats.level} • VIP {placeholderVIP}
-        </p>
-      </div>
-
-      {/* Row 3: Power Box */}
-      <div className="ml-24 mb-3">
-        <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
-          <Zap className="w-4 h-4 text-accent mr-2" />
-          <span className="text-lg font-bold text-accent">
-            POWER: {placeholderPower}
-          </span>
-          <Zap className="w-4 h-4 text-accent ml-2" />
+          
+          {/* Row 2: Username + Level (removed VIP duplication) */}
+          <p className="text-sm text-secondary mt-1">
+            @{stats.username || 'user'} • Level {stats.level}
+          </p>
+          
+          {/* Row 3: Power Box */}
+          <div className="mt-2">
+            <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
+              <Zap className="w-4 h-4 text-accent mr-2" />
+              <span className="text-lg font-bold text-accent">
+                POWER: {placeholderPower}
+              </span>
+              <Zap className="w-4 h-4 text-accent ml-2" />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Row 4: Rank + Points (same line) */}
-      <div className="mb-3">
+      <div className="mt-3">
         <div className="flex items-center text-sm">
           <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
           <span className="text-secondary">Rank:</span>
@@ -286,7 +284,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       </div>
 
       {/* Row 5: Alliance */}
-      <div className="mb-3">
+      <div className="mt-3">
         <div className="flex items-center text-sm">
           <Shield className="w-4 h-4 text-blue-400 mr-1" />
           <span className="text-secondary">Alliance:</span>
@@ -295,7 +293,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       </div>
 
       {/* Row 6: Alliance Rank + Alliance Power (same line) */}
-      <div>
+      <div className="mt-3">
         <div className="flex items-center text-sm">
           <Award className="w-4 h-4 text-yellow-500 mr-1" />
           <span className="text-secondary">Alliance Rank</span>
