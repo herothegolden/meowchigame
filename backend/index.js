@@ -315,7 +315,7 @@ const setupDatabase = async () => {
 
     const shopCheck = await client.query('SELECT COUNT(*) as count FROM shop_items');
     if (parseInt(shopCheck.rows[0].count) === 0) {
-      console.log('🏪 Initializing shop items...');
+      console.log('🪙 Initializing shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', 'Extends game time by 10 seconds', 1000, 'Clock', 'consumable'),
@@ -949,12 +949,12 @@ app.post('/api/shop/purchase', validateUser, async (req, res) => {
           [user.id, item.name]
         );
       } else {
-        // FIXED: Use proper UPSERT with quantity column
+        // ✅ FIXED: Corrected PostgreSQL syntax - removed table qualifier
         await client.query(
           `INSERT INTO user_inventory (user_id, item_id, quantity)
            VALUES ($1, $2, 1)
            ON CONFLICT (user_id, item_id)
-           DO UPDATE SET quantity = user_inventory.quantity + 1`,
+           DO UPDATE SET quantity = quantity + 1`,
           [user.id, itemId]
         );
       }
@@ -1538,7 +1538,7 @@ const startGlobalStatsSimulation = async () => {
             body: JSON.stringify({ field: 'total_eaten_today' })
           });
           const data = await response.json();
-          console.log('🪐 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+          console.log('🪙 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
         } catch (error) {
           console.error('❌ [EATEN] Increment failed:', error.message);
         }
