@@ -25,7 +25,8 @@ const ShopPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await apiCall('/api/get-shop-data');
+      const response = await apiCall('/api/get-profile-complete');
+      const result = response.shopData;
       
       const processedItems = (result.items || [])
         .filter(item => item.id !== 2)
