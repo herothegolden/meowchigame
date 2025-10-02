@@ -253,7 +253,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             </div>
           )}
           
-          {/* Row 2: Username + Level (removed VIP duplication) */}
+          {/* Row 2: Username + Level */}
           <p className="text-sm text-secondary mt-1">
             @{stats.username || 'user'} • Level {stats.level}
           </p>
@@ -271,15 +271,19 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 4: Rank + Points (same line) */}
+      {/* Row 4: Rank + Points (with alignment) */}
       <div className="mt-3">
-        <div className="flex items-center text-sm">
-          <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
-          <span className="text-secondary">Rank:</span>
-          <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
-          <Sparkles className="w-4 h-4 text-accent ml-6 mr-1" />
-          <span className="text-secondary">Points:</span>
-          <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center">
+            <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
+            <span className="text-secondary">Rank:</span>
+            <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
+          </div>
+          <div className="flex items-center">
+            <Sparkles className="w-4 h-4 text-accent mr-1" />
+            <span className="text-secondary">Points:</span>
+            <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+          </div>
         </div>
       </div>
 
@@ -292,15 +296,19 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 6: Alliance Rank + Alliance Power (same line) */}
+      {/* Row 6: Alliance Rank + Alliance Power (with alignment) */}
       <div className="mt-3">
-        <div className="flex items-center text-sm">
-          <Award className="w-4 h-4 text-yellow-500 mr-1" />
-          <span className="text-secondary">Alliance Rank</span>
-          <span className="text-primary font-bold ml-1">#{placeholderAllianceRank}</span>
-          <Zap className="w-4 h-4 text-accent ml-6 mr-1" />
-          <span className="text-secondary">Alliance Power</span>
-          <span className="text-primary font-bold ml-1">{placeholderAlliancePower}</span>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center">
+            <Award className="w-4 h-4 text-yellow-500 mr-1" />
+            <span className="text-secondary">Alliance Rank</span>
+            <span className="text-primary font-bold ml-1">#{placeholderAllianceRank}</span>
+          </div>
+          <div className="flex items-center">
+            <Zap className="w-4 h-4 text-accent mr-1" />
+            <span className="text-secondary">Alliance Power</span>
+            <span className="text-primary font-bold ml-1">{placeholderAlliancePower}</span>
+          </div>
         </div>
       </div>
     </motion.div>
