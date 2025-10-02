@@ -34,30 +34,25 @@ const StarterBadges = () => {
 
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {STARTER_BADGES.map((badge, index) => (
-          <div
+          <motion.div
             key={badge.id}
-            className="relative"
+            onClick={() => handleBadgeClick(badge.id)}
+            className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-visible opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
           >
-            {/* Badge Container */}
-            <motion.div
-              onClick={() => handleBadgeClick(badge.id)}
-              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
-            >
-              {/* Badge Icon */}
-              <div className="text-2xl sm:text-3xl filter brightness-50">
-                {badge.icon}
-              </div>
+            {/* Badge Icon */}
+            <div className="text-2xl sm:text-3xl filter brightness-50">
+              {badge.icon}
+            </div>
 
-              {/* Lock Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-                <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-              </div>
-            </motion.div>
+            {/* Lock Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
+              <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+            </div>
 
-            {/* Tooltip - Direct child of relative parent */}
+            {/* Tooltip - Direct child of badge */}
             <AnimatePresence>
               {activeBadge === badge.id && (
                 <motion.div
@@ -77,7 +72,7 @@ const StarterBadges = () => {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
         ))}
       </div>
 
