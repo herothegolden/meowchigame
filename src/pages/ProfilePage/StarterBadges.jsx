@@ -13,68 +13,79 @@ const STARTER_BADGES = [
 const StarterBadges = () => {
   const [activeBadge, setActiveBadge] = useState(null);
 
-  const handleBadgeClick = (badgeId) => {
-    setActiveBadge(activeBadge === badgeId ? null : badgeId);
+  const handleBadgeClick = (badge) => {
+    setActiveBadge(activeBadge?.id === badge.id ? null : badge);
   };
 
   return (
-    <motion.div
-      className="bg-nav p-4 rounded-lg border border-gray-700"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: 0.1 }}
-    >
-      <div className="mb-3">
-        <h3 className="text-sm font-bold text-primary flex items-center">
-          <span className="text-accent mr-2">🌟</span>
-          Level 1: Starter Badges
-        </h3>
-        <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
-      </div>
-
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
-        {STARTER_BADGES.map((badge, index) => (
+    <div>
+      {/* Tooltip Area - Shows ABOVE the badges section */}
+      <AnimatePresence>
+        {activeBadge && (
           <motion.div
-            key={badge.id}
-            onClick={() => handleBadgeClick(badge.id)}
-            className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-visible opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
+            className="mb-4"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
           >
-            {/* Badge Icon */}
-            <div className="text-2xl sm:text-3xl filter brightness-50">
-              {badge.icon}
-            </div>
-
-            {/* Lock Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-              <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-            </div>
-
-            {/* Tooltip - Direct child of badge */}
-            <AnimatePresence>
-              {activeBadge === badge.id && (
-                <motion.div
-                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 pointer-events-none"
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
-                    <p className="font-bold text-accent mb-1.5 text-center leading-tight">{badge.name}</p>
-                    <p className="text-gray-300 text-center leading-tight">{badge.requirement}</p>
-                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2">
-                      <div className="w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
-                    </div>
+            <div className="bg-gray-900 text-white rounded-lg py-3 px-4 shadow-2xl border border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="text-3xl">{activeBadge.icon}</div>
+                  <div>
+                    <p className="font-bold text-accent">{activeBadge.name}</p>
+                    <p className="text-sm text-gray-300">{activeBadge.requirement}</p>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+                <div className="text-xs text-gray-400 flex items-center">
+                  <Lock className="w-3 h-3 mr-1" />
+                  Locked
+                </div>
+              </div>
+            </div>
           </motion.div>
-        ))}
-      </div>
+        )}
+      </AnimatePresence>
+
+      {/* Badges Section */}
+      <motion.div
+        className="bg-nav p-4 rounded-lg border border-gray-700"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+      >
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-primary flex items-center">
+            <span className="text-accent mr-2">🌟</span>
+            Level 1: Starter Badges
+          </h3>
+          <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
+        </div>
+
+        <div className="grid grid-cols-5 gap-2 sm:gap-3">
+          {STARTER_BADGES.map((badge, index) => (
+            <motion.div
+              key={badge.id}
+              onClick={() => handleBadgeClick(badge)}
+              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
+            >
+              {/* Badge Icon */}
+              <div className="text-2xl sm:text-3xl filter brightness-50">
+                {badge.icon}
+              </div>
+
+              {/* Lock Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
 
       {/* Backdrop to close tooltip */}
       {activeBadge && (
@@ -83,7 +94,7 @@ const StarterBadges = () => {
           onClick={() => setActiveBadge(null)}
         />
       )}
-    </motion.div>
+    </div>
   );
 };
 
