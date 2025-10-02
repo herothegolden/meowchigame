@@ -1,6 +1,6 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Lock, X } from 'lucide-react';
 
 const STARTER_BADGES = [
   { id: 1, name: 'The First Paw', icon: '🐾', requirement: 'First login' },
@@ -11,9 +11,15 @@ const STARTER_BADGES = [
 ];
 
 const StarterBadges = () => {
+  const [selectedBadge, setSelectedBadge] = useState(null);
+
+  const handleBadgeClick = (badge) => {
+    setSelectedBadge(selectedBadge?.id === badge.id ? null : badge);
+  };
+
   return (
     <motion.div
-      className="bg-nav p-4 rounded-lg border border-gray-700"
+      className="bg-nav p-4 rounded-lg border border-gray-700 relative"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: 0.1 }}
@@ -30,18 +36,18 @@ const StarterBadges = () => {
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
-            className="relative group"
+            className="relative"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
           >
             {/* Badge Container */}
             <div
-              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale"
-              title={`${badge.name}: ${badge.requirement}`}
+              onClick={() => handleBadgeClick(badge)}
+              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
             >
               {/* Badge Icon */}
-              <div className="text-2xl sm:text-3xl mb-1 filter brightness-50">
+              <div className="text-2xl sm:text-3xl filter brightness-50">
                 {badge.icon}
               </div>
 
@@ -50,25 +56,50 @@ const StarterBadges = () => {
                 <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
               </div>
             </div>
-
-            {/* Badge Name (below icon) */}
-            <p className="text-[10px] sm:text-xs text-secondary text-center mt-1 truncate">
-              {badge.name}
-            </p>
-
-            {/* Tooltip on Hover (Desktop) */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
-              <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 shadow-lg border border-gray-700 whitespace-nowrap">
-                <p className="font-bold text-accent mb-1">{badge.name}</p>
-                <p className="text-gray-300">{badge.requirement}</p>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">
-                  <div className="border-4 border-transparent border-t-gray-900"></div>
-                </div>
-              </div>
-            </div>
           </motion.div>
         ))}
       </div>
+
+      {/* Tooltip Modal - Shown on Tap/Click */}
+      <AnimatePresence>
+        {selectedBadge && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              className="fixed inset-0 bg-black/50 z-40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedBadge(null)}
+            />
+            
+            {/* Tooltip Card */}
+            <motion.div
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-gray-900 text-white rounded-lg p-4 shadow-2xl border border-gray-700 max-w-[280px] w-[90vw]"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+            >
+              <button
+                onClick={() => setSelectedBadge(null)}
+                className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              
+              <div className="text-center">
+                <div className="text-4xl mb-3">{selectedBadge.icon}</div>
+                <h4 className="font-bold text-accent text-lg mb-2">{selectedBadge.name}</h4>
+                <p className="text-gray-300 text-sm">{selectedBadge.requirement}</p>
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <p className="text-xs text-gray-400">🔒 Locked</p>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
