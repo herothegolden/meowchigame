@@ -13,6 +13,7 @@ const STARTER_BADGES = [
 const StarterBadges = () => {
   const [activeBadge, setActiveBadge] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ left: '50%', transform: 'translateX(-50%)' });
+  const [arrowPosition, setArrowPosition] = useState({ left: '50%', transform: 'translateX(-50%)' });
   const badgeRefs = useRef({});
   const tooltipRef = useRef(null);
   const containerRef = useRef(null);
@@ -60,9 +61,17 @@ const StarterBadges = () => {
       finalLeft = containerRect.width - tooltipRect.width - 8;
     }
 
+    // Calculate arrow position relative to tooltip
+    const arrowLeft = badgeCenterX - finalLeft;
+
     setTooltipPosition({
       left: `${finalLeft}px`,
       transform: 'none'
+    });
+
+    setArrowPosition({
+      left: `${arrowLeft}px`,
+      transform: 'translateX(-50%)'
     });
   }, [activeBadge]);
 
@@ -139,10 +148,7 @@ const StarterBadges = () => {
                 </p>
                 <div 
                   className="absolute -top-1.5 w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"
-                  style={{
-                    left: '50%',
-                    transform: 'translateX(-50%)'
-                  }}
+                  style={arrowPosition}
                 />
               </div>
             </motion.div>
