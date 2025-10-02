@@ -47,7 +47,6 @@ const ProfileSkeleton = () => (
 const ProfilePage = () => {
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
-  const [activeBadge, setActiveBadge] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -86,11 +85,9 @@ const ProfilePage = () => {
       <ProfileHeader 
         stats={data.stats} 
         onUpdate={fetchData}
-        activeBadge={activeBadge}
-        onCloseBadge={() => setActiveBadge(null)}
       />
       
-      <StarterBadges onBadgeClick={setActiveBadge} />
+      <StarterBadges />
       
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
