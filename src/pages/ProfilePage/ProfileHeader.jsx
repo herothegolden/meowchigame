@@ -271,9 +271,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 4: Rank + Points (with alignment) */}
+      {/* Row 4: Rank + Points (grid layout for alignment) */}
       <div className="mt-3">
-        <div className="flex items-center justify-between text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
             <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
             <span className="text-secondary">Rank:</span>
@@ -296,9 +296,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 6: Alliance Rank + Alliance Power (with alignment) */}
+      {/* Row 6: Alliance Rank + Alliance Power (grid layout for alignment) */}
       <div className="mt-3">
-        <div className="flex items-center justify-between text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
             <Award className="w-4 h-4 text-yellow-500 mr-1" />
             <span className="text-secondary">Alliance Rank</span>
