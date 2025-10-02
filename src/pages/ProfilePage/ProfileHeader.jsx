@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, X, CheckSquare, LoaderCircle, Star, Camera } from 'lucide-react';
+import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
@@ -33,31 +33,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   useEffect(() => {
     setAvatarError(false);
   }, [stats.avatar_url]);
-
-  // Calculate XP progress for current level
-  const calculateXPProgress = () => {
-    const currentLevel = stats.level || 1;
-    const currentXP = stats.points || 0;
-    
-    // XP required for each level (exponential growth)
-    const getXPForLevel = (level) => {
-      return Math.floor(1000 * Math.pow(1.5, level - 1));
-    };
-    
-    const xpForCurrentLevel = currentLevel === 1 ? 0 : getXPForLevel(currentLevel);
-    const xpForNextLevel = getXPForLevel(currentLevel + 1);
-    const xpInCurrentLevel = currentXP - xpForCurrentLevel;
-    const xpNeededForLevel = xpForNextLevel - xpForCurrentLevel;
-    
-    const percentage = Math.min((xpInCurrentLevel / xpNeededForLevel) * 100, 100);
-    
-    return {
-      current: xpInCurrentLevel,
-      needed: xpNeededForLevel,
-      percentage: percentage,
-      nextLevel: currentLevel + 1
-    };
-  };
 
   const handleUpdate = async () => {
     if (!editValue.trim() || editValue.trim() === stats.first_name) {
@@ -160,7 +135,13 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   };
 
   const avatarUrl = getAvatarUrl(stats.avatar_url);
-  const xpProgress = calculateXPProgress();
+
+  // Placeholder values for new fields
+  const placeholderPower = 0;
+  const placeholderRank = '--';
+  const placeholderVIP = 0;
+  const placeholderAlliance = 'None';
+  const placeholderAlliancePower = 0;
 
   return (
     <motion.div
@@ -272,39 +253,51 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               )}
             </div>
           )}
-          <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
           
-          {/* XP Progress Bar */}
-          <div className="mt-2">
-            <div className="flex items-center justify-between text-xs text-secondary mb-1">
-              <span>XP: {xpProgress.current.toLocaleString()} / {xpProgress.needed.toLocaleString()}</span>
-              <span className="text-accent font-bold">Level {xpProgress.nextLevel}</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-              <motion.div
-                className="h-full bg-gradient-to-r from-accent via-yellow-400 to-accent rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${xpProgress.percentage}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
+          {/* Username + Level + VIP */}
+          <p className="text-sm text-secondary truncate">
+            @{stats.username || 'user'} • Level {stats.level} • VIP {placeholderVIP}
+          </p>
+          
+          {/* Power Display (Prominent) */}
+          <div className="mt-3 mb-3 text-center">
+            <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 via-yellow-400/20 to-accent/20 border-2 border-accent rounded-lg px-6 py-3">
+              <Zap className="w-6 h-6 text-accent mr-2" />
+              <span className="text-2xl font-bold text-accent">
+                POWER: {placeholderPower.toLocaleString()}
+              </span>
+              <Zap className="w-6 h-6 text-accent ml-2" />
             </div>
           </div>
 
-          <div className="flex items-center mt-2">
-            <Star className="w-4 h-4 text-accent mr-1" />
-            <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
+          {/* Rank + Points Row */}
+          <div className="flex items-center justify-between text-sm bg-background/30 rounded-lg px-4 py-2 mb-2">
+            <div className="flex items-center">
+              <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
+              <span className="text-secondary">Rank:</span>
+              <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
+            </div>
+            <div className="text-secondary mx-2">|</div>
+            <div className="flex items-center">
+              <span className="text-secondary">Points:</span>
+              <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Alliance + Alliance Power Row */}
+          <div className="flex items-center justify-between text-sm bg-background/30 rounded-lg px-4 py-2">
+            <div className="flex items-center">
+              <Shield className="w-4 h-4 text-blue-400 mr-1" />
+              <span className="text-secondary">Alliance:</span>
+              <span className="text-primary font-bold ml-1 truncate">{placeholderAlliance}</span>
+            </div>
+            <div className="text-secondary mx-2">|</div>
+            <div className="flex items-center">
+              <span className="text-secondary">Power:</span>
+              <span className="text-primary font-bold ml-1">{placeholderAlliancePower.toLocaleString()}</span>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <div className="mt-3 pt-3 border-t border-gray-700 text-center">
-        <p className="text-xs text-secondary">
-          {isUploadingAvatar ? (
-            <span className="text-accent font-bold">Uploading... {uploadProgress}%</span>
-          ) : (
-            avatarUrl ? 'Tap camera icon to change avatar' : 'Tap camera icon to upload avatar'
-          )}
-        </p>
       </div>
     </motion.div>
   );
