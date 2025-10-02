@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield } from 'lucide-react';
+import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
@@ -243,6 +243,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               >
                 <Edit2 className="w-4 h-4" />
               </button>
+              <span className="text-sm text-secondary font-medium">VIP {placeholderVIP}</span>
               {isDeveloper && (
                 <button 
                   onClick={() => window.location.href = '/dev-tools'}
@@ -279,6 +280,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               <span className="text-sm text-primary font-bold ml-1">#{placeholderRank}</span>
             </div>
             <div className="flex items-center">
+              <Sparkles className="w-4 h-4 text-accent mr-1" />
               <span className="text-sm text-secondary">Points:</span>
               <span className="text-sm text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
             </div>
@@ -291,15 +293,17 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             <span className="text-sm text-primary font-bold ml-1">{placeholderAlliance}</span>
           </div>
 
-          {/* Alliance Rank (Left) + Alliance Power (Right) Row */}
-          <div className="flex items-center justify-between text-sm text-secondary">
-            <div>
-              <span className="font-medium">Alliance Rank</span>
-              <div className="text-primary font-bold text-base mt-1">#{placeholderAllianceRank}</div>
+          {/* Alliance Rank (Left) + Alliance Power (Right) - Single Row */}
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <Award className="w-4 h-4 text-yellow-500 mr-1" />
+              <span className="text-secondary">Alliance Rank</span>
+              <span className="text-primary font-bold ml-1">#{placeholderAllianceRank}</span>
             </div>
-            <div className="text-right">
-              <span className="font-medium">Alliance Power</span>
-              <div className="text-primary font-bold text-base mt-1">{placeholderAlliancePower}</div>
+            <div className="flex items-center">
+              <Zap className="w-4 h-4 text-accent mr-1" />
+              <span className="text-secondary">Alliance Power</span>
+              <span className="text-primary font-bold ml-1">{placeholderAlliancePower}</span>
             </div>
           </div>
         </div>
