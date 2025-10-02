@@ -18,33 +18,39 @@ const StarterBadges = () => {
   };
 
   return (
-    <div>
-      {/* Tooltip Area - Shows ABOVE the badges section */}
+    <>
+      {/* Fixed Tooltip - Centered, Above Everything */}
       <AnimatePresence>
         {activeBadge && (
-          <motion.div
-            className="mb-4"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="bg-gray-900 text-white rounded-lg py-3 px-4 shadow-2xl border border-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="text-3xl">{activeBadge.icon}</div>
-                  <div>
-                    <p className="font-bold text-accent">{activeBadge.name}</p>
-                    <p className="text-sm text-gray-300">{activeBadge.requirement}</p>
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setActiveBadge(null)}
+            />
+            <motion.div
+              className="fixed top-[30%] left-1/2 -translate-x-1/2 z-50 w-[90vw] max-w-[400px]"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="bg-gray-900 text-white rounded-lg py-3 px-4 shadow-2xl border border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-3xl">{activeBadge.icon}</div>
+                    <div>
+                      <p className="font-bold text-accent">{activeBadge.name}</p>
+                      <p className="text-sm text-gray-300">{activeBadge.requirement}</p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 flex items-center">
+                    <Lock className="w-3 h-3 mr-1" />
+                    Locked
                   </div>
                 </div>
-                <div className="text-xs text-gray-400 flex items-center">
-                  <Lock className="w-3 h-3 mr-1" />
-                  Locked
-                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
@@ -86,15 +92,7 @@ const StarterBadges = () => {
           ))}
         </div>
       </motion.div>
-
-      {/* Backdrop to close tooltip */}
-      {activeBadge && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setActiveBadge(null)}
-        />
-      )}
-    </div>
+    </>
   );
 };
 
