@@ -17,19 +17,15 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
-  // Helper function to get full avatar URL
   const getAvatarUrl = (avatarPath) => {
     if (!avatarPath) return null;
-    
     if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
       return avatarPath;
     }
-    
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
     return `${BACKEND_URL}${avatarPath}`;
   };
 
-  // Reset avatar error state when avatar URL changes
   useEffect(() => {
     setAvatarError(false);
   }, [stats.avatar_url]);
@@ -136,7 +132,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   const avatarUrl = getAvatarUrl(stats.avatar_url);
 
-  // Placeholder values for new fields
   const placeholderPower = 0;
   const placeholderRank = '--';
   const placeholderVIP = 0;
@@ -151,8 +146,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="flex items-start space-x-4">
-        <div className="relative">
+      {/* Row 1: Avatar + Name/Edit/VIP */}
+      <div className="flex items-start space-x-4 mb-2">
+        <div className="relative flex-shrink-0">
           <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
             {avatarUrl && !avatarError ? (
               <img 
@@ -201,6 +197,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
           />
         </div>
 
+        {/* Name + Edit + VIP */}
         <div className="flex-1 min-w-0">
           {isEditing ? (
             <div className="flex items-center space-x-2">
@@ -231,8 +228,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               </button>
             </div>
           ) : (
-            <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold text-primary truncate">{stats.first_name}</h1>
+            <div className="flex items-center space-x-2 flex-wrap">
+              <h1 className="text-xl font-bold text-primary">{stats.first_name}</h1>
               <button
                 onClick={() => {
                   setEditValue(stats.first_name || '');
@@ -255,57 +252,57 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               )}
             </div>
           )}
-          
-          {/* Username + Level + VIP */}
-          <p className="text-sm text-secondary truncate">
-            @{stats.username || 'user'} • Level {stats.level} • VIP {placeholderVIP}
-          </p>
-          
-          {/* Power Display (Medium Size) */}
-          <div className="mt-2 mb-3">
-            <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
-              <Zap className="w-4 h-4 text-accent mr-2" />
-              <span className="text-lg font-bold text-accent">
-                POWER: {placeholderPower}
-              </span>
-              <Zap className="w-4 h-4 text-accent ml-2" />
-            </div>
-          </div>
+        </div>
+      </div>
 
-          {/* Rank (Left) + Points (Right) Row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center">
-              <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
-              <span className="text-sm text-secondary">Rank:</span>
-              <span className="text-sm text-primary font-bold ml-1">#{placeholderRank}</span>
-            </div>
-            <div className="flex items-center">
-              <Sparkles className="w-4 h-4 text-accent mr-1" />
-              <span className="text-sm text-secondary">Points:</span>
-              <span className="text-sm text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
-            </div>
-          </div>
+      {/* Row 2: Username + Level + VIP */}
+      <div className="ml-24 mb-3">
+        <p className="text-sm text-secondary">
+          @{stats.username || 'user'} • Level {stats.level} • VIP {placeholderVIP}
+        </p>
+      </div>
 
-          {/* Alliance Name */}
-          <div className="flex items-center mb-3">
-            <Shield className="w-4 h-4 text-blue-400 mr-1" />
-            <span className="text-sm text-secondary">Alliance:</span>
-            <span className="text-sm text-primary font-bold ml-1">{placeholderAlliance}</span>
-          </div>
+      {/* Row 3: Power Box */}
+      <div className="ml-24 mb-3">
+        <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
+          <Zap className="w-4 h-4 text-accent mr-2" />
+          <span className="text-lg font-bold text-accent">
+            POWER: {placeholderPower}
+          </span>
+          <Zap className="w-4 h-4 text-accent ml-2" />
+        </div>
+      </div>
 
-          {/* Alliance Rank (Left) + Alliance Power (Right) - Single Row */}
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center">
-              <Award className="w-4 h-4 text-yellow-500 mr-1" />
-              <span className="text-secondary">Alliance Rank</span>
-              <span className="text-primary font-bold ml-1">#{placeholderAllianceRank}</span>
-            </div>
-            <div className="flex items-center">
-              <Zap className="w-4 h-4 text-accent mr-1" />
-              <span className="text-secondary">Alliance Power</span>
-              <span className="text-primary font-bold ml-1">{placeholderAlliancePower}</span>
-            </div>
-          </div>
+      {/* Row 4: Rank + Points (same line) */}
+      <div className="mb-3">
+        <div className="flex items-center text-sm">
+          <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
+          <span className="text-secondary">Rank:</span>
+          <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
+          <Sparkles className="w-4 h-4 text-accent ml-6 mr-1" />
+          <span className="text-secondary">Points:</span>
+          <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* Row 5: Alliance */}
+      <div className="mb-3">
+        <div className="flex items-center text-sm">
+          <Shield className="w-4 h-4 text-blue-400 mr-1" />
+          <span className="text-secondary">Alliance:</span>
+          <span className="text-primary font-bold ml-1">{placeholderAlliance}</span>
+        </div>
+      </div>
+
+      {/* Row 6: Alliance Rank + Alliance Power (same line) */}
+      <div>
+        <div className="flex items-center text-sm">
+          <Award className="w-4 h-4 text-yellow-500 mr-1" />
+          <span className="text-secondary">Alliance Rank</span>
+          <span className="text-primary font-bold ml-1">#{placeholderAllianceRank}</span>
+          <Zap className="w-4 h-4 text-accent ml-6 mr-1" />
+          <span className="text-secondary">Alliance Power</span>
+          <span className="text-primary font-bold ml-1">{placeholderAlliancePower}</span>
         </div>
       </div>
     </motion.div>
