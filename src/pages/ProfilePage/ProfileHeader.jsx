@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Star, Camera } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
@@ -8,6 +9,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const [editValue, setEditValue] = useState(stats.first_name || '');
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
   const tg = window.Telegram?.WebApp;
@@ -23,7 +25,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       return avatarPath;
     }
     
-    // Otherwise, prepend backend URL
+    // Otherwise, prepend backend URL (avatarPath starts with /)
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
     return `${BACKEND_URL}${avatarPath}`;
   };
@@ -60,32 +62,51 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      showError('File too large. Maximum size is 2MB');
-      return;
-    }
+    // Check original file size
+    const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
+    console.log(`Original image size: ${originalSizeMB}MB`);
 
     setIsUploadingAvatar(true);
+    setUploadProgress(10);
 
     try {
+      // OPTIMIZED: Compress image before upload
+      console.log('Compressing image...');
+      setUploadProgress(20);
+
+      const compressionOptions = {
+        maxSizeMB: 0.5,              // Target 500KB
+        maxWidthOrHeight: 800,        // Max dimension 800px
+        useWebWorker: true,           // Use worker for better performance
+        fileType: 'image/jpeg',       // Convert to JPEG for better compression
+        initialQuality: 0.8           // Good quality/size balance
+      };
+
+      const compressedFile = await imageCompression(file, compressionOptions);
+      const compressedSizeMB = (compressedFile.size / 1024 / 1024).toFixed(2);
+      console.log(`Compressed size: ${compressedSizeMB}MB (${((1 - compressedFile.size / file.size) * 100).toFixed(0)}% reduction)`);
+
+      setUploadProgress(40);
+
+      // Upload compressed file
       const formData = new FormData();
-      formData.append('avatar', file);
+      formData.append('avatar', compressedFile, 'avatar.jpg');
 
       const initData = tg?.initData;
       if (!initData) {
         throw new Error('Telegram data not available');
       }
+      formData.append('initData', initData);
+
+      setUploadProgress(50);
 
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
       const response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
         method: 'POST',
-        body: (() => {
-          const fd = new FormData();
-          fd.append('avatar', file);
-          fd.append('initData', initData);
-          return fd;
-        })()
+        body: formData
       });
+
+      setUploadProgress(80);
 
       if (!response.ok) {
         const error = await response.json();
@@ -93,9 +114,14 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       }
 
       const result = await response.json();
-      showSuccess('Avatar uploaded successfully!');
-      onUpdate();
+      setUploadProgress(100);
       
+      showSuccess(`Avatar uploaded! (${compressedSizeMB}MB)`);
+      
+      // Refresh profile data
+      await onUpdate();
+      
+      // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -105,6 +131,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       showError(error.message || 'Failed to upload avatar');
     } finally {
       setIsUploadingAvatar(false);
+      setUploadProgress(0);
     }
   };
 
@@ -129,7 +156,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
                 onError={(e) => {
                   console.error('Avatar load error:', e.target.src);
                   e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
+                  if (e.target.nextSibling) {
+                    e.target.nextSibling.style.display = 'block';
+                  }
                 }}
               />
             ) : null}
@@ -139,6 +168,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             />
           </div>
           
+          {/* Camera button with progress indicator */}
           <motion.button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
@@ -147,7 +177,14 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             title="Upload avatar"
           >
             {isUploadingAvatar ? (
-              <LoaderCircle className="w-3 h-3 animate-spin" />
+              <div className="relative w-3 h-3">
+                <LoaderCircle className="w-3 h-3 animate-spin" />
+                {uploadProgress > 0 && (
+                  <span className="absolute -top-6 -left-2 text-[10px] font-bold text-accent whitespace-nowrap">
+                    {uploadProgress}%
+                  </span>
+                )}
+              </div>
             ) : (
               <Camera className="w-3 h-3" />
             )}
@@ -225,7 +262,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       
       <div className="mt-3 pt-3 border-t border-gray-700 text-center">
         <p className="text-xs text-secondary">
-          {avatarUrl ? 'Tap camera icon to change avatar' : 'Tap camera icon to upload avatar'}
+          {isUploadingAvatar ? (
+            <span className="text-accent font-bold">Uploading... {uploadProgress}%</span>
+          ) : (
+            avatarUrl ? 'Tap camera icon to change avatar' : 'Tap camera icon to upload avatar'
+          )}
         </p>
       </div>
     </motion.div>
