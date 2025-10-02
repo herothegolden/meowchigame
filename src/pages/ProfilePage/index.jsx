@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, Trophy, CheckSquare } from 'lucide-react';
+import { User, Trophy, CheckSquare } from 'lucide-react';
 import { apiCall } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import ProfileHeader from './ProfileHeader';
-import { OverviewTab, BadgesTab, LeaderboardTab, TasksTab } from './tabs';
+import StarterBadges from './components/StarterBadges';
+import { OverviewTab, LeaderboardTab, TasksTab } from './tabs';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: User },
-  { id: 'badges', label: 'Badges', icon: Award },
   { id: 'leaderboard', label: 'Board', icon: Trophy },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare }
 ];
@@ -30,7 +30,7 @@ const ProfileSkeleton = () => (
     
     {/* Tabs skeleton */}
     <div className="flex bg-nav rounded-lg border border-gray-700 p-1 animate-pulse">
-      {[1, 2, 3, 4].map(i => (
+      {[1, 2, 3].map(i => (
         <div key={i} className="flex-1 h-16 bg-gray-700 rounded-md mx-1"></div>
       ))}
     </div>
@@ -84,6 +84,8 @@ const ProfilePage = () => {
     <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
       <ProfileHeader stats={data.stats} onUpdate={fetchData} />
       
+      <StarterBadges />
+      
       <motion.div 
         className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }} 
@@ -111,7 +113,6 @@ const ProfilePage = () => {
 
       <div className="min-h-[400px]">
         {activeTab === 'overview' && <OverviewTab stats={data.stats} />}
-        {activeTab === 'badges' && <BadgesTab ownedBadges={data.ownedBadges} badgeProgress={data.badgeProgress} />}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
         {activeTab === 'tasks' && <TasksTab />}
       </div>
