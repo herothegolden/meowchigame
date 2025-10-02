@@ -258,7 +258,7 @@ router.post('/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// ---- UPDATE AVATAR ----
+// ---- UPDATE AVATAR (FIXED: Store relative path only) ----
 router.post('/update-avatar', (req, res) => {
   uploadAvatar.single('avatar')(req, res, async (err) => {
     try {
@@ -279,7 +279,7 @@ router.post('/update-avatar', (req, res) => {
       }
       const user = JSON.parse(userString);
 
-      let avatarUrl;
+      let avatarPath;
 
       if (err) {
         if (err instanceof multer.MulterError) {
@@ -291,9 +291,9 @@ router.post('/update-avatar', (req, res) => {
       }
 
       if (req.file) {
-        const relativePath = `uploads/avatars/${req.file.filename}`;
-        avatarUrl = `${process.env.BACKEND_URL || `http://localhost:${PORT}`}/${relativePath}`;
-        console.log(`📸 Avatar uploaded for user ${user.id}: ${avatarUrl}`);
+        // FIXED: Store relative path only (not full URL)
+        avatarPath = `/uploads/avatars/${req.file.filename}`;
+        console.log(`📸 Avatar uploaded for user ${user.id}: ${avatarPath}`);
       } else {
         return res.status(400).json({ error: 'No file uploaded' });
       }
@@ -302,7 +302,7 @@ router.post('/update-avatar', (req, res) => {
       try {
         const result = await client.query(
           'UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $2 RETURNING avatar_url',
-          [avatarUrl, user.id]
+          [avatarPath, user.id]
         );
 
         if (result.rowCount === 0) {
