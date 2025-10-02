@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, X } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 const STARTER_BADGES = [
   { id: 1, name: 'The First Paw', icon: '🐾', requirement: 'First login' },
@@ -11,15 +11,15 @@ const STARTER_BADGES = [
 ];
 
 const StarterBadges = () => {
-  const [selectedBadge, setSelectedBadge] = useState(null);
+  const [activeBadge, setActiveBadge] = useState(null);
 
-  const handleBadgeClick = (badge) => {
-    setSelectedBadge(selectedBadge?.id === badge.id ? null : badge);
+  const handleBadgeClick = (badgeId) => {
+    setActiveBadge(activeBadge === badgeId ? null : badgeId);
   };
 
   return (
     <motion.div
-      className="bg-nav p-4 rounded-lg border border-gray-700 relative"
+      className="bg-nav p-4 rounded-lg border border-gray-700"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: 0.1 }}
@@ -32,7 +32,7 @@ const StarterBadges = () => {
         <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 relative">
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
@@ -43,7 +43,7 @@ const StarterBadges = () => {
           >
             {/* Badge Container */}
             <div
-              onClick={() => handleBadgeClick(badge)}
+              onClick={() => handleBadgeClick(badge.id)}
               className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
             >
               {/* Badge Icon */}
@@ -56,50 +56,38 @@ const StarterBadges = () => {
                 <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
               </div>
             </div>
+
+            {/* Tooltip - Shown Below Badge */}
+            <AnimatePresence>
+              {activeBadge === badge.id && (
+                <motion.div
+                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 pointer-events-none"
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
+                    <p className="font-bold text-accent mb-1.5 text-center leading-tight">{badge.name}</p>
+                    <p className="text-gray-300 text-center leading-tight">{badge.requirement}</p>
+                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2">
+                      <div className="w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         ))}
       </div>
 
-      {/* Tooltip Modal - Shown on Tap/Click */}
-      <AnimatePresence>
-        {selectedBadge && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              className="fixed inset-0 bg-black/50 z-40"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedBadge(null)}
-            />
-            
-            {/* Tooltip Card */}
-            <motion.div
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-gray-900 text-white rounded-lg p-4 shadow-2xl border border-gray-700 max-w-[280px] w-[90vw]"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.2 }}
-            >
-              <button
-                onClick={() => setSelectedBadge(null)}
-                className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              
-              <div className="text-center">
-                <div className="text-4xl mb-3">{selectedBadge.icon}</div>
-                <h4 className="font-bold text-accent text-lg mb-2">{selectedBadge.name}</h4>
-                <p className="text-gray-300 text-sm">{selectedBadge.requirement}</p>
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <p className="text-xs text-gray-400">🔒 Locked</p>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Backdrop to close tooltip on tap outside */}
+      {activeBadge && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setActiveBadge(null)}
+        />
+      )}
     </motion.div>
   );
 };
