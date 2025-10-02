@@ -31,13 +31,13 @@ const StarterBadges = () => {
   // Get tooltip positioning class based on badge index
   const getTooltipPositionClass = (index) => {
     if (index === 0) {
-      // First badge - shift slightly right
-      return 'left-2';
+      // First badge - center but nudge right with margin
+      return 'left-1/2 -translate-x-1/2 ml-12';
     } else if (index === 4) {
-      // Last badge - shift slightly left
-      return 'right-2';
+      // Last badge - center but nudge left with margin
+      return 'left-1/2 -translate-x-1/2 mr-12';
     } else {
-      // Middle badges - centered
+      // Middle badges - perfectly centered
       return 'left-1/2 -translate-x-1/2';
     }
   };
