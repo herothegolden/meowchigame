@@ -10,7 +10,7 @@ const STARTER_BADGES = [
   { id: 5, name: 'Cat Challenger', icon: '🎮', requirement: 'Play game 7 days in a row' },
 ];
 
-const StarterBadges = ({ onBadgeClick }) => {
+const StarterBadges = () => {
   return (
     <motion.div
       className="bg-nav p-4 rounded-lg border border-gray-700"
@@ -30,8 +30,7 @@ const StarterBadges = ({ onBadgeClick }) => {
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
-            onClick={() => onBadgeClick(badge)}
-            className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
+            className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
