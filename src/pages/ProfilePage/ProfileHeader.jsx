@@ -16,18 +16,41 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
-  // FIXED: Helper function to get full avatar URL
+  // Helper function to get full avatar URL
   const getAvatarUrl = (avatarPath) => {
     if (!avatarPath) return null;
     
-    // If already a full URL, return as-is
     if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
       return avatarPath;
     }
     
-    // Otherwise, prepend backend URL (avatarPath starts with /)
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
     return `${BACKEND_URL}${avatarPath}`;
+  };
+
+  // Calculate XP progress for current level
+  const calculateXPProgress = () => {
+    const currentLevel = stats.level || 1;
+    const currentXP = stats.points || 0;
+    
+    // XP required for each level (exponential growth)
+    const getXPForLevel = (level) => {
+      return Math.floor(1000 * Math.pow(1.5, level - 1));
+    };
+    
+    const xpForCurrentLevel = currentLevel === 1 ? 0 : getXPForLevel(currentLevel);
+    const xpForNextLevel = getXPForLevel(currentLevel + 1);
+    const xpInCurrentLevel = currentXP - xpForCurrentLevel;
+    const xpNeededForLevel = xpForNextLevel - xpForCurrentLevel;
+    
+    const percentage = Math.min((xpInCurrentLevel / xpNeededForLevel) * 100, 100);
+    
+    return {
+      current: xpInCurrentLevel,
+      needed: xpNeededForLevel,
+      percentage: percentage,
+      nextLevel: currentLevel + 1
+    };
   };
 
   const handleUpdate = async () => {
@@ -62,7 +85,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       return;
     }
 
-    // Check original file size
     const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
     console.log(`Original image size: ${originalSizeMB}MB`);
 
@@ -70,16 +92,15 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     setUploadProgress(10);
 
     try {
-      // OPTIMIZED: Compress image before upload
       console.log('Compressing image...');
       setUploadProgress(20);
 
       const compressionOptions = {
-        maxSizeMB: 0.5,              // Target 500KB
-        maxWidthOrHeight: 800,        // Max dimension 800px
-        useWebWorker: true,           // Use worker for better performance
-        fileType: 'image/jpeg',       // Convert to JPEG for better compression
-        initialQuality: 0.8           // Good quality/size balance
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 800,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
+        initialQuality: 0.8
       };
 
       const compressedFile = await imageCompression(file, compressionOptions);
@@ -88,7 +109,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
       setUploadProgress(40);
 
-      // Upload compressed file
       const formData = new FormData();
       formData.append('avatar', compressedFile, 'avatar.jpg');
 
@@ -118,10 +138,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       
       showSuccess(`Avatar uploaded! (${compressedSizeMB}MB)`);
       
-      // Refresh profile data
       await onUpdate();
       
-      // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -135,8 +153,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     }
   };
 
-  // FIXED: Get full avatar URL
   const avatarUrl = getAvatarUrl(stats.avatar_url);
+  const xpProgress = calculateXPProgress();
 
   return (
     <motion.div
@@ -168,7 +186,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             />
           </div>
           
-          {/* Camera button with progress indicator */}
           <motion.button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
@@ -253,7 +270,24 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             </div>
           )}
           <p className="text-sm text-secondary truncate">@{stats.username || 'user'} • Level {stats.level}</p>
-          <div className="flex items-center mt-1">
+          
+          {/* XP Progress Bar */}
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-xs text-secondary mb-1">
+              <span>XP: {xpProgress.current.toLocaleString()} / {xpProgress.needed.toLocaleString()}</span>
+              <span className="text-accent font-bold">Level {xpProgress.nextLevel}</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-accent via-yellow-400 to-accent rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${xpProgress.percentage}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center mt-2">
             <Star className="w-4 h-4 text-accent mr-1" />
             <span className="text-lg font-bold text-accent">{stats.points.toLocaleString()}</span>
           </div>
