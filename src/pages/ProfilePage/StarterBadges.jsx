@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock } from 'lucide-react';
 
 const STARTER_BADGES = [
-  { id: 1, name: 'The First Paw', icon: '🐾', requirement: 'First login' },
+  { id: 1, name: 'The First Paw', icon: '�', requirement: 'First login' },
   { id: 2, name: 'Cookie Lover', icon: '🍪', requirement: 'Play your first game' },
-  { id: 3, name: 'Double Snack', icon: '🎁', requirement: 'Buy your first Meowchi 쫀득쿠키' },
+  { id: 3, name: 'Double Snack', icon: '🎁', requirement: 'Buy your first Meowchi 쫀더쿠키' },
   { id: 4, name: '7-Day Streak', icon: '📅', requirement: 'Log in 7 days in a row' },
   { id: 5, name: 'Cat Challenger', icon: '🎮', requirement: 'Play game 7 days in a row' },
 ];
@@ -13,8 +13,33 @@ const STARTER_BADGES = [
 const StarterBadges = () => {
   const [activeBadge, setActiveBadge] = useState(null);
 
+  // Auto-dismiss tooltip after 2 seconds
+  useEffect(() => {
+    if (activeBadge === null) return;
+
+    const timer = setTimeout(() => {
+      setActiveBadge(null);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [activeBadge]);
+
   const handleBadgeClick = (badgeId) => {
-    setActiveBadge(activeBadge === badgeId ? null : badgeId);
+    setActiveBadge(badgeId);
+  };
+
+  // Get tooltip positioning class based on badge index
+  const getTooltipPositionClass = (index) => {
+    if (index === 0) {
+      // First badge - shift slightly right
+      return 'left-2';
+    } else if (index === 4) {
+      // Last badge - shift slightly left
+      return 'right-2';
+    } else {
+      // Middle badges - centered
+      return 'left-1/2 -translate-x-1/2';
+    }
   };
 
   return (
@@ -32,7 +57,7 @@ const StarterBadges = () => {
         <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 relative">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
@@ -61,7 +86,7 @@ const StarterBadges = () => {
             <AnimatePresence>
               {activeBadge === badge.id && (
                 <motion.div
-                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 pointer-events-none"
+                  className={`absolute top-full mt-2 z-50 pointer-events-none ${getTooltipPositionClass(index)}`}
                   initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
