@@ -315,7 +315,7 @@ const setupDatabase = async () => {
 
     const shopCheck = await client.query('SELECT COUNT(*) as count FROM shop_items');
     if (parseInt(shopCheck.rows[0].count) === 0) {
-      console.log('🏪 Initializing shop items...');
+      console.log('🪙 Initializing shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', 'Extends game time by 10 seconds', 1000, 'Clock', 'consumable'),
@@ -657,6 +657,38 @@ app.post('/api/get-profile-complete', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/get-profile-complete:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- ✅ RESTORED: Missing /api/get-shop-data endpoint ----
+app.post('/api/get-shop-data', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const [itemsResult, userResult, inventoryResult, badgesResult] = await Promise.all([
+        client.query('SELECT * FROM shop_items ORDER BY id ASC'),
+        client.query('SELECT points, point_booster_expires_at FROM users WHERE telegram_id = $1', [user.id]),
+        client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
+        client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
+      ]);
+
+      res.status(200).json({
+        items: itemsResult.rows,
+        userPoints: userResult.rows[0]?.points || 0,
+        inventory: inventoryResult.rows,
+        boosterActive: userResult.rows[0]?.point_booster_expires_at && 
+                      new Date(userResult.rows[0].point_booster_expires_at) > new Date(),
+        boosterExpiresAt: userResult.rows[0]?.point_booster_expires_at || null,
+        ownedBadges: badgesResult.rows.map(row => row.badge_name)
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-shop-data:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1097,151 +1129,6 @@ app.post('/api/use-time-booster', validateUser, async (req, res) => {
       }
 
       await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
-        [user.id, itemId]
-      );
-      
-      await client.query('COMMIT');
-      
-      console.log(`⏰ Extra Time +10s used by user ${user.id}`);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Extra Time +10s used successfully!',
-        timeBonus: timeBonus
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('🚨 Error in /api/use-time-booster:', error);
-      res.status(500).json({ success: false, error: 'Internal server error.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/use-time-booster:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/activate-item', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId } = req.body;
-    
-    if (!itemId || itemId !== 4) {
-      return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // FIXED: Removed "already active" check - allow multiple activations
-
-      // FIXED: Use new quantity-based logic instead of old row deletion
-      const inventoryResult = await client.query(
-        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-        [user.id, itemId]
-      );
-      
-      if (inventoryResult.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: 'You do not own this item.' });
-      }
-
-      const quantity = inventoryResult.rows[0].quantity;
-
-      if (quantity > 1) {
-        // Decrease quantity by 1
-        await client.query(
-          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
-          [user.id, itemId]
-        );
-      } else {
-        // Remove item completely if quantity is 1
-        await client.query(
-          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-          [user.id, itemId]
-        );
-      }
-
-      // FIXED: Set 20-second timer instead of boolean true
-      const expirationTime = new Date(Date.now() + 20000); // 20 seconds from now
-      await client.query(
-        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2', 
-        [expirationTime, user.id]
-      );
-      
-      await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
-        [user.id, itemId]
-      );
-      
-      await client.query('COMMIT');
-      
-      console.log(`⚡ Point booster activated for user ${user.id} (expires in 20s)`);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Point Booster activated for 20 seconds!',
-        expiresAt: expirationTime.toISOString()
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('🚨 Error in /api/activate-item:', error);
-      res.status(500).json({ success: false, error: 'Internal server error.' });
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('🚨 Error in /api/activate-item:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/use-bomb', validateUser, async (req, res) => {
-  try {
-    const { user } = req;
-    const { itemId } = req.body;
-    
-    if (!itemId || itemId !== 3) {
-      return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // FIXED: Use new quantity-based logic instead of old row deletion
-      const inventoryResult = await client.query(
-        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-        [user.id, itemId]
-      );
-      
-      if (inventoryResult.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: 'You do not own this item.' });
-      }
-
-      const quantity = inventoryResult.rows[0].quantity;
-
-      if (quantity > 1) {
-        // Decrease quantity by 1
-        await client.query(
-          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
-          [user.id, itemId]
-        );
-      } else {
-        // Remove item completely if quantity is 1
-        await client.query(
-          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-          [user.id, itemId]
-        );
-      }
-
-      await client.query(
         `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Cookie Bomb')`,
         [user.id, itemId]
       );
@@ -1525,8 +1412,6 @@ const startGlobalStatsSimulation = async () => {
         simulationActive.eaten = true;
       }
 
-      // 🔧 FIX #1: Changed interval from 1-20 minutes to 1-4 minutes
-      // Old: const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
       const interval = Math.floor(Math.random() * (240000 - 60000 + 1)) + 60000;
       console.log(`⏱️ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
       
@@ -1538,7 +1423,7 @@ const startGlobalStatsSimulation = async () => {
             body: JSON.stringify({ field: 'total_eaten_today' })
           });
           const data = await response.json();
-          console.log('🪐 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+          console.log('🪙 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
         } catch (error) {
           console.error('❌ [EATEN] Increment failed:', error.message);
         }
@@ -1597,8 +1482,6 @@ const startGlobalStatsSimulation = async () => {
     console.log('▶️ [ACTIVE] 24/7 simulation started');
     
     const updateAndSchedule = () => {
-      // 🔧 FIX #2: Changed interval from 5-15 minutes to 2 seconds
-      // Old: const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
       const interval = 2000;
       console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/1000)} seconds`);
       
@@ -1648,4 +1531,149 @@ const startServer = async () => {
 setupDatabase().then(startServer).catch(err => {
   console.error('💥 Failed to start application:', err);
   process.exit(1);
+}); error: 'You do not own this item.' });
+      }
+
+      const quantity = inventoryResult.rows[0].quantity;
+
+      if (quantity > 1) {
+        // Decrease quantity by 1
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        // Remove item completely if quantity is 1
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
+        [user.id, itemId]
+      );
+      
+      await client.query('COMMIT');
+      
+      console.log(`⏰ Extra Time +10s used by user ${user.id}`);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Extra Time +10s used successfully!',
+        timeBonus: timeBonus
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('🚨 Error in /api/use-time-booster:', error);
+      res.status(500).json({ success: false, error: 'Internal server error.' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/use-time-booster:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
+
+app.post('/api/activate-item', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    
+    if (!itemId || itemId !== 4) {
+      return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // FIXED: Removed "already active" check - allow multiple activations
+
+      // FIXED: Use new quantity-based logic instead of old row deletion
+      const inventoryResult = await client.query(
+        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [user.id, itemId]
+      );
+      
+      if (inventoryResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'You do not own this item.' });
+      }
+
+      const quantity = inventoryResult.rows[0].quantity;
+
+      if (quantity > 1) {
+        // Decrease quantity by 1
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        // Remove item completely if quantity is 1
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
+
+      // FIXED: Set 20-second timer instead of boolean true
+      const expirationTime = new Date(Date.now() + 20000); // 20 seconds from now
+      await client.query(
+        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2', 
+        [expirationTime, user.id]
+      );
+      
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
+        [user.id, itemId]
+      );
+      
+      await client.query('COMMIT');
+      
+      console.log(`⚡ Point booster activated for user ${user.id} (expires in 20s)`);
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Point Booster activated for 20 seconds!',
+        expiresAt: expirationTime.toISOString()
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('🚨 Error in /api/activate-item:', error);
+      res.status(500).json({ success: false, error: 'Internal server error.' });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/activate-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/use-bomb', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    
+    if (!itemId || itemId !== 3) {
+      return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // FIXED: Use new quantity-based logic instead of old row deletion
+      const inventoryResult = await client.query(
+        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [user.id, itemId]
+      );
+      
+      if (inventoryResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false,
