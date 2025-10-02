@@ -19,8 +19,12 @@ router.post('/get-leaderboard', validateUser, async (req, res) => {
           SELECT u.telegram_id, u.first_name, u.username, u.points, u.avatar_url,
                  ROW_NUMBER() OVER (ORDER BY u.points DESC) as rank
           FROM users u
-          INNER JOIN user_friends uf ON (uf.friend_telegram_id = u.telegram_id AND uf.user_id = $1)
-             OR u.telegram_id = $1
+          WHERE u.telegram_id = $1 
+             OR u.telegram_id IN (
+               SELECT friend_telegram_id 
+               FROM user_friends 
+               WHERE user_id = $1
+             )
           ORDER BY u.points DESC
           LIMIT 50
         `;
