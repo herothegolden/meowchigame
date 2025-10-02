@@ -1,5 +1,5 @@
 import express from 'express';
-import multer from 'multer';  // ← ADD THIS
+import multer from 'multer';
 import { pool } from '../config/database.js';
 import { validate } from '../utils.js';
 import { validateUser } from '../middleware/auth.js';
