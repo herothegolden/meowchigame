@@ -4,7 +4,7 @@ import { User, Trophy, CheckSquare } from 'lucide-react';
 import { apiCall } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import ProfileHeader from './ProfileHeader';
-import StarterBadges from './components/StarterBadges';
+import StarterBadges from './StarterBadges';
 import { OverviewTab, LeaderboardTab, TasksTab } from './tabs';
 
 const TABS = [
