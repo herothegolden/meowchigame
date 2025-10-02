@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Star, Camera } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
@@ -10,6 +10,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [avatarError, setAvatarError] = useState(false);
   const fileInputRef = useRef(null);
 
   const tg = window.Telegram?.WebApp;
@@ -27,6 +28,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
     return `${BACKEND_URL}${avatarPath}`;
   };
+
+  // Reset avatar error state when avatar URL changes
+  useEffect(() => {
+    setAvatarError(false);
+  }, [stats.avatar_url]);
 
   // Calculate XP progress for current level
   const calculateXPProgress = () => {
@@ -166,24 +172,21 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       <div className="flex items-start space-x-4">
         <div className="relative">
           <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
-            {avatarUrl ? (
+            {avatarUrl && !avatarError ? (
               <img 
                 src={avatarUrl}
                 alt="Avatar"
+                key={avatarUrl}
                 className="w-full h-full object-cover"
-                onError={(e) => {
-                  console.error('Avatar load error:', e.target.src);
-                  e.target.style.display = 'none';
-                  if (e.target.nextSibling) {
-                    e.target.nextSibling.style.display = 'block';
-                  }
+                onError={() => {
+                  console.error('Avatar load error:', avatarUrl);
+                  setAvatarError(true);
                 }}
+                onLoad={() => setAvatarError(false)}
               />
-            ) : null}
-            <User 
-              className="w-10 h-10 text-accent" 
-              style={{ display: avatarUrl ? 'none' : 'block' }} 
-            />
+            ) : (
+              <User className="w-10 h-10 text-accent" />
+            )}
           </div>
           
           <motion.button
