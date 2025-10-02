@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle } from 'lucide-react';
+import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle, User } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../../utils/api';
 
 const LeaderboardTab = () => {
@@ -10,6 +10,18 @@ const LeaderboardTab = () => {
   const [friendUsername, setFriendUsername] = useState('');
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
+
+  // Helper function to get full avatar URL
+  const getAvatarUrl = (avatarPath) => {
+    if (!avatarPath) return null;
+    
+    if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+      return avatarPath;
+    }
+    
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+    return `${BACKEND_URL}${avatarPath}`;
+  };
 
   useEffect(() => {
     fetchLeaderboard(activeType);
@@ -148,62 +160,87 @@ const LeaderboardTab = () => {
         </div>
       ) : (
         <div className="space-y-2">
-          {leaderboard.slice(0, 10).map((entry, index) => (
-            <motion.div
-              key={`${activeType}-${entry.rank}`}
-              className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
-                entry.isCurrentUser 
-                  ? 'bg-accent/20 border-accent' 
-                  : 'bg-background border-gray-600'
-              }`}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-            >
-              <div className="flex items-center justify-center w-8 h-8 mr-3">
-                {getRankIcon(entry.rank)}
-              </div>
+          {leaderboard.slice(0, 10).map((entry, index) => {
+            const avatarUrl = getAvatarUrl(entry.player.avatarUrl);
+            
+            return (
+              <motion.div
+                key={`${activeType}-${entry.rank}`}
+                className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
+                  entry.isCurrentUser 
+                    ? 'bg-accent/20 border-accent' 
+                    : 'bg-background border-gray-600'
+                }`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+              >
+                <div className="flex items-center justify-center w-8 h-8 mr-3">
+                  {getRankIcon(entry.rank)}
+                </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
-                    {entry.player.name}
+                {/* Avatar */}
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-accent/20 border-2 border-accent/50 flex items-center justify-center mr-3 flex-shrink-0">
+                  {avatarUrl ? (
+                    <img 
+                      src={avatarUrl}
+                      alt={entry.player.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        if (e.target.nextSibling) {
+                          e.target.nextSibling.style.display = 'block';
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <User 
+                    className="w-5 h-5 text-accent" 
+                    style={{ display: avatarUrl ? 'none' : 'block' }}
+                  />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                      {entry.player.name}
+                    </p>
+                    {entry.isCurrentUser && (
+                      <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">YOU</span>
+                    )}
+                    {activeType === 'friends' && !entry.isCurrentUser && (
+                      <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">FRIEND</span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
+                    {entry.badge && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
+                        {entry.badge}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-right mr-2">
+                  <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                    {entry.score.toLocaleString()}
                   </p>
-                  {entry.isCurrentUser && (
-                    <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">YOU</span>
-                  )}
-                  {activeType === 'friends' && !entry.isCurrentUser && (
-                    <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">FRIEND</span>
-                  )}
+                  <p className="text-xs text-secondary">pts</p>
                 </div>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
-                  {entry.badge && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
-                      {entry.badge}
-                    </span>
-                  )}
-                </div>
-              </div>
 
-              <div className="text-right mr-2">
-                <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
-                  {entry.score.toLocaleString()}
-                </p>
-                <p className="text-xs text-secondary">pts</p>
-              </div>
-
-              {activeType === 'friends' && !entry.isCurrentUser && (
-                <button
-                  onClick={() => handleRemoveFriend(entry.player.name.toLowerCase())}
-                  disabled={removingFriend === entry.player.name.toLowerCase()}
-                  className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
-                >
-                  {removingFriend === entry.player.name.toLowerCase() ? <LoaderCircle className="w-3 h-3 animate-spin" /> : '✕'}
-                </button>
-              )}
-            </motion.div>
-          ))}
+                {activeType === 'friends' && !entry.isCurrentUser && (
+                  <button
+                    onClick={() => handleRemoveFriend(entry.player.username)}
+                    disabled={removingFriend === entry.player.username}
+                    className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                  >
+                    {removingFriend === entry.player.username ? <LoaderCircle className="w-3 h-3 animate-spin" /> : '✕'}
+                  </button>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </motion.div>
