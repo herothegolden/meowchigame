@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock } from 'lucide-react';
 
 const STARTER_BADGES = [
-  { id: 1, name: 'The First Paw', icon: '�', requirement: 'First login' },
+  { id: 1, name: 'The First Paw', icon: '🐾', requirement: 'First login' },
   { id: 2, name: 'Cookie Lover', icon: '🍪', requirement: 'Play your first game' },
   { id: 3, name: 'Double Snack', icon: '🎁', requirement: 'Buy your first Meowchi 쫀더쿠키' },
   { id: 4, name: '7-Day Streak', icon: '📅', requirement: 'Log in 7 days in a row' },
@@ -12,6 +12,10 @@ const STARTER_BADGES = [
 
 const StarterBadges = () => {
   const [activeBadge, setActiveBadge] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ left: '50%', transform: 'translateX(-50%)' });
+  const badgeRefs = useRef({});
+  const tooltipRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Auto-dismiss tooltip after 2 seconds
   useEffect(() => {
@@ -24,26 +28,51 @@ const StarterBadges = () => {
     return () => clearTimeout(timer);
   }, [activeBadge]);
 
+  // Calculate tooltip position when active badge changes
+  useEffect(() => {
+    if (activeBadge === null || !tooltipRef.current || !containerRef.current) return;
+
+    const badgeElement = badgeRefs.current[activeBadge];
+    if (!badgeElement) return;
+
+    const container = containerRef.current;
+    const tooltip = tooltipRef.current;
+    
+    const containerRect = container.getBoundingClientRect();
+    const badgeRect = badgeElement.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    // Calculate badge center relative to container
+    const badgeCenterX = badgeRect.left - containerRect.left + (badgeRect.width / 2);
+    
+    // Calculate tooltip position (centered under badge)
+    const tooltipLeft = badgeCenterX - (tooltipRect.width / 2);
+    const tooltipRight = tooltipLeft + tooltipRect.width;
+
+    // Check if tooltip overflows container
+    let finalLeft = tooltipLeft;
+    
+    if (tooltipLeft < 0) {
+      // Overflow on left - shift right
+      finalLeft = 8; // 8px padding from edge
+    } else if (tooltipRight > containerRect.width) {
+      // Overflow on right - shift left
+      finalLeft = containerRect.width - tooltipRect.width - 8;
+    }
+
+    setTooltipPosition({
+      left: `${finalLeft}px`,
+      transform: 'none'
+    });
+  }, [activeBadge]);
+
   const handleBadgeClick = (badgeId) => {
     setActiveBadge(badgeId);
   };
 
-  // Get tooltip positioning class based on badge index
-  const getTooltipPositionClass = (index) => {
-    if (index === 0) {
-      // First badge - center but nudge right with margin
-      return 'left-1/2 -translate-x-1/2 ml-12';
-    } else if (index === 4) {
-      // Last badge - center but nudge left with margin
-      return 'left-1/2 -translate-x-1/2 mr-12';
-    } else {
-      // Middle badges - perfectly centered
-      return 'left-1/2 -translate-x-1/2';
-    }
-  };
-
   return (
     <motion.div
+      ref={containerRef}
       className="bg-nav p-4 rounded-lg border border-gray-700"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -57,10 +86,11 @@ const StarterBadges = () => {
         <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 relative">
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
+            ref={(el) => (badgeRefs.current[badge.id] = el)}
             className="relative"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -81,29 +111,43 @@ const StarterBadges = () => {
                 <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
               </div>
             </div>
-
-            {/* Tooltip - Shown Below Badge */}
-            <AnimatePresence>
-              {activeBadge === badge.id && (
-                <motion.div
-                  className={`absolute top-full mt-2 z-50 pointer-events-none ${getTooltipPositionClass(index)}`}
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
-                    <p className="font-bold text-accent mb-1.5 text-center leading-tight">{badge.name}</p>
-                    <p className="text-gray-300 text-center leading-tight">{badge.requirement}</p>
-                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2">
-                      <div className="w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         ))}
+
+        {/* Single Tooltip - Positioned Absolutely in Grid */}
+        <AnimatePresence>
+          {activeBadge && (
+            <motion.div
+              ref={tooltipRef}
+              className="absolute z-50 pointer-events-none"
+              style={{
+                top: '100%',
+                marginTop: '8px',
+                ...tooltipPosition
+              }}
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
+                <p className="font-bold text-accent mb-1.5 text-center leading-tight">
+                  {STARTER_BADGES.find(b => b.id === activeBadge)?.name}
+                </p>
+                <p className="text-gray-300 text-center leading-tight">
+                  {STARTER_BADGES.find(b => b.id === activeBadge)?.requirement}
+                </p>
+                <div 
+                  className="absolute -top-1.5 w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"
+                  style={{
+                    left: '50%',
+                    transform: 'translateX(-50%)'
+                  }}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Backdrop to close tooltip on tap outside */}
