@@ -32,19 +32,18 @@ const StarterBadges = () => {
         <p className="text-xs text-secondary mt-1">Complete tasks to unlock your first badges</p>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 relative">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {STARTER_BADGES.map((badge, index) => (
           <motion.div
             key={badge.id}
-            className="relative"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
           >
-            {/* Badge Container */}
+            {/* Badge Container - NOW with relative positioning */}
             <div
               onClick={() => handleBadgeClick(badge.id)}
-              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-hidden opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
+              className="bg-background rounded-lg border border-gray-600 p-2 sm:p-3 flex flex-col items-center justify-center aspect-square relative overflow-visible opacity-50 grayscale cursor-pointer active:scale-95 transition-transform"
             >
               {/* Badge Icon */}
               <div className="text-2xl sm:text-3xl filter brightness-50">
@@ -52,31 +51,31 @@ const StarterBadges = () => {
               </div>
 
               {/* Lock Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
                 <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
               </div>
-            </div>
 
-            {/* Tooltip - Shown Below Badge */}
-            <AnimatePresence>
-              {activeBadge === badge.id && (
-                <motion.div
-                  className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 pointer-events-none"
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
-                    <p className="font-bold text-accent mb-1.5 text-center leading-tight">{badge.name}</p>
-                    <p className="text-gray-300 text-center leading-tight">{badge.requirement}</p>
-                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2">
-                      <div className="w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
+              {/* Tooltip - Positioned relative to THIS badge */}
+              <AnimatePresence>
+                {activeBadge === badge.id && (
+                  <motion.div
+                    className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 pointer-events-none"
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="bg-gray-900 text-white text-xs rounded-lg py-3 px-3 shadow-2xl border border-gray-700 min-w-[140px] max-w-[160px]">
+                      <p className="font-bold text-accent mb-1.5 text-center leading-tight">{badge.name}</p>
+                      <p className="text-gray-300 text-center leading-tight">{badge.requirement}</p>
+                      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2">
+                        <div className="w-3 h-3 bg-gray-900 border-l border-t border-gray-700 rotate-45"></div>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </motion.div>
         ))}
       </div>
