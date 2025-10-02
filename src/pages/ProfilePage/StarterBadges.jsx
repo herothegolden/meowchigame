@@ -155,14 +155,6 @@ const StarterBadges = () => {
           )}
         </AnimatePresence>
       </div>
-
-      {/* Backdrop to close tooltip on tap outside */}
-      {activeBadge && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setActiveBadge(null)}
-        />
-      )}
     </motion.div>
   );
 };
