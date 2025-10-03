@@ -47,15 +47,68 @@ export const setupDatabase = async () => {
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'avatar_url', type: 'VARCHAR(500)' },
-      { name: 'updated_at', type: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP' }
+      { name: 'updated_at', type: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP' },
+      { name: 'vip_level', type: 'INT DEFAULT 0 NOT NULL' }
     ];
 
     for (const column of columnsToAdd) {
       if (!existingColumns.includes(column.name)) {
-        console.log(`📊 Adding ${column.name} column...`);
+        console.log(`📊 Adding ${column.name} column to users...`);
         await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
       }
     }
+
+    // ---- ORDERS TABLE SETUP ----
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id VARCHAR(50) PRIMARY KEY,
+        telegram_id BIGINT,
+        customer_name VARCHAR(255),
+        customer_phone VARCHAR(50),
+        delivery_address TEXT,
+        product_name VARCHAR(255),
+        quantity INT DEFAULT 1,
+        total_amount INT NOT NULL,
+        ambassador_id VARCHAR(50),
+        commission_amount INT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Check and add missing columns to orders table
+    const orderColumns = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders'
+    `);
+    
+    const existingOrderColumns = orderColumns.rows.map(row => row.column_name);
+    
+    const orderColumnsToAdd = [
+      { name: 'telegram_id', type: 'BIGINT' },
+      { name: 'product_name', type: 'VARCHAR(255)' },
+      { name: 'quantity', type: 'INT DEFAULT 1' }
+    ];
+
+    for (const column of orderColumnsToAdd) {
+      if (!existingOrderColumns.includes(column.name)) {
+        console.log(`📊 Adding ${column.name} column to orders...`);
+        await client.query(`ALTER TABLE orders ADD COLUMN ${column.name} ${column.type}`);
+      }
+    }
+
+    // Create indexes for orders table
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_telegram_id ON orders(telegram_id);
+    `);
+    
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+    `);
+
+    console.log('✅ Orders table setup complete');
 
     const tableCheck = await client.query(`
       SELECT column_name 
