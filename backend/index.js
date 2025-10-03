@@ -16,6 +16,7 @@ import friendsRoutes from './routes/friends.js';
 import tasksRoutes from './routes/tasks.js';
 import badgesRoutes from './routes/badges.js';
 import globalStatsRoutes from './routes/globalStats.js';
+import ordersRoutes from './routes/orders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +52,7 @@ app.use('/api', friendsRoutes);
 app.use('/api', tasksRoutes);
 app.use('/api', badgesRoutes);
 app.use('/api', globalStatsRoutes);
+app.use('/api', ordersRoutes);
 
 // ---- START SERVER ----
 const startServer = async () => {
