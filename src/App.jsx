@@ -13,6 +13,7 @@ import TasksPage from './pages/TasksPage';
 import PartnersPage from './pages/PartnersPage';
 import LeaderboardsPage from './pages/LeaderboardsPage';
 import DevToolsPage from './pages/DevToolsPage';
+import OrderPage from './pages/OrderPage';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -268,6 +269,7 @@ function App() {
                 <Route path="/partners" element={<PartnersPage />} />
                 <Route path="/leaderboards" element={<LeaderboardsPage />} />
                 <Route path="/dev-tools" element={<DevToolsPage />} />
+                <Route path="/order" element={<OrderPage />} />
               </Routes>
             </main>
 
