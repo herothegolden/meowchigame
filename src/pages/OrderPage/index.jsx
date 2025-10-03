@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Plus, Minus, Check, Loader } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Loader, Trash2 } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const PRODUCTS = [
   {
-    id: 'strawberry_oreo_jar_100',
+    id: 'jar_100',
     name: "Jar Cubes",
     weight: "100gr",
     price: 85000,
@@ -13,7 +13,7 @@ const PRODUCTS = [
     imageUrl: 'https://ik.imagekit.io/59r2kpz8r/Option3.webp?updatedAt=1756918223729'
   },
   {
-    id: 'strawberry_oreo_mini_box_125',
+    id: 'mini_box_125',
     name: "Mini Box Cubes",
     weight: "125gr",
     price: 95000,
@@ -21,7 +21,7 @@ const PRODUCTS = [
     imageUrl: 'https://ik.imagekit.io/59r2kpz8r/Option2.webp?updatedAt=1756918223593'
   },
   {
-    id: 'strawberry_oreo_gift_box_300',
+    id: 'gift_box_300',
     name: "Gift Box Bars",
     weight: "300gr",
     price: 270000,
@@ -32,21 +32,39 @@ const PRODUCTS = [
 
 const OrderPage = () => {
   const [selectedFlavor, setSelectedFlavor] = useState('classic');
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
-  const handleProductSelect = (product) => {
-    setSelectedProduct(product);
-    setQuantity(1);
-    setOrderSuccess(false);
+  const handleAddToCart = (product) => {
+    const flavorPrefix = selectedFlavor === 'classic' 
+      ? 'Viral Classic Strawberry & Oreo' 
+      : 'Viral Matcha Strawberry & Oreo';
+    
+    const fullProductName = `${flavorPrefix} ${product.name}`;
+    const lineTotal = product.price * quantity;
+
+    const cartItem = {
+      id: `${selectedFlavor}_${product.id}_${Date.now()}`,
+      productId: product.id,
+      flavor: selectedFlavor,
+      name: fullProductName,
+      quantity: quantity,
+      unitPrice: product.price,
+      totalPrice: lineTotal
+    };
+
+    setCart([...cart, cartItem]);
+    setQuantity(1); // Reset quantity after adding
+  };
+
+  const handleRemoveFromCart = (itemId) => {
+    setCart(cart.filter(item => item.id !== itemId));
   };
 
   const incrementQuantity = () => {
-    if (selectedProduct && quantity < selectedProduct.stock) {
-      setQuantity(quantity + 1);
-    }
+    setQuantity(quantity + 1);
   };
 
   const decrementQuantity = () => {
@@ -55,9 +73,8 @@ const OrderPage = () => {
     }
   };
 
-  const calculateTotal = () => {
-    if (!selectedProduct) return 0;
-    return selectedProduct.price * quantity;
+  const calculateSubtotal = () => {
+    return cart.reduce((sum, item) => sum + item.totalPrice, 0);
   };
 
   const formatPrice = (price) => {
@@ -65,42 +82,30 @@ const OrderPage = () => {
   };
 
   const handleSubmitOrder = async () => {
-    if (!selectedProduct) {
-      showError('Please select a product');
-      return;
-    }
-
-    if (quantity < 1) {
-      showError('Quantity must be at least 1');
-      return;
-    }
-
-    if (quantity > selectedProduct.stock) {
-      showError(`Only ${selectedProduct.stock} items available`);
+    if (cart.length === 0) {
+      showError('Please add items to your cart');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const flavorPrefix = selectedFlavor === 'classic' 
-        ? 'Viral Classic Strawberry & Oreo' 
-        : 'Viral Matcha Strawberry & Oreo';
-      
-      const fullProductName = `${flavorPrefix} ${selectedProduct.name}`;
-
       const result = await apiCall('/api/create-order', {
-        productId: selectedProduct.id,
-        productName: fullProductName,
-        quantity: quantity,
-        totalAmount: calculateTotal()
+        items: cart.map(item => ({
+          productId: item.productId,
+          productName: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice
+        })),
+        totalAmount: calculateSubtotal()
       });
 
       setOrderSuccess(true);
       showSuccess('Order submitted! Admin will contact you via Telegram.');
 
       setTimeout(() => {
-        setSelectedProduct(null);
+        setCart([]);
         setQuantity(1);
         setOrderSuccess(false);
       }, 3000);
@@ -126,7 +131,7 @@ const OrderPage = () => {
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring" }}
           >
-            <Check className="w-16 h-16 text-accent mx-auto mb-4" />
+            <ShoppingCart className="w-16 h-16 text-accent mx-auto mb-4" />
           </motion.div>
           <h2 className="text-2xl font-bold text-primary mb-2">Order Submitted!</h2>
           <p className="text-secondary mb-4">
@@ -134,13 +139,10 @@ const OrderPage = () => {
           </p>
           <div className="bg-accent/10 p-4 rounded-lg border border-accent/30">
             <p className="text-sm text-primary">
-              <strong>Order Details:</strong>
-            </p>
-            <p className="text-sm text-secondary mt-2">
-              {selectedProduct?.name} x{quantity}
+              <strong>Total Items:</strong> {cart.reduce((sum, item) => sum + item.quantity, 0)}
             </p>
             <p className="text-lg font-bold text-accent mt-2">
-              {formatPrice(calculateTotal())}
+              {formatPrice(calculateSubtotal())}
             </p>
           </div>
         </motion.div>
@@ -202,12 +204,8 @@ const OrderPage = () => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 + index * 0.1 }}
-            onClick={() => handleProductSelect(product)}
-            className={`bg-nav p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              selectedProduct?.id === product.id
-                ? 'border-accent shadow-lg shadow-accent/20'
-                : 'border-gray-700 hover:border-accent/50'
-            }`}
+            onClick={() => handleAddToCart(product)}
+            className="bg-nav p-4 rounded-lg border-2 border-gray-700 hover:border-accent/50 cursor-pointer transition-all"
           >
             <div className="flex items-center space-x-4">
               {/* Product Image */}
@@ -231,19 +229,6 @@ const OrderPage = () => {
                   <span className="text-xs text-secondary">Stock: {product.stock}</span>
                 </div>
               </div>
-
-              {/* Selection Indicator */}
-              {selectedProduct?.id === product.id && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="flex-shrink-0"
-                >
-                  <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center">
-                    <Check className="w-4 h-4 text-background" />
-                  </div>
-                </motion.div>
-              )}
             </div>
           </motion.div>
         ))}
@@ -258,10 +243,10 @@ const OrderPage = () => {
       >
         <h3 className="text-primary font-bold mb-4">Select Quantity</h3>
 
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <button
             onClick={decrementQuantity}
-            disabled={quantity <= 1 || !selectedProduct}
+            disabled={quantity <= 1}
             className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
           >
             <Minus className="w-5 h-5 text-accent" />
@@ -269,19 +254,43 @@ const OrderPage = () => {
 
           <div className="text-center">
             <div className="text-4xl font-bold text-primary">{quantity}</div>
-            <div className="text-xs text-secondary mt-1">
-              Max: {selectedProduct ? selectedProduct.stock : 0}
-            </div>
           </div>
 
           <button
             onClick={incrementQuantity}
-            disabled={!selectedProduct || quantity >= (selectedProduct?.stock || 0)}
-            className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 flex items-center justify-center transition-colors"
           >
             <Plus className="w-5 h-5 text-accent" />
           </button>
         </div>
+
+        {/* Cart Items */}
+        {cart.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {cart.map((item) => (
+              <div 
+                key={item.id}
+                className="flex items-center justify-between text-sm bg-background p-3 rounded-lg"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-primary font-medium truncate">{item.name}</p>
+                </div>
+                <div className="flex items-center space-x-3 ml-3">
+                  <span className="text-secondary">{item.quantity}</span>
+                  <span className="text-accent font-semibold whitespace-nowrap">
+                    {formatPrice(item.totalPrice)}
+                  </span>
+                  <button
+                    onClick={() => handleRemoveFromCart(item.id)}
+                    className="text-red-500 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Pricing Summary */}
         <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
@@ -303,7 +312,7 @@ const OrderPage = () => {
             <div className="flex items-center justify-between text-sm">
               <span className="text-secondary">Subtotal:</span>
               <span className="text-primary font-semibold">
-                {formatPrice(calculateTotal())}
+                {formatPrice(calculateSubtotal())}
               </span>
             </div>
 
@@ -318,7 +327,7 @@ const OrderPage = () => {
               <div className="flex items-center justify-between">
                 <span className="text-secondary font-semibold">Total:</span>
                 <span className="text-xl font-bold text-accent">
-                  {formatPrice(calculateTotal())}
+                  {formatPrice(calculateSubtotal())}
                 </span>
               </div>
             </div>
@@ -335,7 +344,7 @@ const OrderPage = () => {
       >
         <button
           onClick={handleSubmitOrder}
-          disabled={isSubmitting || !selectedProduct}
+          disabled={isSubmitting || cart.length === 0}
           className="w-full bg-accent hover:bg-accent/90 disabled:bg-gray-700 disabled:cursor-not-allowed text-background font-bold py-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
         >
           {isSubmitting ? (
@@ -346,7 +355,7 @@ const OrderPage = () => {
           ) : (
             <>
               <ShoppingCart className="w-5 h-5" />
-              <span>Submit Order</span>
+              <span>Submit Order ({cart.length} items)</span>
             </>
           )}
         </button>
