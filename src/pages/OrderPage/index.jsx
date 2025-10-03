@@ -283,22 +283,44 @@ const OrderPage = () => {
           </button>
         </div>
 
-        {/* Discounts and Total */}
-        <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-secondary">game tester and contributor discount</span>
-            <span className="text-secondary">20%</span>
+        {/* Pricing Summary */}
+        <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
+          {/* Available Discounts */}
+          <div className="space-y-1">
+            <p className="text-xs text-secondary font-semibold mb-1">Available Discounts:</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-secondary">• Game tester & contributor</span>
+              <span className="text-secondary">20%</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-secondary">• Social media contributor</span>
+              <span className="text-secondary">20%</span>
+            </div>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-secondary">social media contributor discount</span>
-            <span className="text-secondary">20%</span>
-          </div>
-          <div className="border-t border-accent/20 pt-2 mt-2">
-            <div className="flex items-center justify-between">
-              <span className="text-secondary">Total:</span>
-              <span className="text-xl font-bold text-accent">
+
+          <div className="border-t border-accent/20 pt-3 space-y-2">
+            {/* Subtotal */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-secondary">Subtotal:</span>
+              <span className="text-primary font-semibold">
                 {formatPrice(calculateTotal())}
               </span>
+            </div>
+
+            {/* Discounts */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-secondary">Discounts:</span>
+              <span className="text-primary font-semibold">-0 UZS</span>
+            </div>
+
+            {/* Total */}
+            <div className="border-t border-accent/20 pt-2 mt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-secondary font-semibold">Total:</span>
+                <span className="text-xl font-bold text-accent">
+                  {formatPrice(calculateTotal())}
+                </span>
+              </div>
             </div>
           </div>
         </div>
