@@ -32,45 +32,87 @@ const PRODUCTS = [
 
 const OrderPage = () => {
   const [selectedFlavor, setSelectedFlavor] = useState('classic');
-  const [quantity, setQuantity] = useState(1);
   const [cart, setCart] = useState([]);
+  const [selectedCartItemId, setSelectedCartItemId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
   const handleAddToCart = (product) => {
     const flavorPrefix = selectedFlavor === 'classic' 
-      ? 'Viral Classic Strawberry & Oreo' 
-      : 'Viral Matcha Strawberry & Oreo';
+      ? 'Viral Classic' 
+      : 'Viral Matcha';
     
-    const fullProductName = `${flavorPrefix} ${product.name}`;
-    const lineTotal = product.price * quantity;
+    const shortName = `${flavorPrefix} ${product.name.split(' ')[0]}`; // "Viral Classic Jar"
+    const fullProductName = `${flavorPrefix} Strawberry & Oreo ${product.name}`;
 
     const cartItem = {
       id: `${selectedFlavor}_${product.id}_${Date.now()}`,
       productId: product.id,
       flavor: selectedFlavor,
-      name: fullProductName,
-      quantity: quantity,
+      displayName: shortName,
+      fullName: fullProductName,
+      quantity: 1,
       unitPrice: product.price,
-      totalPrice: lineTotal
+      totalPrice: product.price
     };
 
-    setCart([...cart, cartItem]);
-    setQuantity(1); // Reset quantity after adding
+    const newCart = [...cart, cartItem];
+    setCart(newCart);
+    setSelectedCartItemId(cartItem.id); // Auto-select newly added item
   };
 
   const handleRemoveFromCart = (itemId) => {
-    setCart(cart.filter(item => item.id !== itemId));
+    const newCart = cart.filter(item => item.id !== itemId);
+    setCart(newCart);
+    
+    // If removed item was selected, clear selection
+    if (selectedCartItemId === itemId) {
+      setSelectedCartItemId(newCart.length > 0 ? newCart[0].id : null);
+    }
+  };
+
+  const handleSelectCartItem = (itemId) => {
+    setSelectedCartItemId(itemId);
+  };
+
+  const getSelectedItem = () => {
+    return cart.find(item => item.id === selectedCartItemId);
   };
 
   const incrementQuantity = () => {
-    setQuantity(quantity + 1);
+    const selectedItem = getSelectedItem();
+    if (!selectedItem) return;
+
+    const newCart = cart.map(item => {
+      if (item.id === selectedCartItemId) {
+        const newQuantity = item.quantity + 1;
+        return {
+          ...item,
+          quantity: newQuantity,
+          totalPrice: item.unitPrice * newQuantity
+        };
+      }
+      return item;
+    });
+    setCart(newCart);
   };
 
   const decrementQuantity = () => {
-    if (quantity > 1) {
-      setQuantity(quantity - 1);
-    }
+    const selectedItem = getSelectedItem();
+    if (!selectedItem || selectedItem.quantity <= 1) return;
+
+    const newCart = cart.map(item => {
+      if (item.id === selectedCartItemId) {
+        const newQuantity = item.quantity - 1;
+        return {
+          ...item,
+          quantity: newQuantity,
+          totalPrice: item.unitPrice * newQuantity
+        };
+      }
+      return item;
+    });
+    setCart(newCart);
   };
 
   const calculateSubtotal = () => {
@@ -93,7 +135,7 @@ const OrderPage = () => {
       const result = await apiCall('/api/create-order', {
         items: cart.map(item => ({
           productId: item.productId,
-          productName: item.name,
+          productName: item.fullName,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           totalPrice: item.totalPrice
@@ -106,7 +148,7 @@ const OrderPage = () => {
 
       setTimeout(() => {
         setCart([]);
-        setQuantity(1);
+        setSelectedCartItemId(null);
         setOrderSuccess(false);
       }, 3000);
 
@@ -149,6 +191,8 @@ const OrderPage = () => {
       </div>
     );
   }
+
+  const selectedItem = getSelectedItem();
 
   return (
     <div className="min-h-screen bg-background p-4 pb-24">
@@ -234,55 +278,71 @@ const OrderPage = () => {
         ))}
       </div>
 
-      {/* Quantity Selector - Always Visible */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-nav p-6 rounded-lg border border-gray-700 mb-6"
-      >
-        <h3 className="text-primary font-bold mb-4">Select Quantity</h3>
+      {/* Cart and Quantity Section - Only show if cart has items */}
+      {cart.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-nav p-6 rounded-lg border border-gray-700 mb-6"
+        >
+          <h3 className="text-primary font-bold mb-4">Select Quantity</h3>
 
-        <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={decrementQuantity}
-            disabled={quantity <= 1}
-            className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-          >
-            <Minus className="w-5 h-5 text-accent" />
-          </button>
+          {/* Quantity Controls */}
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={decrementQuantity}
+              disabled={!selectedItem || selectedItem.quantity <= 1}
+              className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              <Minus className="w-5 h-5 text-accent" />
+            </button>
 
-          <div className="text-center">
-            <div className="text-4xl font-bold text-primary">{quantity}</div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-primary">
+                {selectedItem ? selectedItem.quantity : 0}
+              </div>
+              <div className="text-xs text-secondary mt-1">
+                {selectedItem ? selectedItem.displayName : 'Select item'}
+              </div>
+            </div>
+
+            <button
+              onClick={incrementQuantity}
+              disabled={!selectedItem}
+              className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              <Plus className="w-5 h-5 text-accent" />
+            </button>
           </div>
 
-          <button
-            onClick={incrementQuantity}
-            className="w-12 h-12 rounded-full bg-accent/20 hover:bg-accent/30 flex items-center justify-center transition-colors"
-          >
-            <Plus className="w-5 h-5 text-accent" />
-          </button>
-        </div>
-
-        {/* Cart Items */}
-        {cart.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {cart.map((item) => (
+          {/* Cart Items */}
+          <div className="mb-4 space-y-3">
+            <p className="text-xs text-secondary font-semibold mb-2">Order Items:</p>
+            {cart.map((item, index) => (
               <div 
                 key={item.id}
-                className="flex items-center justify-between text-sm bg-background p-3 rounded-lg"
+                onClick={() => handleSelectCartItem(item.id)}
+                className={`p-3 rounded-lg cursor-pointer transition-all ${
+                  selectedCartItemId === item.id
+                    ? 'bg-accent/20 border-2 border-accent'
+                    : 'bg-background border-2 border-transparent hover:border-accent/30'
+                }`}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-primary font-medium truncate">{item.name}</p>
-                </div>
-                <div className="flex items-center space-x-3 ml-3">
-                  <span className="text-secondary">{item.quantity}</span>
-                  <span className="text-accent font-semibold whitespace-nowrap">
-                    {formatPrice(item.totalPrice)}
-                  </span>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-primary mb-1">
+                      {index + 1}. {item.displayName}
+                    </p>
+                    <p className="text-xs text-secondary">
+                      Qty: {item.quantity} × {formatPrice(item.unitPrice)} = {formatPrice(item.totalPrice)}
+                    </p>
+                  </div>
                   <button
-                    onClick={() => handleRemoveFromCart(item.id)}
-                    className="text-red-500 hover:text-red-400 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveFromCart(item.id);
+                    }}
+                    className="text-red-500 hover:text-red-400 transition-colors ml-3"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -290,50 +350,50 @@ const OrderPage = () => {
               </div>
             ))}
           </div>
-        )}
 
-        {/* Pricing Summary */}
-        <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
-          {/* Available Discounts */}
-          <div className="space-y-1">
-            <p className="text-xs text-secondary font-semibold mb-1">Available Discounts:</p>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-secondary">• Game tester & contributor</span>
-              <span className="text-secondary">20%</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-secondary">• Social media contributor</span>
-              <span className="text-secondary">20%</span>
-            </div>
-          </div>
-
-          <div className="border-t border-accent/20 pt-3 space-y-2">
-            {/* Subtotal */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-secondary">Subtotal:</span>
-              <span className="text-primary font-semibold">
-                {formatPrice(calculateSubtotal())}
-              </span>
+          {/* Pricing Summary */}
+          <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
+            {/* Available Discounts */}
+            <div className="space-y-1">
+              <p className="text-xs text-secondary font-semibold mb-1">Available Discounts:</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-secondary">• Game tester & contributor</span>
+                <span className="text-secondary">20%</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-secondary">• Social media contributor</span>
+                <span className="text-secondary">20%</span>
+              </div>
             </div>
 
-            {/* Discounts */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-secondary">Discounts:</span>
-              <span className="text-primary font-semibold">-0 UZS</span>
-            </div>
-
-            {/* Total */}
-            <div className="border-t border-accent/20 pt-2 mt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-secondary font-semibold">Total:</span>
-                <span className="text-xl font-bold text-accent">
+            <div className="border-t border-accent/20 pt-3 space-y-2">
+              {/* Subtotal */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-secondary">Subtotal:</span>
+                <span className="text-primary font-semibold">
                   {formatPrice(calculateSubtotal())}
                 </span>
               </div>
+
+              {/* Discounts */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-secondary">Discounts:</span>
+                <span className="text-primary font-semibold">-0 UZS</span>
+              </div>
+
+              {/* Total */}
+              <div className="border-t border-accent/20 pt-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold">Total:</span>
+                  <span className="text-xl font-bold text-accent">
+                    {formatPrice(calculateSubtotal())}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Submit Button - Always Visible */}
       <motion.div
