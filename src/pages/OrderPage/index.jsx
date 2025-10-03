@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingCart, Plus, Minus, Loader, Trash2 } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
@@ -36,8 +36,26 @@ const OrderPage = () => {
   const [selectedCartItemId, setSelectedCartItemId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [showFlavorBurst, setShowFlavorBurst] = useState(null); // 'classic' or 'matcha'
+
+  const triggerHaptic = (style = 'light') => {
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
+    }
+  };
+
+  const handleFlavorSelect = (flavor) => {
+    triggerHaptic('light');
+    setSelectedFlavor(flavor);
+    setShowFlavorBurst(flavor);
+    
+    setTimeout(() => {
+      setShowFlavorBurst(null);
+    }, 800);
+  };
 
   const handleAddToCart = (product) => {
+    triggerHaptic('medium');
     const flavorPrefix = selectedFlavor === 'classic' 
       ? 'Viral Classic' 
       : 'Viral Matcha';
@@ -62,6 +80,7 @@ const OrderPage = () => {
   };
 
   const handleRemoveFromCart = (itemId) => {
+    triggerHaptic('medium');
     const newCart = cart.filter(item => item.id !== itemId);
     setCart(newCart);
     
@@ -72,6 +91,7 @@ const OrderPage = () => {
   };
 
   const handleSelectCartItem = (itemId) => {
+    triggerHaptic('light');
     setSelectedCartItemId(itemId);
   };
 
@@ -80,6 +100,7 @@ const OrderPage = () => {
   };
 
   const incrementQuantity = () => {
+    triggerHaptic('light');
     const selectedItem = getSelectedItem();
     if (!selectedItem) return;
 
@@ -98,6 +119,7 @@ const OrderPage = () => {
   };
 
   const decrementQuantity = () => {
+    triggerHaptic('light');
     const selectedItem = getSelectedItem();
     if (!selectedItem || selectedItem.quantity <= 1) return;
 
@@ -129,6 +151,7 @@ const OrderPage = () => {
       return;
     }
 
+    triggerHaptic('heavy');
     setIsSubmitting(true);
 
     try {
@@ -213,9 +236,9 @@ const OrderPage = () => {
         transition={{ delay: 0.1 }}
         className="mb-6"
       >
-        <div className="flex gap-3">
+        <div className="flex gap-3 relative">
           <button
-            onClick={() => setSelectedFlavor('classic')}
+            onClick={() => handleFlavorSelect('classic')}
             className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
               selectedFlavor === 'classic'
                 ? 'bg-pink-500 text-white border-2 border-pink-400'
@@ -227,7 +250,7 @@ const OrderPage = () => {
           </button>
           
           <button
-            onClick={() => setSelectedFlavor('matcha')}
+            onClick={() => handleFlavorSelect('matcha')}
             className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
               selectedFlavor === 'matcha'
                 ? 'bg-green-500 text-white border-2 border-green-400'
@@ -237,6 +260,39 @@ const OrderPage = () => {
             Viral Matcha
             <div className="text-xs font-normal mt-1">Strawberry & Oreo</div>
           </button>
+
+          {/* Flavor Burst Animation */}
+          <AnimatePresence>
+            {showFlavorBurst && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                {[0, 1, 2, 3, 4].map((index) => {
+                  const angle = (index * 72) - 90; // Distribute 5 items in circle
+                  const distance = 60;
+                  const x = Math.cos((angle * Math.PI) / 180) * distance;
+                  const y = Math.sin((angle * Math.PI) / 180) * distance;
+                  
+                  return (
+                    <motion.div
+                      key={`burst-${index}`}
+                      initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                      animate={{ 
+                        scale: [0, 1.5, 1.2], 
+                        x: x, 
+                        y: y,
+                        opacity: [1, 1, 0],
+                        rotate: Math.random() * 360
+                      }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="absolute text-4xl"
+                    >
+                      {showFlavorBurst === 'classic' ? '🍓' : '🍵'}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
 
