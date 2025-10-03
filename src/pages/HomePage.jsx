@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import GlobalPulse from "../components/GlobalPulse";
 
@@ -9,6 +10,7 @@ const HomePage = () => {
   const [poppedItems, setPoppedItems] = useState([]);
   const [showBurst, setShowBurst] = useState(false);
   const hiFiveTimerRef = useRef(null);
+  const navigate = useNavigate();
 
   const gameItems = [
     'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
@@ -85,8 +87,8 @@ const HomePage = () => {
     };
   }, []);
 
-  const openTelegramOrder = () => {
-    window.open("https://t.me/MeowchiOrders_Bot", "_blank");
+  const navigateToOrder = () => {
+    navigate('/order');
   };
 
   const handleCardClick = (index, card) => {
@@ -177,7 +179,7 @@ const HomePage = () => {
 
           <motion.button
             whileHover={{ scale: 1.05 }}
-            onClick={openTelegramOrder}
+            onClick={navigateToOrder}
             className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
           >
             Заказать сейчас →
@@ -371,7 +373,7 @@ const HomePage = () => {
           </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
-            onClick={openTelegramOrder}
+            onClick={navigateToOrder}
             className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
           >
             Order via Telegram
