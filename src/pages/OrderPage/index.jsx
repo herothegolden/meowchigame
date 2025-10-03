@@ -260,7 +260,7 @@ const OrderPage = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-gray-700"
+          className="fixed bottom-20 left-0 right-0 p-4 bg-background border-t border-gray-700 z-40"
         >
           <button
             onClick={handleSubmitOrder}
