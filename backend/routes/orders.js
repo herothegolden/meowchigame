@@ -1,29 +1,9 @@
 import express from 'express';
 import { pool } from '../config/database.js';
-import { validate } from '../utils.js';
 import { validateUser } from '../middleware/auth.js';
 
 const router = express.Router();
 const { BOT_TOKEN, ADMIN_TELEGRAM_ID } = process.env;
-
-// Product data (matches frontend)
-const PRODUCTS = {
-  'strawberry_oreo_jar_100': {
-    name: "Strawberry & Oreo JAR cubes (100gr)",
-    price: 85000,
-    stock: 50
-  },
-  'strawberry_oreo_mini_box_125': {
-    name: "Strawberry & Oreo Mini Box cubes (125gr)",
-    price: 95000,
-    stock: 30
-  },
-  'strawberry_oreo_gift_box_300': {
-    name: "Strawberry & Oreo Gift Box bars (300gr)",
-    price: 270000,
-    stock: 15
-  }
-};
 
 // Helper: Send notification to admin via Telegram
 async function sendAdminNotification(orderData) {
@@ -33,6 +13,11 @@ async function sendAdminNotification(orderData) {
   }
 
   try {
+    // Format items list
+    const itemsList = orderData.items.map((item, index) => 
+      `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${item.unitPrice.toLocaleString()} = ${item.totalPrice.toLocaleString()} UZS`
+    ).join('\n');
+
     const message = `🔔 **NEW ORDER #${orderData.orderId}**
 
 👤 **Customer:**
@@ -40,10 +25,10 @@ async function sendAdminNotification(orderData) {
 • Username: @${orderData.username || 'no_username'}
 • Telegram ID: ${orderData.telegramId}
 
-🍪 **Order:**
-• Product: ${orderData.productName}
-• Quantity: ${orderData.quantity}
-• Total: ${orderData.totalAmount.toLocaleString()} UZS
+🍪 **Order Items:**
+${itemsList}
+
+💰 **Total Amount:** ${orderData.totalAmount.toLocaleString()} UZS
 
 📊 **Status:** Pending Payment
 
@@ -91,46 +76,57 @@ Contact customer via Telegram to arrange payment and delivery.`;
   }
 }
 
-// ---- CREATE ORDER ----
+// ---- CREATE ORDER (WITH CART SUPPORT) ----
 router.post('/create-order', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const { productId, productName, quantity, totalAmount } = req.body;
+    const { items, totalAmount } = req.body;
 
     // Validate input
-    if (!productId || !quantity || !totalAmount) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ 
-        error: 'Missing required fields: productId, quantity, totalAmount' 
+        error: 'Missing required field: items (must be non-empty array)' 
       });
     }
 
-    // Validate product exists
-    const product = PRODUCTS[productId];
-    if (!product) {
-      return res.status(400).json({ error: 'Invalid product ID' });
-    }
-
-    // Validate quantity
-    if (quantity < 1 || quantity > 100) {
-      return res.status(400).json({ error: 'Invalid quantity (must be 1-100)' });
-    }
-
-    // Validate price calculation
-    const expectedTotal = product.price * quantity;
-    if (totalAmount !== expectedTotal) {
+    if (!totalAmount || totalAmount <= 0) {
       return res.status(400).json({ 
-        error: 'Price mismatch',
-        expected: expectedTotal,
+        error: 'Invalid total amount' 
+      });
+    }
+
+    // Validate each item
+    for (const item of items) {
+      if (!item.productId || !item.productName || !item.quantity || !item.unitPrice || !item.totalPrice) {
+        return res.status(400).json({ 
+          error: 'Invalid item format. Each item must have: productId, productName, quantity, unitPrice, totalPrice' 
+        });
+      }
+
+      if (item.quantity < 1 || item.quantity > 100) {
+        return res.status(400).json({ 
+          error: `Invalid quantity for ${item.productName} (must be 1-100)` 
+        });
+      }
+
+      // Verify price calculation
+      const expectedTotal = item.unitPrice * item.quantity;
+      if (item.totalPrice !== expectedTotal) {
+        return res.status(400).json({ 
+          error: `Price mismatch for ${item.productName}`,
+          expected: expectedTotal,
+          received: item.totalPrice
+        });
+      }
+    }
+
+    // Verify total amount calculation
+    const calculatedTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+    if (totalAmount !== calculatedTotal) {
+      return res.status(400).json({ 
+        error: 'Total amount mismatch',
+        expected: calculatedTotal,
         received: totalAmount
-      });
-    }
-
-    // Check stock availability
-    if (quantity > product.stock) {
-      return res.status(400).json({ 
-        error: 'Insufficient stock',
-        available: product.stock,
-        requested: quantity
       });
     }
 
@@ -149,6 +145,11 @@ router.post('/create-order', validateUser, async (req, res) => {
       const customerName = userData.first_name || 'Unknown';
       const username = userData.username || null;
 
+      // Create order summary for database
+      const orderSummary = items.map(item => 
+        `${item.productName} (${item.quantity})`
+      ).join(', ');
+
       // Insert order into database
       const insertQuery = `
         INSERT INTO orders (
@@ -165,18 +166,21 @@ router.post('/create-order', validateUser, async (req, res) => {
         RETURNING id, created_at
       `;
 
+      // Store total quantity and order summary
+      const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+
       const orderResult = await client.query(insertQuery, [
         orderId,
         user.id,
         customerName,
-        null, // customer_phone not collected in simplified flow
-        productName || product.name,
-        quantity,
+        null, // customer_phone not collected
+        orderSummary, // Combined product names
+        totalQuantity, // Total quantity of all items
         totalAmount,
         'pending'
       ]);
 
-      console.log(`✅ Order created: ${orderId} for user ${user.id}`);
+      console.log(`✅ Order created: ${orderId} for user ${user.id} with ${items.length} items`);
 
       // Send notification to admin
       const notificationSent = await sendAdminNotification({
@@ -184,8 +188,7 @@ router.post('/create-order', validateUser, async (req, res) => {
         telegramId: user.id,
         customerName,
         username,
-        productName: productName || product.name,
-        quantity,
+        items,
         totalAmount
       });
 
@@ -200,8 +203,11 @@ router.post('/create-order', validateUser, async (req, res) => {
         message: 'Order submitted successfully. Admin will contact you via Telegram.',
         order: {
           id: orderId,
-          product: productName || product.name,
-          quantity,
+          items: items.map(item => ({
+            product: item.productName,
+            quantity: item.quantity,
+            price: item.totalPrice
+          })),
           total: totalAmount,
           status: 'pending',
           createdAt: orderResult.rows[0].created_at
