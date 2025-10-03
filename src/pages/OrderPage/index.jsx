@@ -331,7 +331,7 @@ const OrderPage = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6 }}
-        className="fixed bottom-20 left-0 right-0 p-4 bg-background border-t border-gray-700 z-40"
+        className="mt-6"
       >
         <button
           onClick={handleSubmitOrder}
