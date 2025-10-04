@@ -133,7 +133,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const avatarUrl = getAvatarUrl(stats.avatar_url);
 
   const placeholderPower = 0;
-  const placeholderRank = '--';
+  const userRank = stats.rank || '--';
   const placeholderVIP = 0;
   const placeholderAlliance = 'None';
   const placeholderAlliancePower = 0;
@@ -277,7 +277,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
           <div className="flex items-center">
             <Trophy className="w-4 h-4 text-yellow-500 mr-1" />
             <span className="text-secondary">Rank:</span>
-            <span className="text-primary font-bold ml-1">#{placeholderRank}</span>
+            <span className="text-primary font-bold ml-1">#{userRank}</span>
           </div>
           <div className="flex items-center">
             <Sparkles className="w-4 h-4 text-accent mr-1" />
