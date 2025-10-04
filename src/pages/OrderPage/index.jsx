@@ -225,8 +225,8 @@ const OrderPage = () => {
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        <h1 className="text-2xl font-bold text-primary mb-2">Order Cookies</h1>
-        <p className="text-secondary text-sm">Select your product and quantity</p>
+        <h1 className="text-2xl font-bold text-primary mb-2">Закажи свои 쫀득쿠ки</h1>
+        <p className="text-secondary text-sm">Strawberry & Oreo vibes прямо в Ташкенте ✨</p>
       </motion.div>
 
       {/* Flavor Selection */}
@@ -246,7 +246,7 @@ const OrderPage = () => {
             }`}
           >
             Viral Classic
-            <div className="text-xs font-normal mt-1">Strawberry & Oreo</div>
+            <div className="text-xs font-normal mt-1">🍓 + Oreo = культовый вкус</div>
           </button>
           
           <button
@@ -258,7 +258,7 @@ const OrderPage = () => {
             }`}
           >
             Viral Matcha
-            <div className="text-xs font-normal mt-1">Strawberry & Oreo</div>
+            <div className="text-xs font-normal mt-1">🍵 + Oreo = новый obsession</div>
           </button>
 
           {/* Flavor Burst Animation */}
@@ -322,12 +322,13 @@ const OrderPage = () => {
 
               {/* Product Info */}
               <div className="flex-1 min-w-0">
-                <h3 className="text-primary font-bold text-sm mb-1">{product.name}</h3>
-                <p className="text-secondary text-xs mb-1">{product.weight}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-accent font-bold">{formatPrice(product.price)}</span>
-                  <span className="text-xs text-secondary">Stock: {product.stock}</span>
-                </div>
+                <h3 className="text-primary font-bold text-sm mb-1">{product.name} ({product.weight})</h3>
+                <p className="text-accent font-bold mb-1">{formatPrice(product.price)} • Stock: {product.stock}</p>
+                <p className="text-secondary text-xs">
+                  {product.id === 'jar_100' && '✨ 쫀득 момент в каждой банке'}
+                  {product.id === 'mini_box_125' && '🎁 компактный формат для stories'}
+                  {product.id === 'gift_box_300' && '📦 premium набор для sharing'}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -341,7 +342,7 @@ const OrderPage = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-nav p-6 rounded-lg border border-gray-700 mb-6"
         >
-          <h3 className="text-primary font-bold mb-4">Select Quantity</h3>
+          <h3 className="text-primary font-bold mb-4">Выбери сколько баночек счастья 🍪</h3>
 
           {/* Quantity Controls */}
           <div className="flex items-center justify-between mb-6">
@@ -411,14 +412,14 @@ const OrderPage = () => {
           <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
             {/* Available Discounts */}
             <div className="space-y-1">
-              <p className="text-xs text-secondary font-semibold mb-1">Available Discounts:</p>
+              <p className="text-xs text-secondary font-semibold mb-1">💡 Доступные бонусы:</p>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-secondary">• Game tester & contributor</span>
-                <span className="text-secondary">20%</span>
+                <span className="text-secondary">🎮 Тестер игры + участник</span>
+                <span className="text-secondary">–20%</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-secondary">• Social media contributor</span>
-                <span className="text-secondary">20%</span>
+                <span className="text-secondary">📱 Поддержка в соцсетях</span>
+                <span className="text-secondary">–20%</span>
               </div>
             </div>
 
@@ -440,11 +441,14 @@ const OrderPage = () => {
               {/* Total */}
               <div className="border-t border-accent/20 pt-2 mt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-secondary font-semibold">Total:</span>
+                  <span className="text-secondary font-semibold">Итого:</span>
                   <span className="text-xl font-bold text-accent">
                     {formatPrice(calculateSubtotal())}
                   </span>
                 </div>
+                <p className="text-xs text-secondary text-right mt-1 italic">
+                  (да, так вкусно и так доступно 😋)
+                </p>
               </div>
             </div>
           </div>
@@ -471,7 +475,7 @@ const OrderPage = () => {
           ) : (
             <>
               <ShoppingCart className="w-5 h-5" />
-              <span>Submit Order ({cart.length} items)</span>
+              <span>🚀 Оформить заказ ({cart.length} items)</span>
             </>
           )}
         </button>
