@@ -76,3 +76,7 @@ export const showError = (message) => {
     alert(message);
   }
 };
+
+export const claimStreak = async () => {
+  return await apiCall('/api/streak/claim-streak');
+};
