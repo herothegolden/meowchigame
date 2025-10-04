@@ -165,7 +165,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult] = await Promise.all([
+      const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult, rankResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
            games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
@@ -176,7 +176,12 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         client.query('SELECT badge_name, current_progress, target_progress FROM badge_progress WHERE user_id = $1', [user.id]),
         client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
-        client.query('SELECT points, point_booster_expires_at FROM users WHERE telegram_id = $1', [user.id])
+        client.query('SELECT points, point_booster_expires_at FROM users WHERE telegram_id = $1', [user.id]),
+        client.query(`
+          SELECT COUNT(*) + 1 as rank
+          FROM users
+          WHERE points > (SELECT points FROM users WHERE telegram_id = $1)
+        `, [user.id])
       ]);
       
       if (userResult.rowCount === 0) {
@@ -187,6 +192,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
+      userData.rank = rankResult.rows[0]?.rank || null;
       
       const progress = {};
       progressResult.rows.forEach(row => {
