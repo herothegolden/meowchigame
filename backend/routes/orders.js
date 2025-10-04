@@ -173,7 +173,7 @@ router.post('/create-order', validateUser, async (req, res) => {
         orderId,
         user.id,
         customerName,
-        null, // customer_phone not collected
+        '', // customer_phone not collected (empty string for NOT NULL constraint)
         orderSummary, // Combined product names
         totalQuantity, // Total quantity of all items
         totalAmount,
