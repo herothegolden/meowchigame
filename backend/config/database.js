@@ -46,9 +46,12 @@ export const setupDatabase = async () => {
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'TEXT' }, // CHANGED: VARCHAR(500) -> TEXT for Base64
+      { name: 'avatar_url', type: 'TEXT' },
       { name: 'updated_at', type: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP' },
-      { name: 'vip_level', type: 'INT DEFAULT 0 NOT NULL' }
+      { name: 'vip_level', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'longest_streak', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'last_login_date', type: 'DATE' },
+      { name: 'streak_claimed_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' }
     ];
 
     for (const column of columnsToAdd) {
