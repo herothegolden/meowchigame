@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from '../config/database.js';
 import { validate } from '../utils.js';
 import { validateUser } from '../middleware/auth.js';
+import { getTashkentDate, calculateDateDiff } from '../utils/timezone.js';
 
 const router = express.Router();
 const { BOT_TOKEN, PORT } = process.env;
@@ -36,7 +37,6 @@ router.post('/validate', async (req, res) => {
         [user.id]
       );
       let appUser;
-      let dailyBonus = null;
 
       if (dbUserResult.rows.length === 0) {
         console.log(`👤 Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
@@ -75,26 +75,66 @@ router.post('/validate', async (req, res) => {
           appUser = updateResult.rows[0];
         }
 
-        const lastLogin = appUser.last_login_at;
-        const now = new Date();
-        
-        if (!lastLogin || (now - new Date(lastLogin)) >= 24 * 60 * 60 * 1000) {
-          console.log(`🎁 Daily bonus for user ${user.id}`);
-          
-          const hoursSinceLastLogin = lastLogin ? (now - new Date(lastLogin)) / (1000 * 60 * 60) : null;
-          const streakValid = hoursSinceLastLogin && hoursSinceLastLogin < 48;
-          const newStreak = streakValid ? appUser.daily_streak + 1 : 1;
-          const bonusPoints = 100 * newStreak;
-          const newPoints = appUser.points + bonusPoints;
-          dailyBonus = { points: bonusPoints, streak: newStreak };
-
-          const updateResult = await client.query(
-            'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, daily_streak = $2, points = $3 WHERE telegram_id = $1 RETURNING *',
-            [user.id, newStreak, newPoints]
-          );
-          appUser = updateResult.rows[0];
-        }
+        // Update last_login_at for activity tracking (but don't give automatic points)
+        await client.query(
+          'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE telegram_id = $1',
+          [user.id]
+        );
       }
+
+      // ---- STREAK EVALUATION LOGIC (NO DATABASE MODIFICATION) ----
+      const currentDate = getTashkentDate();
+      const lastLoginDate = appUser.last_login_date;
+      const currentStreak = appUser.daily_streak || 0;
+      const streakClaimedToday = appUser.streak_claimed_today || false;
+
+      // Calculate date difference
+      const diffDays = calculateDateDiff(lastLoginDate, currentDate);
+
+      // Determine eligibility state
+      let canClaim = false;
+      let state = 'CLAIMED';
+      let potentialBonus = 0;
+      let message = '';
+
+      if (lastLoginDate === null) {
+        // First time user
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100;
+        message = 'Claim your first streak!';
+      } else if (diffDays === 0 && streakClaimedToday) {
+        // Same day, already claimed
+        canClaim = false;
+        state = 'CLAIMED';
+        message = 'Streak already claimed today';
+      } else if (diffDays === 0 && !streakClaimedToday) {
+        // Same day, not claimed yet
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100 * (currentStreak + 1);
+        message = `Claim your day ${currentStreak + 1} streak!`;
+      } else if (diffDays === 1) {
+        // Next day (continues streak)
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100 * (currentStreak + 1);
+        message = `Continue your ${currentStreak}-day streak!`;
+      } else if (diffDays > 1) {
+        // Missed days (will reset)
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100;
+        message = 'Streak reset - start fresh!';
+      }
+
+      const streakInfo = {
+        canClaim,
+        state,
+        currentStreak,
+        potentialBonus,
+        message
+      };
 
       const userCount = await client.query('SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL \'1 hour\'');
       const activeCount = Math.max(37, parseInt(userCount.rows[0].count));
@@ -107,7 +147,7 @@ router.post('/validate', async (req, res) => {
       `, [activeCount]);
 
       console.log(`✅ User ${user.id} (@${user.username || 'no-username'}) validated successfully`);
-      res.status(200).json({ ...appUser, dailyBonus });
+      res.status(200).json({ ...appUser, streakInfo });
       
     } finally {
       client.release();
@@ -168,7 +208,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult, rankResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url, vip_level FROM users WHERE telegram_id = $1`, 
+           games_played, high_score, total_play_time, avatar_url, vip_level,
+           last_login_date, streak_claimed_today FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
@@ -193,6 +234,53 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
+      
+      // ---- ADD STREAK INFO (SAME LOGIC AS /validate) ----
+      const currentDate = getTashkentDate();
+      const lastLoginDate = userData.last_login_date;
+      const currentStreak = userData.daily_streak || 0;
+      const streakClaimedToday = userData.streak_claimed_today || false;
+
+      const diffDays = calculateDateDiff(lastLoginDate, currentDate);
+
+      let canClaim = false;
+      let state = 'CLAIMED';
+      let potentialBonus = 0;
+      let message = '';
+
+      if (lastLoginDate === null) {
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100;
+        message = 'Claim your first streak!';
+      } else if (diffDays === 0 && streakClaimedToday) {
+        canClaim = false;
+        state = 'CLAIMED';
+        message = 'Streak already claimed today';
+      } else if (diffDays === 0 && !streakClaimedToday) {
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100 * (currentStreak + 1);
+        message = `Claim your day ${currentStreak + 1} streak!`;
+      } else if (diffDays === 1) {
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100 * (currentStreak + 1);
+        message = `Continue your ${currentStreak}-day streak!`;
+      } else if (diffDays > 1) {
+        canClaim = true;
+        state = 'ELIGIBLE';
+        potentialBonus = 100;
+        message = 'Streak reset - start fresh!';
+      }
+
+      userData.streakInfo = {
+        canClaim,
+        state,
+        currentStreak,
+        potentialBonus,
+        message
+      };
       
       const progress = {};
       progressResult.rows.forEach(row => {
