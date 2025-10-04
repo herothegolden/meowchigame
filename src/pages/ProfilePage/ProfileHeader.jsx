@@ -19,13 +19,27 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
-  const getAvatarUrl = (avatarPath) => {
-    if (!avatarPath) return null;
-    if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
-      return avatarPath;
+  // CHANGED: Handle Base64 avatars directly
+  const getAvatarUrl = (avatarData) => {
+    if (!avatarData) return null;
+    
+    // If it's already a Base64 data URI, return as-is
+    if (avatarData.startsWith('data:image/')) {
+      return avatarData;
     }
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-    return `${BACKEND_URL}${avatarPath}`;
+    
+    // Legacy support: if it's an old file path, construct URL
+    if (avatarData.startsWith('/uploads/')) {
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+      return `${BACKEND_URL}${avatarData}`;
+    }
+    
+    // If it's an external URL
+    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) {
+      return avatarData;
+    }
+    
+    return null;
   };
 
   useEffect(() => {
@@ -55,6 +69,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     fileInputRef.current?.click();
   };
 
+  // CHANGED: Convert to Base64 and send via JSON
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -88,31 +103,24 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
       setUploadProgress(40);
 
-      const formData = new FormData();
-      formData.append('avatar', compressedFile, 'avatar.jpg');
-
-      const initData = tg?.initData;
-      if (!initData) {
-        throw new Error('Telegram data not available');
-      }
-      formData.append('initData', initData);
-
-      setUploadProgress(50);
-
-      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-      const response = await fetch(`${BACKEND_URL}/api/update-avatar`, {
-        method: 'POST',
-        body: formData
+      // CHANGED: Convert to Base64
+      console.log('Converting to Base64...');
+      const reader = new FileReader();
+      
+      const base64Promise = new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(compressedFile);
       });
 
-      setUploadProgress(80);
+      const avatarBase64 = await base64Promise;
+      setUploadProgress(60);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
+      console.log(`Base64 size: ${(avatarBase64.length / 1024).toFixed(2)}KB`);
 
-      const result = await response.json();
+      // CHANGED: Send via apiCall (JSON) instead of FormData
+      const result = await apiCall('/api/update-avatar', { avatarBase64 });
+      
       setUploadProgress(100);
       
       showSuccess(`Avatar uploaded! (${compressedSizeMB}MB)`);
