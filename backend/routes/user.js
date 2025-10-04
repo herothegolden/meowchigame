@@ -1,3 +1,5 @@
+// Path: backend/routes/user.js
+
 import express from 'express';
 import multer from 'multer';
 import { pool } from '../config/database.js';
@@ -127,7 +129,7 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       const [userResult, badgesResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
+           games_played, high_score, total_play_time, avatar_url, vip_level FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
@@ -168,7 +170,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult, rankResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url FROM users WHERE telegram_id = $1`, 
+           games_played, high_score, total_play_time, avatar_url, vip_level FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
