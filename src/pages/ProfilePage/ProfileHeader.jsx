@@ -1,3 +1,5 @@
+// Path: frontend/src/pages/ProfilePage/ProfileHeader.jsx
+
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles } from 'lucide-react';
@@ -134,7 +136,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   const placeholderPower = 0;
   const userRank = stats.rank || '--';
-  const placeholderVIP = 0;
+  const userVipLevel = stats.vip_level || 0;
   const placeholderAlliance = 'None';
   const placeholderAlliancePower = 0;
   const placeholderAllianceRank = '--';
@@ -240,7 +242,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               >
                 <Edit2 className="w-4 h-4" />
               </button>
-              <span className="text-sm text-secondary font-medium">VIP {placeholderVIP}</span>
+              <span className="text-sm text-secondary font-medium">VIP {userVipLevel}</span>
               {isDeveloper && (
                 <button 
                   onClick={() => window.location.href = '/dev-tools'}
