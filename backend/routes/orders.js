@@ -18,21 +18,21 @@ async function sendAdminNotification(orderData) {
       `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${item.unitPrice.toLocaleString()} = ${item.totalPrice.toLocaleString()} UZS`
     ).join('\n');
 
-    const message = `🔔 **NEW ORDER #${orderData.orderId}**
+    const message = `🔔 <b>NEW ORDER #${orderData.orderId}</b>
 
-👤 **Customer:**
-• Name: ${orderData.customerName}
-• Username: @${orderData.username || 'no_username'}
-• Telegram ID: ${orderData.telegramId}
+👤 <b>Customer:</b>
+- Name: ${orderData.customerName}
+- Username: @${orderData.username || 'no_username'}
+- Telegram ID: <code>${orderData.telegramId}</code>
 
-🍪 **Order Items:**
+🪙 <b>Order Items:</b>
 ${itemsList}
 
-💰 **Total Amount:** ${orderData.totalAmount.toLocaleString()} UZS
+💰 <b>Total Amount:</b> ${orderData.totalAmount.toLocaleString()} UZS
 
-📊 **Status:** Pending Payment
+📊 <b>Status:</b> Pending Payment
 
-💡 **Action Required:**
+💡 <b>Action Required:</b>
 Contact customer via Telegram to arrange payment and delivery.`;
 
     const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -41,7 +41,7 @@ Contact customer via Telegram to arrange payment and delivery.`;
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_ID,
         text: message,
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
