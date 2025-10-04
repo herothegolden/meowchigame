@@ -1,11 +1,9 @@
 // Path: backend/routes/user.js
 
 import express from 'express';
-import multer from 'multer';
 import { pool } from '../config/database.js';
 import { validate } from '../utils.js';
 import { validateUser } from '../middleware/auth.js';
-import { uploadAvatar } from '../middleware/upload.js';
 
 const router = express.Router();
 const { BOT_TOKEN, PORT } = process.env;
@@ -266,72 +264,55 @@ router.post('/update-profile', validateUser, async (req, res) => {
   }
 });
 
-// ---- UPDATE AVATAR (FIXED: Store relative path only) ----
-router.post('/update-avatar', (req, res) => {
-  uploadAvatar.single('avatar')(req, res, async (err) => {
-    try {
-      const initData = req.body.initData;
-      
-      if (!initData) {
-        return res.status(400).json({ error: 'initData is required' });
-      }
-
-      if (!validate(initData, BOT_TOKEN)) {
-        return res.status(401).json({ error: 'Invalid authentication' });
-      }
-
-      const params = new URLSearchParams(initData);
-      const userString = params.get('user');
-      if (!userString) {
-        return res.status(400).json({ error: 'Invalid user data' });
-      }
-      const user = JSON.parse(userString);
-
-      let avatarPath;
-
-      if (err) {
-        if (err instanceof multer.MulterError) {
-          if (err.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ error: 'File too large. Maximum size is 2MB.' });
-          }
-        }
-        return res.status(400).json({ error: err.message || 'File upload failed' });
-      }
-
-      if (req.file) {
-        // FIXED: Store relative path only (not full URL)
-        avatarPath = `/uploads/avatars/${req.file.filename}`;
-        console.log(`📸 Avatar uploaded for user ${user.id}: ${avatarPath}`);
-      } else {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      const client = await pool.connect();
-      try {
-        const result = await client.query(
-          'UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $2 RETURNING avatar_url',
-          [avatarPath, user.id]
-        );
-
-        if (result.rowCount === 0) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-
-        res.status(200).json({
-          success: true,
-          avatarUrl: result.rows[0].avatar_url,
-          message: 'Avatar updated successfully'
-        });
-
-      } finally {
-        client.release();
-      }
-
-    } catch (error) {
-      console.error('🚨 Error in /api/update-avatar:', error);
-      res.status(500).json({ error: 'Internal server error' });
+// ---- UPDATE AVATAR (Base64 Version) ----
+router.post('/update-avatar', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { avatarBase64 } = req.body;
+    
+    if (!avatarBase64) {
+      return res.status(400).json({ error: 'Avatar data is required' });
     }
-  });
+
+    // Validate Base64 format
+    if (!avatarBase64.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'Invalid avatar format. Must be Base64 data URI.' });
+    }
+
+    // Check size (limit to ~2MB Base64 string, which is ~1.5MB binary)
+    const base64Length = avatarBase64.length;
+    const sizeInMB = (base64Length * 0.75) / (1024 * 1024); // Base64 is ~33% larger than binary
+    
+    if (sizeInMB > 2) {
+      return res.status(400).json({ error: `Avatar too large (${sizeInMB.toFixed(2)}MB). Maximum is 2MB.` });
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $2 RETURNING avatar_url',
+        [avatarBase64, user.id]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      console.log(`📸 Avatar updated for user ${user.id} (${sizeInMB.toFixed(2)}MB Base64)`);
+
+      res.status(200).json({
+        success: true,
+        avatarUrl: result.rows[0].avatar_url,
+        message: 'Avatar updated successfully'
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/update-avatar:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;
