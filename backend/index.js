@@ -18,9 +18,6 @@ import badgesRoutes from './routes/badges.js';
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 
-// ---- TELEGRAM BOT ----
-import bot from './bot.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -29,11 +26,6 @@ const { PORT = 3000 } = process.env;
 // ---- ENV VALIDATION ----
 if (!process.env.DATABASE_URL || !process.env.BOT_TOKEN) {
   console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
-  process.exit(1);
-}
-
-if (!process.env.ADMIN_API_KEY) {
-  console.error("⛔ Missing ADMIN_API_KEY environment variable (required for order confirmations)");
   process.exit(1);
 }
 
@@ -70,7 +62,7 @@ const startServer = async () => {
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🔍 Health check: http://localhost:${PORT}/health`);
-      console.log(`🛠️ Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
+      console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
       console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
       
       await startGlobalStatsSimulation(PORT);
