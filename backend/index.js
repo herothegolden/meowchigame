@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { setupDatabase } from './config/database.js';
 import { startGlobalStatsSimulation } from './routes/globalStats.js';
+import { scheduleDailyReset } from './cron/dailyReset.js';
 import devToolsRoutes from './devToolsRoutes.js';
 
 // Route imports
@@ -17,6 +18,7 @@ import tasksRoutes from './routes/tasks.js';
 import badgesRoutes from './routes/badges.js';
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
+import streakRoutes from './routes/streak.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,8 +34,8 @@ if (!process.env.DATABASE_URL || !process.env.BOT_TOKEN) {
 // ---- EXPRESS APP ----
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // CHANGED: Increased limit for Base64 avatars
-app.use(express.urlencoded({ limit: '10mb', extended: true })); // Also increase URL-encoded limit
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ---- STATIC FILES ----
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -54,15 +56,19 @@ app.use('/api', tasksRoutes);
 app.use('/api', badgesRoutes);
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
+app.use('/api/streak', streakRoutes);
 
 // ---- START SERVER ----
 const startServer = async () => {
   try {
     await setupDatabase();
     
+    // Schedule daily streak reset cron job
+    scheduleDailyReset();
+    
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🔍 Health check: http://localhost:${PORT}/health`);
+      console.log(`🏥 Health check: http://localhost:${PORT}/health`);
       console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
       console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
       
