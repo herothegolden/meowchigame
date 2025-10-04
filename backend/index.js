@@ -32,7 +32,8 @@ if (!process.env.DATABASE_URL || !process.env.BOT_TOKEN) {
 // ---- EXPRESS APP ----
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // CHANGED: Increased limit for Base64 avatars
+app.use(express.urlencoded({ limit: '10mb', extended: true })); // Also increase URL-encoded limit
 
 // ---- STATIC FILES ----
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
