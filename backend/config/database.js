@@ -46,7 +46,7 @@ export const setupDatabase = async () => {
       { name: 'games_played', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'high_score', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'total_play_time', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'avatar_url', type: 'VARCHAR(500)' },
+      { name: 'avatar_url', type: 'TEXT' }, // CHANGED: VARCHAR(500) -> TEXT for Base64
       { name: 'updated_at', type: 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP' },
       { name: 'vip_level', type: 'INT DEFAULT 0 NOT NULL' }
     ];
@@ -55,6 +55,21 @@ export const setupDatabase = async () => {
       if (!existingColumns.includes(column.name)) {
         console.log(`📊 Adding ${column.name} column to users...`);
         await client.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.type}`);
+      }
+    }
+
+    // ---- MIGRATION: Extend avatar_url to TEXT if it exists as VARCHAR ----
+    if (existingColumns.includes('avatar_url')) {
+      const columnTypeCheck = await client.query(`
+        SELECT data_type 
+        FROM information_schema.columns 
+        WHERE table_name='users' AND column_name='avatar_url'
+      `);
+      
+      if (columnTypeCheck.rows[0]?.data_type === 'character varying') {
+        console.log('🔧 Migrating avatar_url from VARCHAR to TEXT for Base64 storage...');
+        await client.query(`ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT`);
+        console.log('✅ avatar_url column migrated to TEXT');
       }
     }
 
