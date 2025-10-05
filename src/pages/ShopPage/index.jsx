@@ -1,5 +1,5 @@
 // src/pages/ShopPage/index.jsx
-// v6 — Updated Cookie Pack card text only (no structural or logic changes)
+// v7 — Updated Cookie Pack card text + layout only (dividers, alignment, same x-position)
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -166,18 +166,39 @@ const ShopPage = () => {
         />
       </div>
 
-      {/* 🍪 Cookie Pack Card (Game-style, updated text) */}
+      {/* 🍪 Cookie Pack Card (Game-style, updated text + dividers) */}
       <div className="max-w-md mx-auto p-4 rounded-2xl bg-white/5 border border-white/10 shadow-lg space-y-3 mb-10 text-left">
         <h3 className="text-lg font-semibold flex items-center">
-          <span className="text-2xl mr-2">🍪</span>Meowchi 쫀득 куки!
+          <span className="text-2xl mr-2">🍪</span>Купи Meowchi 쫀득 куки!
         </h3>
+
         <p className="text-gray-400 text-sm leading-relaxed">
           Получи бонусы Meowchiverse:
-          <br />⏰ Booster ×3 💣 Bomb ×3 ✨ Multiplier ×3 👑 VIP +1
         </p>
-        <p className="text-gray-300 text-sm">
+
+        {/* Rewards grid with vertical dividers */}
+        <div className="grid grid-cols-3 gap-2 text-sm text-gray-300 font-medium">
+          <div className="col-span-1 flex justify-center items-center">
+            ⏰ Booster ×3
+          </div>
+          <div className="col-span-1 flex justify-center items-center relative">
+            <span
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-6 border-l border-white/40"
+              aria-hidden="true"
+            ></span>
+            💣 Bomb ×3
+          </div>
+          <div className="col-span-3 flex justify-center items-center gap-6 mt-1 relative">
+            <div className="flex items-center gap-1">✨ Multiplier ×3</div>
+            <span className="h-6 border-l border-white/40" aria-hidden="true"></span>
+            <div className="flex items-center gap-1">👑 VIP +1</div>
+          </div>
+        </div>
+
+        <p className="text-gray-300 text-sm mt-2">
           Ешь. Наслаждайся. 쫀득 — вкус и сила в одном.
         </p>
+
         <div className="flex justify-end pt-2">
           <button
             onClick={() => navigate("/order")}
