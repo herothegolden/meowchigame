@@ -176,7 +176,7 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
           >
             Заказать Сейчас
           </motion.button>
@@ -220,7 +220,7 @@ const HomePage = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               onClick={navigateToOrder}
-              className="px-8 py-4 rounded-full font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+              className="px-8 py-4 rounded-xl font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
             >
               Заказать Сейчас
             </motion.button>
@@ -378,7 +378,7 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
           >
             Заказать Сейчас
           </motion.button>
