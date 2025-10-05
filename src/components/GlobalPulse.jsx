@@ -152,54 +152,54 @@ const GlobalPulse = () => {
         🌍 MEOWCHI PULSE
       </h2>
       
-      {/* Stats (UPDATED TEXT) */}
-      <div className="space-y-3">
+      {/* Stats (VERTICAL STACK LAYOUT) */}
+      <div className="space-y-4">
         {/* Just Sold */}
-        <div className="flex items-center justify-center gap-2 text-lg">
-          <span className="text-gray-400">🛒 Только что заказали:</span>
-          <motion.span
-            className="font-bold text-emerald-400"
+        <div className="text-center space-y-1">
+          <div className="text-base text-gray-400">🛒 Только что заказали:</div>
+          <motion.div
+            className="text-xl font-bold text-emerald-400"
             animate={pulsateJustSold ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
             {stats.just_sold} 쫀득 Cookie
-          </motion.span>
+          </motion.div>
         </div>
         
         {/* Total Eaten */}
-        <div className="flex items-center justify-center gap-2 text-lg">
-          <span className="text-gray-400">🍪 Съедено сегодня:</span>
-          <motion.span
-            className="font-bold text-purple-400"
+        <div className="text-center space-y-1">
+          <div className="text-base text-gray-400">🍪 Съедено сегодня:</div>
+          <motion.div
+            className="text-xl font-bold text-purple-400"
             animate={pulsateTotalEaten ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
             {stats.total_eaten_today} Meowchi (и счётчик растёт 👀)
-          </motion.span>
+          </motion.div>
         </div>
         
         {/* Active Players */}
-        <div className="flex items-center justify-center gap-2 text-lg">
-          <span className="text-gray-400">👥 Сейчас на сайте:</span>
-          <motion.span
-            className="font-bold text-blue-400"
+        <div className="text-center space-y-1">
+          <div className="text-base text-gray-400">👥 Сейчас на сайте:</div>
+          <motion.div
+            className="text-xl font-bold text-blue-400"
             animate={pulsateActivePlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
             {stats.active_players} игроков, наслаждаются бoунси-вибами
-          </motion.span>
+          </motion.div>
         </div>
         
         {/* New Players */}
-        <div className="flex items-center justify-center gap-2 text-lg">
-          <span className="text-gray-400">🎉 Новых участников:</span>
-          <motion.span
-            className="font-bold text-pink-400"
+        <div className="text-center space-y-1">
+          <div className="text-base text-gray-400">🎉 Новых участников:</div>
+          <motion.div
+            className="text-xl font-bold text-pink-400"
             animate={pulsateNewPlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
             {stats.new_players_today} — добро пожаловать в текстурный рай!
-          </motion.span>
+          </motion.div>
         </div>
       </div>
     </div>
