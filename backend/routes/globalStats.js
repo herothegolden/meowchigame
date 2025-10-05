@@ -23,7 +23,7 @@ const getTashkentHour = () => {
   return (now.getUTCHours() + 5) % 24;
 };
 
-// ---- GET GLOBAL STATS ----
+// ---- GET GLOBAL STATS (UPDATED: Split just_sold into product + quantity) ----
 router.get('/global-stats', async (req, res) => {
   try {
     const client = await pool.connect();
@@ -57,10 +57,31 @@ router.get('/global-stats', async (req, res) => {
         `);
         
         const updatedStats = await client.query('SELECT * FROM global_stats WHERE id = 1');
-        return res.status(200).json(updatedStats.rows[0]);
+        const resetStats = updatedStats.rows[0];
+        
+        // Parse just_sold for reset stats too
+        const resetMatch = resetStats.just_sold.match(/^(.+?)\s+(\d+)$/);
+        const resetProduct = resetMatch ? resetMatch[1] : resetStats.just_sold;
+        const resetQuantity = resetMatch ? parseInt(resetMatch[2]) : null;
+        
+        return res.status(200).json({
+          ...resetStats,
+          just_sold_product: resetProduct,
+          just_sold_quantity: resetQuantity
+        });
       }
 
-      res.status(200).json(stats);
+      // Parse just_sold into product name and quantity
+      // Expected format: "Viral Matcha 4" or "Viral Classic 2"
+      const productMatch = stats.just_sold.match(/^(.+?)\s+(\d+)$/);
+      const product = productMatch ? productMatch[1] : stats.just_sold;
+      const quantity = productMatch ? parseInt(productMatch[2]) : null;
+
+      res.status(200).json({
+        ...stats,
+        just_sold_product: product,
+        just_sold_quantity: quantity
+      });
 
     } finally {
       client.release();
@@ -136,7 +157,19 @@ router.post('/global-stats/increment', async (req, res) => {
         const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
         console.log(`✅ Order: "${displayProduct}" → Eaten Today: ${result.rows[0].total_eaten_today} (+${randomQuantity})`);
 
-        return res.status(200).json({ success: true, stats: result.rows[0] });
+        // Return with split fields
+        const productMatch = result.rows[0].just_sold.match(/^(.+?)\s+(\d+)$/);
+        const product = productMatch ? productMatch[1] : result.rows[0].just_sold;
+        const quantity = productMatch ? parseInt(productMatch[2]) : null;
+
+        return res.status(200).json({ 
+          success: true, 
+          stats: {
+            ...result.rows[0],
+            just_sold_product: product,
+            just_sold_quantity: quantity
+          }
+        });
         
       } else {
         // new_players_today: keep original +1 logic
@@ -164,7 +197,7 @@ router.post('/global-stats/increment', async (req, res) => {
 
 // ---- GLOBAL STATS SIMULATION ----
 export const startGlobalStatsSimulation = async (PORT) => {
-  console.log('🎮 Starting global stats simulation v5 with Tashkent timezone (UTC+5)...');
+  console.log('🎮 Starting global stats simulation v6 with Tashkent timezone (UTC+5)...');
   console.log(`⏰ Server UTC time: ${new Date().toISOString()}`);
   console.log(`⏰ Tashkent hour: ${(new Date().getUTCHours() + 5) % 24}:${new Date().getUTCMinutes()}`);
   console.log(`🌍 Active hours (Tashkent): ${isActiveHoursTashkent() ? 'YES ✅' : 'NO ❌'}`);
