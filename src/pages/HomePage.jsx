@@ -99,7 +99,6 @@ const HomePage = () => {
   const handleHiFiveClick = (e) => {
     e.stopPropagation();
     
-    // Trigger haptic feedback (Telegram WebApp)
     if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
     }
@@ -108,24 +107,21 @@ const HomePage = () => {
     setHiFiveCount(newCount);
 
     if (newCount < 11) {
-      // Pop random item
       const randomItem = gameItems[Math.floor(Math.random() * gameItems.length)];
       const newItem = {
         id: Date.now(),
         emoji: randomItem,
-        x: Math.random() * 100 - 50, // Random position around center
+        x: Math.random() * 100 - 50,
         y: Math.random() * 50 - 25,
       };
       setPoppedItems(prev => [...prev, newItem]);
       
-      // Remove item after animation
       setTimeout(() => {
         setPoppedItems(prev => prev.filter(item => item.id !== newItem.id));
       }, 1000);
     }
 
     if (newCount === 11) {
-      // Celebratory burst - show all items
       setShowBurst(true);
       
       setTimeout(() => {
@@ -180,9 +176,9 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
+            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
           >
-            Заказать сейчас →
+            Заказать Сейчас
           </motion.button>
         </motion.div>
 
@@ -220,6 +216,16 @@ const HomePage = () => {
         <div className="space-y-8">
           <GlobalPulse />
 
+          <div className="flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              onClick={navigateToOrder}
+              className="px-8 py-4 rounded-full font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+            >
+              Заказать Сейчас
+            </motion.button>
+          </div>
+
           {cards.map((item, i) => (
             <motion.div
               key={i}
@@ -253,7 +259,6 @@ const HomePage = () => {
                         className="w-32 h-32 mx-auto object-contain cursor-pointer"
                       />
                       
-                      {/* Individual popped items */}
                       <AnimatePresence>
                         {poppedItems.map((item) => (
                           <motion.div
@@ -279,7 +284,6 @@ const HomePage = () => {
                         ))}
                       </AnimatePresence>
                       
-                      {/* Celebratory burst */}
                       {showBurst && (
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                           {gameItems.map((imageUrl, idx) => (
@@ -374,9 +378,9 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-full font-semibold text-black bg-gradient-to-r from-emerald-400 to-teal-300 shadow-lg hover:shadow-emerald-500/50"
+            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
           >
-            Order via Telegram
+            Заказать Сейчас
           </motion.button>
         </motion.div>
       </div>
