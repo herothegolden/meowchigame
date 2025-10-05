@@ -319,9 +319,11 @@ const HomePage = () => {
                       {item.content}
                     </p>
                   ) : (
-                    <p className="text-gray-400 whitespace-pre-line">
-                      {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
-                    </p>
+                    <div className="min-h-[96px] flex items-center justify-center">
+                      <p className="text-gray-400 whitespace-pre-line">
+                        {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
+                      </p>
+                    </div>
                   )}
                 </>
               )}
