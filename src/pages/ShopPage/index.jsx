@@ -1,5 +1,5 @@
 // src/pages/ShopPage/index.jsx
-// v4 — ShopPage with Meowchi WebM Header + Text + Order Button (Mechanics Safe)
+// v5 — Visual patch: Cookie Promo now styled as game card (no logic changes)
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +29,6 @@ const ShopPage = () => {
   const [purchasing, setPurchasing] = useState(null);
   const [justPurchased, setJustPurchased] = useState(null);
 
-  // --- Session cache for faster load ---
   useEffect(() => {
     const cached = sessionStorage.getItem("shopData");
     if (cached) {
@@ -150,7 +149,6 @@ const ShopPage = () => {
   if (!data)
     return <ErrorState error="No data available" onRetry={fetchData} />;
 
-  // --- Render ---
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
       <ShopHeader points={data.userPoints} />
@@ -166,26 +164,30 @@ const ShopPage = () => {
           preload="auto"
           className="w-full max-w-md mx-auto rounded-2xl shadow-[0_0_25px_rgba(255,255,255,0.15)] border border-white/10"
         />
-        <div className="mt-4 text-gray-200 space-y-2 max-w-md mx-auto">
-          <p className="text-lg font-semibold">
-            🍪 Купи настоящие Meowchi 쫀득 куки!
-          </p>
-          <p className="text-gray-400 text-sm leading-relaxed">
-            Получи не только сладость, но и силы Meowchiverse:
-            <br />⏰ Time Booster ×3
-            <br />💣 Cookie Bomb ×3
-            <br />✨ Point Multiplier ×3
-          </p>
-          <p className="text-gray-300 text-sm">
-            Ешь. Наслаждайся. Получай бонусы. 쫀득 — вкус и польза в одном.
-          </p>
+      </div>
+
+      {/* 🍪 Cookie Pack Card (Game-style) */}
+      <div className="max-w-md mx-auto p-4 rounded-2xl bg-white/5 border border-white/10 shadow-lg space-y-3 mb-10 text-left">
+        <h3 className="text-lg font-semibold flex items-center">
+          <span className="text-2xl mr-2">🍪</span>Купи настоящие Meowchi 쫀득 куки!
+        </h3>
+        <p className="text-gray-400 text-sm leading-relaxed">
+          Получи не только сладость, но и силы Meowchiverse:
+          <br />⏰ Time Booster ×3
+          <br />💣 Cookie Bomb ×3
+          <br />✨ Point Multiplier ×3
+        </p>
+        <p className="text-gray-300 text-sm">
+          Ешь. Наслаждайся. Получай бонусы. 쫀득 — вкус и польза в одном.
+        </p>
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={() => navigate("/order")}
+            className="bg-yellow-400 hover:bg-yellow-300 text-black font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            Заказать
+          </button>
         </div>
-        <button
-          onClick={() => navigate("/order")}
-          className="px-8 py-3 rounded-xl font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
-        >
-          Заказать Сейчас
-        </button>
       </div>
 
       {/* Shop Categories */}
