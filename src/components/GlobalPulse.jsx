@@ -1,250 +1,437 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import GlobalPulse from "../components/GlobalPulse";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-const POLL_INTERVAL = 15000; // Poll every 15 seconds
+const HomePage = () => {
+  const [openCard, setOpenCard] = useState(null);
+  const [lockedCardTextIndex, setLockedCardTextIndex] = useState(0);
+  const [hiFiveCount, setHiFiveCount] = useState(0);
+  const [poppedItems, setPoppedItems] = useState([]);
+  const [showBurst, setShowBurst] = useState(false);
+  const hiFiveTimerRef = useRef(null);
+  const navigate = useNavigate();
 
-const GlobalPulse = () => {
-  // State for stats from backend
-  const [stats, setStats] = useState({
-    just_sold: 'Viral Classic',
-    total_eaten_today: 0,
-    active_players: 0,
-    new_players_today: 0
-  });
-  
-  // Loading and error states
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Previous stats for detecting changes
-  const prevStatsRef = useRef(stats);
-  
-  // Pulsate animation states
-  const [pulsateJustSold, setPulsateJustSold] = useState(false);
-  const [pulsateTotalEaten, setPulsateTotalEaten] = useState(false);
-  const [pulsateActivePlayers, setPulsateActivePlayers] = useState(false);
-  const [pulsateNewPlayers, setPulsateNewPlayers] = useState(false);
-  
-  // Clock state
-  const [currentTime, setCurrentTime] = useState(new Date());
-  
-  // Trigger pulsate animation
-  const triggerPulsate = (setter) => {
-    setter(true);
-    setTimeout(() => setter(false), 600);
-  };
-  
-  // Fetch stats from backend
-  const fetchStats = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/global-stats`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Detect changes and trigger animations
-      const prevStats = prevStatsRef.current;
-      
-      if (data.just_sold !== prevStats.just_sold) {
-        triggerPulsate(setPulsateJustSold);
-      }
-      
-      if (data.total_eaten_today !== prevStats.total_eaten_today) {
-        triggerPulsate(setPulsateTotalEaten);
-      }
-      
-      if (data.active_players !== prevStats.active_players) {
-        triggerPulsate(setPulsateActivePlayers);
-      }
-      
-      if (data.new_players_today !== prevStats.new_players_today) {
-        triggerPulsate(setPulsateNewPlayers);
-      }
-      
-      // Update stats
-      prevStatsRef.current = data;
-      setStats(data);
-      setLoading(false);
-      setError(null);
-      
-    } catch (err) {
-      console.error('Failed to fetch global stats:', err);
-      setError('Unable to load stats');
-      setLoading(false);
-    }
-  };
-  
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchStats();
-  }, []);
-  
-  // Poll for updates every 15 seconds
+  const gameItems = [
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Marshmellow.webp?updatedAt=1758904443590',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Strawberry.webp?updatedAt=1758904443682',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Matcha.webp?updatedAt=1758904443599',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Milk.webp?updatedAt=1758904443453',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Oreo.webp?updatedAt=1758904443333',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/ColourBomb.webp?updatedAt=1758905830618',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/HoneyJar.webp?updatedAt=1758905928332',
+    'https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/Butter.webp?updatedAt=1758904443280'
+  ];
+
+  const cards = [
+    {
+      num: "3.14",
+      teaser: "3.14 — White Day / Pi Day\nGirls get 42% OFF",
+      content: `3.14 = White Day, Pi Day и День Маршмеллоу
+Наблюдается 14 марта — ровно через месяц после Дня Святого Валентина и через 6 дней после 8 марта.
+Традиция: девушки дарят подарки мужчинам, которые дарили подарки или цветы, или все вместе на 14 Февраля и 8 Марта.
+Бонус Meowchi: Все девушки получают скидку 42%.`,
+    },
+    {
+      num: "11",
+      teaser: "11 — Singles Day & Double Joy\n11% if single / 22% with a friend",
+      hiFiveRequired: true,
+      content: `11 = Двойные лапки, двойная радость
+11/11 — День холостяка: друзья собираются вместе, чтобы праздновать свободу и угощаться вкусняшками.
+Потому что вдвоём всегда вкуснее.
+Бонус Meowchi:
+Если ты один — скидка 11%.
+Купи ещё для друга → скидка 22%.`,
+    },
+    {
+      num: "42",
+      teaser: "42 — The Ultimate Answer Pack\nBuy 42 → Free Gift Box + Boosters",
+      content: `42 = Ответ на жизнь, вселенную и десерт
+Вдохновлено книгой Дугласа Адамса «Автостопом по галактике».
+Для Meowchi 42 — это «формула идеального десерта».
+Легендарный бонус:
+Купи 42 печенья Meowchi → получи:
+🎁 Подарочную коробку Meowchi
+⚡ x2 Time Boosters
+💣 x2 Cookie Bombs
+✨ x2 Double Points
+Доступно только 42 игрокам в месяц.`,
+    },
+    {
+      num: "🔒",
+      locked: true,
+      alternateTexts: [
+        "🔒 Mystery Locked Card\nUnlock at Level 11 or pay $49",
+        "🔒 Mystery Locked Card\nОткроется только самым любопытным."
+      ],
+      content: `«Секретная книга рецептов Meowchi» (эксклюзивная загрузка)
+⚡ x3 Time Boosters
+💣 x3 Cookie Bombs
+✨ x3 Double Points`,
+    },
+  ];
+
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchStats();
-    }, POLL_INTERVAL);
-    
+      setLockedCardTextIndex((prev) => (prev === 0 ? 1 : 0));
+    }, 3000);
+
     return () => clearInterval(interval);
   }, []);
-  
-  // Update clock every second
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    
-    return () => clearInterval(timer);
+    return () => {
+      if (hiFiveTimerRef.current) {
+        clearTimeout(hiFiveTimerRef.current);
+      }
+    };
   }, []);
-  
-  // Format time as HH:MM:SS
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-GB', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit',
-      hour12: false 
-    });
+
+  const navigateToOrder = () => {
+    navigate('/order');
   };
-  
-  // Loading state
-  if (loading) {
-    return (
-      <div className="space-y-4 text-center mb-6">
-        <h2 className="text-2xl font-extrabold tracking-widest text-pink-400">
-          🌍 MEOWCHI PULSE
-        </h2>
-        <div className="text-gray-400 animate-pulse">Loading stats...</div>
-      </div>
-    );
-  }
-  
-  // Error state
-  if (error) {
-    return (
-      <div className="space-y-4 text-center mb-6">
-        <h2 className="text-2xl font-extrabold tracking-widest text-pink-400">
-          🌍 MEOWCHI PULSE
-        </h2>
-        <div className="text-red-400 text-sm">{error}</div>
-      </div>
-    );
-  }
-  
+
+  const handleCardClick = (index, card) => {
+    if (card.locked || card.hiFiveRequired) return;
+    setOpenCard(openCard === index ? null : index);
+  };
+
+  const handleHiFiveClick = (e) => {
+    e.stopPropagation();
+    
+    // Trigger haptic feedback (Telegram WebApp)
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+    
+    const newCount = hiFiveCount + 1;
+    setHiFiveCount(newCount);
+
+    if (newCount < 11) {
+      // Pop random item
+      const randomItem = gameItems[Math.floor(Math.random() * gameItems.length)];
+      const newItem = {
+        id: Date.now(),
+        emoji: randomItem,
+        x: Math.random() * 100 - 50, // Random position around center
+        y: Math.random() * 50 - 25,
+      };
+      setPoppedItems(prev => [...prev, newItem]);
+      
+      // Remove item after animation
+      setTimeout(() => {
+        setPoppedItems(prev => prev.filter(item => item.id !== newItem.id));
+      }, 1000);
+    }
+
+    if (newCount === 11) {
+      // Celebratory burst - show all items
+      setShowBurst(true);
+      
+      setTimeout(() => {
+        setShowBurst(false);
+        setOpenCard(1);
+      }, 800);
+      
+      if (hiFiveTimerRef.current) {
+        clearTimeout(hiFiveTimerRef.current);
+      }
+
+      hiFiveTimerRef.current = setTimeout(() => {
+        setOpenCard(null);
+        setHiFiveCount(0);
+        setPoppedItems([]);
+      }, 11000);
+    }
+  };
+
   return (
-    <div className="space-y-6 mb-6">
-      {/* Digital Clock Section */}
-      <div className="space-y-2 text-center pb-8 border-b border-white/5">
-        <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">
-          🕒 Meowchiverse Time
-        </p>
-        <div className="text-4xl md:text-5xl font-mono font-bold text-pink-400" style={{textShadow: '0 0 20px rgba(249, 168, 212, 0.4)'}}>
-          {formatTime(currentTime)}
-        </div>
-      </div>
-      
-      {/* Section Title */}
-      <h2 className="text-2xl md:text-3xl font-extrabold tracking-widest text-center text-pink-400 uppercase">
-        🌍 MEOWCHI PULSE
-      </h2>
-      
-      {/* Stats - LEFT-RIGHT SPLIT LAYOUT */}
-      <div className="space-y-6 md:space-y-8">
-        {/* Stat 1: Just Ordered (NO NUMBER) */}
+    <div className="min-h-screen bg-black text-white font-sans relative flex flex-col">
+      <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
+
+      <div className="flex-grow max-w-2xl mx-auto px-6 py-12 space-y-12">
         <motion.div
-          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
-          animate={pulsateJustSold ? { x: [0, 4, 0] } : {}}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-center space-y-4"
         >
-          <div className="flex-1 space-y-1">
-            <div className="text-sm md:text-base text-gray-400 font-medium">
-              🛒 Только что заказали
-            </div>
-            <motion.div
-              className="text-base md:text-lg font-bold text-pink-400 leading-snug"
-              animate={pulsateJustSold ? { scale: [1, 1.05, 1], opacity: [1, 0.8, 1] } : {}}
-              transition={{ duration: 0.6 }}
+          <h1 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent drop-shadow-lg leading-tight">
+            Чётко. <br />
+            Стильно. <br />
+            쫀득.
+          </h1>
+          <p className="text-lg text-gray-300 leading-relaxed">
+            Это Meowchi — мраморные маршмеллоу-куки из Ташкента. <br />
+            Вкус, который тянется, текстура, которая попадает в ваши Stories.
+          </p>
+          <p className="text-white font-semibold text-lg">
+            Your new viral obsession.
+          </p>
+
+          <div className="w-full flex justify-center my-4">
+            <img
+              src="https://ik.imagekit.io/59r2kpz8r/Meowchi/1.webp?updatedAt=1758888700434"
+              alt="Meowchi Hero"
+              className="w-64 h-64 object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+            />
+          </div>
+
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            onClick={navigateToOrder}
+            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+          >
+            Заказать Сейчас
+          </motion.button>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true }}
+          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
+        >
+          <h2 className="text-2xl font-bold mb-3">
+            Почему Meowchi особенный?
+          </h2>
+          <p className="text-gray-300 leading-relaxed mb-3">
+            Meowchi — больше, чем печенье. Это{" "}
+            <span className="font-semibold text-white">쫀득-текстура</span>,
+            которая делает каждый укус{" "}
+            <span className="italic">ASMR moment</span>. Мраморный рисунок,
+            эстетика для Instagram, вкус, который объединяет друзей. Сделано в
+            Ташкенте, вдохновлено Korean dessert culture, создано для того,
+            чтобы стать <span className="font-semibold">global trend</span>.
+          </p>
+          <p className="mt-3 text-emerald-300 italic font-medium">
+            Chewy. Marble. Shareable.
+          </p>
+          <div className="w-full flex justify-center mt-4">
+            <img
+              src="https://ik.imagekit.io/59r2kpz8r/Meowchi/2.webp?updatedAt=1758888699837"
+              alt="About Meowchi"
+              className="w-full max-w-md h-auto rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+            />
+          </div>
+        </motion.div>
+
+        <div className="space-y-8">
+          <GlobalPulse />
+
+          {/* NEW YELLOW BUTTON AFTER MEOWCHI PULSE */}
+          <div className="flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              onClick={navigateToOrder}
+              className="px-8 py-4 rounded-full font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
             >
-              {stats.just_sold} 쫀득 Cookie
+              Заказать Сейчас
+            </motion.button>
+          </div>
+
+          {cards.map((item, i) => (
+            <motion.div
+              key={i}
+              whileHover={{ scale: item.locked ? 1.0 : 1.02 }}
+              onClick={() => handleCardClick(i, item)}
+              className={`p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
+                item.locked ? "cursor-not-allowed opacity-80" : item.hiFiveRequired ? "cursor-default" : "cursor-pointer"
+              }`}
+            >
+              <h3 className="text-5xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(0,255,200,0.6)]">
+                {item.num}
+              </h3>
+              
+              {item.hiFiveRequired ? (
+                openCard === i ? (
+                  <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                    {item.content}
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
+                    
+                    <div className="relative inline-block">
+                      <motion.img
+                        src="https://ik.imagekit.io/59r2kpz8r/HiFive%20copy.webp?updatedAt=1759313478537"
+                        alt="HiFive Cat"
+                        onClick={handleHiFiveClick}
+                        whileTap={{ scale: 0.95 }}
+                        animate={{ scale: [1, 1.05, 1] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className="w-32 h-32 mx-auto object-contain cursor-pointer"
+                      />
+                      
+                      {/* Individual popped items */}
+                      <AnimatePresence>
+                        {poppedItems.map((item) => (
+                          <motion.div
+                            key={item.id}
+                            initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                            animate={{ 
+                              scale: [0, 1.5, 1], 
+                              x: item.x, 
+                              y: item.y - 50, 
+                              opacity: [1, 1, 0] 
+                            }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 1 }}
+                            className="absolute top-1/2 left-1/2 pointer-events-none"
+                            style={{ transform: 'translate(-50%, -50%)' }}
+                          >
+                            <img 
+                              src={item.emoji} 
+                              alt="Game Item" 
+                              className="w-12 h-12 object-contain"
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                      
+                      {/* Celebratory burst */}
+                      {showBurst && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                          {gameItems.map((imageUrl, idx) => (
+                            <motion.div
+                              key={`burst-${idx}`}
+                              initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                              animate={{ 
+                                scale: [0, 2, 1.5], 
+                                x: (idx - 3.5) * 50, 
+                                y: -60 - Math.random() * 40,
+                                opacity: [1, 1, 0],
+                                rotate: Math.random() * 360
+                              }}
+                              transition={{ duration: 0.8, delay: idx * 0.08 }}
+                              className="absolute"
+                            >
+                              <img 
+                                src={imageUrl} 
+                                alt="Game Item" 
+                                className="w-16 h-16 object-contain"
+                              />
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              ) : (
+                <>
+                  {openCard === i && !item.locked ? (
+                    <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                      {item.content}
+                    </p>
+                  ) : (
+                    <p className="text-gray-400 whitespace-pre-line">
+                      {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
+                    </p>
+                  )}
+                </>
+              )}
+            </motion.div>
+          ))}
+        </div>
+
+        <div>
+          <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
+          <div className="grid grid-cols-1 gap-6">
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
+            >
+              <img
+                src="https://ik.imagekit.io/59r2kpz8r/Meowchi/3.webp?updatedAt=1758892681518"
+                alt="Viral Strawberry & Oreo"
+                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(255,0,150,0.3)] border border-white/10 mb-4"
+              />
+              <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
+              <p className="text-gray-300 text-sm">
+                розовое настроение, playful, вирусный фаворит.
+              </p>
+            </motion.div>
+
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
+            >
+              <div className="w-full h-40 bg-white/10 rounded-lg mb-4"></div>
+              <h3 className="text-xl font-semibold">
+                Matcha Strawberry & Oreo
+              </h3>
+              <p className="text-gray-300 text-sm">
+                earthy + strawberry twist, эстетика для тех, кто ценит баланс.
+              </p>
             </motion.div>
           </div>
-        </motion.div>
-        
-        {/* Stat 2: Eaten Today */}
+        </div>
+
         <motion.div
-          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
-          animate={pulsateTotalEaten ? { x: [0, 4, 0] } : {}}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true }}
+          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
         >
-          <div className="flex-1 space-y-1">
-            <div className="text-sm md:text-base text-gray-400 font-medium">
-              🍪 Съедено сегодня
-            </div>
-            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
-              Meowchi (и счётчик растёт 👀)
-            </div>
-          </div>
-          <motion.div
-            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
-            animate={pulsateTotalEaten ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
-            transition={{ duration: 0.6 }}
+          <h2 className="text-xl font-bold">Как заказать?</h2>
+          <p className="text-gray-300">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
+          <p className="text-gray-300">❄️ Хранение: 30 дней в холодильнике</p>
+          <p className="text-gray-300">
+            ☎️ Телефон: <a href="tel:+998913141142" className="text-emerald-300 hover:underline">+998 91 314 11 42</a>
+          </p>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            onClick={navigateToOrder}
+            className="px-6 py-3 rounded-full font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
           >
-            {stats.total_eaten_today}
-          </motion.div>
-        </motion.div>
-        
-        {/* Stat 3: Active Players */}
-        <motion.div
-          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
-          animate={pulsateActivePlayers ? { x: [0, 4, 0] } : {}}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="flex-1 space-y-1">
-            <div className="text-sm md:text-base text-gray-400 font-medium">
-              👥 Сейчас на сайте
-            </div>
-            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
-              игроков наслаждаются боунси-вибами
-            </div>
-          </div>
-          <motion.div
-            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
-            animate={pulsateActivePlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
-            transition={{ duration: 0.6 }}
-          >
-            {stats.active_players}
-          </motion.div>
-        </motion.div>
-        
-        {/* Stat 4: New Players */}
-        <motion.div
-          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
-          animate={pulsateNewPlayers ? { x: [0, 4, 0] } : {}}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="flex-1 space-y-1">
-            <div className="text-sm md:text-base text-gray-400 font-medium">
-              🎉 Новых участников
-            </div>
-            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
-              добро пожаловать в текстурный рай!
-            </div>
-          </div>
-          <motion.div
-            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
-            animate={pulsateNewPlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
-            transition={{ duration: 0.6 }}
-          >
-            {stats.new_players_today}
-          </motion.div>
+            Заказать Сейчас
+          </motion.button>
         </motion.div>
       </div>
+
+      <footer className="border-t border-white/10 py-6 mt-8">
+        <div className="flex justify-center space-x-6 text-2xl">
+          <a
+            href="https://t.me/meowchi_lab"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-300 hover:text-emerald-400 transition"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              className="w-7 h-7"
+            >
+              <path d="M9.999 15.5 9.5 20a.5.5 0 0 0 .8.4l3.2-2.4 3.8 2.9c.5.4 1.2.1 1.3-.5L21 4.6c.1-.7-.6-1.2-1.2-.9L2.7 11.4c-.7.3-.7 1.3.1 1.5l5.1 1.5 10.6-6.6-8.5 8.7Z" />
+            </svg>
+          </a>
+
+          <a
+            href="https://www.instagram.com/meowchi.lab/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-pink-400 hover:text-pink-500 transition"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              className="w-7 h-7"
+            >
+              <path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9A5.5 5.5 0 0 1 16.5 22h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2Zm0 2A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20h9a3.5 3.5 0 0 0 3.5-3.5v-9A3.5 3.5 0 0 0 16.5 4h-9Zm4.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm5.25-2.75a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z" />
+            </svg>
+          </a>
+        </div>
+        <p className="text-center text-gray-500 text-sm mt-3">
+          © {new Date().getFullYear()} Meowchi. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 };
 
-export default GlobalPulse;
+export default HomePage;
