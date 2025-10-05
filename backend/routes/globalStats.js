@@ -17,6 +17,12 @@ const isActiveHoursTashkent = () => {
   return tashkentHour >= 10 && tashkentHour < 22;
 };
 
+// Helper function to get current Tashkent hour (for time-based interval calculations)
+const getTashkentHour = () => {
+  const now = new Date();
+  return (now.getUTCHours() + 5) % 24;
+};
+
 // ---- GET GLOBAL STATS ----
 router.get('/global-stats', async (req, res) => {
   try {
@@ -100,7 +106,7 @@ router.get('/global-stats/debug', async (req, res) => {
   }
 });
 
-// ---- INCREMENT STATS ----
+// ---- INCREMENT STATS (UPDATED: LINKED LOGIC) ----
 router.post('/global-stats/increment', async (req, res) => {
   try {
     const { field } = req.body;
@@ -111,22 +117,41 @@ router.post('/global-stats/increment', async (req, res) => {
 
     const client = await pool.connect();
     try {
-      const products = ['Viral Matcha', 'Viral Classic'];
-      const newProduct = products[Math.floor(Math.random() * products.length)];
+      if (field === 'total_eaten_today') {
+        // NEW LOGIC: Generate random number (1-4) and link to eaten count
+        const products = ['Viral Matcha', 'Viral Classic'];
+        const baseProduct = products[Math.floor(Math.random() * products.length)];
+        const randomQuantity = Math.floor(Math.random() * 4) + 1; // 1-4
+        const displayProduct = `${baseProduct} ${randomQuantity}`;
+        
+        // Atomic update: set product name AND increment by the quantity
+        await client.query(`
+          UPDATE global_stats 
+          SET total_eaten_today = total_eaten_today + $1,
+              just_sold = $2,
+              last_updated = CURRENT_TIMESTAMP
+          WHERE id = 1
+        `, [randomQuantity, displayProduct]);
 
-      await client.query(`
-        UPDATE global_stats 
-        SET ${field} = ${field} + 1,
-            just_sold = $1,
-            last_updated = CURRENT_TIMESTAMP
-        WHERE id = 1
-        RETURNING *
-      `, [newProduct]);
+        const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
+        console.log(`✅ Order: "${displayProduct}" → Eaten Today: ${result.rows[0].total_eaten_today} (+${randomQuantity})`);
 
-      const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
-      console.log(`✅ Incremented ${field} to ${result.rows[0][field]}`);
+        return res.status(200).json({ success: true, stats: result.rows[0] });
+        
+      } else {
+        // new_players_today: keep original +1 logic
+        await client.query(`
+          UPDATE global_stats 
+          SET ${field} = ${field} + 1,
+              last_updated = CURRENT_TIMESTAMP
+          WHERE id = 1
+        `);
 
-      res.status(200).json({ success: true, stats: result.rows[0] });
+        const result = await client.query('SELECT * FROM global_stats WHERE id = 1');
+        console.log(`✅ Incremented ${field} to ${result.rows[0][field]}`);
+
+        return res.status(200).json({ success: true, stats: result.rows[0] });
+      }
 
     } finally {
       client.release();
@@ -139,7 +164,7 @@ router.post('/global-stats/increment', async (req, res) => {
 
 // ---- GLOBAL STATS SIMULATION ----
 export const startGlobalStatsSimulation = async (PORT) => {
-  console.log('🎮 Starting global stats simulation v4 with Tashkent timezone (UTC+5)...');
+  console.log('🎮 Starting global stats simulation v5 with Tashkent timezone (UTC+5)...');
   console.log(`⏰ Server UTC time: ${new Date().toISOString()}`);
   console.log(`⏰ Tashkent hour: ${(new Date().getUTCHours() + 5) % 24}:${new Date().getUTCMinutes()}`);
   console.log(`🌍 Active hours (Tashkent): ${isActiveHoursTashkent() ? 'YES ✅' : 'NO ❌'}`);
@@ -172,7 +197,7 @@ export const startGlobalStatsSimulation = async (PORT) => {
     console.log('⏸️ OUTSIDE ACTIVE HOURS - Waiting for 10 AM Tashkent...');
   }
   
-  // Schedule "Eaten" updates
+  // Schedule "Eaten" updates (UPDATED: Time-based intervals)
   const scheduleEatenUpdate = () => {
     const checkAndSchedule = () => {
       if (!isActiveHoursTashkent()) {
@@ -187,8 +212,22 @@ export const startGlobalStatsSimulation = async (PORT) => {
         simulationActive.eaten = true;
       }
 
-      const interval = Math.floor(Math.random() * (1200000 - 60000 + 1)) + 60000;
-      console.log(`⏱️ [EATEN] Next increment in ${Math.round(interval/60000)} minutes`);
+      // NEW: Time-based interval calculation for ~300-350 target by 21:30
+      const tashkentHour = getTashkentHour();
+      let interval;
+      
+      if (tashkentHour >= 10 && tashkentHour < 13) {
+        // Morning (10:00-13:00): Slower pace, 5-10 minutes
+        interval = Math.floor(Math.random() * (600000 - 300000 + 1)) + 300000;
+      } else if (tashkentHour >= 13 && tashkentHour < 21.5) {
+        // Afternoon/Evening (13:00-21:30): Faster pace, 3-7 minutes
+        interval = Math.floor(Math.random() * (420000 - 180000 + 1)) + 180000;
+      } else {
+        // Late evening (21:30-22:00): Very slow, 10-15 minutes
+        interval = Math.floor(Math.random() * (900000 - 600000 + 1)) + 600000;
+      }
+      
+      console.log(`⏱️ [EATEN] Next order in ${Math.round(interval/60000)} minutes`);
       
       setTimeout(async () => {
         try {
@@ -198,7 +237,7 @@ export const startGlobalStatsSimulation = async (PORT) => {
             body: JSON.stringify({ field: 'total_eaten_today' })
           });
           const data = await response.json();
-          console.log('🪙 Simulated Meowchi eaten - Total:', data.stats?.total_eaten_today);
+          console.log(`🍪 Order placed → Total eaten: ${data.stats?.total_eaten_today}`);
         } catch (error) {
           console.error('❌ [EATEN] Increment failed:', error.message);
         }
@@ -209,7 +248,7 @@ export const startGlobalStatsSimulation = async (PORT) => {
     checkAndSchedule();
   };
 
-  // Schedule "New Players" updates
+  // Schedule "New Players" updates (UNCHANGED)
   const scheduleNewPlayerUpdate = () => {
     const checkAndSchedule = () => {
       if (!isActiveHoursTashkent()) {
@@ -253,18 +292,20 @@ export const startGlobalStatsSimulation = async (PORT) => {
     checkAndSchedule();
   };
 
-  // Schedule "Active Players" updates (24/7)
+  // Schedule "Active Players" updates (UPDATED: 11-314 range, 1s-15min interval, 24/7)
   const scheduleActivePlayersUpdate = () => {
     simulationActive.activePlayers = true;
-    console.log('▶️ [ACTIVE] 24/7 simulation started');
+    console.log('▶️ [ACTIVE] 24/7 simulation started (11-314 range, 1s-15min updates)');
     
     const updateAndSchedule = () => {
-      const interval = Math.floor(Math.random() * (900000 - 300000 + 1)) + 300000;
-      console.log(`⏱️ [ACTIVE] Next update in ${Math.round(interval/60000)} minutes`);
+      // NEW: 1 second to 15 minutes
+      const interval = Math.floor(Math.random() * (900000 - 1000 + 1)) + 1000;
+      console.log(`⏱️ [ACTIVE] Next update in ${interval < 60000 ? Math.round(interval/1000) + 's' : Math.round(interval/60000) + 'min'}`);
       
       setTimeout(async () => {
         try {
-          const newCount = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
+          // NEW: Range 11-314 (was 37-150)
+          const newCount = Math.floor(Math.random() * (314 - 11 + 1)) + 11;
           const client = await pool.connect();
           try {
             await client.query(`
@@ -273,7 +314,7 @@ export const startGlobalStatsSimulation = async (PORT) => {
                   last_updated = CURRENT_TIMESTAMP
               WHERE id = 1
             `, [newCount]);
-            console.log(`💥 Updated active players: ${newCount}`);
+            console.log(`👥 Updated active players: ${newCount}`);
           } finally {
             client.release();
           }
