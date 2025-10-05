@@ -5,7 +5,6 @@ import { apiCall } from '../../utils/api';
 import { ErrorState } from '../../components/ErrorState';
 import ProfileHeader from './ProfileHeader';
 import StarterBadges from './StarterBadges';
-import StreakCapsule from './StreakCapsule';
 import { OverviewTab, LeaderboardTab, TasksTab } from './tabs';
 
 const TABS = [
@@ -85,14 +84,6 @@ const ProfilePage = () => {
     <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
       <ProfileHeader stats={data.stats} onUpdate={fetchData} />
       
-      {/* Streak Capsule - Show if streakInfo exists */}
-      {data.stats?.streakInfo && (
-        <StreakCapsule 
-          streakInfo={data.stats.streakInfo} 
-          onClaimed={fetchData} 
-        />
-      )}
-      
       <StarterBadges />
       
       <motion.div 
@@ -121,7 +112,13 @@ const ProfilePage = () => {
       </motion.div>
 
       <div className="min-h-[400px]">
-        {activeTab === 'overview' && <OverviewTab stats={data.stats} />}
+        {activeTab === 'overview' && (
+          <OverviewTab 
+            stats={data.stats} 
+            streakInfo={data.stats?.streakInfo} 
+            onUpdate={fetchData} 
+          />
+        )}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
         {activeTab === 'tasks' && <TasksTab />}
       </div>
