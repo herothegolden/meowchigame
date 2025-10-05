@@ -6,7 +6,8 @@ const POLL_INTERVAL = 15000;
 
 const GlobalPulse = () => {
   const [stats, setStats] = useState({
-    just_sold: 'Viral Classic',
+    just_sold_product: 'Viral Classic',
+    just_sold_quantity: 0,
     total_eaten_today: 0,
     active_players: 0,
     new_players_today: 0
@@ -39,7 +40,9 @@ const GlobalPulse = () => {
       const data = await response.json();
       const prevStats = prevStatsRef.current;
       
-      if (data.just_sold !== prevStats.just_sold) {
+      // Trigger pulsate if product OR quantity changed
+      if (data.just_sold_product !== prevStats.just_sold_product || 
+          data.just_sold_quantity !== prevStats.just_sold_quantity) {
         triggerPulsate(setPulsateJustSold);
       }
       
@@ -122,7 +125,7 @@ const GlobalPulse = () => {
     <div className="space-y-6 mb-6">
       <div className="space-y-2 text-center pb-8 border-b border-white/5">
         <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">
-          🕒 Meowchiverse Time
+          🕐 Meowchiverse Time
         </p>
         <div className="text-4xl md:text-5xl font-mono font-bold text-pink-400" style={{textShadow: '0 0 20px rgba(249, 168, 212, 0.4)'}}>
           {formatTime(currentTime)}
@@ -134,6 +137,7 @@ const GlobalPulse = () => {
       </h2>
       
       <div className="space-y-6 md:space-y-8">
+        {/* UPDATED: Just Ordered - Split layout with product on left, quantity on right */}
         <motion.div
           className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
           animate={pulsateJustSold ? { x: [0, 4, 0] } : {}}
@@ -148,9 +152,16 @@ const GlobalPulse = () => {
               animate={pulsateJustSold ? { scale: [1, 1.05, 1], opacity: [1, 0.8, 1] } : {}}
               transition={{ duration: 0.6 }}
             >
-              {stats.just_sold} 쫀득 Cookie
+              {stats.just_sold_product}
             </motion.div>
           </div>
+          <motion.div
+            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
+            animate={pulsateJustSold ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
+            transition={{ duration: 0.6 }}
+          >
+            {stats.just_sold_quantity}
+          </motion.div>
         </motion.div>
         
         <motion.div
