@@ -1,5 +1,5 @@
 // src/pages/ShopPage/ShopItemCard.jsx
-// v3.1 — Russian Text Polished Layout (No logic or layout changes)
+// v4 — Unified Layout per Screenshot (No Logic Change, Russian Text)
 
 import React from "react";
 import { Star, LoaderCircle, CheckCircle } from "lucide-react";
@@ -16,23 +16,25 @@ const ShopItemCard = ({
   const canAfford = userPoints >= item.price;
 
   return (
-    <div className="bg-nav p-4 rounded-lg flex items-center justify-between border border-gray-700">
-      {/* Left: icon, name, description */}
-      <div className="flex items-start space-x-3">
+    <div className="bg-nav p-4 rounded-lg border border-gray-700 flex flex-col justify-between text-white">
+      {/* Top Icon + Header */}
+      <div className="flex items-start space-x-3 mb-2">
         <div className="text-accent">{icon}</div>
-        <div className="text-left space-y-1">
-          {/* 🛍 Meowchi Shop localized & rearranged for clarity */}
+        <div className="flex flex-col text-left space-y-1">
+          {/* Header + Text Layout */}
           {item.name.includes("Time") && (
             <>
-              <p className="font-bold text-primary text-base">⏰ Тайм-Бусти</p>
-              <p className="text-sm text-secondary">
-                Когда время — просто ингредиент в рецепте счастья.
+              <p className="font-bold text-base flex items-center">
+                ⏰ Тайм-Бусти
               </p>
-              <div className="mt-2 text-secondary text-sm leading-snug">
-                <p className="mb-1">🕒 +10 секунд наслаждения</p>
+              <p className="text-sm font-semibold uppercase">
+                КОГДА ВРЕМЯ — ПРОСТО ИНГРЕДИЕНТ В РЕЦЕПТЕ СЧАСТЬЯ.
+              </p>
+              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+                <p>🕒 +10 СЕКУНД НАСЛАЖДЕНИЯ</p>
                 <p>
-                  Ещё немного, чтобы услышать это идеальное “чпоньк!” —
-                  момент чистых 쫀득-вибов.
+                  ЕЩЁ НЕМНОГО, ЧТОБЫ УСЛЫШАТЬ ЭТО ИДЕАЛЬНОЕ “ЧПОНЬК!” — МОМЕНТ
+                  ЧИСТЫХ 쫀득-ВИБОВ.
                 </p>
               </div>
             </>
@@ -40,15 +42,17 @@ const ShopItemCard = ({
 
           {item.name.includes("Bomb") && (
             <>
-              <p className="font-bold text-primary text-base">💣 쿠키-Бомбы</p>
-              <p className="text-sm text-secondary">
-                Иногда жизнь — это просто сладкий взрыв ожиданий.
+              <p className="font-bold text-base flex items-center">
+                💣 쿠키-Бомбы
               </p>
-              <div className="mt-2 text-secondary text-sm leading-snug">
-                <p className="mb-1">💥 Cookie Bomb</p>
+              <p className="text-sm font-semibold uppercase">
+                ИНОГДА ЖИЗНЬ — ЭТО ПРОСТО СЛАДКИЙ ВЗРЫВ ОЖИДАНИЙ.
+              </p>
+              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+                <p>💥 COOKIE BOMB</p>
                 <p>
-                  Бум! Очищает 3×3 поле и оставляет после себя
-                  вкусный хаос.
+                  БУМ! ОЧИЩАЕТ 3×3 ПОЛЕ И ОСТАВЛЯЕТ ПОСЛЕ СЕБЯ ВКУСНЫЙ ХАОС.  
+                  쫀득-ВИБЫ ГАРАНТИРОВАНЫ.
                 </p>
               </div>
             </>
@@ -56,17 +60,17 @@ const ShopItemCard = ({
 
           {item.name.includes("Points") && (
             <>
-              <p className="font-bold text-primary text-base">
+              <p className="font-bold text-base flex items-center">
                 ✨ Множители Очков
               </p>
-              <p className="text-sm text-secondary">
-                Для тех, кто играет не ради победы, а ради вайба.
+              <p className="text-sm font-semibold uppercase">
+                ДЛЯ ТЕХ, КТО ИГРАЕТ НЕ РАДИ ПОБЕДЫ, А РАДИ ВАЙБА.
               </p>
-              <div className="mt-2 text-secondary text-sm leading-snug">
-                <p className="mb-1">⬆️ Двойные Очки</p>
+              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+                <p>⬆️ ДВОЙНЫЕ ОЧКИ</p>
                 <p>
-                  2× очков. 2× текстуры. 쫀득-вибы на пределе допустимого
-                  счастья.
+                  2× ОЧКОВ. 2× ТЕКСТУРЫ. 쫀득-ВИБЫ НА ПРЕДЕЛЕ ДОПУСТИМОГО
+                  СЧАСТЬЯ.
                 </p>
               </div>
             </>
@@ -74,14 +78,16 @@ const ShopItemCard = ({
         </div>
       </div>
 
-      {/* Right: owned + button */}
-      <div className="flex flex-col items-center justify-center min-w-[7rem] text-right">
+      {/* Footer Row: Owned + Price Button */}
+      <div className="flex items-center justify-between mt-4">
+        {/* Owned count */}
         {item.type === "consumable" && (
-          <p className="text-amber-400 font-bold text-xl mb-2">
+          <p className="text-amber-400 font-bold text-lg">
             У тебя: {ownedQuantity}
           </p>
         )}
 
+        {/* Owned (permanent) or Buy button */}
         {isOwned && item.type === "permanent" ? (
           <div className="flex items-center text-green-400 font-bold py-2 px-4">
             <CheckCircle className="w-5 h-5 mr-2" />
@@ -91,9 +97,9 @@ const ShopItemCard = ({
           <button
             onClick={() => onPurchase(item.id)}
             disabled={!canAfford || isPurchasing}
-            className={`font-bold py-2 px-4 rounded-lg flex items-center justify-center w-28 ${
+            className={`font-bold py-2 px-4 rounded-md flex items-center justify-center ${
               canAfford
-                ? "bg-accent text-background"
+                ? "bg-yellow-400 text-black"
                 : "bg-gray-600 text-gray-400 cursor-not-allowed"
             }`}
           >
