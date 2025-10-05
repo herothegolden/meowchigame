@@ -1,5 +1,5 @@
 // src/pages/ShopPage/ShopItemCard.jsx
-// v4 — Unified Layout per Screenshot (No Logic Change, Russian Text)
+// v4 — Unified Layout with Inter Font (No Logic Change, Russian Text)
 
 import React from "react";
 import { Star, LoaderCircle, CheckCircle } from "lucide-react";
@@ -16,7 +16,13 @@ const ShopItemCard = ({
   const canAfford = userPoints >= item.price;
 
   return (
-    <div className="bg-nav p-4 rounded-lg border border-gray-700 flex flex-col justify-between text-white">
+    <div
+      className="bg-nav p-4 rounded-lg border border-gray-700 flex flex-col justify-between text-white font-inter"
+      style={{
+        fontFamily:
+          "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif",
+      }}
+    >
       {/* Top Icon + Header */}
       <div className="flex items-start space-x-3 mb-2">
         <div className="text-accent">{icon}</div>
@@ -24,13 +30,13 @@ const ShopItemCard = ({
           {/* Header + Text Layout */}
           {item.name.includes("Time") && (
             <>
-              <p className="font-bold text-base flex items-center">
+              <p className="font-semibold text-base flex items-center">
                 ⏰ Тайм-Бусти
               </p>
-              <p className="text-sm font-semibold uppercase">
+              <p className="text-sm font-medium uppercase tracking-wide">
                 КОГДА ВРЕМЯ — ПРОСТО ИНГРЕДИЕНТ В РЕЦЕПТЕ СЧАСТЬЯ.
               </p>
-              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+              <div className="text-sm font-medium leading-snug mt-2 space-y-1">
                 <p>🕒 +10 СЕКУНД НАСЛАЖДЕНИЯ</p>
                 <p>
                   ЕЩЁ НЕМНОГО, ЧТОБЫ УСЛЫШАТЬ ЭТО ИДЕАЛЬНОЕ “ЧПОНЬК!” — МОМЕНТ
@@ -42,13 +48,13 @@ const ShopItemCard = ({
 
           {item.name.includes("Bomb") && (
             <>
-              <p className="font-bold text-base flex items-center">
+              <p className="font-semibold text-base flex items-center">
                 💣 쿠키-Бомбы
               </p>
-              <p className="text-sm font-semibold uppercase">
+              <p className="text-sm font-medium uppercase tracking-wide">
                 ИНОГДА ЖИЗНЬ — ЭТО ПРОСТО СЛАДКИЙ ВЗРЫВ ОЖИДАНИЙ.
               </p>
-              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+              <div className="text-sm font-medium leading-snug mt-2 space-y-1">
                 <p>💥 COOKIE BOMB</p>
                 <p>
                   БУМ! ОЧИЩАЕТ 3×3 ПОЛЕ И ОСТАВЛЯЕТ ПОСЛЕ СЕБЯ ВКУСНЫЙ ХАОС.  
@@ -60,13 +66,13 @@ const ShopItemCard = ({
 
           {item.name.includes("Points") && (
             <>
-              <p className="font-bold text-base flex items-center">
+              <p className="font-semibold text-base flex items-center">
                 ✨ Множители Очков
               </p>
-              <p className="text-sm font-semibold uppercase">
+              <p className="text-sm font-medium uppercase tracking-wide">
                 ДЛЯ ТЕХ, КТО ИГРАЕТ НЕ РАДИ ПОБЕДЫ, А РАДИ ВАЙБА.
               </p>
-              <div className="text-sm font-semibold leading-tight mt-2 space-y-1">
+              <div className="text-sm font-medium leading-snug mt-2 space-y-1">
                 <p>⬆️ ДВОЙНЫЕ ОЧКИ</p>
                 <p>
                   2× ОЧКОВ. 2× ТЕКСТУРЫ. 쫀득-ВИБЫ НА ПРЕДЕЛЕ ДОПУСТИМОГО
@@ -89,7 +95,7 @@ const ShopItemCard = ({
 
         {/* Owned (permanent) or Buy button */}
         {isOwned && item.type === "permanent" ? (
-          <div className="flex items-center text-green-400 font-bold py-2 px-4">
+          <div className="flex items-center text-green-400 font-semibold py-2 px-4">
             <CheckCircle className="w-5 h-5 mr-2" />
             Куплено
           </div>
@@ -97,11 +103,15 @@ const ShopItemCard = ({
           <button
             onClick={() => onPurchase(item.id)}
             disabled={!canAfford || isPurchasing}
-            className={`font-bold py-2 px-4 rounded-md flex items-center justify-center ${
+            className={`font-semibold py-2 px-4 rounded-md flex items-center justify-center ${
               canAfford
                 ? "bg-yellow-400 text-black"
                 : "bg-gray-600 text-gray-400 cursor-not-allowed"
             }`}
+            style={{
+              fontFamily:
+                "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif",
+            }}
           >
             {isPurchasing ? (
               <LoaderCircle className="w-5 h-5 animate-spin" />
