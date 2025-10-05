@@ -228,12 +228,15 @@ const HomePage = () => {
 
           {/* Shopping Image */}
           <div className="flex justify-center my-6">
-            <img
-              src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
-              alt="Shopping"
-              className="w-full max-w-md h-auto rounded-2xl"
-            />
-          </div>
+  <video
+    src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
+    autoPlay
+    loop
+    muted
+    playsInline
+    className="w-full max-w-md h-auto rounded-2xl"
+  />
+</div>
 
           {cards.map((item, i) => (
             <motion.div
