@@ -325,10 +325,10 @@ export const startGlobalStatsSimulation = async (PORT) => {
     checkAndSchedule();
   };
 
-  // Schedule "Active Players" updates (UPDATED: 11-314 range, 1s-15min interval, 24/7)
+  // Schedule "Active Players" updates (UPDATED: 11-80 range, 1s-15min interval, 24/7)
   const scheduleActivePlayersUpdate = () => {
     simulationActive.activePlayers = true;
-    console.log('▶️ [ACTIVE] 24/7 simulation started (11-314 range, 1s-15min updates)');
+    console.log('▶️ [ACTIVE] 24/7 simulation started (11-80 range, 1s-15min updates)');
     
     const updateAndSchedule = () => {
       // NEW: 1 second to 15 minutes
@@ -337,8 +337,8 @@ export const startGlobalStatsSimulation = async (PORT) => {
       
       setTimeout(async () => {
         try {
-          // NEW: Range 11-314 (was 37-150)
-          const newCount = Math.floor(Math.random() * (314 - 11 + 1)) + 11;
+          // NEW: Range 11-80 (adjusted for realism)
+          const newCount = Math.floor(Math.random() * (80 - 11 + 1)) + 11;
           const client = await pool.connect();
           try {
             await client.query(`
