@@ -226,6 +226,15 @@ const HomePage = () => {
             </motion.button>
           </div>
 
+          {/* Shopping Image */}
+          <div className="flex justify-center my-6">
+            <img
+              src="https://ik.imagekit.io/59r2kpz8r/Shopping.webp?updatedAt=1759681210998"
+              alt="Shopping"
+              className="w-full max-w-md h-auto rounded-2xl"
+            />
+          </div>
+
           {cards.map((item, i) => (
             <motion.div
               key={i}
