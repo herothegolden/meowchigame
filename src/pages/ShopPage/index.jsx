@@ -1,154 +1,125 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiCall, showError } from '../../utils/api';
-import { ErrorState } from '../../components/ErrorState';
-import { LoadingState } from '../../components/LoadingState';
-import ShopHeader from './ShopHeader';
-import CategorySection from './CategorySection';
-import { motion } from 'framer-motion';
+// index.jsx v2 — Speed-Optimized, Mechanics-Safe
+import React, { useEffect, useState, useMemo, Suspense } from "react";
+import { motion } from "framer-motion";
+import ShopHeader from "./ShopHeader.jsx";
+const CategorySection = React.lazy(() => import("./CategorySection.jsx"));
+import apiCall from "../../utils/apiCall.js";
 
-const getCategoryFromItem = (item) => {
-  if (item.name.includes('Time') || item.name.includes('time')) return 'time';
-  if (item.name.includes('Bomb') || item.name.includes('bomb')) return 'bomb';
-  if (item.name.includes('Points') || item.name.includes('Double') || item.name.includes('Booster')) return 'multiplier';
-  if (item.name.includes('Badge') || item.type === 'permanent') return 'badge';
-  return 'other';
-};
-
-const ShopPage = () => {
-  const [data, setData] = useState(null);
+export default function ShopPage() {
+  const [shopData, setShopData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [purchasing, setPurchasing] = useState(null);
-  const [justPurchased, setJustPurchased] = useState(null);
 
-  const fetchData = async () => {
+  // --- SESSION CACHE --------------------------------------------------
+  useEffect(() => {
+    const cached = sessionStorage.getItem("shopData");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setShopData(parsed);
+        setLoading(false); // render instantly from cache
+      } catch {
+        sessionStorage.removeItem("shopData");
+      }
+    }
+    fetchData(); // always refresh in background
+  }, []);
+
+  // --- PARALLEL FETCH -------------------------------------------------
+  async function fetchData() {
     try {
       setLoading(true);
-      setError(null);
-      const response = await apiCall('/api/get-profile-complete');
-      const result = response.shopData;
-      
-      const processedItems = (result.items || [])
-        .filter(item => item.id !== 2)
-        .map(item => ({
-          ...item,
-          category: getCategoryFromItem(item)
-        }));
+      const [profileRes, itemsRes] = await Promise.all([
+        apiCall("/api/get-profile-complete"),
+        apiCall("/api/get-shop-items"),
+      ]);
 
-      setData({
-        items: processedItems,
-        userPoints: result.userPoints || 0,
-        inventory: result.inventory || [],
-        ownedBadges: result.ownedBadges || []
-      });
+      const mergedData = {
+        ...profileRes.shopData,
+        items: itemsRes.items || profileRes.shopData.items,
+      };
+
+      setShopData(mergedData);
+      sessionStorage.setItem("shopData", JSON.stringify(mergedData));
     } catch (err) {
-      console.error('Failed to load shop data:', err);
-      setError(err.message);
+      console.error("Shop load error:", err);
+      setError("Failed to load shop data.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const updateInventory = (inventory, itemId) => {
-    const existingItem = inventory.find(inv => inv.item_id === itemId);
-    if (existingItem) {
-      return inventory.map(inv => 
-        inv.item_id === itemId 
-          ? { ...inv, quantity: inv.quantity + 1 }
-          : inv
-      );
-    } else {
-      return [...inventory, { item_id: itemId, quantity: 1 }];
+  // --- MEMOIZED DERIVED DATA ------------------------------------------
+  const categories = useMemo(() => {
+    if (!shopData?.items) return [];
+    const catMap = {};
+    for (const item of shopData.items) {
+      const key =
+        item.category ||
+        (item.name.toLowerCase().includes("boost")
+          ? "Boosters"
+          : item.name.toLowerCase().includes("badge")
+          ? "Badges"
+          : "Other");
+      if (!catMap[key]) catMap[key] = [];
+      catMap[key].push(item);
     }
-  };
+    return Object.entries(catMap);
+  }, [shopData]);
 
-  const updateBadges = (badges, itemId, items) => {
-    const item = items.find(i => i.id === itemId);
-    if (item && item.category === 'badge') {
-      return [...badges, item.name];
-    }
-    return badges;
-  };
-
-  const handlePurchase = useCallback(async (itemId) => {
-    if (purchasing !== null) {
-      console.log('Purchase blocked - another purchase in progress:', purchasing);
-      return;
-    }
-
-    const item = data?.items.find(i => i.id === itemId);
-    if (!item) {
-      console.log('Purchase blocked - item not found:', itemId);
-      return;
-    }
-
-    console.log('Starting purchase for item:', itemId);
-    setPurchasing(itemId);
-
-    try {
-      const result = await apiCall('/api/shop/purchase', { itemId });
-      console.log('Purchase API completed for item:', itemId);
-
-      setData(prev => {
-        // Prevent duplicate increments in strict mode or double-calls
-        if (justPurchased === itemId) return prev;
-
-        return {
-          ...prev,
-          userPoints: result.newPoints,
-          inventory: updateInventory(prev.inventory, itemId),
-          ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items)
-        };
-      });
-
-      setJustPurchased(itemId);
-      setTimeout(() => setJustPurchased(null), 800);
-
-    } catch (err) {
-      console.error('Purchase error for item:', itemId, err);
-      showError(err.message);
-    } finally {
-      setTimeout(() => {
-        console.log('Clearing purchase lock for item:', itemId);
-        setPurchasing(null);
-      }, 1000);
-    }
-  }, [purchasing, justPurchased, data?.items]);
-
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState error={error} onRetry={fetchData} />;
-  if (!data) return <ErrorState error="No data available" onRetry={fetchData} />;
-
-  const itemsByCategory = {
-    time: data.items.filter(item => item.category === 'time'),
-    bomb: data.items.filter(item => item.category === 'bomb'),
-    multiplier: data.items.filter(item => item.category === 'multiplier'),
-    badge: data.items.filter(item => item.category === 'badge')
-  };
-
-  return (
-    <div className="p-4 space-y-6 bg-background text-primary">
-      <ShopHeader points={data.userPoints} />
-
-      {['time', 'bomb', 'multiplier', 'badge'].map(category => (
-        <CategorySection
-          key={category}
-          category={category}
-          items={itemsByCategory[category]}
-          userPoints={data.userPoints}
-          inventory={data.inventory}
-          ownedBadges={data.ownedBadges}
-          onPurchase={handlePurchase}
-          purchasing={purchasing}
-          justPurchased={justPurchased}
+  // --- LOADING PLACEHOLDER (SKELETON) --------------------------------
+  if (loading && !shopData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-gray-300">
+        <motion.div
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ repeat: Infinity, duration: 1.2 }}
+          className="rounded-2xl w-64 h-64 bg-white/5 mb-4"
         />
-      ))}
-    </div>
-  );
-};
+        <p className="text-sm opacity-75">Loading your Meowchi Shop…</p>
+      </div>
+    );
+  }
 
-export default ShopPage;
+  if (error) {
+    return (
+      <div className="text-center mt-20 text-red-400">
+        <p>{error}</p>
+      </div>
+    );
+  }
+
+  if (!shopData) return null;
+
+  // --- PAGE RENDER ----------------------------------------------------
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="min-h-screen pb-24"
+    >
+      <ShopHeader points={shopData.userPoints} />
+
+      <div className="p-4 space-y-10">
+        <Suspense
+          fallback={
+            <div className="animate-pulse text-gray-500 text-center">
+              Preparing items…
+            </div>
+          }
+        >
+          {categories.map(([category, items]) => (
+            <CategorySection
+              key={category}
+              title={category}
+              items={items}
+              ownedBadges={shopData.ownedBadges}
+              inventory={shopData.inventory}
+            />
+          ))}
+        </Suspense>
+      </div>
+    </motion.div>
+  );
+}
