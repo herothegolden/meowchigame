@@ -26,7 +26,7 @@ const GlobalPulse = () => {
   const [pulsateActivePlayers, setPulsateActivePlayers] = useState(false);
   const [pulsateNewPlayers, setPulsateNewPlayers] = useState(false);
   
-  // Clock state (NEW)
+  // Clock state
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Trigger pulsate animation
@@ -92,7 +92,7 @@ const GlobalPulse = () => {
     return () => clearInterval(interval);
   }, []);
   
-  // Update clock every second (NEW)
+  // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -101,7 +101,7 @@ const GlobalPulse = () => {
     return () => clearInterval(timer);
   }, []);
   
-  // Format time as HH:MM:SS (NEW)
+  // Format time as HH:MM:SS
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-GB', { 
       hour: '2-digit', 
@@ -115,7 +115,7 @@ const GlobalPulse = () => {
   if (loading) {
     return (
       <div className="space-y-4 text-center mb-6">
-        <h2 className="text-2xl font-extrabold tracking-widest bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
+        <h2 className="text-2xl font-extrabold tracking-widest text-pink-400">
           🌍 MEOWCHI PULSE
         </h2>
         <div className="text-gray-400 animate-pulse">Loading stats...</div>
@@ -127,7 +127,7 @@ const GlobalPulse = () => {
   if (error) {
     return (
       <div className="space-y-4 text-center mb-6">
-        <h2 className="text-2xl font-extrabold tracking-widest bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
+        <h2 className="text-2xl font-extrabold tracking-widest text-pink-400">
           🌍 MEOWCHI PULSE
         </h2>
         <div className="text-red-400 text-sm">{error}</div>
@@ -136,71 +136,112 @@ const GlobalPulse = () => {
   }
   
   return (
-    <div className="space-y-6 text-center mb-6">
-      {/* Digital Clock Section (NEW) */}
-      <div className="space-y-2">
-        <p className="text-sm text-gray-500 font-medium">
+    <div className="space-y-6 mb-6">
+      {/* Digital Clock Section */}
+      <div className="space-y-2 text-center pb-8 border-b border-white/5">
+        <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">
           🕒 Meowchiverse Time
         </p>
-        <div className="text-3xl font-mono font-bold text-emerald-300">
+        <div className="text-4xl md:text-5xl font-mono font-bold text-pink-400" style={{textShadow: '0 0 20px rgba(249, 168, 212, 0.4)'}}>
           {formatTime(currentTime)}
         </div>
       </div>
       
-      {/* Section Title (UPDATED) */}
-      <h2 className="text-2xl font-extrabold tracking-widest bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
+      {/* Section Title */}
+      <h2 className="text-2xl md:text-3xl font-extrabold tracking-widest text-center text-pink-400 uppercase">
         🌍 MEOWCHI PULSE
       </h2>
       
-      {/* Stats (VERTICAL STACK LAYOUT) */}
-      <div className="space-y-4">
-        {/* Just Sold */}
-        <div className="text-center space-y-1">
-          <div className="text-base text-gray-400">🛒 Только что заказали:</div>
-          <motion.div
-            className="text-xl font-bold text-emerald-400"
-            animate={pulsateJustSold ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
-            transition={{ duration: 0.6 }}
-          >
-            {stats.just_sold} 쫀득 Cookie
-          </motion.div>
-        </div>
+      {/* Stats - LEFT-RIGHT SPLIT LAYOUT */}
+      <div className="space-y-6 md:space-y-8">
+        {/* Stat 1: Just Ordered (NO NUMBER) */}
+        <motion.div
+          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
+          animate={pulsateJustSold ? { x: [0, 4, 0] } : {}}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex-1 space-y-1">
+            <div className="text-sm md:text-base text-gray-400 font-medium">
+              🛒 Только что заказали
+            </div>
+            <motion.div
+              className="text-base md:text-lg font-bold text-pink-400 leading-snug"
+              animate={pulsateJustSold ? { scale: [1, 1.05, 1], opacity: [1, 0.8, 1] } : {}}
+              transition={{ duration: 0.6 }}
+            >
+              {stats.just_sold} 쫀득 Cookie
+            </motion.div>
+          </div>
+        </motion.div>
         
-        {/* Total Eaten */}
-        <div className="text-center space-y-1">
-          <div className="text-base text-gray-400">🍪 Съедено сегодня:</div>
+        {/* Stat 2: Eaten Today */}
+        <motion.div
+          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
+          animate={pulsateTotalEaten ? { x: [0, 4, 0] } : {}}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex-1 space-y-1">
+            <div className="text-sm md:text-base text-gray-400 font-medium">
+              🍪 Съедено сегодня
+            </div>
+            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
+              Meowchi (и счётчик растёт 👀)
+            </div>
+          </div>
           <motion.div
-            className="text-xl font-bold text-purple-400"
+            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
             animate={pulsateTotalEaten ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {stats.total_eaten_today} Meowchi (и счётчик растёт 👀)
+            {stats.total_eaten_today}
           </motion.div>
-        </div>
+        </motion.div>
         
-        {/* Active Players */}
-        <div className="text-center space-y-1">
-          <div className="text-base text-gray-400">👥 Сейчас на сайте:</div>
+        {/* Stat 3: Active Players */}
+        <motion.div
+          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
+          animate={pulsateActivePlayers ? { x: [0, 4, 0] } : {}}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex-1 space-y-1">
+            <div className="text-sm md:text-base text-gray-400 font-medium">
+              👥 Сейчас на сайте
+            </div>
+            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
+              игроков наслаждаются боунси-вибами
+            </div>
+          </div>
           <motion.div
-            className="text-xl font-bold text-blue-400"
+            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
             animate={pulsateActivePlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {stats.active_players} игроков, наслаждаются бoунси-вибами
+            {stats.active_players}
           </motion.div>
-        </div>
+        </motion.div>
         
-        {/* New Players */}
-        <div className="text-center space-y-1">
-          <div className="text-base text-gray-400">🎉 Новых участников:</div>
+        {/* Stat 4: New Players */}
+        <motion.div
+          className="flex items-center justify-between gap-6 p-5 md:p-6 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all"
+          animate={pulsateNewPlayers ? { x: [0, 4, 0] } : {}}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex-1 space-y-1">
+            <div className="text-sm md:text-base text-gray-400 font-medium">
+              🎉 Новых участников
+            </div>
+            <div className="text-base md:text-lg font-bold text-pink-400 leading-snug">
+              добро пожаловать в текстурный рай!
+            </div>
+          </div>
           <motion.div
-            className="text-xl font-bold text-pink-400"
+            className="text-5xl md:text-6xl font-extrabold text-white leading-none min-w-[80px] md:min-w-[100px] text-right"
             animate={pulsateNewPlayers ? { scale: [1, 1.15, 1], opacity: [1, 0.8, 1] } : {}}
             transition={{ duration: 0.6 }}
           >
-            {stats.new_players_today} — добро пожаловать в текстурный рай!
+            {stats.new_players_today}
           </motion.div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
