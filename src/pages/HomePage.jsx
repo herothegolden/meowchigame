@@ -346,7 +346,8 @@ const HomePage = () => {
         <div>
   <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
   <div className="grid grid-cols-1 gap-6">
-    {/* Product 1 — WebM Video */}
+    
+    {/* Product 1 — Strawberry & Oreo */}
     <motion.div
       whileHover={{ scale: 1.03 }}
       className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
@@ -366,17 +367,26 @@ const HomePage = () => {
       </p>
     </motion.div>
 
-    {/* Product 2 — Static Placeholder */}
+    {/* Product 2 — Matcha Strawberry & Oreo */}
     <motion.div
       whileHover={{ scale: 1.03 }}
       className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
     >
-      <div className="w-full h-40 bg-white/10 rounded-lg mb-4"></div>
+      <video
+        src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(0,255,200,0.3)] border border-white/10 mb-4"
+      />
       <h3 className="text-xl font-semibold">Matcha Strawberry & Oreo</h3>
       <p className="text-gray-300 text-sm">
         earthy + strawberry twist, эстетика для тех, кто ценит баланс.
       </p>
     </motion.div>
+
   </div>
 </div>
 
