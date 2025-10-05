@@ -1,5 +1,5 @@
 // src/pages/ShopPage/index.jsx
-// v5 — Visual patch: Cookie Promo now styled as game card (no logic changes)
+// v6 — Updated Cookie Pack card text only (no structural or logic changes)
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -166,19 +166,17 @@ const ShopPage = () => {
         />
       </div>
 
-      {/* 🍪 Cookie Pack Card (Game-style) */}
+      {/* 🍪 Cookie Pack Card (Game-style, updated text) */}
       <div className="max-w-md mx-auto p-4 rounded-2xl bg-white/5 border border-white/10 shadow-lg space-y-3 mb-10 text-left">
         <h3 className="text-lg font-semibold flex items-center">
-          <span className="text-2xl mr-2">🍪</span>Купи настоящие Meowchi 쫀득 куки!
+          <span className="text-2xl mr-2">🍪</span>Meowchi 쫀득 куки!
         </h3>
         <p className="text-gray-400 text-sm leading-relaxed">
-          Получи не только сладость, но и силы Meowchiverse:
-          <br />⏰ Time Booster ×3
-          <br />💣 Cookie Bomb ×3
-          <br />✨ Point Multiplier ×3
+          Получи бонусы Meowchiverse:
+          <br />⏰ Booster ×3 💣 Bomb ×3 ✨ Multiplier ×3 👑 VIP +1
         </p>
         <p className="text-gray-300 text-sm">
-          Ешь. Наслаждайся. Получай бонусы. 쫀득 — вкус и польза в одном.
+          Ешь. Наслаждайся. 쫀득 — вкус и сила в одном.
         </p>
         <div className="flex justify-end pt-2">
           <button
