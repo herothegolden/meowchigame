@@ -229,7 +229,7 @@ const HomePage = () => {
           {/* Shopping Image */}
           <div className="flex justify-center my-6">
             <img
-              src="https://ik.imagekit.io/59r2kpz8r/Shopping.webp?updatedAt=1759681210998"
+              src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
               alt="Shopping"
               className="w-full max-w-md h-auto rounded-2xl"
             />
