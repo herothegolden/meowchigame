@@ -1,5 +1,5 @@
 // src/pages/ShopPage/index.jsx
-// v3 — Collectibles Removed, Mechanics-Safe
+// v4 — No Animations, Mechanics-Safe
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { apiCall, showError } from "../../utils/api";
@@ -7,9 +7,8 @@ import { ErrorState } from "../../components/ErrorState";
 import { LoadingState } from "../../components/LoadingState";
 import ShopHeader from "./ShopHeader";
 import CategorySection from "./CategorySection";
-import { motion } from "framer-motion";
 
-// --- Category detection (badges removed completely) ---
+// --- Category detection (badges removed) ---
 const getCategoryFromItem = (item) => {
   if (item.name.includes("Time") || item.name.includes("time")) return "time";
   if (item.name.includes("Bomb") || item.name.includes("bomb")) return "bomb";
@@ -29,7 +28,7 @@ const ShopPage = () => {
   const [purchasing, setPurchasing] = useState(null);
   const [justPurchased, setJustPurchased] = useState(null);
 
-  // --- Session cache for perceived speed ---
+  // --- Session cache for perceived speed (non-animated) ---
   useEffect(() => {
     const cached = sessionStorage.getItem("shopData");
     if (cached) {
@@ -64,7 +63,7 @@ const ShopPage = () => {
         items: processedItems,
         userPoints: result.userPoints || 0,
         inventory: result.inventory || [],
-        ownedBadges: [], // badges dropped
+        ownedBadges: [],
       };
 
       setData(nextData);
@@ -91,38 +90,23 @@ const ShopPage = () => {
     }
   };
 
-  // --- Badges removed: keep signature but no effect ---
-  const updateBadges = (badges, itemId, items) => {
-    return badges; // no-op, collectibles removed
-  };
+  // --- Badges removed completely ---
+  const updateBadges = (badges) => badges;
 
-  // --- Purchase flow (mechanics identical) ---
+  // --- Purchase flow (no animations after purchase) ---
   const handlePurchase = useCallback(
     async (itemId) => {
-      if (purchasing !== null) {
-        console.log(
-          "Purchase blocked - another purchase in progress:",
-          purchasing
-        );
-        return;
-      }
-
+      if (purchasing !== null) return;
       const item = data?.items.find((i) => i.id === itemId);
-      if (!item) {
-        console.log("Purchase blocked - item not found:", itemId);
-        return;
-      }
+      if (!item) return;
 
-      console.log("Starting purchase for item:", itemId);
       setPurchasing(itemId);
 
       try {
         const result = await apiCall("/api/shop/purchase", { itemId });
-        console.log("Purchase API completed for item:", itemId);
 
         setData((prev) => {
           if (!prev) return prev;
-          if (justPurchased === itemId) return prev;
 
           const updated = {
             ...prev,
@@ -134,23 +118,18 @@ const ShopPage = () => {
           sessionStorage.setItem("shopData", JSON.stringify(updated));
           return updated;
         });
-
-        setJustPurchased(itemId);
-        setTimeout(() => setJustPurchased(null), 800);
       } catch (err) {
         console.error("Purchase error for item:", itemId, err);
         showError(err.message);
       } finally {
-        setTimeout(() => {
-          console.log("Clearing purchase lock for item:", itemId);
-          setPurchasing(null);
-        }, 1000);
+        setPurchasing(null);
+        setJustPurchased(null); // ensure no animation trigger
       }
     },
-    [purchasing, justPurchased, data?.items]
+    [purchasing, data?.items]
   );
 
-  // --- Memoized categories (no badges) ---
+  // --- Memoized categories (badges removed) ---
   const itemsByCategory = useMemo(() => {
     if (!data?.items) {
       return { time: [], bomb: [], multiplier: [] };
@@ -162,16 +141,23 @@ const ShopPage = () => {
     };
   }, [data?.items]);
 
-  if (loading && !data) return <LoadingState />;
+  // --- Static loading/error states (no shimmer or motion) ---
+  if (loading && !data)
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-gray-400">
+        <div className="rounded-2xl w-64 h-64 bg-white/10 mb-4" />
+        <p className="text-sm opacity-75">Loading shop...</p>
+      </div>
+    );
+
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
   if (!data)
     return <ErrorState error="No data available" onRetry={fetchData} />;
 
-  // --- Render (collectibles section gone) ---
+  // --- Render (no animations anywhere) ---
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
       <ShopHeader points={data.userPoints} />
-
       {["time", "bomb", "multiplier"].map((category) => (
         <CategorySection
           key={category}
@@ -179,10 +165,10 @@ const ShopPage = () => {
           items={itemsByCategory[category]}
           userPoints={data.userPoints}
           inventory={data.inventory}
-          ownedBadges={[]} // keep prop to avoid breaking children
+          ownedBadges={[]} // keep prop to avoid child errors
           onPurchase={handlePurchase}
           purchasing={purchasing}
-          justPurchased={justPurchased}
+          justPurchased={null} // ensure no animation trigger
         />
       ))}
     </div>
