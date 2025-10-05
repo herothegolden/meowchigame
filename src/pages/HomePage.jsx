@@ -183,35 +183,39 @@ const HomePage = () => {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
-        >
-          <h2 className="text-2xl font-bold mb-3">
-            Почему Meowchi особенный?
-          </h2>
-          <p className="text-gray-300 leading-relaxed mb-3">
-            Meowchi — больше, чем печенье. Это{" "}
-            <span className="font-semibold text-white">쫀득-текстура</span>,
-            которая делает каждый укус{" "}
-            <span className="italic">ASMR moment</span>. Мраморный рисунок,
-            эстетика для Instagram, вкус, который объединяет друзей. Сделано в
-            Ташкенте, вдохновлено Korean dessert culture, создано для того,
-            чтобы стать <span className="font-semibold">global trend</span>.
-          </p>
-          <p className="mt-3 text-emerald-300 italic font-medium">
-            Chewy. Marble. Shareable.
-          </p>
-          <div className="w-full flex justify-center mt-4">
-            <img
-              src="https://ik.imagekit.io/59r2kpz8r/Meowchi/2.webp?updatedAt=1758888699837"
-              alt="About Meowchi"
-              className="w-full max-w-md h-auto rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
-            />
-          </div>
-        </motion.div>
+  initial={{ opacity: 0, y: 40 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.8 }}
+  viewport={{ once: true }}
+  className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
+>
+  <h2 className="text-2xl font-bold mb-3">Почему Meowchi особенный?</h2>
+  <p className="text-gray-300 leading-relaxed mb-3">
+    Meowchi — больше, чем печенье. Это{" "}
+    <span className="font-semibold text-white">쫀득-текстура</span>,
+    которая делает каждый укус{" "}
+    <span className="italic">ASMR moment</span>. Мраморный рисунок,
+    эстетика для Instagram, вкус, который объединяет друзей. Сделано в
+    Ташкенте, вдохновлено Korean dessert culture, создано для того,
+    чтобы стать <span className="font-semibold">global trend</span>.
+  </p>
+  <p className="mt-3 text-emerald-300 italic font-medium">
+    Chewy. Marble. Shareable.
+  </p>
+
+  {/* Replace image with WebM */}
+  <div className="w-full flex justify-center mt-4">
+    <video
+      src="https://ik.imagekit.io/59r2kpz8r/G4.webm/ik-video.mp4?updatedAt=1759692598673"
+      autoPlay
+      loop
+      muted
+      playsInline
+      preload="auto"
+      className="w-full max-w-md h-auto aspect-[4/5] object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+    />
+  </div>
+</motion.div>
 
         <div className="space-y-8">
           <GlobalPulse />
