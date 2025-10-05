@@ -1,5 +1,5 @@
 // src/pages/ShopPage/ShopItemCard.jsx
-// v5 — Inter Font, Unified with App Style (No Logic Change)
+// v6 — Shorter Russian Text Update (No Logic or Layout Change)
 
 import React from "react";
 import { Star, LoaderCircle, CheckCircle } from "lucide-react";
@@ -23,46 +23,39 @@ const ShopItemCard = ({
         <div className="flex flex-col text-left space-y-2">
           {item.name.includes("Time") && (
             <>
-              <p className="text-base font-semibold flex items-center text-primary">
+              <p className="text-base font-semibold text-primary">
                 ⏰ Тайм-Бусти
               </p>
               <p className="text-sm text-secondary">
-                Когда время — просто ингредиент в рецепте счастья.
+                Когда хочешь ещё чуть-чуть 쫀득-времени.
               </p>
               <p className="text-sm text-secondary">
-                +10 секунд наслаждения. Ещё немного, чтобы услышать это
-                идеальное “чпоньк!” — момент чистых 쫀득-вибов.
+                +10 сек. чистого наслаждения.
               </p>
             </>
           )}
 
           {item.name.includes("Bomb") && (
             <>
-              <p className="text-base font-semibold flex items-center text-primary">
+              <p className="text-base font-semibold text-primary">
                 💣 쿠키-Бомбы
               </p>
               <p className="text-sm text-secondary">
-                Иногда жизнь — это просто сладкий взрыв ожиданий.
+                Бум — сладкий хаос и чистые 쫀득-вибы.
               </p>
-              <p className="text-sm text-secondary">
-                Cookie Bomb очищает 3×3 поле и оставляет за собой вкусный хаос.
-                쫀득-вибы гарантированы.
-              </p>
+              <p className="text-sm text-secondary">Очищает 3×3 поле.</p>
             </>
           )}
 
           {item.name.includes("Points") && (
             <>
-              <p className="text-base font-semibold flex items-center text-primary">
-                ✨ Множители очков
+              <p className="text-base font-semibold text-primary">
+                ✨ Множители Очков
               </p>
               <p className="text-sm text-secondary">
-                Для тех, кто играет не ради победы, а ради вайба.
+                2× очков. 2× текстуры. 쫀득-вибы ×2.
               </p>
-              <p className="text-sm text-secondary">
-                Двойные очки: 2× текстуры, 2× удовольствие. 쫀득-вибы на пределе
-                допустимого счастья.
-              </p>
+              <p className="text-sm text-secondary">Игра ради вайба.</p>
             </>
           )}
         </div>
