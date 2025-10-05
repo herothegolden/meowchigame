@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Flame, Trophy, Package, Award, Calendar } from 'lucide-react';
-import { claimStreak, showSuccess, showError } from '../../utils/api';
+import { claimStreak, showSuccess, showError } from '../../../utils/api';
 
 const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const [isClaiming, setIsClaiming] = useState(false);
