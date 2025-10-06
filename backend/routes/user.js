@@ -75,7 +75,7 @@ router.post('/validate', async (req, res) => {
           appUser = updateResult.rows[0];
         }
 
-        // Update last_login_at for activity tracking (but don't give automatic points)
+        // Update last_login_at for activity tracking
         await client.query(
           'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE telegram_id = $1',
           [user.id]
@@ -87,62 +87,49 @@ router.post('/validate', async (req, res) => {
       const lastLoginDate = appUser.last_login_date;
       const currentStreak = appUser.daily_streak || 0;
       const streakClaimedToday = appUser.streak_claimed_today || false;
-
-      // Calculate date difference
       const diffDays = calculateDateDiff(lastLoginDate, currentDate);
 
-      // Determine eligibility state
       let canClaim = false;
       let state = 'CLAIMED';
       let potentialBonus = 0;
       let message = '';
 
       if (lastLoginDate === null) {
-        // First time user
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100;
         message = 'Claim your first streak!';
       } else if (diffDays === 0 && streakClaimedToday) {
-        // Same day, already claimed
         canClaim = false;
         state = 'CLAIMED';
         message = 'Streak already claimed today';
       } else if (diffDays === 0 && !streakClaimedToday) {
-        // Same day, not claimed yet
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100 * (currentStreak + 1);
         message = `Claim your day ${currentStreak + 1} streak!`;
       } else if (diffDays === 1) {
-        // Next day (continues streak)
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100 * (currentStreak + 1);
         message = `Continue your ${currentStreak}-day streak!`;
       } else if (diffDays > 1) {
-        // Missed days (will reset)
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100;
         message = 'Streak reset - start fresh!';
       }
 
-      const streakInfo = {
-        canClaim,
-        state,
-        currentStreak,
-        potentialBonus,
-        message
-      };
+      const streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      const userCount = await client.query('SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL \'1 hour\'');
+      const userCount = await client.query(
+        'SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL \'1 hour\''
+      );
       const activeCount = Math.max(37, parseInt(userCount.rows[0].count));
       
       await client.query(`
         UPDATE global_stats 
-        SET active_players = $1,
-            last_updated = CURRENT_TIMESTAMP
+        SET active_players = $1, last_updated = CURRENT_TIMESTAMP
         WHERE id = 1
       `, [activeCount]);
 
@@ -167,7 +154,8 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       const [userResult, badgesResult] = await Promise.all([
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url, vip_level FROM users WHERE telegram_id = $1`, 
+           games_played, high_score, total_play_time, avatar_url, vip_level 
+           FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
@@ -179,17 +167,7 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
-      
-      const avgResult = await client.query(
-        'SELECT AVG(score) as avg_score FROM game_sessions WHERE user_id = $1',
-        [user.id]
-      );
-      userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
-      
-      userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
-      
       res.status(200).json(userData);
-
     } finally {
       client.release();
     }
@@ -409,6 +387,56 @@ router.post('/update-avatar', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/update-avatar:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- UNLOCK BADGE (NEW) ----
+router.post('/unlock-badge', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { badgeName } = req.body;
+
+    if (!badgeName) {
+      return res.status(400).json({ error: 'Badge name is required' });
+    }
+
+    const client = await pool.connect();
+    try {
+      // Check existing badge
+      const exists = await client.query(
+        'SELECT 1 FROM user_badges WHERE user_id = $1 AND badge_name = $2',
+        [user.id, badgeName]
+      );
+      if (exists.rowCount > 0) {
+        return res.status(200).json({ success: true, message: 'Badge already unlocked' });
+      }
+
+      // Insert badge
+      await client.query(
+        `INSERT INTO user_badges (user_id, badge_name)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id, badge_name) DO NOTHING`,
+        [user.id, badgeName]
+      );
+
+      // Reward +100 points
+      await client.query(
+        `UPDATE users SET points = points + 100 WHERE telegram_id = $1`,
+        [user.id]
+      );
+
+      console.log(`🏅 Badge unlocked for user ${user.id}: ${badgeName}`);
+      res.status(200).json({
+        success: true,
+        message: `Unlocked badge: ${badgeName}`,
+        pointsAwarded: 100
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/unlock-badge:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
