@@ -1,3 +1,6 @@
+// Path: backend/index.js
+// v2 — badgesRoutes import and mount removed only
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -15,7 +18,7 @@ import shopRoutes from './routes/shop.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import friendsRoutes from './routes/friends.js';
 import tasksRoutes from './routes/tasks.js';
-import badgesRoutes from './routes/badges.js';
+// import badgesRoutes from './routes/badges.js'; // 🔸 Removed safely
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
@@ -53,7 +56,7 @@ app.use('/api', shopRoutes);
 app.use('/api', leaderboardRoutes);
 app.use('/api', friendsRoutes);
 app.use('/api', tasksRoutes);
-app.use('/api', badgesRoutes);
+// app.use('/api', badgesRoutes); // 🔸 Removed safely
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
