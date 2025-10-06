@@ -49,7 +49,7 @@ const OverviewTab = () => {
 
   return (
     <motion.div
-      className="grid grid-cols-2 gap-x-3 gap-y-4 relative"
+      className="grid grid-cols-2 gap-x-3 gap-y-3 relative"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.2 }}
@@ -62,24 +62,17 @@ const OverviewTab = () => {
             boxShadow: "0 0 10px rgba(255,255,255,0.08)",
           }}
           transition={{ type: "spring", stiffness: 220, damping: 14 }}
-          className={`p-4 rounded-lg border border-white/10 shadow-md backdrop-blur-sm bg-gradient-to-br ${stat.gradient} flex flex-col justify-center min-h-[120px]`}
+          className={`p-4 rounded-lg border border-white/10 shadow-md backdrop-blur-sm bg-gradient-to-br ${stat.gradient} flex flex-col justify-center items-center min-h-[120px] text-center`}
         >
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[15px] font-semibold text-white">
-                {stat.emoji}
-              </span>
-              <span className="text-[15px] font-semibold text-white">
-                {stat.title}
-              </span>
-            </div>
-            <p className="text-[19px] font-bold text-white mb-0.5">
-              {stat.value}
-            </p>
-            <p className="text-[13px] text-[#AEB4BE] leading-snug">
-              {stat.subtitle}
-            </p>
-          </div>
+          <p className="text-[15px] font-semibold text-white mb-1">
+            {stat.emoji} {stat.title}
+          </p>
+          <p className="text-[19px] font-bold text-white mb-0.5">
+            {stat.value}
+          </p>
+          <p className="text-[13px] text-[#AEB4BE] leading-snug">
+            {stat.subtitle}
+          </p>
         </motion.div>
       ))}
     </motion.div>
