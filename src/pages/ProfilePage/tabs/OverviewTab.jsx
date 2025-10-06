@@ -40,7 +40,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     },
     {
       title: "Социальная энергия",
-      value: `${dailyStreak} дн${dailyStreak === 1 ? "ь" : "я"} подряд`,
+      value: `${dailyStreak} ${dailyStreak === 1 ? "ь" : "я"} `,
       subtitle:
         dailyStreak > 0
           ? "Ты говорил с людьми. Герой дня."
@@ -57,8 +57,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       title: "Счётчик мяу",
       value:
         meowTaps >= 314
-          ? "314 / 314"
-          : `${meowTaps.toLocaleString()} / 314`,
+          ? "314"
+          : `${meowTaps.toLocaleString()}`,
       subtitle:
         meowTaps >= 314
           ? "Совершенство достигнуто — мир в равновесии."
