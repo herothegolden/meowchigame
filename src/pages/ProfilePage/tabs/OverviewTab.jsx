@@ -40,7 +40,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     },
     {
       title: "Социальная энергия",
-      value: `${dailyStreak} ${dailyStreak === 1 ? "ь" : "я"} `,
+      value: `${dailyStreak} ${dailyStreak === 1 ?} `,
       subtitle:
         dailyStreak > 0
           ? "Ты говорил с людьми. Герой дня."
