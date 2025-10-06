@@ -1,52 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { User, Trophy, CheckSquare } from 'lucide-react';
-import { apiCall } from '../../utils/api';
-import { ErrorState } from '../../components/ErrorState';
-import ProfileHeader from './ProfileHeader';
-import StarterBadges from './StarterBadges';
-import { OverviewTab, LeaderboardTab, TasksTab } from './tabs';
+// Path: frontend/src/pages/ProfilePage/index.jsx
+// v4 — passes stats + ownedBadges + onUpdate props to StarterBadges
 
-const TABS = [
-  { id: 'overview', label: 'Overview', icon: User },
-  { id: 'leaderboard', label: 'Board', icon: Trophy },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare }
-];
+import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
+import { motion } from "framer-motion";
+import { apiCall, showError } from "../../utils/api";
+import ProfileHeader from "./ProfileHeader";
+import BottomNav from "../../components/BottomNav";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { LoaderCircle } from "lucide-react";
 
-// Loading skeleton component
-const ProfileSkeleton = () => (
-  <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
-    {/* Header skeleton */}
-    <div className="bg-nav p-6 rounded-lg border border-gray-700 animate-pulse">
-      <div className="flex items-start space-x-4">
-        <div className="w-20 h-20 rounded-full bg-gray-700"></div>
-        <div className="flex-1 space-y-3">
-          <div className="h-6 bg-gray-700 rounded w-1/3"></div>
-          <div className="h-4 bg-gray-700 rounded w-1/2"></div>
-          <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-        </div>
-      </div>
-    </div>
-    
-    {/* Tabs skeleton */}
-    <div className="flex bg-nav rounded-lg border border-gray-700 p-1 animate-pulse">
-      {[1, 2, 3].map(i => (
-        <div key={i} className="flex-1 h-16 bg-gray-700 rounded-md mx-1"></div>
-      ))}
-    </div>
-    
-    {/* Content skeleton */}
-    <div className="grid grid-cols-2 gap-4 animate-pulse">
-      {[1, 2, 3, 4, 5, 6].map(i => (
-        <div key={i} className="bg-nav p-4 rounded-lg border border-gray-700 h-24"></div>
-      ))}
-    </div>
-  </div>
-);
+// Lazy-loaded tabs for performance
+const OverviewTab = lazy(() => import("./OverviewTab"));
+const BadgesTab = lazy(() => import("./BadgesTab"));
+const LeaderboardTab = lazy(() => import("./LeaderboardTab"));
+const TasksTab = lazy(() => import("./TasksTab"));
+const StarterBadges = lazy(() => import("./StarterBadges"));
 
 const ProfilePage = () => {
   const [data, setData] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -54,18 +26,10 @@ const ProfilePage = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Single API call for all data
-      const profileData = await apiCall('/api/get-profile-complete');
-      
-      setData({
-        stats: profileData.stats,
-        inventory: profileData.shopData.inventory || [],
-        ownedBadges: profileData.shopData.ownedBadges || [],
-        badgeProgress: profileData.badgeProgress || { progress: {} }
-      });
+      const result = await apiCall("/api/get-profile-complete");
+      setData(result);
     } catch (err) {
-      console.error('Failed to load profile data:', err);
+      console.error("❌ Failed to load profile:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -76,52 +40,137 @@ const ProfilePage = () => {
     fetchData();
   }, [fetchData]);
 
-  if (loading) return <ProfileSkeleton />;
-  if (error) return <ErrorState error={error} onRetry={fetchData} />;
-  if (!data) return <ErrorState error="No data available" onRetry={fetchData} />;
+  if (loading)
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-secondary">
+        <LoaderCircle className="w-6 h-6 animate-spin mb-2" />
+        <p className="text-sm">Loading profile...</p>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-center">
+        <p className="text-red-400 font-semibold mb-2">Error loading profile</p>
+        <p className="text-secondary text-sm mb-4">{error}</p>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 rounded-lg bg-accent text-background hover:bg-accent/90 transition"
+        >
+          Retry
+        </button>
+      </div>
+    );
+
+  if (!data)
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-gray-400">
+        No profile data available
+      </div>
+    );
+
+  const stats = data.stats || {};
+  const ownedBadges = data.stats?.ownedBadges || [];
+  const streakInfo = data.stats?.streakInfo || {};
 
   return (
-    <div className="p-4 space-y-6 bg-background text-primary min-h-screen">
-      <ProfileHeader stats={data.stats} onUpdate={fetchData} />
-      
-      <StarterBadges />
-      
-      <motion.div 
-        className="flex bg-nav rounded-lg border border-gray-700 p-1 overflow-hidden"
-        initial={{ opacity: 0, scale: 0.95 }} 
-        animate={{ opacity: 1, scale: 1 }} 
-        transition={{ delay: 0.1 }}
+    <div className="p-4 space-y-6 pb-24 bg-background text-primary">
+      {/* Profile Header */}
+      <ProfileHeader stats={stats} onUpdate={fetchData} />
+
+      {/* Starter Badges — Fixed props */}
+      <Suspense
+        fallback={
+          <div className="text-center py-6 text-secondary text-sm">
+            Loading badges...
+          </div>
+        }
       >
-        {TABS.map((tab) => {
-          const TabIcon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-md transition-all duration-200 ${
-                activeTab === tab.id 
-                  ? 'bg-accent text-background' 
-                  : 'text-secondary hover:text-primary hover:bg-background/20'
-              }`}
+        <StarterBadges
+          stats={stats}
+          ownedBadges={ownedBadges}
+          onUpdate={fetchData}
+        />
+      </Suspense>
+
+      {/* Tabs Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="rounded-2xl bg-nav/30 backdrop-blur-lg border border-white/10 shadow-lg"
+      >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-4 rounded-t-2xl border-b border-white/10">
+            <TabsTrigger value="overview">Обзор</TabsTrigger>
+            <TabsTrigger value="badges">Бейджи</TabsTrigger>
+            <TabsTrigger value="leaderboard">Рейтинг</TabsTrigger>
+            <TabsTrigger value="tasks">Задания</TabsTrigger>
+          </TabsList>
+
+          {/* Overview */}
+          <TabsContent value="overview">
+            <Suspense
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading overview...
+                </div>
+              }
             >
-              <TabIcon className="w-4 h-4 mb-1" />
-              <span className="text-xs font-medium truncate">{tab.label}</span>
-            </button>
-          );
-        })}
+              <OverviewTab
+                stats={stats}
+                streakInfo={streakInfo}
+                onUpdate={fetchData}
+              />
+            </Suspense>
+          </TabsContent>
+
+          {/* Badges */}
+          <TabsContent value="badges">
+            <Suspense
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading badges...
+                </div>
+              }
+            >
+              <BadgesTab
+                ownedBadges={ownedBadges}
+                badgeProgress={data.badgeProgress}
+              />
+            </Suspense>
+          </TabsContent>
+
+          {/* Leaderboard */}
+          <TabsContent value="leaderboard">
+            <Suspense
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading leaderboard...
+                </div>
+              }
+            >
+              <LeaderboardTab />
+            </Suspense>
+          </TabsContent>
+
+          {/* Tasks */}
+          <TabsContent value="tasks">
+            <Suspense
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading tasks...
+                </div>
+              }
+            >
+              <TasksTab />
+            </Suspense>
+          </TabsContent>
+        </Tabs>
       </motion.div>
 
-      <div className="min-h-[400px]">
-        {activeTab === 'overview' && (
-          <OverviewTab 
-            stats={data.stats} 
-            streakInfo={data.stats?.streakInfo} 
-            onUpdate={fetchData} 
-          />
-        )}
-        {activeTab === 'leaderboard' && <LeaderboardTab />}
-        {activeTab === 'tasks' && <TasksTab />}
-      </div>
+      {/* Bottom Navigation */}
+      <BottomNav />
     </div>
   );
 };
