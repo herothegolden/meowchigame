@@ -1,10 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/components/StarterBadges.jsx
-// v3 — Adds sparkle animation on 🎉 tap + smooth vanish after claim
+// v4 — Fixed import path for api utils (build error)
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock } from 'lucide-react';
-import { apiCall, showSuccess, showError } from '../../../utils/api';
+import { apiCall, showSuccess, showError } from '../../utils/api'; // ✅ fixed path
 
 const STARTER_BADGES = [
   { id: 1, name: 'The First Paw', icon: '🐾', requirement: 'First login', condition: (stats) => stats?.games_played >= 0 },
