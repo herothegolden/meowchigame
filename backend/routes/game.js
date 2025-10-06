@@ -14,7 +14,7 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
       condition: score >= 5000
     },
     {
-      name: 'Speed Demon Badge', 
+      name: 'Speed Demon Badge',
       current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
       target: 100,
       condition: false
@@ -31,7 +31,7 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
     await client.query(
       `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, badge_name) 
+       ON CONFLICT (user_id, badge_name)
        DO UPDATE SET current_progress = GREATEST(badge_progress.current_progress, $3), updated_at = CURRENT_TIMESTAMP`,
       [userId, badge.name, badge.current, badge.target]
     );
@@ -55,8 +55,8 @@ router.post('/update-score', validateUser, async (req, res) => {
     }
 
     const baseScore = Math.floor(Number(score) || 0);
-
     const client = await pool.connect();
+
     try {
       await client.query('BEGIN');
 
@@ -64,7 +64,6 @@ router.post('/update-score', validateUser, async (req, res) => {
         'SELECT points, point_booster_expires_at, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
       );
-      
       if (userResult.rowCount === 0) throw new Error('User not found');
 
       const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
@@ -77,19 +76,19 @@ router.post('/update-score', validateUser, async (req, res) => {
       console.log("Saving score:", finalScore);
 
       const sessionResult = await client.query(
-        `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier) 
+        `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0]
       );
-      
+
       const sessionId = sessionResult.rows[0].id;
 
       const updateResult = await client.query(
-        `UPDATE users SET 
-         points = $1, 
+        `UPDATE users SET
+         points = $1,
          point_booster_active = FALSE,
          point_booster_expires_at = NULL,
-         high_score = $3, 
+         high_score = $3,
          games_played = $4,
          total_play_time = total_play_time + $5
          WHERE telegram_id = $2 RETURNING points`,
@@ -97,16 +96,15 @@ router.post('/update-score', validateUser, async (req, res) => {
       );
 
       await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
-
       await client.query('COMMIT');
 
-      return res.status(200).json({ 
-        new_points: updateResult.rows[0].points, 
+      return res.status(200).json({
+        new_points: updateResult.rows[0].points,
         score_awarded: finalScore,
         session_id: sessionId
       });
 
-    } catch(e){
+    } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
@@ -123,11 +121,10 @@ router.post('/use-time-booster', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { itemId, timeBonus } = req.body;
-    
+
     if (!itemId || itemId !== 1) {
       return res.status(400).json({ error: 'Only Extra Time +10s can be used this way.' });
     }
-    
     if (!timeBonus || timeBonus !== 10) {
       return res.status(400).json({ error: 'Invalid time bonus value.' });
     }
@@ -140,14 +137,12 @@ router.post('/use-time-booster', validateUser, async (req, res) => {
         'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
         [user.id, itemId]
       );
-      
       if (inventoryResult.rowCount === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: 'You do not own this item.' });
       }
 
       const quantity = inventoryResult.rows[0].quantity;
-
       if (quantity > 1) {
         await client.query(
           'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
@@ -161,16 +156,16 @@ router.post('/use-time-booster', validateUser, async (req, res) => {
       }
 
       await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Extra Time +10s')`,
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Extra Time +10s')`,
         [user.id, itemId]
       );
-      
+
       await client.query('COMMIT');
-      
       console.log(`⏰ Extra Time +10s used by user ${user.id}`);
-      
-      res.status(200).json({ 
-        success: true, 
+
+      res.status(200).json({
+        success: true,
         message: 'Extra Time +10s used successfully!',
         timeBonus: timeBonus
       });
@@ -192,7 +187,6 @@ router.post('/activate-item', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { itemId } = req.body;
-    
     if (!itemId || itemId !== 4) {
       return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
     }
@@ -200,19 +194,17 @@ router.post('/activate-item', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
       const inventoryResult = await client.query(
         'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
         [user.id, itemId]
       );
-      
+
       if (inventoryResult.rowCount === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: 'You do not own this item.' });
       }
 
       const quantity = inventoryResult.rows[0].quantity;
-
       if (quantity > 1) {
         await client.query(
           'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
@@ -225,23 +217,23 @@ router.post('/activate-item', validateUser, async (req, res) => {
         );
       }
 
-      const expirationTime = new Date(Date.now() + 20000); // 20 seconds from now
+      const expirationTime = new Date(Date.now() + 20000);
       await client.query(
-        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2', 
+        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2',
         [expirationTime, user.id]
       );
-      
+
       await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Double Points')`,
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Double Points')`,
         [user.id, itemId]
       );
-      
+
       await client.query('COMMIT');
-      
       console.log(`⚡ Point booster activated for user ${user.id} (expires in 20s)`);
-      
-      res.status(200).json({ 
-        success: true, 
+
+      res.status(200).json({
+        success: true,
         message: 'Point Booster activated for 20 seconds!',
         expiresAt: expirationTime.toISOString()
       });
@@ -263,7 +255,6 @@ router.post('/use-bomb', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { itemId } = req.body;
-    
     if (!itemId || itemId !== 3) {
       return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
     }
@@ -271,19 +262,17 @@ router.post('/use-bomb', validateUser, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
       const inventoryResult = await client.query(
         'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
         [user.id, itemId]
       );
-      
+
       if (inventoryResult.rowCount === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: 'You do not own this item.' });
       }
 
       const quantity = inventoryResult.rows[0].quantity;
-
       if (quantity > 1) {
         await client.query(
           'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
@@ -297,16 +286,16 @@ router.post('/use-bomb', validateUser, async (req, res) => {
       }
 
       await client.query(
-        `INSERT INTO item_usage_history (user_id, item_id, item_name) VALUES ($1, $2, 'Cookie Bomb')`,
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Cookie Bomb')`,
         [user.id, itemId]
       );
-      
+
       await client.query('COMMIT');
-      
       console.log(`💥 Cookie Bomb used by user ${user.id}`);
-      
-      res.status(200).json({ 
-        success: true, 
+
+      res.status(200).json({
+        success: true,
         message: 'Cookie Bomb used successfully!'
       });
 
@@ -328,21 +317,48 @@ router.post('/get-item-usage-history', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const historyResult = await client.query(`
-        SELECT item_name, used_at, game_score
-        FROM item_usage_history 
-        WHERE user_id = $1
-        ORDER BY used_at DESC 
-        LIMIT 20
-      `, [user.id]);
-      
+      const historyResult = await client.query(
+        `SELECT item_name, used_at, game_score
+         FROM item_usage_history
+         WHERE user_id = $1
+         ORDER BY used_at DESC
+         LIMIT 20`,
+        [user.id]
+      );
       res.status(200).json(historyResult.rows);
-
     } finally {
       client.release();
     }
   } catch (error) {
     console.error('🚨 Error in /api/get-item-usage-history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* ------------------------------------------------------------
+   ✅ NEW ENDPOINT — RECORD GAME TIME (Zen Level)
+   ------------------------------------------------------------ */
+router.post('/game/record-time', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { duration = 0 } = req.body;
+
+    if (typeof duration !== 'number' || duration <= 0) {
+      return res.status(400).json({ error: 'Invalid duration value' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET total_play_time = COALESCE(total_play_time, 0) + $1
+       WHERE telegram_id = $2
+       RETURNING total_play_time`,
+      [duration, user.id]
+    );
+
+    console.log(`🧘 Zen time recorded for ${user.id}: +${duration}s`);
+    res.status(200).json({ success: true, total_play_time: result.rows[0].total_play_time });
+  } catch (error) {
+    console.error('🚨 Error in /api/game/record-time:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
