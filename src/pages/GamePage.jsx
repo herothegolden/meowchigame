@@ -16,33 +16,28 @@ const GamePage = () => {
   const [gameConfig, setGameConfig] = useState({ startTime: 30, startWithBomb: false });
   const [activeBoosts, setActiveBoosts] = useState({ timeBoost: 0, bomb: false, pointMultiplier: false });
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-
-  // 🆕 Added for Zen Level tracking
-  const [gameStartTime, setGameStartTime] = useState(null);
-  const [sessionDuration, setSessionDuration] = useState(0);
-  const [durationSubmitted, setDurationSubmitted] = useState(false);
-
+  
   // ADDED: Booster timer states
   const [boosterTimeLeft, setBoosterTimeLeft] = useState(0);
   const [boosterActive, setBoosterActive] = useState(false);
-
+  
   // Inventory state
   const [inventory, setInventory] = useState([]);
   const [isActivatingItem, setIsActivatingItem] = useState(null);
   const [availableItems, setAvailableItems] = useState([]);
   const [inventoryError, setInventoryError] = useState(null);
-
+  
   // Shuffle state
   const [shuffleNeeded, setShuffleNeeded] = useState(false);
   const [shuffleCount, setShuffleCount] = useState(0);
   const [shuffleCooldown, setShuffleCooldown] = useState(0);
   const [shuffleFunction, setShuffleFunction] = useState(null);
-
+  
   // Bomb dragging state
   const [isDraggingBomb, setIsDraggingBomb] = useState(false);
   const [ghostBombPosition, setGhostBombPosition] = useState({ x: 0, y: 0 });
   const [gameBoardRef, setGameBoardRef] = useState(null);
-
+  
   const navigate = useNavigate();
   const tg = window.Telegram?.WebApp;
 
@@ -67,26 +62,6 @@ const GamePage = () => {
       soundManager.playCore('game_over', { volume: 1.0 });
     }
   }, [isGameOver, isSubmitting]);
-
-  // 🆕 When game ends, record and send duration
-  useEffect(() => {
-    if (isGameOver && gameStartTime && !durationSubmitted) {
-      const end = Date.now();
-      const elapsed = Math.floor((end - gameStartTime) / 1000);
-      setSessionDuration(elapsed);
-      setDurationSubmitted(true);
-      if (tg && tg.initData && BACKEND_URL) {
-        fetch(`${BACKEND_URL}/api/game/record-time`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg.initData, duration: elapsed }),
-        })
-          .then(res => res.json())
-          .then(data => console.log('🕒 Playtime recorded:', data))
-          .catch(err => console.error('Failed to record game time:', err));
-      }
-    }
-  }, [isGameOver, gameStartTime, durationSubmitted, tg]);
 
   // Shuffle cooldown timer
   useEffect(() => {
@@ -115,6 +90,7 @@ const GamePage = () => {
     }
   }, [boosterTimeLeft, gameStarted, isGameOver]);
 
+  // ADDED: Cleanup booster on component unmount
   useEffect(() => {
     return () => {
       setBoosterTimeLeft(0);
@@ -122,7 +98,7 @@ const GamePage = () => {
     };
   }, []);
 
-  // Handle game over submission (score)
+  // Handle game over submission
   useEffect(() => {
     if (!isGameOver || isSubmitting) return;
     const submitScore = async () => {
@@ -135,8 +111,11 @@ const GamePage = () => {
             body: JSON.stringify({ initData: tg.initData, score: score }),
           });
           const data = await response.json();
-          if (response.ok) console.log('Score submitted successfully:', data);
-          else console.error('Score submission failed:', data.error);
+          if (response.ok) {
+            console.log('Score submitted successfully:', data);
+          } else {
+            console.error('Score submission failed:', data.error);
+          }
         } catch (error) {
           console.error('Error submitting score:', error);
         }
@@ -156,43 +135,13 @@ const GamePage = () => {
   }, [tg]);
 
   // Shuffle handlers
-  const handleShuffleNeeded = useCallback((needed) => setShuffleNeeded(needed), []);
-  const handleBoardReady = useCallback((shuffleFn) => setShuffleFunction(() => shuffleFn), []);
-  const handleGameBoardRef = useCallback((ref) => setGameBoardRef(ref), []);
+  const handleShuffleNeeded = useCallback((needed) => {
+    setShuffleNeeded(needed);
+  }, []);
 
-  // ✅ PATCH START: game timer hooks
-  const startGame = async () => {
-    soundManager.playCore('power_up', { volume: 0.8 });
-    setGameStarted(true);
-    setGameStartTime(Date.now()); // mark start
-    setDurationSubmitted(false);
-    setScore(0);
-    setTimeLeft(30);
-    setIsGameOver(false);
-    setIsSubmitting(false);
-    setShuffleNeeded(false);
-    setShuffleCount(0);
-    setShuffleCooldown(0);
-  };
-
-  const restartGame = async () => {
-    soundManager.playUI('button_click', { volume: 0.8 });
-    setGameStarted(false);
-    setGameStartTime(null);
-    setDurationSubmitted(false);
-    setScore(0);
-    setIsGameOver(false);
-    setIsSubmitting(false);
-    setShuffleNeeded(false);
-    setShuffleCount(0);
-    setShuffleCooldown(0);
-    setShuffleFunction(null);
-    setIsDraggingBomb(false);
-    setGhostBombPosition({ x: 0, y: 0 });
-    setBoosterTimeLeft(0);
-    setBoosterActive(false);
-  };
-  // ✅ PATCH END
+  const handleBoardReady = useCallback((shuffleFn) => {
+    setShuffleFunction(() => shuffleFn);
+  }, []);
 
   const handleGameBoardRef = useCallback((ref) => {
     setGameBoardRef(ref);
