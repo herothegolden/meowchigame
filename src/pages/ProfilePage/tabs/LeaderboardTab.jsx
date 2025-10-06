@@ -1,3 +1,6 @@
+// Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
+// v2 — Synced avatar logic with ProfileHeader (Base64, relative, full URL support)
+
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle, User } from 'lucide-react';
@@ -11,16 +14,27 @@ const LeaderboardTab = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
 
-  // Helper function to get full avatar URL
-  const getAvatarUrl = (avatarPath) => {
-    if (!avatarPath) return null;
-    
-    if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
-      return avatarPath;
+  // ✅ Synced helper: matches ProfileHeader.jsx behavior
+  const getAvatarUrl = (avatarData) => {
+    if (!avatarData) return null;
+
+    // Base64 data URI
+    if (avatarData.startsWith('data:image/')) {
+      return avatarData;
     }
-    
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-    return `${BACKEND_URL}${avatarPath}`;
+
+    // Legacy relative upload
+    if (avatarData.startsWith('/uploads/')) {
+      const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+      return `${BACKEND_URL}${avatarData}`;
+    }
+
+    // External URL
+    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) {
+      return avatarData;
+    }
+
+    return null;
   };
 
   useEffect(() => {
@@ -42,14 +56,11 @@ const LeaderboardTab = () => {
 
   const handleAddFriend = async () => {
     if (!friendUsername.trim()) return;
-
     setIsAddingFriend(true);
     try {
       const result = await apiCall('/api/add-friend', { friendUsername: friendUsername.trim() });
       setFriendUsername('');
-      if (activeType === 'friends') {
-        fetchLeaderboard('friends');
-      }
+      if (activeType === 'friends') fetchLeaderboard('friends');
       showSuccess(result.message);
     } catch (error) {
       showError(error.message);
@@ -72,16 +83,21 @@ const LeaderboardTab = () => {
   };
 
   const getRankIcon = (rank) => {
-    switch(rank) {
+    switch (rank) {
       case 1: return <Crown className="w-5 h-5 text-yellow-400" />;
       case 2: return <Medal className="w-5 h-5 text-gray-300" />;
       case 3: return <Medal className="w-5 h-5 text-amber-600" />;
-      default: return <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">#{rank}</span>;
+      default:
+        return (
+          <span className="w-5 h-5 flex items-center justify-center text-secondary font-bold text-sm">
+            #{rank}
+          </span>
+        );
     }
   };
 
   const getBadgeColor = (badge) => {
-    switch(badge) {
+    switch (badge) {
       case 'Legend': return 'text-purple-400 bg-purple-400/20';
       case 'Epic': return 'text-blue-400 bg-blue-400/20';
       case 'Rare': return 'text-green-400 bg-green-400/20';
@@ -92,7 +108,7 @@ const LeaderboardTab = () => {
   const tabs = [
     { id: 'global', label: 'Global', icon: Users },
     { id: 'weekly', label: 'Weekly', icon: Calendar },
-    { id: 'friends', label: 'Friends', icon: Star }
+    { id: 'friends', label: 'Friends', icon: Star },
   ];
 
   return (
@@ -105,8 +121,8 @@ const LeaderboardTab = () => {
               key={tab.id}
               onClick={() => setActiveType(tab.id)}
               className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
-                activeType === tab.id 
-                  ? 'bg-accent text-background' 
+                activeType === tab.id
+                  ? 'bg-accent text-background'
                   : 'text-secondary hover:text-primary'
               }`}
             >
@@ -153,22 +169,22 @@ const LeaderboardTab = () => {
             {activeType === 'friends' ? 'No Friends Yet' : 'No Players Yet'}
           </h3>
           <p className="text-secondary text-sm">
-            {activeType === 'friends' 
-              ? 'Add friends to see your private leaderboard!' 
+            {activeType === 'friends'
+              ? 'Add friends to see your private leaderboard!'
               : 'Be the first to climb the leaderboard!'}
           </p>
         </div>
       ) : (
         <div className="space-y-2">
           {leaderboard.slice(0, 10).map((entry, index) => {
-            const avatarUrl = getAvatarUrl(entry.player.avatarUrl);
-            
+            const avatarUrl = getAvatarUrl(entry.player.avatarUrl || entry.player.avatar_url);
+
             return (
               <motion.div
                 key={`${activeType}-${entry.rank}`}
                 className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
-                  entry.isCurrentUser 
-                    ? 'bg-accent/20 border-accent' 
+                  entry.isCurrentUser
+                    ? 'bg-accent/20 border-accent'
                     : 'bg-background border-gray-600'
                 }`}
                 initial={{ opacity: 0, x: -20 }}
@@ -182,7 +198,7 @@ const LeaderboardTab = () => {
                 {/* Avatar */}
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-accent/20 border-2 border-accent/50 flex items-center justify-center mr-3 flex-shrink-0">
                   {avatarUrl ? (
-                    <img 
+                    <img
                       src={avatarUrl}
                       alt={entry.player.name}
                       className="w-full h-full object-cover"
@@ -194,28 +210,38 @@ const LeaderboardTab = () => {
                       }}
                     />
                   ) : null}
-                  <User 
-                    className="w-5 h-5 text-accent" 
+                  <User
+                    className="w-5 h-5 text-accent"
                     style={{ display: avatarUrl ? 'none' : 'block' }}
                   />
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-2">
-                    <p className={`font-medium text-sm truncate ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                    <p
+                      className={`font-medium text-sm truncate ${
+                        entry.isCurrentUser ? 'text-accent' : 'text-primary'
+                      }`}
+                    >
                       {entry.player.name}
                     </p>
                     {entry.isCurrentUser && (
-                      <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">YOU</span>
+                      <span className="text-xs bg-accent text-background px-2 py-0.5 rounded-full font-bold">
+                        YOU
+                      </span>
                     )}
                     {activeType === 'friends' && !entry.isCurrentUser && (
-                      <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">FRIEND</span>
+                      <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full font-bold">
+                        FRIEND
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-xs text-secondary">Lv.{entry.player.level}</span>
                     {entry.badge && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-bold ${getBadgeColor(entry.badge)}`}
+                      >
                         {entry.badge}
                       </span>
                     )}
@@ -223,7 +249,11 @@ const LeaderboardTab = () => {
                 </div>
 
                 <div className="text-right mr-2">
-                  <p className={`text-sm font-bold ${entry.isCurrentUser ? 'text-accent' : 'text-primary'}`}>
+                  <p
+                    className={`text-sm font-bold ${
+                      entry.isCurrentUser ? 'text-accent' : 'text-primary'
+                    }`}
+                  >
                     {entry.score.toLocaleString()}
                   </p>
                   <p className="text-xs text-secondary">pts</p>
@@ -235,7 +265,11 @@ const LeaderboardTab = () => {
                     disabled={removingFriend === entry.player.username}
                     className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-bold transition-colors disabled:opacity-50"
                   >
-                    {removingFriend === entry.player.username ? <LoaderCircle className="w-3 h-3 animate-spin" /> : '✕'}
+                    {removingFriend === entry.player.username ? (
+                      <LoaderCircle className="w-3 h-3 animate-spin" />
+                    ) : (
+                      '✕'
+                    )}
                   </button>
                 )}
               </motion.div>
