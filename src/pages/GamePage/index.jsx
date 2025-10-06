@@ -23,19 +23,18 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 const GamePage = () => {
   const tg = window.Telegram?.WebApp;
 
-  // ✅ FIX 3 — proper Mini App homepage navigation
+  // Home should leave the game and return to app’s main screen (no hard reload)
   const navigateHome = () => {
     if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("soft");
     if (tg?.BackButton) tg.BackButton.show();
     if (tg?.MainButton) tg.MainButton.hide();
-    tg?.close(); // closes current Mini App game and returns to main screen
+    tg?.close();
   };
 
-  // 🎯 Core gameplay states
+  // Core gameplay
   const [score, setScore] = useState(0);
-  const [availableItems, setAvailableItems] = useState([]);
 
-  // 🧠 Hooks
+  // Game timer & state
   const {
     timeLeft,
     setTimeLeft,
@@ -47,7 +46,9 @@ const GamePage = () => {
     restartGame,
   } = useGameTimer(tg);
 
+  // Inventory / boosters (hook source of truth)
   const {
+    availableItems: hookAvailableItems,
     inventoryError,
     boosterActive,
     boosterTimeLeft,
@@ -56,6 +57,13 @@ const GamePage = () => {
     loadInventory,
   } = useInventory(tg);
 
+  // ✅ LOCAL MIRROR: used by bomb-drag hook & UI; kept in sync with hook
+  const [availableItems, setAvailableItems] = useState([]);
+  useEffect(() => {
+    setAvailableItems(hookAvailableItems || []);
+  }, [hookAvailableItems]);
+
+  // Shuffle logic
   const {
     shuffleNeeded,
     shuffleCount,
@@ -65,6 +73,7 @@ const GamePage = () => {
     handleShuffle,
   } = useShuffle();
 
+  // Bomb drag logic
   const {
     isDraggingBomb,
     ghostBombPosition,
@@ -74,20 +83,20 @@ const GamePage = () => {
     registerInventoryRefs,
   } = useBombDrag(tg, BACKEND_URL);
 
+  // Score submit + Zen timer
   useScoreSubmit(tg, BACKEND_URL, score, isGameOver);
   useZenTimer(tg, BACKEND_URL, gameStarted, isGameOver);
 
-  // ✅ FIX 1 — preload inventory on mount
+  // Ensure inventory loads at start
   useEffect(() => {
     loadInventory();
   }, [loadInventory]);
 
-  // ✅ FIX 2 — register inventory refs for bomb drag updates
+  // Register inventory refs for bomb-drag updater (decrement on use)
   useEffect(() => {
     registerInventoryRefs(availableItems, setAvailableItems);
   }, [availableItems, registerInventoryRefs]);
 
-  // 🧩 Handlers
   const handleRestart = async () => {
     restartGame();
     await loadInventory();
@@ -95,14 +104,11 @@ const GamePage = () => {
 
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary overflow-hidden">
-      {/* 🧨 Bomb ghost while dragging */}
+      {/* Ghost bomb while dragging */}
       {isDraggingBomb && (
         <motion.div
           className="fixed pointer-events-none z-50 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-2 border-red-400"
-          style={{
-            left: ghostBombPosition.x - 24,
-            top: ghostBombPosition.y - 24,
-          }}
+          style={{ left: ghostBombPosition.x - 24, top: ghostBombPosition.y - 24 }}
           initial={{ scale: 0.8, opacity: 0.8 }}
           animate={{ scale: 1, opacity: 1 }}
         >
@@ -110,7 +116,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* 🧭 Game HUD */}
+      {/* HUD */}
       <GameHUD
         score={score}
         timeLeft={timeLeft}
@@ -120,12 +126,12 @@ const GamePage = () => {
         formatTime={formatTime}
       />
 
-      {/* ⚠️ Shuffle alert */}
+      {/* Shuffle alert */}
       <ShuffleAlert
         visible={shuffleNeeded && gameStarted && !isGameOver && shuffleCooldown === 0}
       />
 
-      {/* 🎮 Game board */}
+      {/* Game board */}
       <motion.div
         className="flex-1 flex flex-col items-center justify-center"
         initial={{ opacity: 0, scale: 0.9 }}
@@ -143,7 +149,7 @@ const GamePage = () => {
         />
       </motion.div>
 
-      {/* 🔄 Shuffle button */}
+      {/* Shuffle button */}
       {gameStarted && !isGameOver && (
         <motion.div
           className="flex items-center justify-center"
@@ -191,7 +197,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* 💥 Inventory error */}
+      {/* Inventory error */}
       {gameStarted && !isGameOver && inventoryError && (
         <motion.div
           className="flex items-center justify-center p-3 bg-red-600/20 rounded-xl border border-red-500"
@@ -202,7 +208,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* 🎒 Items */}
+      {/* Items bar (synced from hook) */}
       {gameStarted && !isGameOver && !inventoryError && availableItems.length > 0 && (
         <motion.div
           className="flex items-center justify-center space-x-4 p-3 bg-nav rounded-xl border border-gray-700 mx-4"
@@ -253,7 +259,7 @@ const GamePage = () => {
         </motion.div>
       )}
 
-      {/* 🕹️ Overlays */}
+      {/* Overlays */}
       <GameOverModal
         visible={isGameOver}
         score={score}
