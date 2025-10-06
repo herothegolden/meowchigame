@@ -209,8 +209,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
            games_played, high_score, total_play_time, avatar_url, vip_level,
-           last_login_date, streak_claimed_today, invited_friends
-           FROM users WHERE telegram_id = $1`, 
+           last_login_date, streak_claimed_today
+           FROM users WHERE telegram_id = $1`,  // 🔧 removed invited_friends
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
@@ -225,23 +225,22 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
           WHERE points > (SELECT points FROM users WHERE telegram_id = $1)
         `, [user.id])
       ]);
-      
+
       if (userResult.rowCount === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
-      
-      // ---- ADD STREAK INFO (SAME LOGIC AS /validate) ----
+
+      // ---- STREAK INFO (unchanged) ----
       const currentDate = getTashkentDate();
       const lastLoginDate = userData.last_login_date;
       const currentStreak = userData.daily_streak || 0;
       const streakClaimedToday = userData.streak_claimed_today || false;
-
       const diffDays = calculateDateDiff(lastLoginDate, currentDate);
 
       let canClaim = false;
@@ -275,19 +274,13 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         message = 'Streak reset - start fresh!';
       }
 
-      userData.streakInfo = {
-        canClaim,
-        state,
-        currentStreak,
-        potentialBonus,
-        message
-      };
+      userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      // ⚡ ADD POWER METRIC COMPUTATION
+      // ⚡ FIXED: Compute Power safely without missing column
       const points_total = Number(userData.points || 0);
       const vip_level = Number(userData.vip_level || 0);
       const highest_score_today = Number(userData.high_score || 0);
-      const invited_friends = Number(userData.invited_friends || 0);
+      const invited_friends = 0; // fallback since column missing
 
       const power = Math.round(
         100 +
@@ -304,21 +297,22 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       progressResult.rows.forEach(row => {
         progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
       });
-      
+
       const shopData = {
         items: shopItemsResult.rows,
         userPoints: userShopResult.rows[0]?.points || 0,
         inventory: inventoryResult.rows,
-        boosterActive: userShopResult.rows[0]?.point_booster_expires_at && 
-                      new Date(userShopResult.rows[0].point_booster_expires_at) > new Date(),
+        boosterActive:
+          userShopResult.rows[0]?.point_booster_expires_at &&
+          new Date(userShopResult.rows[0].point_booster_expires_at) > new Date(),
         boosterExpiresAt: userShopResult.rows[0]?.point_booster_expires_at || null,
-        ownedBadges: badgesResult.rows.map(row => row.badge_name)
+        ownedBadges: badgesResult.rows.map(row => row.badge_name),
       };
-      
+
       res.status(200).json({
         stats: userData,
         badgeProgress: { progress },
-        shopData: shopData
+        shopData,
       });
 
     } finally {
