@@ -1,49 +1,49 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React from "react";
+import { motion } from "framer-motion";
 
 const OverviewTab = () => {
   const lifeStats = [
     {
-      emoji: '🍪',
-      title: 'Cookies Consumed',
-      value: '800,295',
-      subtitle: 'а ведь обещал “только один.”',
-      gradient: 'from-[#FFF4E0]/40 to-[#FFD6A5]/20',
+      emoji: "🍪",
+      title: "Cookies",
+      value: "800,295",
+      subtitle: "а ведь обещал только один.",
+      gradient: "from-[#BBA88C]/30 to-[#9C8872]/20",
     },
     {
-      emoji: '🧘‍♂️',
-      title: 'Chill Level',
-      value: '475h 30m',
-      subtitle: 'в Meowchiverse — терапия с эффектом сахара.',
-      gradient: 'from-[#E6FFF1]/40 to-[#B2F2D0]/20',
+      emoji: "🧘‍♂️",
+      title: "Chill Level",
+      value: "475h 30m",
+      subtitle: "в Meowchiverse — терапия с сахаром.",
+      gradient: "from-[#89B7A0]/30 to-[#6E9986]/20",
     },
     {
-      emoji: '⚡',
-      title: 'Power Mood',
-      value: '0',
-      subtitle: 'сегодня вибы стабильные.',
-      gradient: 'from-[#F0E6FF]/40 to-[#D8B4FE]/20',
+      emoji: "⚡",
+      title: "Power Mood",
+      value: "0",
+      subtitle: "вибы стабильные.",
+      gradient: "from-[#9C8FB7]/30 to-[#7B6A9B]/20",
     },
     {
-      emoji: '💬',
-      title: 'Social Energy',
-      value: '1 день streak',
-      subtitle: 'неплохо для интроверта.',
-      gradient: 'from-[#FFE6E0]/40 to-[#FFC6A5]/20',
+      emoji: "💬",
+      title: "Social Energy",
+      value: "1 день",
+      subtitle: "неплохо для интроверта.",
+      gradient: "from-[#B69A8C]/30 to-[#9A7D6D]/20",
     },
     {
-      emoji: '🌈',
-      title: 'Texture Rank',
-      value: '#42 Worldwide',
-      subtitle: 'за вклад в культуру 쫀득.',
-      gradient: 'from-[#E0F4FF]/40 to-[#A5D8FF]/20',
+      emoji: "🌈",
+      title: "Texture Rank",
+      value: "#42 World",
+      subtitle: "вклад в культуру 쫀득.",
+      gradient: "from-[#8BA6B7]/30 to-[#6C899A]/20",
     },
     {
-      emoji: '💤',
-      title: 'Snack Time Saved',
-      value: '∞ минут',
-      subtitle: 'и всё ещё голоден.',
-      gradient: 'from-[#FFFDE6]/40 to-[#FFF1B2]/20',
+      emoji: "💤",
+      title: "Snack Time",
+      value: "∞ минут",
+      subtitle: "и всё ещё голоден.",
+      gradient: "from-[#BEB29A]/30 to-[#A0917E]/20",
     },
   ];
 
@@ -59,16 +59,21 @@ const OverviewTab = () => {
           key={i}
           whileHover={{
             scale: 1.02,
-            boxShadow: '0 0 12px rgba(255,255,255,0.08)',
+            boxShadow: "0 0 10px rgba(255,255,255,0.08)",
           }}
-          transition={{ type: 'spring', stiffness: 200, damping: 12 }}
-          className={`p-4 rounded-lg border border-white/10 shadow-md backdrop-blur-sm bg-gradient-to-br ${stat.gradient}`}
+          transition={{ type: "spring", stiffness: 220, damping: 14 }}
+          className={`p-4 rounded-lg border border-white/10 shadow-md backdrop-blur-sm bg-gradient-to-br ${stat.gradient} flex flex-col justify-center min-h-[120px]`}
         >
-          <div className="flex flex-col justify-center h-full">
-            <p className="text-[15px] font-semibold text-white mb-1">
-              {stat.emoji} {stat.title}
-            </p>
-            <p className="text-[20px] font-bold text-white mb-0.5">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[15px] font-semibold text-white">
+                {stat.emoji}
+              </span>
+              <span className="text-[15px] font-semibold text-white">
+                {stat.title}
+              </span>
+            </div>
+            <p className="text-[19px] font-bold text-white mb-0.5">
               {stat.value}
             </p>
             <p className="text-[13px] text-[#AEB4BE] leading-snug">
