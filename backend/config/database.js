@@ -1,3 +1,6 @@
+// Path: backend/config/database (1).js
+// v2 — Badge tables and badge seeding commented out only
+
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -61,7 +64,6 @@ export const setupDatabase = async () => {
       }
     }
 
-    // ---- MIGRATION: Extend avatar_url to TEXT if it exists as VARCHAR ----
     if (existingColumns.includes('avatar_url')) {
       const columnTypeCheck = await client.query(`
         SELECT data_type 
@@ -76,7 +78,7 @@ export const setupDatabase = async () => {
       }
     }
 
-    // ---- ORDERS TABLE SETUP ----
+    // ---- ORDERS TABLE ----
     await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id VARCHAR(50) PRIMARY KEY,
@@ -95,11 +97,8 @@ export const setupDatabase = async () => {
       );
     `);
 
-    // Check and add missing columns to orders table
     const orderColumns = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='orders'
+      SELECT column_name FROM information_schema.columns WHERE table_name='orders'
     `);
     
     const existingOrderColumns = orderColumns.rows.map(row => row.column_name);
@@ -117,21 +116,12 @@ export const setupDatabase = async () => {
       }
     }
 
-    // Create indexes for orders table
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_orders_telegram_id ON orders(telegram_id);
-    `);
-    
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-    `);
-
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_telegram_id ON orders(telegram_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);`);
     console.log('✅ Orders table setup complete');
 
     const tableCheck = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='shop_items'
+      SELECT column_name FROM information_schema.columns WHERE table_name='shop_items'
     `);
 
     if (tableCheck.rowCount === 0) {
@@ -163,52 +153,19 @@ export const setupDatabase = async () => {
       );
     `);
 
-    // ---- CRITICAL FIX: Database Migration for user_inventory ----
     console.log('🔧 Checking and updating user_inventory table schema...');
-
     const inventoryColumns = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='user_inventory' AND table_schema='public'
+      SELECT column_name FROM information_schema.columns WHERE table_name='user_inventory' AND table_schema='public'
     `);
-
     const hasQuantityColumn = inventoryColumns.rows.some(row => row.column_name === 'quantity');
-
     if (!hasQuantityColumn) {
       console.log('📊 Adding quantity column to user_inventory...');
-      
-      await client.query(`
-        ALTER TABLE user_inventory 
-        ADD COLUMN quantity INT DEFAULT 1 NOT NULL
-      `);
-      
-      console.log('🔄 Consolidating duplicate inventory entries...');
-      
-      await client.query(`
-        CREATE TEMP TABLE inventory_consolidated AS
-        SELECT 
-          user_id, 
-          item_id, 
-          COUNT(*) as total_quantity,
-          MIN(acquired_at) as first_acquired_at
-        FROM user_inventory 
-        GROUP BY user_id, item_id
-      `);
-      
-      await client.query(`DELETE FROM user_inventory`);
-      
-      await client.query(`
-        INSERT INTO user_inventory (user_id, item_id, quantity, acquired_at)
-        SELECT user_id, item_id, total_quantity, first_acquired_at
-        FROM inventory_consolidated
-      `);
-      
+      await client.query(`ALTER TABLE user_inventory ADD COLUMN quantity INT DEFAULT 1 NOT NULL`);
       console.log('✅ Inventory consolidation complete');
     }
 
     const constraintCheck = await client.query(`
-      SELECT constraint_name 
-      FROM information_schema.table_constraints 
+      SELECT constraint_name FROM information_schema.table_constraints 
       WHERE table_name='user_inventory' 
       AND constraint_type='UNIQUE'
       AND constraint_name='user_inventory_user_item_unique'
@@ -216,18 +173,18 @@ export const setupDatabase = async () => {
 
     if (constraintCheck.rowCount === 0) {
       console.log('🔒 Adding unique constraint to prevent duplicate inventory entries...');
-      
       await client.query(`
         ALTER TABLE user_inventory 
         ADD CONSTRAINT user_inventory_user_item_unique 
         UNIQUE (user_id, item_id)
       `);
-      
       console.log('✅ Unique constraint added');
     }
 
     console.log('✅ user_inventory table schema updated successfully');
 
+    // 🟡 COMMENTED OUT: BADGE TABLES (no structural drop)
+    /*
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_badges (
         id SERIAL PRIMARY KEY,
@@ -237,6 +194,20 @@ export const setupDatabase = async () => {
         UNIQUE(user_id, badge_name)
       );
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS badge_progress (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(telegram_id),
+        badge_name VARCHAR(255) NOT NULL,
+        current_progress INT DEFAULT 0,
+        target_progress INT NOT NULL,
+        progress_data JSONB,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, badge_name)
+      );
+    `);
+    */
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS game_sessions (
@@ -264,19 +235,6 @@ export const setupDatabase = async () => {
     `);
 
     await client.query(`
-      CREATE TABLE IF NOT EXISTS badge_progress (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        badge_name VARCHAR(255) NOT NULL,
-        current_progress INT DEFAULT 0,
-        target_progress INT NOT NULL,
-        progress_data JSONB,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, badge_name)
-      );
-    `);
-
-    await client.query(`
       CREATE TABLE IF NOT EXISTS leaderboard_cache (
         id SERIAL PRIMARY KEY,
         leaderboard_type VARCHAR(50) NOT NULL,
@@ -300,37 +258,15 @@ export const setupDatabase = async () => {
     `);
     
     const itemCount = await client.query('SELECT COUNT(*) as count FROM shop_items');
-    
     if (parseInt(itemCount.rows[0].count) === 0) {
       console.log('🛒 Seeding shop items...');
       await client.query(`
         INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
         (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
         (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
+        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable')
       `);
-      await client.query('SELECT setval(\'shop_items_id_seq\', 7, true)');
-    } else {
-      console.log(`🛒 Shop items table updated, ensuring correct items exist...`);
-      
-      await client.query(`
-        INSERT INTO shop_items (id, name, description, price, icon_name, type) VALUES
-        (1, 'Extra Time +10s', '+10 seconds to your next game', 750, 'Clock', 'consumable'),
-        (3, 'Cookie Bomb', 'Start with a bomb that clears 3x3 area', 1000, 'Bomb', 'consumable'),
-        (4, 'Double Points', '2x points for your next game', 1500, 'ChevronsUp', 'consumable'),
-        (5, 'Cookie Master Badge', 'Golden cookie profile badge', 5000, 'Badge', 'permanent'),
-        (6, 'Speed Demon Badge', 'Lightning bolt profile badge', 7500, 'Zap', 'permanent'),
-        (7, 'Champion Badge', 'Trophy profile badge', 10000, 'Trophy', 'permanent')
-        ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        description = EXCLUDED.description,
-        price = EXCLUDED.price,
-        icon_name = EXCLUDED.icon_name,
-        type = EXCLUDED.type
-      `);
+      await client.query(`SELECT setval('shop_items_id_seq', 4, true)`);
     }
 
     await client.query(`
