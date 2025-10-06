@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Shuffle } from "lucide-react";
 import GameBoard from "../../components/game/GameBoard";
@@ -68,6 +68,11 @@ const GamePage = () => {
 
   useScoreSubmit(tg, BACKEND_URL, score, isGameOver);
   useZenTimer(tg, BACKEND_URL, gameStarted, isGameOver);
+
+  // ✅ FIX: ensure inventory loads before first game start
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory]);
 
   // 🧩 Handlers
   const handleRestart = async () => {
@@ -219,8 +224,16 @@ const GamePage = () => {
                 whileTap={isTimeBooster || isDoublePoints ? { scale: 0.95 } : {}}
                 style={{ touchAction: "none" }}
               >
-                <span className="text-lg">{item.item_id === 1 ? "⏰" : item.item_id === 3 ? "💣" : "✨"}</span>
-                <span className="text-xs text-primary font-medium">{item.quantity}</span>
+                <span className="text-lg">
+                  {item.item_id === 1
+                    ? "⏰"
+                    : item.item_id === 3
+                    ? "💣"
+                    : "✨"}
+                </span>
+                <span className="text-xs text-primary font-medium">
+                  {item.quantity}
+                </span>
               </motion.button>
             );
           })}
