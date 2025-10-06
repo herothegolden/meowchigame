@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v5 — StarterBadges removed safely
+// v6 — Badges tab removed, Overview + Leaderboard + Tasks kept
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -11,7 +11,6 @@ import { LoaderCircle } from "lucide-react";
 
 // Lazy-loaded tabs for performance
 const OverviewTab = lazy(() => import("./OverviewTab"));
-const BadgesTab = lazy(() => import("./BadgesTab"));
 const LeaderboardTab = lazy(() => import("./LeaderboardTab"));
 const TasksTab = lazy(() => import("./TasksTab"));
 
@@ -84,9 +83,8 @@ const ProfilePage = () => {
         className="rounded-2xl bg-nav/30 backdrop-blur-lg border border-white/10 shadow-lg"
       >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-4 rounded-t-2xl border-b border-white/10">
+          <TabsList className="grid grid-cols-3 rounded-t-2xl border-b border-white/10">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
-            <TabsTrigger value="badges">Бейджи</TabsTrigger>
             <TabsTrigger value="leaderboard">Рейтинг</TabsTrigger>
             <TabsTrigger value="tasks">Задания</TabsTrigger>
           </TabsList>
@@ -105,19 +103,6 @@ const ProfilePage = () => {
                 streakInfo={streakInfo}
                 onUpdate={fetchData}
               />
-            </Suspense>
-          </TabsContent>
-
-          {/* Badges */}
-          <TabsContent value="badges">
-            <Suspense
-              fallback={
-                <div className="p-4 text-center text-secondary text-sm">
-                  Loading badges...
-                </div>
-              }
-            >
-              <BadgesTab badgeProgress={data.badgeProgress} />
             </Suspense>
           </TabsContent>
 
