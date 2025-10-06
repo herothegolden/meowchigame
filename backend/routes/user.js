@@ -1,4 +1,5 @@
 // Path: backend/routes/user.js
+// v3 — Initialize defaults for new users and return NULL-safe stats
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -7,82 +8,97 @@ import { validateUser } from '../middleware/auth.js';
 import { getTashkentDate, calculateDateDiff } from '../utils/timezone.js';
 
 const router = express.Router();
-const { BOT_TOKEN, PORT } = process.env;
+const { BOT_TOKEN } = process.env;
+
+/* -------------------------------------------
+   AUTH / VALIDATION
+------------------------------------------- */
 
 // ---- VALIDATE & LOGIN ----
 router.post('/validate', async (req, res) => {
   try {
     const isValid = validate(req.body.initData, BOT_TOKEN);
-    if (!isValid) {
-      return res.status(403).json({ error: 'Invalid Telegram initData' });
-    }
+    if (!isValid) return res.status(403).json({ error: 'Invalid Telegram initData' });
 
     const params = new URLSearchParams(req.body.initData);
     const userString = params.get('user');
-    
-    if (!userString) {
-      return res.status(400).json({ error: 'Missing user data in initData' });
-    }
-    
-    const user = JSON.parse(userString);
-    
-    if (!user || !user.id) {
-      return res.status(400).json({ error: 'Invalid user data in initData' });
-    }
+    if (!userString) return res.status(400).json({ error: 'Missing user data in initData' });
+
+    const tgUser = JSON.parse(userString);
+    if (!tgUser || !tgUser.id) return res.status(400).json({ error: 'Invalid user data in initData' });
 
     const client = await pool.connect();
     try {
+      // Try to find existing user
       let dbUserResult = await client.query(
         'SELECT * FROM users WHERE telegram_id = $1',
-        [user.id]
+        [tgUser.id]
       );
+
       let appUser;
 
       if (dbUserResult.rows.length === 0) {
-        console.log(`👤 Creating new user: ${user.first_name} (@${user.username || 'no-username'}) (${user.id})`);
-        
-        const insertResult = await client.query(
+        // New user
+        console.log(`👤 Creating new user: ${tgUser.first_name} (@${tgUser.username || 'no-username'}) (${tgUser.id})`);
+
+        await client.query(
           `INSERT INTO users (telegram_id, first_name, last_name, username)
-           VALUES ($1, $2, $3, $4) RETURNING *`,
-          [user.id, user.first_name, user.last_name, user.username]
+           VALUES ($1, $2, $3, $4)`,
+          [tgUser.id, tgUser.first_name, tgUser.last_name, tgUser.username]
         );
-        appUser = insertResult.rows[0];
-        
+
+        // ✅ Initialize numeric fields to zero to avoid NULL on first login
+        await client.query(
+          `UPDATE users SET
+             points = COALESCE(points, 0),
+             level = COALESCE(level, 1),
+             daily_streak = COALESCE(daily_streak, 0),
+             games_played = COALESCE(games_played, 0),
+             high_score = COALESCE(high_score, 0),
+             total_play_time = COALESCE(total_play_time, 0),
+             last_login_at = CURRENT_TIMESTAMP
+           WHERE telegram_id = $1`,
+          [tgUser.id]
+        );
+
+        // Re-read the user row after init
+        dbUserResult = await client.query('SELECT * FROM users WHERE telegram_id = $1', [tgUser.id]);
+        appUser = dbUserResult.rows[0];
+
+        // Stats: new player counter
         await client.query(`
-          UPDATE global_stats 
+          UPDATE global_stats
           SET new_players_today = new_players_today + 1,
               last_updated = CURRENT_TIMESTAMP
           WHERE id = 1
         `);
-        
       } else {
+        // Existing user — update profile deltas if changed
         appUser = dbUserResult.rows[0];
 
-        const needsUpdate = 
-          appUser.first_name !== user.first_name || 
-          appUser.last_name !== user.last_name || 
-          appUser.username !== user.username;
-        
+        const needsUpdate =
+          appUser.first_name !== tgUser.first_name ||
+          appUser.last_name !== tgUser.last_name ||
+          appUser.username !== tgUser.username;
+
         if (needsUpdate) {
-          console.log(`🔄 Updating user info for ${user.id}`);
-          
-          const updateResult = await client.query(
-            `UPDATE users SET
-             first_name = $1, last_name = $2, username = $3
-             WHERE telegram_id = $4 RETURNING *`,
-            [user.first_name, user.last_name, user.username, user.id]
+          console.log(`🔄 Updating user info for ${tgUser.id}`);
+          await client.query(
+            `UPDATE users
+             SET first_name = $1, last_name = $2, username = $3
+             WHERE telegram_id = $4`,
+            [tgUser.first_name, tgUser.last_name, tgUser.username, tgUser.id]
           );
-          appUser = updateResult.rows[0];
         }
 
-        // Update last_login_at for activity tracking
+        // Touch last_login_at
         await client.query(
           'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE telegram_id = $1',
-          [user.id]
+          [tgUser.id]
         );
       }
 
-      // ---- STREAK EVALUATION LOGIC (NO DATABASE MODIFICATION) ----
+      // ---- STREAK EVALUATION (read-only logic here) ----
       const currentDate = getTashkentDate();
       const lastLoginDate = appUser.last_login_date;
       const currentStreak = appUser.daily_streak || 0;
@@ -122,20 +138,20 @@ router.post('/validate', async (req, res) => {
 
       const streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
+      // Active players (soft floor 37)
       const userCount = await client.query(
-        'SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL \'1 hour\''
+        `SELECT COUNT(*) as count FROM users WHERE last_login_at > NOW() - INTERVAL '1 hour'`
       );
-      const activeCount = Math.max(37, parseInt(userCount.rows[0].count));
-      
-      await client.query(`
-        UPDATE global_stats 
-        SET active_players = $1, last_updated = CURRENT_TIMESTAMP
-        WHERE id = 1
-      `, [activeCount]);
+      const activeCount = Math.max(37, parseInt(userCount.rows[0].count, 10) || 0);
+      await client.query(
+        `UPDATE global_stats
+         SET active_players = $1, last_updated = CURRENT_TIMESTAMP
+         WHERE id = 1`,
+        [activeCount]
+      );
 
-      console.log(`✅ User ${user.id} (@${user.username || 'no-username'}) validated successfully`);
+      console.log(`✅ User ${tgUser.id} (@${tgUser.username || 'no-username'}) validated successfully`);
       res.status(200).json({ ...appUser, streakInfo });
-      
     } finally {
       client.release();
     }
@@ -145,6 +161,10 @@ router.post('/validate', async (req, res) => {
   }
 });
 
+/* -------------------------------------------
+   PROFILE / STATS
+------------------------------------------- */
+
 // ---- GET USER STATS ----
 router.post('/get-user-stats', validateUser, async (req, res) => {
   try {
@@ -153,20 +173,29 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
     try {
       const [userResult, badgesResult] = await Promise.all([
         client.query(
-          `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url, vip_level 
-           FROM users WHERE telegram_id = $1`, 
+          `SELECT
+             first_name,
+             username,
+             COALESCE(points, 0)          AS points,
+             COALESCE(level, 1)           AS level,
+             COALESCE(daily_streak, 0)    AS daily_streak,
+             created_at,
+             COALESCE(games_played, 0)    AS games_played,
+             COALESCE(high_score, 0)      AS high_score,
+             COALESCE(total_play_time, 0) AS total_play_time,
+             avatar_url,
+             COALESCE(vip_level, 0)       AS vip_level
+           FROM users
+           WHERE telegram_id = $1`,
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id])
       ]);
-      
-      if (userResult.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
+
+      if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+
       const userData = userResult.rows[0];
-      userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
+      userData.ownedBadges = badgesResult.rows.map(r => r.badge_name);
       res.status(200).json(userData);
     } finally {
       client.release();
@@ -183,12 +212,33 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
     const { user } = req;
     const client = await pool.connect();
     try {
-      const [userResult, badgesResult, avgResult, progressResult, inventoryResult, shopItemsResult, userShopResult, rankResult] = await Promise.all([
+      const [
+        userResult,
+        badgesResult,
+        avgResult,
+        progressResult,
+        inventoryResult,
+        shopItemsResult,
+        userShopResult,
+        rankResult
+      ] = await Promise.all([
         client.query(
-          `SELECT first_name, username, points, level, daily_streak, created_at,
-           games_played, high_score, total_play_time, avatar_url, vip_level,
-           last_login_date, streak_claimed_today
-           FROM users WHERE telegram_id = $1`,  // 🔧 removed invited_friends
+          `SELECT
+             first_name,
+             username,
+             COALESCE(points, 0)          AS points,
+             COALESCE(level, 1)           AS level,
+             COALESCE(daily_streak, 0)    AS daily_streak,
+             created_at,
+             COALESCE(games_played, 0)    AS games_played,
+             COALESCE(high_score, 0)      AS high_score,
+             COALESCE(total_play_time, 0) AS total_play_time,
+             avatar_url,
+             COALESCE(vip_level, 0)       AS vip_level,
+             last_login_date,
+             COALESCE(streak_claimed_today, FALSE) AS streak_claimed_today
+           FROM users
+           WHERE telegram_id = $1`,
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
@@ -197,24 +247,27 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         client.query('SELECT item_id, quantity FROM user_inventory WHERE user_id = $1', [user.id]),
         client.query('SELECT * FROM shop_items ORDER BY id ASC'),
         client.query('SELECT points, point_booster_expires_at FROM users WHERE telegram_id = $1', [user.id]),
-        client.query(`
-          SELECT COUNT(*) + 1 as rank
-          FROM users
-          WHERE points > (SELECT points FROM users WHERE telegram_id = $1)
-        `, [user.id])
+        client.query(
+          `SELECT COUNT(*) + 1 as rank
+           FROM users
+           WHERE points > (SELECT points FROM users WHERE telegram_id = $1)`,
+          [user.id]
+        )
       ]);
 
-      if (userResult.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
+      if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
       const userData = userResult.rows[0];
       userData.ownedBadges = badgesResult.rows.map(row => row.badge_name);
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
+
+      // Human-readable play time (safe because we COALESCE to 0 in SELECT)
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
+
+      // Rank
       userData.rank = rankResult.rows[0]?.rank || null;
 
-      // ---- STREAK INFO (unchanged) ----
+      // ---- STREAK INFO (read-only compute) ----
       const currentDate = getTashkentDate();
       const lastLoginDate = userData.last_login_date;
       const currentStreak = userData.daily_streak || 0;
@@ -254,12 +307,11 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      // ⚡ FIXED: Compute Power safely without missing column
+      // Power (safe calcs)
       const points_total = Number(userData.points || 0);
       const vip_level = Number(userData.vip_level || 0);
       const highest_score_today = Number(userData.high_score || 0);
-      const invited_friends = 0; // fallback since column missing
-
+      const invited_friends = 0; // placeholder (no column yet)
       const power = Math.round(
         100 +
         points_total * 0.00005 +
@@ -268,12 +320,13 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         highest_score_today * 0.001 +
         invited_friends * 20
       );
-
       userData.power = power;
 
+      // Progress map
       const progress = {};
       progressResult.rows.forEach(row => {
-        progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
+        const pct = row.target_progress ? (row.current_progress / row.target_progress) : 0;
+        progress[row.badge_name] = Math.max(0, Math.min(100, Math.round(pct * 100)));
       });
 
       const shopData = {
@@ -284,15 +337,14 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
           userShopResult.rows[0]?.point_booster_expires_at &&
           new Date(userShopResult.rows[0].point_booster_expires_at) > new Date(),
         boosterExpiresAt: userShopResult.rows[0]?.point_booster_expires_at || null,
-        ownedBadges: badgesResult.rows.map(row => row.badge_name),
+        ownedBadges: userData.ownedBadges
       };
 
       res.status(200).json({
         stats: userData,
         badgeProgress: { progress },
-        shopData,
+        shopData
       });
-
     } finally {
       client.release();
     }
@@ -302,16 +354,19 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
   }
 });
 
+/* -------------------------------------------
+   PROFILE UPDATE / AVATAR
+------------------------------------------- */
+
 // ---- UPDATE PROFILE ----
 router.post('/update-profile', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { firstName } = req.body;
-    
+
     if (!firstName || firstName.trim().length === 0) {
       return res.status(400).json({ error: 'First name is required' });
     }
-    
     if (firstName.trim().length > 50) {
       return res.status(400).json({ error: 'First name too long (max 50 characters)' });
     }
@@ -322,17 +377,13 @@ router.post('/update-profile', validateUser, async (req, res) => {
         'UPDATE users SET first_name = $1 WHERE telegram_id = $2 RETURNING first_name',
         [firstName.trim(), user.id]
       );
-      
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      res.status(200).json({ 
-        success: true, 
-        firstName: result.rows[0].first_name,
-        message: 'Profile updated successfully' 
-      });
+      if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
+      res.status(200).json({
+        success: true,
+        firstName: result.rows[0].first_name,
+        message: 'Profile updated successfully'
+      });
     } finally {
       client.release();
     }
@@ -347,18 +398,17 @@ router.post('/update-avatar', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { avatarBase64 } = req.body;
-    
+
     if (!avatarBase64) {
       return res.status(400).json({ error: 'Avatar data is required' });
     }
-
     if (!avatarBase64.startsWith('data:image/')) {
       return res.status(400).json({ error: 'Invalid avatar format. Must be Base64 data URI.' });
     }
 
+    // Estimate size (roughly 3/4 multiplier for base64)
     const base64Length = avatarBase64.length;
     const sizeInMB = (base64Length * 0.75) / (1024 * 1024);
-    
     if (sizeInMB > 2) {
       return res.status(400).json({ error: `Avatar too large (${sizeInMB.toFixed(2)}MB). Maximum is 2MB.` });
     }
@@ -369,19 +419,14 @@ router.post('/update-avatar', validateUser, async (req, res) => {
         'UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $2 RETURNING avatar_url',
         [avatarBase64, user.id]
       );
-
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
+      if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
       console.log(`📸 Avatar updated for user ${user.id} (${sizeInMB.toFixed(2)}MB Base64)`);
-
       res.status(200).json({
         success: true,
         avatarUrl: result.rows[0].avatar_url,
         message: 'Avatar updated successfully'
       });
-
     } finally {
       client.release();
     }
@@ -391,19 +436,21 @@ router.post('/update-avatar', validateUser, async (req, res) => {
   }
 });
 
-// ---- UNLOCK BADGE (NEW) ----
+/* -------------------------------------------
+   BADGES
+------------------------------------------- */
+
+// ---- UNLOCK BADGE ----
 router.post('/unlock-badge', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { badgeName } = req.body;
 
-    if (!badgeName) {
-      return res.status(400).json({ error: 'Badge name is required' });
-    }
+    if (!badgeName) return res.status(400).json({ error: 'Badge name is required' });
 
     const client = await pool.connect();
     try {
-      // Check existing badge
+      // Already owned?
       const exists = await client.query(
         'SELECT 1 FROM user_badges WHERE user_id = $1 AND badge_name = $2',
         [user.id, badgeName]
@@ -422,7 +469,9 @@ router.post('/unlock-badge', validateUser, async (req, res) => {
 
       // Reward +100 points
       await client.query(
-        `UPDATE users SET points = points + 100 WHERE telegram_id = $1`,
+        `UPDATE users
+         SET points = COALESCE(points, 0) + 100
+         WHERE telegram_id = $1`,
         [user.id]
       );
 
