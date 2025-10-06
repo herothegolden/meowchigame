@@ -1,13 +1,23 @@
 // Path: src/components/ui/tabs/index.jsx
-// v1 — Lightweight internal Tabs implementation (no Radix)
+// v2 — Dependency-free internal Tabs implementation (no clsx or Radix)
 
 import React, { createContext, useContext, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import clsx from "clsx";
+
+// Simple local helper: merges truthy strings
+function cx(...args) {
+  return args.filter(Boolean).join(" ");
+}
 
 const TabsContext = createContext();
 
-export const Tabs = ({ value: controlledValue, onValueChange, defaultValue, children, className }) => {
+export const Tabs = ({
+  value: controlledValue,
+  onValueChange,
+  defaultValue,
+  children,
+  className,
+}) => {
   const isControlled = controlledValue !== undefined;
   const [internal, setInternal] = useState(defaultValue || "");
   const value = isControlled ? controlledValue : internal;
@@ -19,14 +29,14 @@ export const Tabs = ({ value: controlledValue, onValueChange, defaultValue, chil
 
   return (
     <TabsContext.Provider value={{ value, setValue }}>
-      <div className={clsx("w-full", className)}>{children}</div>
+      <div className={cx("w-full", className)}>{children}</div>
     </TabsContext.Provider>
   );
 };
 
 export const TabsList = ({ children, className }) => (
   <div
-    className={clsx(
+    className={cx(
       "flex items-center justify-around bg-nav/20 backdrop-blur-lg text-secondary",
       className
     )}
@@ -41,11 +51,12 @@ export const TabsTrigger = ({ value, children, className }) => {
   return (
     <button
       onClick={() => setValue(value)}
-      className={clsx(
+      className={cx(
         "flex-1 py-2 text-sm font-semibold transition-colors border-b-2",
         isActive
           ? "text-accent border-accent"
-          : "text-secondary border-transparent hover:text-primary"
+          : "text-secondary border-transparent hover:text-primary",
+        className
       )}
     >
       {children}
@@ -65,7 +76,7 @@ export const TabsContent = ({ value, children, className }) => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25 }}
-          className={clsx("p-4", className)}
+          className={cx("p-4", className)}
         >
           {children}
         </motion.div>
