@@ -7,64 +7,66 @@ const OverviewTab = () => {
       title: "Съедено печенек",
       value: "800 295",
       subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
-      gradient: "from-[#D6C1A3]/20 to-[#BBA88C]/10",
+      gradient: "from-[#A0886B]/30 to-[#705C44]/10",
     },
     {
       title: "Уровень дзена",
       value: "475ч 30м",
       subtitle: "Чем больше часов, тем тише мысли.",
-      gradient: "from-[#9AB9A9]/20 to-[#6E9986]/10",
+      gradient: "from-[#709C89]/30 to-[#4D7262]/10",
     },
     {
       title: "Настроение по мощности",
       value: "0 %",
       subtitle: "Система стабильна. Эмоции в спячке.",
-      gradient: "from-[#9C8FB7]/20 to-[#7B6A9B]/10",
+      gradient: "from-[#7E75A5]/30 to-[#5B5378]/10",
     },
     {
       title: "Социальная энергия",
-      value: "1 день streak",
+      value: "1 день",
       subtitle: "Ты говорил с людьми. Герой дня.",
-      gradient: "from-[#B69A8C]/20 to-[#9A7D6D]/10",
+      gradient: "from-[#8C6F63]/30 to-[#59473F]/10",
     },
     {
       title: "Приглашено друзей",
       value: "11",
       subtitle: "Каждый получил полотенце. Никто не вернул.",
-      gradient: "from-[#8BA6B7]/20 to-[#6C899A]/10",
+      gradient: "from-[#6F889B]/30 to-[#465866]/10",
     },
     {
       title: "Счётчик мяу",
       value: "63",
       subtitle: "Ответ найден. Это — мяу.",
-      gradient: "from-[#BEB29A]/20 to-[#9E8F79]/10",
+      gradient: "from-[#9C9278]/30 to-[#6B624D]/10",
     },
   ];
 
   return (
     <motion.div
-      className="grid grid-cols-2 gap-x-3 gap-y-3 relative"
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className="grid grid-cols-2 gap-4 relative"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
     >
       {lifeStats.map((stat, i) => (
         <motion.div
           key={i}
           whileHover={{
-            scale: 1.03,
-            boxShadow: "0 0 20px rgba(255,255,255,0.08)",
+            scale: 1.015,
+            boxShadow: "0 4px 14px rgba(255,255,255,0.06)",
           }}
-          transition={{ type: "spring", stiffness: 200, damping: 14 }}
-          className={`p-4 rounded-2xl border border-white/10 bg-gradient-to-br ${stat.gradient} backdrop-blur-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] flex flex-col justify-center items-center min-h-[120px] text-center select-none transition-transform duration-200`}
+          transition={{ type: "spring", stiffness: 180, damping: 18 }}
+          className={`rounded-2xl border border-white/10 bg-gradient-to-br ${stat.gradient}
+                      backdrop-blur-md p-5 flex flex-col justify-center items-center 
+                      text-center min-h-[150px] shadow-[0_0_20px_rgba(0,0,0,0.2)]`}
         >
-          <p className="text-[13px] text-[#D8D8D8] mb-1 font-medium tracking-wide">
+          <p className="text-[14px] font-medium text-gray-200 mb-2 tracking-wide">
             {stat.title}
           </p>
-          <p className="text-[28px] font-bold text-white mb-1 leading-tight">
+          <p className="text-[28px] font-extrabold text-white mb-2 leading-none">
             {stat.value}
           </p>
-          <p className="text-[12px] text-[#AEB4BE] max-w-[90%] leading-snug">
+          <p className="text-[13px] text-gray-400 leading-snug max-w-[85%]">
             {stat.subtitle}
           </p>
         </motion.div>
