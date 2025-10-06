@@ -14,25 +14,32 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
 
     const submitScore = async () => {
       setIsSubmitting(true);
-      if (score > 0 && tg && tg.initData && BACKEND_URL) {
-        try {
+      try {
+        if (score > 0 && tg && tg.initData && BACKEND_URL) {
           const res = await fetch(`${BACKEND_URL}/api/update-score`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ initData: tg.initData, score }),
           });
           const data = await res.json();
-          if (res.ok) console.log("✅ Score submitted successfully:", data);
-          else console.error("❌ Score submission failed:", data.error);
-        } catch (err) {
-          console.error("⚠️ Error submitting score:", err);
+          if (res.ok) {
+            console.log("✅ Score submitted successfully:", data);
+          } else {
+            console.error("❌ Score submission failed:", data.error);
+          }
         }
+      } catch (err) {
+        console.error("⚠️ Error submitting score:", err);
+      } finally {
+        setIsSubmitting(false);
       }
-      setIsSubmitting(false);
     };
 
-    const timeoutId = setTimeout(submitScore, 1000);
-    return () => clearTimeout(timeoutId);
+    // ⬇️ v1 fix: submit immediately (remove 1s delay to avoid race with Profile fetch)
+    submitScore();
+
+    // keep a no-op cleanup to preserve effect structure
+    return () => {};
   }, [isGameOver, score, isSubmitting, tg, BACKEND_URL]);
 
   return { isSubmitting, setIsSubmitting };
