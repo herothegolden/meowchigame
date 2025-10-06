@@ -22,10 +22,18 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const GamePage = () => {
   const tg = window.Telegram?.WebApp;
-  const navigateHome = () => window.location.assign("/");
+
+  // ✅ FIX 3 — proper Mini App homepage navigation
+  const navigateHome = () => {
+    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("soft");
+    if (tg?.BackButton) tg.BackButton.show();
+    if (tg?.MainButton) tg.MainButton.hide();
+    tg?.close(); // closes current Mini App game and returns to main screen
+  };
 
   // 🎯 Core gameplay states
   const [score, setScore] = useState(0);
+  const [availableItems, setAvailableItems] = useState([]);
 
   // 🧠 Hooks
   const {
@@ -40,7 +48,6 @@ const GamePage = () => {
   } = useGameTimer(tg);
 
   const {
-    availableItems,
     inventoryError,
     boosterActive,
     boosterTimeLeft,
@@ -64,15 +71,21 @@ const GamePage = () => {
     startDraggingBomb,
     gameBoardRef,
     setGameBoardRef,
+    registerInventoryRefs,
   } = useBombDrag(tg, BACKEND_URL);
 
   useScoreSubmit(tg, BACKEND_URL, score, isGameOver);
   useZenTimer(tg, BACKEND_URL, gameStarted, isGameOver);
 
-  // ✅ FIX: ensure inventory loads before first game start
+  // ✅ FIX 1 — preload inventory on mount
   useEffect(() => {
     loadInventory();
   }, [loadInventory]);
+
+  // ✅ FIX 2 — register inventory refs for bomb drag updates
+  useEffect(() => {
+    registerInventoryRefs(availableItems, setAvailableItems);
+  }, [availableItems, registerInventoryRefs]);
 
   // 🧩 Handlers
   const handleRestart = async () => {
