@@ -3,19 +3,32 @@ import { useState, useCallback, useEffect } from "react";
 
 /**
  * Hook: useBombDrag
- * Handles drag-and-drop logic for Cookie Bombs.
- * v3 — fixes undefined setter bug, disables screen scroll during drag, preserves gameplay.
+ * Fix v4 — Immediate scroll lock to prevent viewport jumping during drag.
  */
 export default function useBombDrag(tg, BACKEND_URL) {
   const [isDraggingBomb, setIsDraggingBomb] = useState(false);
   const [ghostBombPosition, setGhostBombPosition] = useState({ x: 0, y: 0 });
   const [gameBoardRef, setGameBoardRef] = useState(null);
 
+  // 🔒 Ensure Telegram viewport doesn’t scroll independently
+  useEffect(() => {
+    try {
+      tg?.expand();
+      window.Telegram?.WebApp?.expand();
+    } catch (_) {}
+  }, [tg]);
+
   // --- Start dragging the bomb ---
   const startDraggingBomb = useCallback(
     (e, availableItems) => {
       const bombItem = availableItems.find((item) => item.item_id === 3);
       if (!bombItem || bombItem.quantity <= 0 || isDraggingBomb) return;
+
+      // ✅ Immediate scroll lock BEFORE render update
+      document.body.style.touchAction = "none";
+      document.body.style.overscrollBehavior = "none";
+      document.documentElement.style.touchAction = "none";
+      document.documentElement.style.overscrollBehavior = "none";
 
       setIsDraggingBomb(true);
       const x = e.clientX || (e.touches && e.touches[0]?.clientX) || 0;
@@ -26,6 +39,7 @@ export default function useBombDrag(tg, BACKEND_URL) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred("medium");
       }
 
+      // Prevent browser scroll start
       e.preventDefault();
     },
     [isDraggingBomb]
@@ -48,6 +62,12 @@ export default function useBombDrag(tg, BACKEND_URL) {
     async (e, availableItems, setAvailableItems) => {
       if (!isDraggingBomb) return;
       setIsDraggingBomb(false);
+
+      // ✅ Unlock scroll immediately
+      document.body.style.touchAction = "";
+      document.body.style.overscrollBehavior = "";
+      document.documentElement.style.touchAction = "";
+      document.documentElement.style.overscrollBehavior = "";
 
       const x = e.clientX || (e.changedTouches && e.changedTouches[0]?.clientX) || 0;
       const y = e.clientY || (e.changedTouches && e.changedTouches[0]?.clientY) || 0;
@@ -77,7 +97,7 @@ export default function useBombDrag(tg, BACKEND_URL) {
               const result = await res.json();
               if (!res.ok) throw new Error(result.error || "Failed to use bomb");
 
-              // ✅ Proper state update (no 'p is not a function' error)
+              // Update inventory count
               setAvailableItems((prev) =>
                 prev
                   .map((item) =>
@@ -113,13 +133,10 @@ export default function useBombDrag(tg, BACKEND_URL) {
     [isDraggingBomb, gameBoardRef, tg, BACKEND_URL]
   );
 
-  // --- Global pointer listeners (prevent scrolling while dragging) ---
+  // --- Global pointer listeners (preserved, ensures smooth drag) ---
   useEffect(() => {
     if (isDraggingBomb) {
       const preventScroll = (e) => e.preventDefault();
-      document.body.style.overscrollBehavior = "none";
-      document.body.style.touchAction = "none";
-
       const pointerMoveHandler = (e) => handlePointerMove(e);
       const pointerUpHandler = (e) =>
         handlePointerUp(e, window._availableItemsRef, window._setAvailableItemsRef);
@@ -131,8 +148,6 @@ export default function useBombDrag(tg, BACKEND_URL) {
       document.addEventListener("scroll", preventScroll, { passive: false });
 
       return () => {
-        document.body.style.overscrollBehavior = "";
-        document.body.style.touchAction = "";
         document.removeEventListener("pointermove", pointerMoveHandler);
         document.removeEventListener("pointerup", pointerUpHandler);
         document.removeEventListener("touchmove", pointerMoveHandler);
@@ -149,13 +164,10 @@ export default function useBombDrag(tg, BACKEND_URL) {
   }, []);
 
   return {
-    // state
     isDraggingBomb,
     ghostBombPosition,
     gameBoardRef,
     setGameBoardRef,
-
-    // handlers
     startDraggingBomb,
     handlePointerMove,
     handlePointerUp,
