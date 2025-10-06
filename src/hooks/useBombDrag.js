@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 /**
  * Hook: useBombDrag
  * Handles drag-and-drop logic for Cookie Bombs.
- * Behavior identical to GamePage.jsx — modularized for clarity.
+ * v3 — fixes undefined setter bug, disables screen scroll during drag, preserves gameplay.
  */
 export default function useBombDrag(tg, BACKEND_URL) {
   const [isDraggingBomb, setIsDraggingBomb] = useState(false);
@@ -25,6 +25,7 @@ export default function useBombDrag(tg, BACKEND_URL) {
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred("medium");
       }
+
       e.preventDefault();
     },
     [isDraggingBomb]
@@ -72,17 +73,22 @@ export default function useBombDrag(tg, BACKEND_URL) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ initData: tg.initData, itemId: 3 }),
               });
+
               const result = await res.json();
               if (!res.ok) throw new Error(result.error || "Failed to use bomb");
 
+              // ✅ Proper state update (no 'p is not a function' error)
               setAvailableItems((prev) =>
                 prev
-                  .map((i) =>
-                    i.item_id === 3 ? { ...i, quantity: i.quantity - 1 } : i
+                  .map((item) =>
+                    item.item_id === 3
+                      ? { ...item, quantity: item.quantity - 1 }
+                      : item
                   )
-                  .filter((i) => i.quantity > 0)
+                  .filter((item) => item.quantity > 0)
               );
 
+              // Notify board
               gameBoardRef.handleBombDrop?.({ row, col });
 
               if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -101,27 +107,46 @@ export default function useBombDrag(tg, BACKEND_URL) {
           }
         }
       }
+
       e.preventDefault();
     },
     [isDraggingBomb, gameBoardRef, tg, BACKEND_URL]
   );
 
-  // --- Global pointer listeners identical to GamePage ---
+  // --- Global pointer listeners (prevent scrolling while dragging) ---
   useEffect(() => {
     if (isDraggingBomb) {
-      const preventDefaults = { passive: false };
-      document.addEventListener("pointermove", handlePointerMove, preventDefaults);
-      document.addEventListener("pointerup", handlePointerUp, preventDefaults);
-      document.addEventListener("touchmove", handlePointerMove, preventDefaults);
-      document.addEventListener("touchend", handlePointerUp, preventDefaults);
+      const preventScroll = (e) => e.preventDefault();
+      document.body.style.overscrollBehavior = "none";
+      document.body.style.touchAction = "none";
+
+      const pointerMoveHandler = (e) => handlePointerMove(e);
+      const pointerUpHandler = (e) =>
+        handlePointerUp(e, window._availableItemsRef, window._setAvailableItemsRef);
+
+      document.addEventListener("pointermove", pointerMoveHandler, { passive: false });
+      document.addEventListener("pointerup", pointerUpHandler, { passive: false });
+      document.addEventListener("touchmove", pointerMoveHandler, { passive: false });
+      document.addEventListener("touchend", pointerUpHandler, { passive: false });
+      document.addEventListener("scroll", preventScroll, { passive: false });
+
       return () => {
-        document.removeEventListener("pointermove", handlePointerMove);
-        document.removeEventListener("pointerup", handlePointerUp);
-        document.removeEventListener("touchmove", handlePointerMove);
-        document.removeEventListener("touchend", handlePointerUp);
+        document.body.style.overscrollBehavior = "";
+        document.body.style.touchAction = "";
+        document.removeEventListener("pointermove", pointerMoveHandler);
+        document.removeEventListener("pointerup", pointerUpHandler);
+        document.removeEventListener("touchmove", pointerMoveHandler);
+        document.removeEventListener("touchend", pointerUpHandler);
+        document.removeEventListener("scroll", preventScroll);
       };
     }
   }, [isDraggingBomb, handlePointerMove, handlePointerUp]);
+
+  // --- Provide helpers to GamePage so we can pass inventory refs ---
+  const registerInventoryRefs = useCallback((availableItems, setAvailableItems) => {
+    window._availableItemsRef = availableItems;
+    window._setAvailableItemsRef = setAvailableItems;
+  }, []);
 
   return {
     // state
@@ -134,5 +159,6 @@ export default function useBombDrag(tg, BACKEND_URL) {
     startDraggingBomb,
     handlePointerMove,
     handlePointerUp,
+    registerInventoryRefs,
   };
 }
