@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v6 — Badges tab removed, Overview + Leaderboard + Tasks kept
+// v8 — Fixed lazy import paths for tabs folder
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -9,10 +9,10 @@ import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { LoaderCircle } from "lucide-react";
 
-// Lazy-loaded tabs for performance
-const OverviewTab = lazy(() => import("./OverviewTab"));
-const LeaderboardTab = lazy(() => import("./LeaderboardTab"));
-const TasksTab = lazy(() => import("./TasksTab"));
+// ✅ Corrected lazy imports (moved to /tabs/ folder)
+const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
+const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
+const TasksTab = lazy(() => import("./tabs/TasksTab"));
 
 const ProfilePage = () => {
   const [data, setData] = useState(null);
