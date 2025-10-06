@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v4 — passes stats + ownedBadges + onUpdate props to StarterBadges
+// v5 — StarterBadges removed safely
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -14,7 +14,6 @@ const OverviewTab = lazy(() => import("./OverviewTab"));
 const BadgesTab = lazy(() => import("./BadgesTab"));
 const LeaderboardTab = lazy(() => import("./LeaderboardTab"));
 const TasksTab = lazy(() => import("./TasksTab"));
-const StarterBadges = lazy(() => import("./StarterBadges"));
 
 const ProfilePage = () => {
   const [data, setData] = useState(null);
@@ -70,28 +69,12 @@ const ProfilePage = () => {
     );
 
   const stats = data.stats || {};
-  const ownedBadges = data.stats?.ownedBadges || [];
   const streakInfo = data.stats?.streakInfo || {};
 
   return (
     <div className="p-4 space-y-6 pb-24 bg-background text-primary">
       {/* Profile Header */}
       <ProfileHeader stats={stats} onUpdate={fetchData} />
-
-      {/* Starter Badges — Fixed props */}
-      <Suspense
-        fallback={
-          <div className="text-center py-6 text-secondary text-sm">
-            Loading badges...
-          </div>
-        }
-      >
-        <StarterBadges
-          stats={stats}
-          ownedBadges={ownedBadges}
-          onUpdate={fetchData}
-        />
-      </Suspense>
 
       {/* Tabs Section */}
       <motion.div
@@ -134,10 +117,7 @@ const ProfilePage = () => {
                 </div>
               }
             >
-              <BadgesTab
-                ownedBadges={ownedBadges}
-                badgeProgress={data.badgeProgress}
-              />
+              <BadgesTab badgeProgress={data.badgeProgress} />
             </Suspense>
           </TabsContent>
 
