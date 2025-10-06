@@ -1,30 +1,50 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-const OverviewTab = () => {
+// Helper: convert seconds → "Xч Yм"
+const formatPlayTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return "0ч 0м";
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  return `${hrs}ч ${mins}м`;
+};
+
+const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
+  const totalPoints = (stats?.points || 0).toLocaleString();
+  const totalPlay =
+    typeof stats?.totalPlayTime === "string"
+      ? stats.totalPlayTime
+      : formatPlayTime(stats?.totalPlayTime || 0);
+  const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
+  const dailyStreak = stats?.daily_streak || 0;
+  const meowTaps = stats?.meow_taps || 0;
+
   const lifeStats = [
     {
       title: "Съедено печенек",
-      value: "800 295",
+      value: totalPoints,
       subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
       tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
     },
     {
       title: "Уровень дзена",
-      value: "475ч 30м",
+      value: totalPlay,
       subtitle: "Чем больше часов, тем тише мысли.",
       tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
     },
     {
       title: "Настроение по мощности",
-      value: "0 %",
-      subtitle: "Система стабильна. Эмоции в спячке.",
+      value: highScoreToday,
+      subtitle: "Рекорд дня. Система сияет, ты тоже.",
       tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
     },
     {
       title: "Социальная энергия",
-      value: "1 день",
-      subtitle: "Ты говорил с людьми. Герой дня.",
+      value: `${dailyStreak} дн${dailyStreak === 1 ? "ь" : "я"} подряд`,
+      subtitle:
+        dailyStreak > 0
+          ? "Ты говорил с людьми. Герой дня."
+          : "Пора снова выйти в Meowchiverse.",
       tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
     },
     {
@@ -35,8 +55,14 @@ const OverviewTab = () => {
     },
     {
       title: "Счётчик мяу",
-      value: "63",
-      subtitle: "Ответ найден. Это — мяу.",
+      value:
+        meowTaps >= 314
+          ? "314 / 314"
+          : `${meowTaps.toLocaleString()} / 314`,
+      subtitle:
+        meowTaps >= 314
+          ? "Совершенство достигнуто — мир в равновесии."
+          : "Нажимай дальше. Мяу ждёт.",
       tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
     },
   ];
@@ -62,13 +88,11 @@ const OverviewTab = () => {
                       flex flex-col justify-center items-center text-center 
                       shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`}
         >
-          {/* Subtle inner top light reflection */}
+          {/* Top reflection */}
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-
-          {/* Inner edge soft glow */}
+          {/* Inner glow */}
           <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
 
-          {/* Content */}
           <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
             <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
               {stat.title}
@@ -81,7 +105,7 @@ const OverviewTab = () => {
             </p>
           </div>
 
-          {/* Subtle ambient bottom fade for depth */}
+          {/* Bottom fade for depth */}
           <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
         </motion.div>
       ))}
