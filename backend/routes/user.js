@@ -209,7 +209,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         client.query(
           `SELECT first_name, username, points, level, daily_streak, created_at,
            games_played, high_score, total_play_time, avatar_url, vip_level,
-           last_login_date, streak_claimed_today FROM users WHERE telegram_id = $1`, 
+           last_login_date, streak_claimed_today, invited_friends
+           FROM users WHERE telegram_id = $1`, 
           [user.id]
         ),
         client.query('SELECT badge_name FROM user_badges WHERE user_id = $1', [user.id]),
@@ -281,7 +282,24 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         potentialBonus,
         message
       };
-      
+
+      // ⚡ ADD POWER METRIC COMPUTATION
+      const points_total = Number(userData.points || 0);
+      const vip_level = Number(userData.vip_level || 0);
+      const highest_score_today = Number(userData.high_score || 0);
+      const invited_friends = Number(userData.invited_friends || 0);
+
+      const power = Math.round(
+        100 +
+        points_total * 0.00005 +
+        currentStreak * 15 +
+        vip_level * 50 +
+        highest_score_today * 0.001 +
+        invited_friends * 20
+      );
+
+      userData.power = power;
+
       const progress = {};
       progressResult.rows.forEach(row => {
         progress[row.badge_name] = Math.round((row.current_progress / row.target_progress) * 100);
@@ -362,14 +380,12 @@ router.post('/update-avatar', validateUser, async (req, res) => {
       return res.status(400).json({ error: 'Avatar data is required' });
     }
 
-    // Validate Base64 format
     if (!avatarBase64.startsWith('data:image/')) {
       return res.status(400).json({ error: 'Invalid avatar format. Must be Base64 data URI.' });
     }
 
-    // Check size (limit to ~2MB Base64 string, which is ~1.5MB binary)
     const base64Length = avatarBase64.length;
-    const sizeInMB = (base64Length * 0.75) / (1024 * 1024); // Base64 is ~33% larger than binary
+    const sizeInMB = (base64Length * 0.75) / (1024 * 1024);
     
     if (sizeInMB > 2) {
       return res.status(400).json({ error: `Avatar too large (${sizeInMB.toFixed(2)}MB). Maximum is 2MB.` });
