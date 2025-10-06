@@ -252,7 +252,10 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               >
                 <Edit2 className="w-4 h-4" />
               </button>
-              <span className="text-sm text-secondary font-medium">VIP {userVipLevel}</span>
+              <span className="flex items-center text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 drop-shadow-[0_0_3px_rgba(255,215,0,0.5)] ml-1">
+  <Crown className="w-4 h-4 text-yellow-400 mr-1" strokeWidth={2} />
+  VIP {userVipLevel}
+</span>
               {isDeveloper && (
                 <button 
                   onClick={() => window.location.href = '/dev-tools'}
