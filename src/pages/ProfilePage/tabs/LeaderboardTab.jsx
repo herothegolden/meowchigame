@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
-// v2 — Synced avatar logic with ProfileHeader (Base64, relative, full URL support)
+// v3 — Faster loading with per-tab cache, lazy avatars, and background prefetch
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -14,26 +14,15 @@ const LeaderboardTab = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
 
-  // ✅ Synced helper: matches ProfileHeader.jsx behavior
+  // ✅ Synced helper: same as ProfileHeader
   const getAvatarUrl = (avatarData) => {
     if (!avatarData) return null;
-
-    // Base64 data URI
-    if (avatarData.startsWith('data:image/')) {
-      return avatarData;
-    }
-
-    // Legacy relative upload
+    if (avatarData.startsWith('data:image/')) return avatarData;
     if (avatarData.startsWith('/uploads/')) {
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
       return `${BACKEND_URL}${avatarData}`;
     }
-
-    // External URL
-    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) {
-      return avatarData;
-    }
-
+    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) return avatarData;
     return null;
   };
 
@@ -42,17 +31,47 @@ const LeaderboardTab = () => {
   }, [activeType]);
 
   const fetchLeaderboard = async (type) => {
-    setLoading(true);
+    // 🔹 Use cached data first
+    const cached = sessionStorage.getItem(`leaderboard_${type}`);
+    if (cached) {
+      try {
+        setLeaderboard(JSON.parse(cached));
+      } catch {
+        sessionStorage.removeItem(`leaderboard_${type}`);
+      }
+    }
+
+    // Only show loading if no cached data
+    if (!cached) setLoading(true);
+
     try {
       const result = await apiCall('/api/get-leaderboard', { type });
-      setLeaderboard(result.leaderboard || []);
+      const data = result.leaderboard || [];
+      setLeaderboard(data);
+      sessionStorage.setItem(`leaderboard_${type}`, JSON.stringify(data));
     } catch (error) {
       console.error('Failed to load leaderboard:', error);
-      setLeaderboard([]);
+      if (!cached) setLeaderboard([]);
     } finally {
       setLoading(false);
     }
   };
+
+  // 🔹 Prefetch other tabs when idle
+  useEffect(() => {
+    if (activeType === 'global') {
+      ['weekly', 'friends'].forEach((t) => {
+        if (!sessionStorage.getItem(`leaderboard_${t}`)) {
+          apiCall('/api/get-leaderboard', { type: t })
+            .then((r) => {
+              if (r?.leaderboard)
+                sessionStorage.setItem(`leaderboard_${t}`, JSON.stringify(r.leaderboard));
+            })
+            .catch(() => {});
+        }
+      });
+    }
+  }, [activeType]);
 
   const handleAddFriend = async () => {
     if (!friendUsername.trim()) return;
@@ -157,7 +176,7 @@ const LeaderboardTab = () => {
         </div>
       )}
 
-      {loading ? (
+      {loading && leaderboard.length === 0 ? (
         <div className="flex items-center justify-center py-8">
           <LoaderCircle className="w-6 h-6 text-accent animate-spin mr-2" />
           <span className="text-secondary text-sm">Loading...</span>
@@ -199,6 +218,7 @@ const LeaderboardTab = () => {
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-accent/20 border-2 border-accent/50 flex items-center justify-center mr-3 flex-shrink-0">
                   {avatarUrl ? (
                     <img
+                      loading="lazy"
                       src={avatarUrl}
                       alt={entry.player.name}
                       className="w-full h-full object-cover"
