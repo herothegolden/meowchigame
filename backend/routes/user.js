@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v2 — Clamp Profile points to a single authoritative value from users.points (no other changes)
+// v3 — Fix points inflation: /game/complete writes EXACT finalScore once; no server multipliers.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -232,7 +232,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const userRow = userResult.rows[0];
 
-      // ✅ Authoritative lifetime points (single source of truth)
+      // Authoritative lifetime points (single source of truth)
       const lifetimePoints = Number(userRow.points || 0);
 
       const userData = {
@@ -298,7 +298,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const shopData = {
         items: shopItemsResult.rows,
-        userPoints: lifetimePoints, // ✅ same single source
+        userPoints: lifetimePoints, // same single source
         inventory: inventoryResult.rows,
         boosterActive:
           userShopResult.rows[0]?.point_booster_expires_at &&
@@ -312,6 +312,65 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/get-profile-complete:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* -------------------------------------------
+   GAME COMPLETE — WRITE EXACT FINAL SCORE
+------------------------------------------- */
+
+router.post('/game/complete', validateUser, async (req, res) => {
+  // Client must post the number shown in the Game Over modal as finalScore.
+  // Server will *not* apply any multipliers/boosters again.
+  try {
+    const { user } = req;
+    const { score, finalScore, durationSec } = req.body;
+
+    const raw = Number(score) || 0;
+    const shown = Number(finalScore);
+    const awarded = Number.isFinite(shown) ? shown : raw; // truth source = modal number
+
+    const duration = Math.max(0, Number(durationSec) || 0);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Record the session with the exact awarded value for traceability
+      await client.query(
+        `INSERT INTO game_sessions (user_id, score, duration_seconds, created_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [user.id, awarded, duration]
+      );
+
+      // Single, atomic increment — add exactly what was shown to the player
+      await client.query(
+        `UPDATE users
+           SET points = COALESCE(points, 0) + $2,
+               games_played = COALESCE(games_played, 0) + 1,
+               high_score = GREATEST(COALESCE(high_score, 0), $2),
+               total_play_time = COALESCE(total_play_time, 0) + $3,
+               updated_at = NOW()
+         WHERE telegram_id = $1`,
+        [user.id, awarded, duration]
+      );
+
+      await client.query('COMMIT');
+
+      res.status(200).json({
+        success: true,
+        added: awarded,
+        totalAddedSeconds: duration
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/game/complete:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
