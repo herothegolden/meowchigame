@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v10 — Tab container now 100% visually identical to ProfileHeader
+// v11 — Tab container identical to ProfileHeader (no gradient, same corners, same tone)
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -80,14 +80,11 @@ const ProfilePage = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        // 🎨 Matched exactly to ProfileHeader container styling
-        className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1f1f1f] via-[#1a1a1a] to-[#111] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        // 🎨 Updated to match ProfileHeader exactly: no gradient, identical corner radius and tone
+        className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
-        {/* identical top gloss */}
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/5 via-transparent to-transparent pointer-events-none" />
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
-          <TabsList className="grid grid-cols-3 rounded-t-xl border-b border-white/10">
+          <TabsList className="grid grid-cols-3 rounded-t-lg border-b border-white/10">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="leaderboard">Рейтинг</TabsTrigger>
             <TabsTrigger value="tasks">Задания</TabsTrigger>
