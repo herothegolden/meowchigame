@@ -1,46 +1,58 @@
 // src/hooks/useScoreSubmit.js
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Hook: useScoreSubmit
- * Handles automatic score submission after each game.
- * Logic identical to the original GamePage implementation.
+ * Submits score exactly once when a game ends.
+ * Minimal, targeted fix: idempotent guard to prevent duplicate POSTs.
  */
 export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittedRef = useRef(false); // ✅ prevents duplicate submits per game end
 
   useEffect(() => {
-    if (!isGameOver || isSubmitting) return;
+    // reset idempotency latch when leaving game-over state (i.e., new round can submit again)
+    if (!isGameOver) submittedRef.current = false;
+  }, [isGameOver]);
+
+  useEffect(() => {
+    if (!isGameOver || isSubmitting || submittedRef.current) return;
 
     const submitScore = async () => {
-      setIsSubmitting(true);
       try {
-        if (score > 0 && tg && tg.initData && BACKEND_URL) {
-          const res = await fetch(`${BACKEND_URL}/api/update-score`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ initData: tg.initData, score }),
-          });
-          const data = await res.json();
-          if (res.ok) {
-            console.log("✅ Score submitted successfully:", data);
-          } else {
-            console.error("❌ Score submission failed:", data.error);
-          }
-        }
+        submittedRef.current = true; // ✅ latch immediately
+        setIsSubmitting(true);
+
+        const user = tg?.initDataUnsafe?.user;
+        if (!user?.id || !BACKEND_URL) throw new Error("Missing Telegram user or BACKEND_URL");
+
+        const res = await fetch(`${BACKEND_URL}/api/update-score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            score,
+            duration: 30,
+            itemsUsed: [],
+          }),
+        });
+
+        if (!res.ok) throw new Error(`update-score failed: ${res.status}`);
+        // We intentionally do not do any optimistic client-side addition here.
+        // The Profile will reflect the authoritative server value via subsequent fetch.
+
       } catch (err) {
         console.error("⚠️ Error submitting score:", err);
+        // allow retry on hard failure within this game over phase
+        submittedRef.current = false;
       } finally {
         setIsSubmitting(false);
       }
     };
 
-    // ⬇️ v1 fix: submit immediately (remove 1s delay to avoid race with Profile fetch)
     submitScore();
-
-    // keep a no-op cleanup to preserve effect structure
     return () => {};
   }, [isGameOver, score, isSubmitting, tg, BACKEND_URL]);
 
-  return { isSubmitting, setIsSubmitting };
+  return { isSubmitting };
 }
