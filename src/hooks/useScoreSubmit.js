@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from "react";
  * Hook: useScoreSubmit
  * Submits score exactly once when a game ends.
  * Minimal, targeted fix:
- *  1) Idempotent guard to prevent duplicate POSTs
- *  2) On success, fetch fresh stats and broadcast them so Profile updates immediately
+ *  - Add idempotent guard to prevent duplicate POSTs
+ *  - After success, broadcast authoritative points to update Profile immediately
  */
 export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submittedRef = useRef(false); // ✅ prevents duplicate submits per game end
+  const submittedRef = useRef(false); // ✅ prevents duplicate submits per game over
 
-  // Reset the latch when leaving game-over state (new round can submit again)
+  // Reset latch when a new round starts
   useEffect(() => {
     if (!isGameOver) submittedRef.current = false;
   }, [isGameOver]);
@@ -21,97 +21,62 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
     if (!isGameOver || isSubmitting || submittedRef.current) return;
 
     const submitScore = async () => {
+      setIsSubmitting(true);
       try {
-        submittedRef.current = true; // ✅ latch immediately to avoid duplicate POSTs
-        setIsSubmitting(true);
+        // keep your current auth/path contract: initData + score
+        if (score > 0 && tg && tg.initData && BACKEND_URL) {
+          // latch immediately to avoid re-submits from re-renders
+          submittedRef.current = true;
 
-        const user = tg?.initDataUnsafe?.user;
-        if (!user?.id || !BACKEND_URL) throw new Error("Missing Telegram user or BACKEND_URL");
-
-        // 1) Submit final score (authoritative increment happens on the server)
-        const res = await fetch(`${BACKEND_URL}/api/update-score`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            score,
-            duration: 30,
-            itemsUsed: [],
-          }),
-        });
-
-        if (!res.ok) throw new Error(`update-score failed: ${res.status}`);
-
-        // Read the response if present (may include new_points)
-        let upd = null;
-        try {
-          upd = await res.json();
-        } catch (_) {
-          upd = null;
-        }
-
-        // 2) Immediately fetch fresh user stats so Profile can reflect the new total
-        //    (keeps single source of truth = server; no optimistic math here)
-        let fresh = null;
-        try {
-          const s = await fetch(`${BACKEND_URL}/api/get-user-stats`, {
-            method: "GET",
+          const res = await fetch(`${BACKEND_URL}/api/update-score`, {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            credentials: "include",
+            body: JSON.stringify({ initData: tg.initData, score }),
           });
-          if (s.ok) fresh = await s.json();
-        } catch (_) {
-          // ignore fetch errors, we still publish new_points if available
-        }
 
-        // Prefer server stats if available; fall back to update-score payload’s new_points
-        const serverPoints =
-          typeof fresh?.points === "number" ? fresh.points :
-          typeof fresh?.data?.points === "number" ? fresh.data.points :
-          typeof upd?.new_points === "number" ? upd.new_points :
-          null;
-
-        // 3) Broadcast updates for subscribers (Profile / Overview can react)
-        if (serverPoints !== null) {
+          let data = null;
           try {
-            window.dispatchEvent(
-              new CustomEvent("meowchi:points-updated", { detail: { points: serverPoints } })
-            );
-            // Also broadcast full stats if we have them
-            if (fresh && typeof fresh === "object") {
-              window.dispatchEvent(
-                new CustomEvent("meowchi:stats-updated", { detail: { stats: fresh } })
-              );
+            data = await res.json();
+          } catch (_) {
+            // backend might not always return JSON; ignore silently
+          }
+
+          if (res.ok) {
+            console.log("✅ Score submitted successfully:", data);
+
+            // ⬇️ NEW: broadcast authoritative total so Profile updates immediately
+            const newPoints = Number(data?.new_points);
+            if (!Number.isNaN(newPoints)) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("meowchi:points-updated", { detail: { points: newPoints } })
+                );
+              } catch (_) {}
+              try {
+                sessionStorage.setItem("meowchi:points", String(newPoints));
+                localStorage.setItem("meowchi:points", String(newPoints));
+              } catch (_) {}
             }
-          } catch (_) {}
-          // 4) Persist for components hydrating from storage
-          try {
-            sessionStorage.setItem("meowchi:points", String(serverPoints));
-            localStorage.setItem("meowchi:points", String(serverPoints));
-            if (fresh) {
-              sessionStorage.setItem("meowchi:stats", JSON.stringify(fresh));
-              localStorage.setItem("meowchi:stats", JSON.stringify(fresh));
-            }
-          } catch (_) {}
+          } else {
+            console.error("❌ Score submission failed:", data?.error ?? res.status);
+            // allow retry in this game-over phase if server rejected
+            submittedRef.current = false;
+          }
         }
-
-        // Optional: haptic "success" feedback
-        try {
-          tg?.HapticFeedback?.notificationOccurred?.("success");
-        } catch (_) {}
-
       } catch (err) {
         console.error("⚠️ Error submitting score:", err);
-        // allow retry on hard failure within this game-over phase
+        // allow retry on hard failure
         submittedRef.current = false;
       } finally {
         setIsSubmitting(false);
       }
     };
 
+    // Submit immediately (no delay) to avoid racing Profile fetches
     submitScore();
+
     return () => {};
   }, [isGameOver, score, isSubmitting, tg, BACKEND_URL]);
 
-  return { isSubmitting };
+  return { isSubmitting, setIsSubmitting };
 }
