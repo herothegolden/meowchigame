@@ -5,7 +5,7 @@ import { validateUser } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Helper function for badge progress updates
+// Helper function for badge progress updates (unchanged)
 const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
   const badgeUpdates = [
     {
@@ -50,8 +50,9 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
 router.post('/update-score', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const { score, duration = 30, itemsUsed = [] } = req.body;
-    if (score === undefined && req.body.finalScore === undefined) {
+    const { score, duration = 30, itemsUsed = [], finalScore: clientFinalScore } = req.body;
+
+    if (score === undefined && clientFinalScore === undefined) {
       return res.status(400).json({ error: 'Score is required' });
     }
 
@@ -65,19 +66,21 @@ router.post('/update-score', validateUser, async (req, res) => {
         'SELECT points, point_booster_expires_at, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
       );
-      if (userResult.rowCount === 0) throw new Error('User not found');
+      if (userResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'User not found' });
+      }
 
       const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
 
-      // Keep booster detection for telemetry (boost_multiplier), but DO NOT re-apply it to the stored score
+      // Keep booster detection for telemetry only; DO NOT re-apply to stored score (unchanged telemetry)
       const boosterActive =
         point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
 
       // ✅ SURGICAL FIX:
-      // Trust the Game Over modal number sent by the client (finalScore) if present.
-      // Do NOT multiply again on the server.
-      const clientFinal = Number.isFinite(Number(req.body.finalScore))
-        ? Math.floor(Number(req.body.finalScore))
+      // Trust the Game Over modal number (finalScore) if provided; do NOT multiply again on the server.
+      const clientFinal = Number.isFinite(Number(clientFinalScore))
+        ? Math.floor(Number(clientFinalScore))
         : null;
       const finalScore = clientFinal !== null ? clientFinal : baseScore;
 
@@ -92,22 +95,23 @@ router.post('/update-score', validateUser, async (req, res) => {
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0]
       );
-
       const sessionId = sessionResult.rows[0].id;
 
       const updateResult = await client.query(
-        `UPDATE users SET
-         points = $1,
-         point_booster_active = FALSE,
-         point_booster_expires_at = NULL,
-         high_score = $3,
-         games_played = $4,
-         total_play_time = total_play_time + $5
-         WHERE telegram_id = $2 RETURNING points`,
+        `UPDATE users 
+           SET points = $1,
+               point_booster_active = FALSE,
+               point_booster_expires_at = NULL,
+               high_score = $3,
+               games_played = $4,
+               total_play_time = total_play_time + $5,
+               updated_at = NOW()
+         WHERE telegram_id = $2
+         RETURNING points`,
         [newPoints, user.id, newHighScore, newGamesPlayed, duration]
       );
 
-      // Update badge progress (unchanged)
+      // Badge progress (unchanged)
       await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
 
       await client.query('COMMIT');
@@ -117,10 +121,10 @@ router.post('/update-score', validateUser, async (req, res) => {
         score_awarded: finalScore,
         session_id: sessionId
       });
-
     } catch (e) {
       await client.query('ROLLBACK');
-      throw e;
+      console.error('🚨 Error in /api/game/update-score (tx):', e);
+      return res.status(500).json({ error: 'Internal server error' });
     } finally {
       client.release();
     }
@@ -183,7 +187,6 @@ router.post('/use-time-booster', validateUser, async (req, res) => {
         message: 'Extra Time +10s used successfully!',
         timeBonus: timeBonus
       });
-
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -251,7 +254,6 @@ router.post('/activate-item', validateUser, async (req, res) => {
         message: 'Point Booster activated for 20 seconds!',
         expiresAt: expirationTime.toISOString()
       });
-
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -312,7 +314,6 @@ router.post('/use-bomb', validateUser, async (req, res) => {
         success: true,
         message: 'Cookie Bomb used successfully!'
       });
-
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -350,8 +351,8 @@ router.post('/get-item-usage-history', validateUser, async (req, res) => {
 });
 
 /* ------------------------------------------------------------
-   ✅ NEW ENDPOINT — RECORD GAME TIME (Zen Level)
-   ------------------------------------------------------------ */
+   RECORD GAME TIME (Zen Level) — unchanged
+------------------------------------------------------------ */
 router.post('/game/record-time', validateUser, async (req, res) => {
   try {
     const { user } = req;
