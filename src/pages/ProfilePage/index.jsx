@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v11 — Tab container identical to ProfileHeader (no gradient, same corners, same tone)
+// v12 — Refetch on focus & on 'points:updated' so lifetime points update immediately
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -36,6 +36,22 @@ const ProfilePage = () => {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // 🔄 NEW: ensure Profile updates after a game ends
+  useEffect(() => {
+    const onFocus = () => fetchData();
+    const onPointsUpdated = () => fetchData();
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("points:updated", onPointsUpdated);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("points:updated", onPointsUpdated);
+    };
   }, [fetchData]);
 
   if (loading)
