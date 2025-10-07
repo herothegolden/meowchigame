@@ -222,6 +222,26 @@ export const setupDatabase = async () => {
       );
     `);
 
+    // ✅ Idempotency support: add game_id + unique index (user_id, game_id)
+    //    This allows /api/update-score to be INSERT ... ON CONFLICT DO NOTHING
+    const gsCols = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='game_sessions'
+    `);
+    const gsHasGameId = gsCols.rows.some(r => r.column_name === 'game_id');
+    if (!gsHasGameId) {
+      console.log('🧾 Adding game_id column to game_sessions for idempotency...');
+      await client.query(`ALTER TABLE game_sessions ADD COLUMN game_id UUID`);
+      console.log('✅ game_id column added');
+    }
+    // Unique index (user_id, game_id) — permits nulls; collisions only when game_id provided
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_game_sessions_user_game 
+      ON game_sessions (user_id, game_id)
+    `);
+    console.log('✅ Unique index on (user_id, game_id) ensured');
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS item_usage_history (
         id SERIAL PRIMARY KEY,
