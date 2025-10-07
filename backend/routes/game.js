@@ -1,3 +1,4 @@
+// Path: backend/routes/game.js
 import express from 'express';
 import { pool } from '../config/database.js';
 import { validateUser } from '../middleware/auth.js';
@@ -50,7 +51,7 @@ router.post('/update-score', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const { score, duration = 30, itemsUsed = [] } = req.body;
-    if (score === undefined) {
+    if (score === undefined && req.body.finalScore === undefined) {
       return res.status(400).json({ error: 'Score is required' });
     }
 
@@ -67,13 +68,24 @@ router.post('/update-score', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) throw new Error('User not found');
 
       const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
-      const boosterActive = point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
-      const finalScore = boosterActive ? baseScore * 2 : baseScore;
-      const newPoints = points + finalScore;
+
+      // Keep booster detection for telemetry (boost_multiplier), but DO NOT re-apply it to the stored score
+      const boosterActive =
+        point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
+
+      // ✅ SURGICAL FIX:
+      // Trust the Game Over modal number sent by the client (finalScore) if present.
+      // Do NOT multiply again on the server.
+      const clientFinal = Number.isFinite(Number(req.body.finalScore))
+        ? Math.floor(Number(req.body.finalScore))
+        : null;
+      const finalScore = clientFinal !== null ? clientFinal : baseScore;
+
+      const newPoints = (points || 0) + finalScore;
       const newHighScore = Math.max(high_score || 0, finalScore);
       const newGamesPlayed = (games_played || 0) + 1;
 
-      console.log("Saving score:", finalScore);
+      console.log('Saving score:', finalScore);
 
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
