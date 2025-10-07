@@ -1,5 +1,6 @@
 // Path: backend/routes/user.js
-// v4 — Badge endpoints and joins removed only
+// v5 — Daily metrics patched: high_score_today (from game_sessions), display streak from sessions,
+//       power uses high_score_today. No unrelated changes.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -165,7 +166,9 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
            COALESCE(high_score, 0)      AS high_score,
            COALESCE(total_play_time, 0) AS total_play_time,
            avatar_url,
-           COALESCE(vip_level, 0)       AS vip_level
+           COALESCE(vip_level, 0)       AS vip_level,
+           last_login_date,
+           COALESCE(streak_claimed_today, FALSE) AS streak_claimed_today
          FROM users
          WHERE telegram_id = $1`,
         [user.id]
@@ -174,6 +177,44 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
       const userData = userResult.rows[0];
+
+      // --- Derived daily metrics (display correctness) ---
+      const todayStr = getTashkentDate();
+
+      // 1) Today's high score (Asia/Tashkent)
+      const highTodayResult = await client.query(
+        `SELECT COALESCE(MAX(score), 0) AS high_today
+           FROM game_sessions
+          WHERE user_id = $1
+            AND (ended_at AT TIME ZONE 'Asia/Tashkent')::date = $2::date`,
+        [user.id, todayStr]
+      );
+      userData.high_score_today = Number(highTodayResult.rows[0]?.high_today || 0);
+
+      // 2) Display streak from consecutive play-days ending today
+      const recentDatesResult = await client.query(
+        `SELECT DISTINCT (ended_at AT TIME ZONE 'Asia/Tashkent')::date AS d
+           FROM game_sessions
+          WHERE user_id = $1
+            AND (ended_at AT TIME ZONE 'Asia/Tashkent')::date >= ($2::date - INTERVAL '60 days')
+          ORDER BY d DESC`,
+        [user.id, todayStr]
+      );
+      const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
+      let streakFromSessions = 0;
+      let cursor = new Date(`${todayStr}T00:00:00+05:00`);
+      for (let i = 0; i < 60; i++) {
+        const y = cursor.toISOString().slice(0, 10);
+        if (dateSet.has(y)) {
+          streakFromSessions += 1;
+          cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+        } else {
+          break;
+        }
+      }
+      // Use computed streak for display
+      userData.daily_streak = streakFromSessions;
+
       res.status(200).json(userData);
     } finally {
       client.release();
@@ -235,11 +276,47 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
 
-      const currentDate = getTashkentDate();
+      // --- Derived daily metrics (display correctness) ---
+      const todayStr = getTashkentDate();
+
+      // 1) Today's high score (Asia/Tashkent)
+      const highTodayResult = await client.query(
+        `SELECT COALESCE(MAX(score), 0) AS high_today
+           FROM game_sessions
+          WHERE user_id = $1
+            AND (ended_at AT TIME ZONE 'Asia/Tashkent')::date = $2::date`,
+        [user.id, todayStr]
+      );
+      userData.high_score_today = Number(highTodayResult.rows[0]?.high_today || 0);
+
+      // 2) Display streak from consecutive play-days ending today
+      const recentDatesResult = await client.query(
+        `SELECT DISTINCT (ended_at AT TIME ZONE 'Asia/Tashkent')::date AS d
+           FROM game_sessions
+          WHERE user_id = $1
+            AND (ended_at AT TIME ZONE 'Asia/Tashkent')::date >= ($2::date - INTERVAL '60 days')
+          ORDER BY d DESC`,
+        [user.id, todayStr]
+      );
+      const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
+      let streakFromSessions = 0;
+      let cursor = new Date(`${todayStr}T00:00:00+05:00`);
+      for (let i = 0; i < 60; i++) {
+        const y = cursor.toISOString().slice(0, 10);
+        if (dateSet.has(y)) {
+          streakFromSessions += 1;
+          cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+        } else {
+          break;
+        }
+      }
+      // Use computed streak for display
+      const currentStreak = streakFromSessions;
+
+      // Keep the claim-state logic (unchanged), but use display streak value
       const lastLoginDate = userData.last_login_date;
-      const currentStreak = userData.daily_streak || 0;
       const streakClaimedToday = userData.streak_claimed_today || false;
-      const diffDays = calculateDateDiff(lastLoginDate, currentDate);
+      const diffDays = calculateDateDiff(lastLoginDate, todayStr);
 
       let canClaim = false;
       let state = 'CLAIMED';
@@ -272,11 +349,13 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
         message = 'Streak reset - start fresh!';
       }
 
+      userData.daily_streak = currentStreak;
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
+      // Power uses today's high score (not lifetime)
       const points_total = Number(userData.points || 0);
       const vip_level = Number(userData.vip_level || 0);
-      const highest_score_today = Number(userData.high_score || 0);
+      const highest_score_today = Number(userData.high_score_today || 0);
       const invited_friends = 0;
       const power = Math.round(
         100 +
