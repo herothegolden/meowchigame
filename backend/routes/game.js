@@ -107,7 +107,9 @@ router.post('/update-score', validateUser, async (req, res) => {
         [newPoints, user.id, newHighScore, newGamesPlayed, duration]
       );
 
+      // Update badge progress (unchanged)
       await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
+
       await client.query('COMMIT');
 
       return res.status(200).json({
