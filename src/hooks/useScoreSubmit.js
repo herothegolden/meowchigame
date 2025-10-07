@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 /**
  * Hook: useScoreSubmit
  * Submits score exactly once when a game ends.
- * Minimal, targeted fix: idempotent guard to prevent duplicate POSTs.
+ * Minimal, targeted fix: idempotent guard + broadcast updated points on success.
  */
 export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittedRef = useRef(false); // ✅ prevents duplicate submits per game end
 
+  // Reset the latch when leaving game-over state (new round can submit again)
   useEffect(() => {
-    // reset idempotency latch when leaving game-over state (i.e., new round can submit again)
     if (!isGameOver) submittedRef.current = false;
   }, [isGameOver]);
 
@@ -20,7 +20,7 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
 
     const submitScore = async () => {
       try {
-        submittedRef.current = true; // ✅ latch immediately
+        submittedRef.current = true; // ✅ latch immediately to avoid duplicate POSTs
         setIsSubmitting(true);
 
         const user = tg?.initDataUnsafe?.user;
@@ -38,12 +38,39 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
         });
 
         if (!res.ok) throw new Error(`update-score failed: ${res.status}`);
-        // We intentionally do not do any optimistic client-side addition here.
-        // The Profile will reflect the authoritative server value via subsequent fetch.
+
+        // ⬇️ NEW: read authoritative total and push it to interested subscribers
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (_) {
+          // If backend returns empty body, we simply skip broadcasting.
+          data = null;
+        }
+
+        const newPoints = Number(data?.new_points);
+        if (!Number.isNaN(newPoints)) {
+          // 1) Broadcast an app-wide event for immediate UI updates (Profile can subscribe)
+          window.dispatchEvent(
+            new CustomEvent("meowchi:points-updated", { detail: { points: newPoints } })
+          );
+          // 2) Persist to storage in case Profile/Overview reads from cache on focus
+          try {
+            sessionStorage.setItem("meowchi:points", String(newPoints));
+            localStorage.setItem("meowchi:points", String(newPoints));
+          } catch (_) {
+            // storage can fail in private mode; silently ignore
+          }
+        }
+
+        // Optional: haptic "success" feedback
+        try {
+          tg?.HapticFeedback?.notificationOccurred?.("success");
+        } catch (_) {}
 
       } catch (err) {
         console.error("⚠️ Error submitting score:", err);
-        // allow retry on hard failure within this game over phase
+        // allow retry on hard failure within this game-over phase
         submittedRef.current = false;
       } finally {
         setIsSubmitting(false);
