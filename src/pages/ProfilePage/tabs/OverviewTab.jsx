@@ -11,13 +11,19 @@ const formatPlayTime = (seconds) => {
 
 const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
+
+  // Kept for backward-compatibility, though no longer used for the Zen card
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
       ? stats.totalPlayTime
       : formatPlayTime(stats?.totalPlayTime || 0);
+
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
   const meowTaps = stats?.meow_taps || 0;
+
+  // ✅ Use lifetime games played for the “Уровень дзена” value
+  const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
   const lifeStats = [
     {
@@ -28,7 +34,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     },
     {
       title: "Уровень дзена",
-      value: totalPlay,
+      value: gamesPlayed, // ← switched from time to lifetime games played
       subtitle: "Чем больше часов, тем тише мысли.",
       tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
     },
