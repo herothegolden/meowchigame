@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v8 — Fixed lazy import paths for tabs folder
+// v9 — Tab container updated to match ProfileHeader design
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { motion } from "framer-motion";
@@ -80,9 +80,13 @@ const ProfilePage = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="rounded-2xl bg-nav/30 backdrop-blur-lg border border-white/10 shadow-lg"
+        // 🎨 Updated styling: now visually matches ProfileHeader container
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#2a2a2a]/95 via-[#1e1e1e]/95 to-[#111111]/90 border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl"
       >
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Subtle top gloss layer to mimic ProfileHeader */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 via-transparent to-transparent pointer-events-none" />
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
           <TabsList className="grid grid-cols-3 rounded-t-2xl border-b border-white/10">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="leaderboard">Рейтинг</TabsTrigger>
