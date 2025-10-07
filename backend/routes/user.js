@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v4 — Badge endpoints and joins removed only
+// v1 — Minimal fix: unify points source used in Profile payload
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -290,7 +290,9 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const shopData = {
         items: shopItemsResult.rows,
-        userPoints: userShopResult.rows[0]?.points || 0,
+        // ✅ Single source of truth for lifetime points on Profile/Shop:
+        // use the same points we already fetched for the user
+        userPoints: points_total,
         inventory: inventoryResult.rows,
         boosterActive:
           userShopResult.rows[0]?.point_booster_expires_at &&
