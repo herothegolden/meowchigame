@@ -4,18 +4,32 @@ import { useEffect, useRef, useState } from "react";
 /**
  * Hook: useScoreSubmit
  * Submits score exactly once when a game ends.
- * Minimal, targeted fix:
- *  - Idempotent guard to prevent duplicate POSTs
- *  - Post body includes all common server keys (score/finalScore/points)
- *  - On success, broadcast authoritative points; fallback GET if needed
+ * Adds server-side idempotency support by attaching a client-generated gameId (UUID).
  */
 export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submittedRef = useRef(false); // prevents duplicate submits per game over
+  const submittedRef = useRef(false);        // prevents duplicate submits per game over
+  const gameIdRef = useRef(null);            // stable id for this game's submission window
 
-  // Reset latch when a new round starts
+  // UUID generator with browser crypto fallback
+  const makeUuid = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // RFC4122-ish fallback
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
+  // Reset latch and gameId when a new round starts
   useEffect(() => {
-    if (!isGameOver) submittedRef.current = false;
+    if (!isGameOver) {
+      submittedRef.current = false;
+      gameIdRef.current = null;
+    }
   }, [isGameOver]);
 
   useEffect(() => {
@@ -27,14 +41,20 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
         if (score > 0 && tg && tg.initData && BACKEND_URL) {
           submittedRef.current = true;
 
+          // Ensure a stable gameId for this finished game
+          if (!gameIdRef.current) {
+            gameIdRef.current = makeUuid();
+          }
+
           const final = Number(score) || 0;
           const payload = {
             initData: tg.initData,
-            score: final,        // primary key some servers expect
-            finalScore: final,   // alt key some servers expect
-            points: final,       // alt key some servers expect
+            score: final,        // compatibility keys
+            finalScore: final,   // "
+            points: final,       // "
             duration: 30,        // keep for compatibility
-            itemsUsed: []        // keep for compatibility
+            itemsUsed: [],       // keep for compatibility
+            gameId: gameIdRef.current, // 🔒 idempotency key
           };
 
           const res = await fetch(`${BACKEND_URL}/api/update-score`, {
@@ -55,7 +75,7 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
             num(data?.data?.points) ??
             null;
 
-          // If response doesn't contain the updated total, do a single fallback fetch
+          // If response doesn't contain updated total, do a single fallback fetch
           if (res.ok && newTotal === null) {
             try {
               const s = await fetch(`${BACKEND_URL}/api/get-user-stats`, {
@@ -95,13 +115,13 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
             } catch (_) {}
           }
 
-          // If server rejected, allow re-submit within this game-over phase
+          // If server rejected, allow re-submit within this game-over phase (same gameId)
           if (!res.ok) {
             submittedRef.current = false;
           }
         }
       } catch (_) {
-        // allow retry on hard failure
+        // allow retry on hard failure (same gameId)
         submittedRef.current = false;
       } finally {
         setIsSubmitting(false);
