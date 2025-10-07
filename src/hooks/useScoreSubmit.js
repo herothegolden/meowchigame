@@ -24,6 +24,16 @@ export default function useScoreSubmit(tg, BACKEND_URL, score, isGameOver) {
           const data = await res.json();
           if (res.ok) {
             console.log("✅ Score submitted successfully:", data);
+            // NEW (v2): notify ProfilePage to refetch lifetime points immediately
+            try {
+              const detail = {
+                new_points: data?.new_points,
+                score_awarded: data?.score_awarded,
+              };
+              window.dispatchEvent(new CustomEvent("points:updated", { detail }));
+            } catch (e) {
+              // In non-browser environments window may be undefined; safe no-op
+            }
           } else {
             console.error("❌ Score submission failed:", data.error);
           }
