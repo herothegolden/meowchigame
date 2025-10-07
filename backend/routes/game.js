@@ -75,23 +75,27 @@ router.post('/update-score', validateUser, async (req, res) => {
 
       console.log("Saving score:", finalScore);
 
-      // 🔒 DEDUPE GUARD (server-side, no API changes)
-      // Prevent duplicated lifetime increments if the same result is posted repeatedly in a short window.
-      // Heuristic: same user, same score AND same duration within the last 10 seconds => treat as duplicate submission.
+      // 🔒 DEDUPE GUARD (tighter, fewer false positives)
+      // Treat as duplicate ONLY if the same user has an identical session recorded
+      // within the last 2 seconds with the same score, duration, boost multiplier, and items_used.
+      const boostMult = boosterActive ? 2.0 : 1.0;
+      const itemsJson = JSON.stringify(itemsUsed || []);
+
       const dupCheck = await client.query(
         `SELECT id
            FROM game_sessions
           WHERE user_id = $1
             AND score = $2
             AND duration = $3
-            AND created_at >= NOW() - INTERVAL '10 seconds'
+            AND boost_multiplier = $4
+            AND items_used::text = $5::text
+            AND created_at >= NOW() - INTERVAL '2 seconds'
           ORDER BY id DESC
           LIMIT 1`,
-        [user.id, finalScore, duration]
+        [user.id, finalScore, duration, boostMult, itemsJson]
       );
 
       if (dupCheck.rowCount > 0) {
-        // Duplicate detected: don't add points again, just return current lifetime and the existing session id.
         const current = await client.query(
           'SELECT points FROM users WHERE telegram_id = $1',
           [user.id]
@@ -108,7 +112,7 @@ router.post('/update-score', validateUser, async (req, res) => {
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0]
+        [user.id, finalScore, duration, itemsJson, boostMult]
       );
 
       const sessionId = sessionResult.rows[0].id;
