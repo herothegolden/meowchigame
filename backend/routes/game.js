@@ -45,11 +45,11 @@ const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore
   }
 };
 
-// ---- UPDATE SCORE ----
+// ---- UPDATE SCORE (with server-side idempotency via gameId) ----
 router.post('/update-score', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const { score, duration = 30, itemsUsed = [] } = req.body;
+    const { score, duration = 30, itemsUsed = [], gameId } = req.body;
     if (score === undefined) {
       return res.status(400).json({ error: 'Score is required' });
     }
@@ -60,6 +60,7 @@ router.post('/update-score', validateUser, async (req, res) => {
     try {
       await client.query('BEGIN');
 
+      // Lock user row for safe increments
       const userResult = await client.query(
         'SELECT points, point_booster_expires_at, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
         [user.id]
@@ -70,30 +71,102 @@ router.post('/update-score', validateUser, async (req, res) => {
       const boosterActive = point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
       const finalScore = boosterActive ? baseScore * 2 : baseScore;
 
-      // ✅ FIX: ensure numeric addition (prevents "2985" + 100 => "2985100")
-      const newPoints = (Number(points) || 0) + (Number(finalScore) || 0);
-
+      const startingPoints = Number(points) || 0;
       const newHighScore = Math.max(high_score || 0, finalScore);
       const newGamesPlayed = (games_played || 0) + 1;
 
-      console.log("Saving score:", finalScore);
+      let insertedSessionId = null;
+      let usedIdempotency = false;
 
+      // If client provided a gameId, try idempotent insert first.
+      if (typeof gameId === 'string' && gameId.length > 0) {
+        usedIdempotency = true;
+        try {
+          // Attempt idempotent insert (requires DB column + unique index)
+          const sessionResult = await client.query(
+            `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier, game_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (user_id, game_id) DO NOTHING
+             RETURNING id`,
+            [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0, gameId]
+          );
+
+          if (sessionResult.rowCount > 0) {
+            insertedSessionId = sessionResult.rows[0].id;
+
+            // Only on first insert do we increment users.*
+            const newPoints = startingPoints + (Number(finalScore) || 0);
+
+            const updateResult = await client.query(
+              `UPDATE users SET
+                 points = $1,
+                 point_booster_active = FALSE,
+                 point_booster_expires_at = NULL,
+                 high_score = $3,
+                 games_played = $4
+               WHERE telegram_id = $2
+               RETURNING points`,
+              [newPoints, user.id, newHighScore, newGamesPlayed]
+            );
+
+            await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
+            await client.query('COMMIT');
+
+            return res.status(200).json({
+              new_points: updateResult.rows[0].points,
+              score_awarded: finalScore,
+              session_id: insertedSessionId,
+              idempotent: true,
+              inserted: true
+            });
+          } else {
+            // Duplicate (same user_id + game_id) → do not mutate points/games_played
+            await client.query('ROLLBACK'); // nothing changed in this tx
+            return res.status(200).json({
+              new_points: startingPoints, // unchanged
+              score_awarded: 0,
+              session_id: null,
+              idempotent: true,
+              inserted: false
+            });
+          }
+        } catch (e) {
+          // Graceful fallback if game_id column/index not yet migrated
+          const msg = String(e?.message || '');
+          const columnMissing =
+            msg.includes('column "game_id"') ||
+            msg.includes('game_id') && msg.includes('does not exist');
+
+          const conflictTargetMissing =
+            msg.includes('ON CONFLICT') && msg.includes('game_id');
+
+          if (!columnMissing && !conflictTargetMissing) {
+            // Unexpected error → bubble up
+            throw e;
+          }
+          // Else: continue to legacy non-idempotent path below (no game_id)
+          console.warn('⚠️ Idempotency fallback: game_id not available yet. Proceeding without idempotency.');
+        }
+      }
+
+      // ---- Legacy (non-idempotent) path OR fallback if game_id not available ----
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0]
       );
+      insertedSessionId = sessionResult.rows[0].id;
 
-      const sessionId = sessionResult.rows[0].id;
+      // ✅ ensure numeric addition
+      const newPoints = (Number(points) || 0) + (Number(finalScore) || 0);
 
-      // 🩹 Surgical patch: remove total_play_time mutation here.
       const updateResult = await client.query(
         `UPDATE users SET
-         points = $1,
-         point_booster_active = FALSE,
-         point_booster_expires_at = NULL,
-         high_score = $3,
-         games_played = $4
+           points = $1,
+           point_booster_active = FALSE,
+           point_booster_expires_at = NULL,
+           high_score = $3,
+           games_played = $4
          WHERE telegram_id = $2 RETURNING points`,
         [newPoints, user.id, newHighScore, newGamesPlayed]
       );
@@ -104,7 +177,9 @@ router.post('/update-score', validateUser, async (req, res) => {
       return res.status(200).json({
         new_points: updateResult.rows[0].points,
         score_awarded: finalScore,
-        session_id: sessionId
+        session_id: insertedSessionId,
+        idempotent: !!usedIdempotency && false, // attempted but fell back
+        inserted: true
       });
 
     } catch (e) {
