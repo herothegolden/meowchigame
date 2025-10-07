@@ -69,7 +69,10 @@ router.post('/update-score', validateUser, async (req, res) => {
       const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
       const boosterActive = point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
       const finalScore = boosterActive ? baseScore * 2 : baseScore;
-      const newPoints = points + finalScore;
+
+      // ✅ FIX: ensure numeric addition (prevents "2985" + 100 => "2985100")
+      const newPoints = (Number(points) || 0) + (Number(finalScore) || 0);
+
       const newHighScore = Math.max(high_score || 0, finalScore);
       const newGamesPlayed = (games_played || 0) + 1;
 
