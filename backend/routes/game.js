@@ -75,6 +75,36 @@ router.post('/update-score', validateUser, async (req, res) => {
 
       console.log("Saving score:", finalScore);
 
+      // 🔒 DEDUPE GUARD (server-side, no API changes)
+      // Prevent duplicated lifetime increments if the same result is posted repeatedly in a short window.
+      // Heuristic: same user, same score AND same duration within the last 10 seconds => treat as duplicate submission.
+      const dupCheck = await client.query(
+        `SELECT id
+           FROM game_sessions
+          WHERE user_id = $1
+            AND score = $2
+            AND duration = $3
+            AND created_at >= NOW() - INTERVAL '10 seconds'
+          ORDER BY id DESC
+          LIMIT 1`,
+        [user.id, finalScore, duration]
+      );
+
+      if (dupCheck.rowCount > 0) {
+        // Duplicate detected: don't add points again, just return current lifetime and the existing session id.
+        const current = await client.query(
+          'SELECT points FROM users WHERE telegram_id = $1',
+          [user.id]
+        );
+        await client.query('COMMIT');
+        return res.status(200).json({
+          new_points: current.rows[0].points,
+          score_awarded: 0,
+          session_id: dupCheck.rows[0].id,
+          duplicate: true
+        });
+      }
+
       const sessionResult = await client.query(
         `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
