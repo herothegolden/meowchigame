@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v1 — Minimal fix: unify points source used in Profile payload
+// v2 — Clamp Profile points to a single authoritative value from users.points (no other changes)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -230,7 +230,16 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
-      const userData = userResult.rows[0];
+      const userRow = userResult.rows[0];
+
+      // ✅ Authoritative lifetime points (single source of truth)
+      const lifetimePoints = Number(userRow.points || 0);
+
+      const userData = {
+        ...userRow,
+        points: lifetimePoints, // clamp into stats
+      };
+
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
@@ -274,13 +283,12 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      const points_total = Number(userData.points || 0);
       const vip_level = Number(userData.vip_level || 0);
       const highest_score_today = Number(userData.high_score || 0);
       const invited_friends = 0;
       const power = Math.round(
         100 +
-        points_total * 0.00005 +
+        lifetimePoints * 0.00005 +
         currentStreak * 15 +
         vip_level * 50 +
         highest_score_today * 0.001 +
@@ -290,9 +298,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const shopData = {
         items: shopItemsResult.rows,
-        // ✅ Single source of truth for lifetime points on Profile/Shop:
-        // use the same points we already fetched for the user
-        userPoints: points_total,
+        userPoints: lifetimePoints, // ✅ same single source
         inventory: inventoryResult.rows,
         boosterActive:
           userShopResult.rows[0]?.point_booster_expires_at &&
