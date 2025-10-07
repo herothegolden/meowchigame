@@ -92,9 +92,10 @@ router.post('/update-score', validateUser, async (req, res) => {
          point_booster_active = FALSE,
          point_booster_expires_at = NULL,
          high_score = $3,
-         games_played = $4
+         games_played = $4,
+         total_play_time = total_play_time + $5
          WHERE telegram_id = $2 RETURNING points`,
-        [newPoints, user.id, newHighScore, newGamesPlayed]
+        [newPoints, user.id, newHighScore, newGamesPlayed, duration]
       );
 
       await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
