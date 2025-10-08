@@ -140,24 +140,28 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             )}
           </div>
 
-          {/* Camera button moved ABOVE avatar (top-right) */}
+          {/* Camera button — overlap bottom-right, slightly outside the avatar */}
           <button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
-            className="absolute -top-1 -right-1 bg-accent text-background p-2 rounded-full shadow-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
+            className="
+              absolute bottom-0 right-0
+              translate-x-2 translate-y-2
+              bg-accent text-background
+              w-8 h-8 rounded-full
+              flex items-center justify-center
+              shadow-xl ring-2 ring-background
+              hover:bg-accent/90 transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              z-10
+            "
             title="Upload avatar"
+            aria-label="Upload avatar"
           >
             {isUploadingAvatar ? (
-              <div className="relative w-3 h-3">
-                <LoaderCircle className="w-3 h-3 animate-spin" />
-                {uploadProgress > 0 && (
-                  <span className="absolute -top-6 -left-2 text-[10px] font-bold text-accent whitespace-nowrap">
-                    {uploadProgress}%
-                  </span>
-                )}
-              </div>
+              <LoaderCircle className="w-4 h-4 animate-spin" />
             ) : (
-              <Camera className="w-3 h-3" />
+              <Camera className="w-4 h-4" />
             )}
           </button>
 
@@ -232,12 +236,12 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             </div>
           )}
 
-          {/* Row 2: Username (Level removed as requested) */}
+          {/* Username only (Level removed) */}
           <p className="text-sm text-secondary mt-1">
             @{stats.username || 'user'}
           </p>
 
-          {/* Row 3: Power Box */}
+          {/* Power */}
           <div className="mt-2">
             <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
               <Zap className="w-4 h-4 text-accent mr-2" />
@@ -250,7 +254,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 4: Rank + Points */}
+      {/* Rank + Points */}
       <div className="mt-3">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
@@ -266,7 +270,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 5: Alliance */}
+      {/* Alliance */}
       <div className="mt-3">
         <div className="flex items-center text-sm">
           <Shield className="w-4 h-4 text-blue-400 mr-1" />
@@ -275,7 +279,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 6: Alliance Rank + Alliance Power */}
+      {/* Alliance Rank + Power */}
       <div className="mt-3">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
