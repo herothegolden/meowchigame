@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 // Helper: convert seconds → "Xч Yм"
@@ -20,58 +20,140 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
 
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
-  const meowTaps = stats?.meow_taps || 0;
+
+  // Local state for meow taps to get instant feedback on tap
+  const [meowTapsLocal, setMeowTapsLocal] = useState(
+    Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0
+  );
+
+  // Cooldown to prevent spamming the backend; server also rate-limits
+  const tapCooldownRef = useRef(0);
 
   // ✅ Use lifetime games played for the “Уровень дзена” value
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
-  const lifeStats = [
-    {
-      title: "Съедено печенек",
-      value: totalPoints,
-      subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
-      tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
-    },
-    {
-      title: "Уровень дзена",
-      value: gamesPlayed, // ← switched from time to lifetime games played
-      subtitle: "Чем больше часов, тем тише мысли.",
-      tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
-    },
-    {
-      title: "Настроение по мощности",
-      value: highScoreToday,
-      subtitle: "Рекорд дня. Система сияет, ты тоже.",
-      tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
-    },
-    {
-      title: "Социальная энергия",
-      value: `${dailyStreak}`,
-      subtitle:
-        dailyStreak > 0
-          ? "Ты говорил с людьми. Герой дня."
-          : "Пора снова выйти в Meowchiverse.",
-      tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
-    },
-    {
-      title: "Приглашено друзей",
-      value: (stats?.invited_friends || 0).toLocaleString(), // ← wired to backend value
-      subtitle: "Каждый получил полотенце. Никто не вернул.",
-      tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
-    },
-    {
-      title: "Счётчик мяу",
-      value:
-        meowTaps >= 42
-          ? "42" // ← daily cap shown and locked at 42
-          : `${meowTaps.toLocaleString()}`,
-      subtitle:
-        meowTaps >= 42
-          ? "Совершенство достигнуто — мир в равновесии."
-          : "Нажимай дальше. Мяу ждёт.",
-      tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
-    },
-  ];
+  // Build the list (we’ll inject onClick for the Meow Counter card)
+  const lifeStats = useMemo(
+    () => [
+      {
+        key: "points",
+        title: "Съедено печенек",
+        value: totalPoints,
+        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
+        tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
+      },
+      {
+        key: "zen",
+        title: "Уровень дзена",
+        value: gamesPlayed, // ← switched from time to lifetime games played
+        subtitle: "Чем больше часов, тем тише мысли.",
+        tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
+      },
+      {
+        key: "power-mood",
+        title: "Настроение по мощности",
+        value: highScoreToday,
+        subtitle: "Рекорд дня. Система сияет, ты тоже.",
+        tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
+      },
+      {
+        key: "social-energy",
+        title: "Социальная энергия",
+        value: `${dailyStreak}`,
+        subtitle:
+          dailyStreak > 0
+            ? "Ты говорил с людьми. Герой дня."
+            : "Пора снова выйти в Meowchiverse.",
+        tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
+      },
+      {
+        key: "invites",
+        title: "Приглашено друзей",
+        value: (stats?.invited_friends || 0).toLocaleString(), // ← wired to backend value
+        subtitle: "Каждый получил полотенце. Никто не вернул.",
+        tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
+      },
+      {
+        key: "meow-counter",
+        title: "Счётчик мяу",
+        value:
+          (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // ← daily cap at 42
+        subtitle:
+          meowTapsLocal >= 42
+            ? "Совершенство достигнуто — мир в равновесии."
+            : "Нажимай дальше. Мяу ждёт.",
+        tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
+        tappable: true,
+      },
+    ],
+    [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
+  );
+
+  const handleMeowTap = useCallback(async () => {
+    const now = Date.now();
+    if (now - tapCooldownRef.current < 250) return; // tiny client cooldown
+    tapCooldownRef.current = now;
+
+    // Already at cap
+    if (meowTapsLocal >= 42) return;
+
+    // Optimistic UI update
+    setMeowTapsLocal((n) => Math.min(n + 1, 42));
+
+    // Determine backend URL (prefer global var; otherwise relative path)
+    const backend =
+      typeof window !== "undefined" && window.__MEOWCHI_BACKEND_URL__
+        ? window.__MEOWCHI_BACKEND_URL__
+        : "";
+
+    const initData =
+      typeof window !== "undefined" &&
+      window.Telegram &&
+      window.Telegram.WebApp &&
+      window.Telegram.WebApp.initData
+        ? window.Telegram.WebApp.initData
+        : "";
+
+    try {
+      const res = await fetch(`${backend}/api/meow-tap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData }),
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (_) {}
+
+      // Reconcile with server answer if present
+      if (res.ok && data && typeof data.meow_taps === "number") {
+        setMeowTapsLocal(Math.min(Math.max(0, data.meow_taps), 42));
+
+        // Let parent refresh profile stats if it wants to
+        if (typeof onUpdate === "function") {
+          try {
+            onUpdate(); // e.g., refetch /get-profile-complete
+          } catch (_) {}
+        }
+
+        // Broadcast a local event so other parts can react if they listen
+        try {
+          window.dispatchEvent(
+            new CustomEvent("meowchi:stats-updated:meow", {
+              detail: { meow_taps: data.meow_taps },
+            })
+          );
+        } catch (_) {}
+      } else if (!res.ok) {
+        // Roll back optimistic increment on failure (best-effort)
+        setMeowTapsLocal((n) => Math.max(0, n - 1));
+      }
+    } catch (_) {
+      // Network error → roll back optimistic increment (best-effort)
+      setMeowTapsLocal((n) => Math.max(0, n - 1));
+    }
+  }, [meowTapsLocal, onUpdate]);
 
   return (
     <motion.div
@@ -80,41 +162,60 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
-      {lifeStats.map((stat, i) => (
-        <motion.div
-          key={i}
-          whileHover={{
-            scale: 1.015,
-            boxShadow: "0 8px 22px rgba(255,255,255,0.06)",
-          }}
-          transition={{ type: "spring", stiffness: 180, damping: 18 }}
-          className={`relative rounded-2xl border border-white/10 
-                      bg-gradient-to-br ${stat.tint}
-                      backdrop-blur-xl p-5 h-[155px] 
-                      flex flex-col justify-center items-center text-center 
-                      shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`}
-        >
-          {/* Top reflection */}
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-          {/* Inner glow */}
-          <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
+      {lifeStats.map((stat, i) => {
+        const isMeowCounter = stat.key === "meow-counter";
+        const interactiveProps = isMeowCounter
+          ? {
+              onClick: handleMeowTap,
+              className:
+                `relative rounded-2xl border border-white/10 
+                 bg-gradient-to-br ${stat.tint}
+                 backdrop-blur-xl p-5 h-[155px] 
+                 flex flex-col justify-center items-center text-center 
+                 shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden
+                 cursor-pointer select-none`, // clickable
+            }
+          : {
+              className:
+                `relative rounded-2xl border border-white/10 
+                 bg-gradient-to-br ${stat.tint}
+                 backdrop-blur-xl p-5 h-[155px] 
+                 flex flex-col justify-center items-center text-center 
+                 shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`,
+            };
 
-          <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
-            <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
-              {stat.title}
-            </p>
-            <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
-              {stat.value}
-            </p>
-            <p className="text-[12.5px] text-gray-400 leading-snug">
-              {stat.subtitle}
-            </p>
-          </div>
+        return (
+          <motion.div
+            key={i}
+            whileHover={{
+              scale: 1.015,
+              boxShadow: "0 8px 22px rgba(255,255,255,0.06)",
+            }}
+            transition={{ type: "spring", stiffness: 180, damping: 18 }}
+            {...interactiveProps}
+          >
+            {/* Top reflection */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+            {/* Inner glow */}
+            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
 
-          {/* Bottom fade for depth */}
-          <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
-        </motion.div>
-      ))}
+            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
+              <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
+                {stat.title}
+              </p>
+              <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
+                {stat.value}
+              </p>
+              <p className="text-[12.5px] text-gray-400 leading-snug">
+                {stat.subtitle}
+              </p>
+            </div>
+
+            {/* Bottom fade for depth */}
+            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
+          </motion.div>
+        );
+      })}
     </motion.div>
   );
 };
