@@ -1,9 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v11 — Tab container identical to ProfileHeader (no gradient, same corners, same tone)
+// v12 — Adds Meow CTA under tabs (uses backend /api/meow-cta-status and /api/meow-claim)
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { apiCall, showError } from "../../utils/api";
+import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -15,10 +16,21 @@ const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
 
 const ProfilePage = () => {
+  const navigate = useNavigate();
+
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Meow CTA status
+  const [ctaStatus, setCtaStatus] = useState({
+    eligible: false,
+    usedToday: false,
+    remainingGlobal: 0,
+    meow_taps: 0,
+  });
+  const [ctaLoading, setCtaLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -28,15 +40,60 @@ const ProfilePage = () => {
       setData(result);
     } catch (err) {
       console.error("❌ Failed to load profile:", err);
-      setError(err.message);
+      setError(err.message || "Failed to load profile");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchCtaStatus = useCallback(async () => {
+    try {
+      const res = await apiCall("/api/meow-cta-status", "GET");
+      setCtaStatus({
+        eligible: !!res.eligible,
+        usedToday: !!res.usedToday,
+        remainingGlobal: Number(res.remainingGlobal || 0),
+        meow_taps: Number(res.meow_taps || 0),
+      });
+    } catch (e) {
+      // Silently ignore; CTA is optional UI
+      // console.warn("CTA status fetch failed:", e);
     }
   }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Poll CTA status lightly (reflects global 42 cap); also on tab switch
+  useEffect(() => {
+    fetchCtaStatus();
+    const t = setInterval(fetchCtaStatus, 20000);
+    return () => clearInterval(t);
+  }, [fetchCtaStatus, activeTab]);
+
+  const handleClaimAndGoToOrder = useCallback(async () => {
+    if (ctaLoading) return;
+    try {
+      setCtaLoading(true);
+      const res = await apiCall("/api/meow-claim", "POST");
+      if (res?.success && res?.claimId) {
+        showSuccess("Скидка 42% активирована на заказ 🎉");
+        // Hide CTA locally to avoid double-taps
+        setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
+        navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
+      } else {
+        showError(res?.error || "Не удалось активировать предложение");
+        // Refresh CTA status to reflect server truth
+        fetchCtaStatus();
+      }
+    } catch (e) {
+      showError(e?.message || "Сеть недоступна");
+      fetchCtaStatus();
+    } finally {
+      setCtaLoading(false);
+    }
+  }, [ctaLoading, navigate, fetchCtaStatus]);
 
   if (loading)
     return (
@@ -70,8 +127,11 @@ const ProfilePage = () => {
   const stats = data.stats || {};
   const streakInfo = data.stats?.streakInfo || {};
 
+  // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
+  const showMeowCTA = !!ctaStatus.eligible;
+
   return (
-    <div className="p-4 space-y-6 pb-24 bg-background text-primary">
+    <div className="p-4 space-y-6 pb-28 bg-background text-primary">
       {/* Profile Header */}
       <ProfileHeader stats={stats} onUpdate={fetchData} />
 
@@ -80,7 +140,7 @@ const ProfilePage = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        // 🎨 Updated to match ProfileHeader exactly: no gradient, identical corner radius and tone
+        // 🎨 Match ProfileHeader: no gradient, identical corner radius and tone
         className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
@@ -134,6 +194,40 @@ const ProfilePage = () => {
           </TabsContent>
         </Tabs>
       </motion.div>
+
+      {/* Meow CTA — under tabs (appears only when eligible). 
+          NOTE: We intentionally render it in the page flow (not fixed) 
+          so it sits visually "under the tabs" and above BottomNav. */}
+      {showMeowCTA && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-secondary">Достижение «42/42»</span>
+              <span className="text-base font-semibold text-white">
+                Первым 42 — скидка 42%
+              </span>
+            </div>
+            <button
+              disabled={ctaLoading}
+              onClick={handleClaimAndGoToOrder}
+              // Reuse the same visual language as order buttons elsewhere:
+              className={`px-4 py-2 rounded-lg font-semibold transition 
+                ${ctaLoading ? "bg-accent/60 cursor-wait" : "bg-accent hover:bg-accent/90"} 
+                text-background`}
+            >
+              {ctaLoading ? "Подождите..." : "Заказать сейчас"}
+            </button>
+          </div>
+          <p className="mt-2 text-[12.5px] text-gray-400">
+            Осталось сегодня: {ctaStatus.remainingGlobal}
+          </p>
+        </motion.div>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNav />
