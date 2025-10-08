@@ -13,7 +13,7 @@ const formatPlayTime = (seconds) => {
  * Props:
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional
- * - onUpdate: optional callback to trigger parent refetch
+ * - onUpdate: optional callback to trigger parent refetch (⚠️ no longer called on tap to prevent reload)
  * - backendUrl / BACKEND_URL: optional explicit backend base URL (preferred)
  */
 const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
@@ -43,7 +43,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   // Cooldown & in-flight guard to prevent spamming the backend; server also rate-limits
   const tapCooldownRef = useRef(0);
   const inFlightRef = useRef(false);
-  const CLIENT_COOLDOWN_MS = 600; // ↑ avoid 429 due to network jitter/batching
+  const CLIENT_COOLDOWN_MS = 600; // avoid 429 due to network jitter/batching
 
   // ✅ Use lifetime games played for the “Уровень дзена” value
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
@@ -167,14 +167,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal(Math.min(Math.max(0, data.meow_taps), 42));
 
-        // Let parent refresh profile stats if it wants to
-        if (typeof onUpdate === "function") {
-          try {
-            onUpdate(); // e.g., refetch /get-profile-complete
-          } catch (_) {}
-        }
+        // ⚠️ Do NOT call onUpdate() here — it triggers a full page reload upstream.
+        // UI is already consistent via server response + local state.
 
-        // Broadcast a local event so other parts can react if they listen
+        // Broadcast a local event so other parts can react if they listen (non-reloading)
         try {
           window.dispatchEvent(
             new CustomEvent("meowchi:stats-updated:meow", {
@@ -184,7 +180,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         } catch (_) {}
       } else if (res.status === 429) {
         // Rate-limited: KEEP optimistic update; next allowed tap will reconcile
-        // (Do not roll back — this is expected transient throttle)
       } else if (!res.ok) {
         // Other failures → roll back optimistic increment (best-effort)
         setMeowTapsLocal((n) => Math.max(0, n - 1));
@@ -198,7 +193,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } finally {
       inFlightRef.current = false;
     }
-  }, [meowTapsLocal, onUpdate, backendBase]);
+  }, [meowTapsLocal, backendBase]);
 
   return (
     <motion.div
