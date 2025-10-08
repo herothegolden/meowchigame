@@ -58,7 +58,10 @@ export const setupDatabase = async () => {
 
       // 🆕 Meow counter (daily, capped at 42)
       { name: 'meow_taps', type: 'INT DEFAULT 0 NOT NULL' },
-      { name: 'meow_taps_date', type: 'DATE' }
+      { name: 'meow_taps_date', type: 'DATE' },
+
+      // 🆕 Meow CTA one-time per day usage flag
+      { name: 'meow_claim_used_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' }
     ];
 
     for (const column of columnsToAdd) {
@@ -339,6 +342,36 @@ export const setupDatabase = async () => {
     }
 
     console.log('✅ Global stats table ready');
+
+    // 🆕 Meow Daily Claims (global cap per day)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meow_daily_claims (
+        day DATE PRIMARY KEY,
+        claims_taken INT NOT NULL DEFAULT 0
+      );
+    `);
+
+    // 🆕 Meow Claims (per-user, per-day, idempotent; token-based)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS meow_claims (
+        id UUID PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(telegram_id),
+        day DATE NOT NULL,
+        consumed BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure idempotency: one claim per (user_id, day)
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_meow_claims_user_day
+      ON meow_claims (user_id, day);
+    `);
+
+    // Useful lookup indices
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_meow_claims_day ON meow_claims (day);`);
+
+    console.log('✅ Meow claims tables ready');
     console.log('✅ Enhanced database setup complete!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
