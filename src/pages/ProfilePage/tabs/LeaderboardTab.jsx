@@ -1,10 +1,16 @@
 // Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
-// v3 — Faster loading with per-tab cache, lazy avatars, and background prefetch
+// v4 — P1 perf polish for Profile tab:
+// - Versioned per-tab session cache (prevents stale schema issues)
+// - AbortController to cancel in-flight fetches on tab switch/unmount
+// - Lazy avatars with explicit width/height + decoding="async" (stable layout)
+// - Background prefetch of other tabs kept (idle optimization)
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle, User } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../../utils/api';
+
+const CACHE_PREFIX = 'v2:leaderboard:'; // versioned cache key prefix
 
 const LeaderboardTab = () => {
   const [leaderboard, setLeaderboard] = useState([]);
@@ -13,6 +19,10 @@ const LeaderboardTab = () => {
   const [friendUsername, setFriendUsername] = useState('');
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
+
+  // track latest request to avoid race-condition updates
+  const reqTypeRef = useRef(activeType);
+  const abortRef = useRef(null);
 
   // ✅ Synced helper: same as ProfileHeader
   const getAvatarUrl = (avatarData) => {
@@ -24,36 +34,64 @@ const LeaderboardTab = () => {
     }
     if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) return avatarData;
     return null;
-  };
+    };
 
   useEffect(() => {
     fetchLeaderboard(activeType);
+    // cleanup on unmount: abort any pending request
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeType]);
 
   const fetchLeaderboard = async (type) => {
+    reqTypeRef.current = type;
+
     // 🔹 Use cached data first
-    const cached = sessionStorage.getItem(`leaderboard_${type}`);
+    const cacheKey = `${CACHE_PREFIX}${type}`;
+    const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       try {
         setLeaderboard(JSON.parse(cached));
       } catch {
-        sessionStorage.removeItem(`leaderboard_${type}`);
+        sessionStorage.removeItem(cacheKey);
       }
     }
 
     // Only show loading if no cached data
     if (!cached) setLoading(true);
 
+    // Abort previous request (if any)
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const result = await apiCall('/api/get-leaderboard', { type });
+      // apiCall posts by default; here we bypass to attach signal (or you can extend apiCall to accept signal)
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/get-leaderboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await res.json();
       const data = result.leaderboard || [];
+
+      // ignore late responses from older requests or aborted fetches
+      if (controller.signal.aborted || reqTypeRef.current !== type) return;
+
       setLeaderboard(data);
-      sessionStorage.setItem(`leaderboard_${type}`, JSON.stringify(data));
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (error) {
-      console.error('Failed to load leaderboard:', error);
-      if (!cached) setLeaderboard([]);
+      if (error.name !== 'AbortError') {
+        console.error('Failed to load leaderboard:', error);
+        if (!cached) setLeaderboard([]);
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -61,11 +99,12 @@ const LeaderboardTab = () => {
   useEffect(() => {
     if (activeType === 'global') {
       ['weekly', 'friends'].forEach((t) => {
-        if (!sessionStorage.getItem(`leaderboard_${t}`)) {
+        const cacheKey = `${CACHE_PREFIX}${t}`;
+        if (!sessionStorage.getItem(cacheKey)) {
           apiCall('/api/get-leaderboard', { type: t })
             .then((r) => {
               if (r?.leaderboard)
-                sessionStorage.setItem(`leaderboard_${t}`, JSON.stringify(r.leaderboard));
+                sessionStorage.setItem(cacheKey, JSON.stringify(r.leaderboard));
             })
             .catch(() => {});
         }
@@ -219,14 +258,16 @@ const LeaderboardTab = () => {
                   {avatarUrl ? (
                     <img
                       loading="lazy"
+                      decoding="async"
+                      width={40}
+                      height={40}
                       src={avatarUrl}
                       alt={entry.player.name}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        e.target.style.display = 'none';
-                        if (e.target.nextSibling) {
-                          e.target.nextSibling.style.display = 'block';
-                        }
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextSibling;
+                        if (fallback) fallback.style.display = 'block';
                       }}
                     />
                   ) : null}
