@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v9 — Meow counter: do NOT advance throttle timestamp on throttled requests (prevents 1→2→1 snapback)
+// v10 — Fix daily streak date comparison: generate UTC dates from todayStr (no TZ shift)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -156,7 +156,7 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
-    try {
+  try {
       const userResult = await client.query(
         `SELECT
            first_name,
@@ -221,12 +221,13 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       );
       const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
       let streakFromSessions = 0;
-      let cursor = new Date(`${todayStr}T00:00:00+05:00`);
+      // ✅ Build from todayStr at UTC midnight; no TZ shift when slicing YYYY-MM-DD
+      let cursor = new Date(`${todayStr}T00:00:00Z`);
       for (let i = 0; i < 60; i++) {
         const y = cursor.toISOString().slice(0, 10);
         if (dateSet.has(y)) {
           streakFromSessions += 1;
-          cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
         } else {
           break;
         }
@@ -337,12 +338,13 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       );
       const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
       let streakFromSessions = 0;
-      let cursor = new Date(`${todayStr}T00:00:00+05:00`);
+      // ✅ Build from todayStr at UTC midnight; no TZ shift when slicing YYYY-MM-DD
+      let cursor = new Date(`${todayStr}T00:00:00Z`);
       for (let i = 0; i < 60; i++) {
         const y = cursor.toISOString().slice(0, 10);
         if (dateSet.has(y)) {
           streakFromSessions += 1;
-          cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
         } else {
           break;
         }
@@ -528,7 +530,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow = 0;
         }
 
-        // 🔒 Do NOT set meowTapThrottle here — we only update it on success or lock
+        // Do NOT set throttle timestamp here
         return res.status(200).json({
           meow_taps: meow,
           locked: meow >= 42,
@@ -566,7 +568,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       if (meow_taps >= 42) {
         await client.query('COMMIT');
-        // ✅ Only advance throttle window on terminal (locked) response
+        // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
         return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
       }
@@ -580,7 +582,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       );
 
       await client.query('COMMIT');
-      // ✅ Advance throttle window only on successful increment
+      // Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
 
       return res.status(200).json({
