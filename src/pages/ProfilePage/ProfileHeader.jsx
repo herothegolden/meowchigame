@@ -17,7 +17,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
-  // Normalize avatar URL (supports data URI, /uploads path, or external URL)
   const getAvatarUrl = (avatarData) => {
     if (!avatarData || typeof avatarData !== 'string') return null;
     if (avatarData.startsWith('data:image/')) return avatarData;
@@ -30,7 +29,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   };
 
   useEffect(() => {
-    // reset error on new url
     setAvatarError(false);
   }, [stats.avatar_url]);
 
@@ -56,11 +54,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     fileInputRef.current?.click();
   };
 
-  // Upload: compress on demand, send Base64 JSON
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       showError('Please select an image file');
       return;
@@ -72,14 +68,13 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     try {
       setUploadProgress(25);
       const { default: imageCompression } = await import('browser-image-compression');
-      const compressionOptions = {
+      const compressedFile = await imageCompression(file, {
         maxSizeMB: 0.5,
         maxWidthOrHeight: 800,
         useWebWorker: true,
         fileType: 'image/jpeg',
         initialQuality: 0.8,
-      };
-      const compressedFile = await imageCompression(file, compressionOptions);
+      });
       setUploadProgress(55);
 
       const reader = new FileReader();
@@ -120,11 +115,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       {/* Row 1: Avatar + Name/Edit/VIP */}
       <div className="flex items-start space-x-4 mb-1">
         <div className="relative flex-shrink-0">
-          {/* Avatar frame with non-blocking placeholder behind the image */}
+          {/* Avatar frame */}
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-accent relative">
-            {/* Background placeholder (never sits above the image) */}
             <div className="absolute inset-0 rounded-full bg-accent/15" style={{ zIndex: 0 }} />
-            {/* Avatar image */}
             {avatarUrl && !avatarError ? (
               <img
                 src={avatarUrl}
@@ -147,10 +140,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             )}
           </div>
 
+          {/* Camera button moved ABOVE avatar (top-right) */}
           <button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
-            className="absolute -bottom-1 -right-1 bg-accent text-background p-2 rounded-full shadow-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute -top-1 -right-1 bg-accent text-background p-2 rounded-full shadow-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
             title="Upload avatar"
           >
             {isUploadingAvatar ? (
@@ -238,9 +232,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             </div>
           )}
 
-          {/* Row 2: Username + Level */}
+          {/* Row 2: Username (Level removed as requested) */}
           <p className="text-sm text-secondary mt-1">
-            @{stats.username || 'user'} • Level {stats.level}
+            @{stats.username || 'user'}
           </p>
 
           {/* Row 3: Power Box */}
