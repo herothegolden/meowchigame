@@ -1,11 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
-// v5 — Restore global leaderboard visibility
-// - Use apiCall again (auto-includes Telegram initData + correct URL)
-// - Keep: versioned session cache, lazy avatars with fixed size, background prefetch
-// - Simplify: remove AbortController (apiCall doesn't support signal)
+// v6 — No animations:
+// - Removed framer-motion and all motion wrappers
+// - Kept: apiCall (sends initData), versioned session cache, lazy avatars with fixed size,
+//         background prefetch for other leaderboard types
 
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle, User } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../../utils/api';
 
@@ -19,7 +18,7 @@ const LeaderboardTab = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
 
-  // ✅ Synced helper: same as ProfileHeader
+  // Same helper as ProfileHeader
   const getAvatarUrl = (avatarData) => {
     if (!avatarData) return null;
     if (avatarData.startsWith('data:image/')) return avatarData;
@@ -51,7 +50,7 @@ const LeaderboardTab = () => {
     if (!cached) setLoading(true);
 
     try {
-      // 🔑 Use apiCall so initData and base URL logic are handled for us
+      // Use apiCall so initData and base URL logic are handled
       const result = await apiCall('/api/get-leaderboard', { type });
       const data = Array.isArray(result?.leaderboard) ? result.leaderboard : [];
 
@@ -65,7 +64,7 @@ const LeaderboardTab = () => {
     }
   };
 
-  // 🔹 Prefetch other tabs when idle
+  // Background prefetch other types when idle on "global"
   useEffect(() => {
     if (activeType === 'global') {
       ['weekly', 'friends'].forEach((t) => {
@@ -141,7 +140,7 @@ const LeaderboardTab = () => {
   ];
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+    <div>
       <div className="flex bg-background rounded-lg border border-gray-600 p-1 mb-4">
         {tabs.map((tab) => {
           const TabIcon = tab.icon;
@@ -149,7 +148,7 @@ const LeaderboardTab = () => {
             <button
               key={tab.id}
               onClick={() => setActiveType(tab.id)}
-              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-all duration-200 ${
+              className={`flex-1 flex items-center justify-center py-2 px-2 rounded-md transition-colors ${
                 activeType === tab.id
                   ? 'bg-accent text-background'
                   : 'text-secondary hover:text-primary'
@@ -173,12 +172,12 @@ const LeaderboardTab = () => {
               placeholder="Enter username (without @)"
               className="flex-1 bg-nav border border-gray-500 rounded-lg px-3 py-2 text-sm text-primary placeholder-secondary focus:border-accent focus:outline-none"
               disabled={isAddingFriend}
-              onKeyPress={(e) => e.key === 'Enter' && handleAddFriend()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddFriend()}
             />
             <button
               onClick={handleAddFriend}
               disabled={isAddingFriend || !friendUsername.trim()}
-              className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-accent text-background px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isAddingFriend ? <LoaderCircle className="w-4 h-4 animate-spin" /> : 'Add'}
             </button>
@@ -205,20 +204,17 @@ const LeaderboardTab = () => {
         </div>
       ) : (
         <div className="space-y-2">
-          {leaderboard.slice(0, 10).map((entry, index) => {
+          {leaderboard.slice(0, 10).map((entry) => {
             const avatarUrl = getAvatarUrl(entry.player.avatarUrl || entry.player.avatar_url);
 
             return (
-              <motion.div
+              <div
                 key={`${activeType}-${entry.rank}`}
-                className={`flex items-center p-3 rounded-lg border transition-all duration-200 ${
+                className={`flex items-center p-3 rounded-lg border ${
                   entry.isCurrentUser
                     ? 'bg-accent/20 border-accent'
                     : 'bg-background border-gray-600'
                 }`}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
               >
                 <div className="flex items-center justify-center w-8 h-8 mr-3">
                   {getRankIcon(entry.rank)}
@@ -304,12 +300,12 @@ const LeaderboardTab = () => {
                     )}
                   </button>
                 )}
-              </motion.div>
+              </div>
             );
           })}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 };
 
