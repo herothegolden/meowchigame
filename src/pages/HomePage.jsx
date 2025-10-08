@@ -171,7 +171,7 @@ const HomePage = () => {
             <img
               src="https://ik.imagekit.io/59r2kpz8r/Meowchi/1.webp?updatedAt=1758888700434"
               alt="Meowchi Hero"
-              className="w-64 h-64 object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+              className="w-full max-w-md h-auto object-cover rounded-2xl border border-white/10"
             />
           </div>
 
@@ -184,7 +184,7 @@ const HomePage = () => {
           </motion.button>
         </motion.div>
 
-        {/* Info card 1 — removed glow */}
+        {/* Info card */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -233,7 +233,7 @@ const HomePage = () => {
             </motion.button>
           </div>
 
-          {/* Shopping Image */}
+          {/* Shopping Image (reference size) */}
           <div className="flex justify-center my-6">
             <video
               src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
@@ -354,7 +354,7 @@ const HomePage = () => {
           <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
           <div className="grid grid-cols-1 gap-6">
             
-            {/* Product 1 — Strawberry & Oreo (card glow removed) */}
+            {/* Product 1 */}
             <motion.div
               whileHover={{ scale: 1.03 }}
               className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40"
@@ -374,7 +374,7 @@ const HomePage = () => {
               </p>
             </motion.div>
 
-            {/* Product 2 — Matcha Strawberry & Oreo (card glow removed) */}
+            {/* Product 2 */}
             <motion.div
               whileHover={{ scale: 1.03 }}
               className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40"
@@ -397,7 +397,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* CTA card — glow removed */}
+        {/* CTA card */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
