@@ -1,11 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
-// v4 — P1 perf polish for Profile tab:
-// - Versioned per-tab session cache (prevents stale schema issues)
-// - AbortController to cancel in-flight fetches on tab switch/unmount
-// - Lazy avatars with explicit width/height + decoding="async" (stable layout)
-// - Background prefetch of other tabs kept (idle optimization)
+// v5 — Restore global leaderboard visibility
+// - Use apiCall again (auto-includes Telegram initData + correct URL)
+// - Keep: versioned session cache, lazy avatars with fixed size, background prefetch
+// - Simplify: remove AbortController (apiCall doesn't support signal)
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Calendar, Star, Trophy, Crown, Medal, LoaderCircle, User } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../../utils/api';
@@ -20,10 +19,6 @@ const LeaderboardTab = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [removingFriend, setRemovingFriend] = useState(null);
 
-  // track latest request to avoid race-condition updates
-  const reqTypeRef = useRef(activeType);
-  const abortRef = useRef(null);
-
   // ✅ Synced helper: same as ProfileHeader
   const getAvatarUrl = (avatarData) => {
     if (!avatarData) return null;
@@ -34,23 +29,17 @@ const LeaderboardTab = () => {
     }
     if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) return avatarData;
     return null;
-    };
+  };
 
   useEffect(() => {
     fetchLeaderboard(activeType);
-    // cleanup on unmount: abort any pending request
-    return () => {
-      if (abortRef.current) abortRef.current.abort();
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeType]);
 
   const fetchLeaderboard = async (type) => {
-    reqTypeRef.current = type;
-
-    // 🔹 Use cached data first
     const cacheKey = `${CACHE_PREFIX}${type}`;
     const cached = sessionStorage.getItem(cacheKey);
+
     if (cached) {
       try {
         setLeaderboard(JSON.parse(cached));
@@ -59,39 +48,20 @@ const LeaderboardTab = () => {
       }
     }
 
-    // Only show loading if no cached data
     if (!cached) setLoading(true);
 
-    // Abort previous request (if any)
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     try {
-      // apiCall posts by default; here we bypass to attach signal (or you can extend apiCall to accept signal)
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/get-leaderboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = await res.json();
-      const data = result.leaderboard || [];
-
-      // ignore late responses from older requests or aborted fetches
-      if (controller.signal.aborted || reqTypeRef.current !== type) return;
+      // 🔑 Use apiCall so initData and base URL logic are handled for us
+      const result = await apiCall('/api/get-leaderboard', { type });
+      const data = Array.isArray(result?.leaderboard) ? result.leaderboard : [];
 
       setLeaderboard(data);
       sessionStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error('Failed to load leaderboard:', error);
-        if (!cached) setLeaderboard([]);
-      }
+      console.error('Failed to load leaderboard:', error);
+      if (!cached) setLeaderboard([]);
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -103,8 +73,9 @@ const LeaderboardTab = () => {
         if (!sessionStorage.getItem(cacheKey)) {
           apiCall('/api/get-leaderboard', { type: t })
             .then((r) => {
-              if (r?.leaderboard)
+              if (Array.isArray(r?.leaderboard)) {
                 sessionStorage.setItem(cacheKey, JSON.stringify(r.leaderboard));
+              }
             })
             .catch(() => {});
         }
