@@ -1,6 +1,5 @@
 // Path: backend/routes/user.js
-// v5 — Daily metrics patched: high_score_today (from game_sessions), display streak from sessions,
-//       power uses high_score_today. No unrelated changes.
+// v6 — Wire “Счётчик мяу”: daily (Asia/Tashkent) tap counter up to 42 with server-side reset & rate-limit.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -10,6 +9,10 @@ import { getTashkentDate, calculateDateDiff } from '../utils/timezone.js';
 
 const router = express.Router();
 const { BOT_TOKEN } = process.env;
+
+/** Simple per-process rate limiter for /meow-tap */
+const meowTapThrottle = new Map(); // userId -> lastTapMs
+const TAP_COOLDOWN_MS = 200;
 
 /* -------------------------------------------
    AUTH / VALIDATION
@@ -165,6 +168,8 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
            COALESCE(games_played, 0)    AS games_played,
            COALESCE(high_score, 0)      AS high_score,
            COALESCE(total_play_time, 0) AS total_play_time,
+           COALESCE(meow_taps, 0)       AS meow_taps,
+           meow_taps_date,
            avatar_url,
            COALESCE(vip_level, 0)       AS vip_level,
            last_login_date,
@@ -178,9 +183,22 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // --- Derived daily metrics (display correctness) ---
+      // --- Meow taps daily reset (server-side) ---
       const todayStr = getTashkentDate();
+      if (!userData.meow_taps_date || String(userData.meow_taps_date) !== todayStr) {
+        const resetRes = await client.query(
+          `UPDATE users
+             SET meow_taps = 0,
+                 meow_taps_date = $1
+           WHERE telegram_id = $2
+           RETURNING meow_taps, meow_taps_date`,
+          [todayStr, user.id]
+        );
+        userData.meow_taps = resetRes.rows[0].meow_taps;
+        userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
+      }
 
+      // --- Derived daily metrics (display correctness) ---
       // 1) Today's high score (Asia/Tashkent)
       const highTodayResult = await client.query(
         `SELECT COALESCE(MAX(score), 0) AS high_today
@@ -249,6 +267,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
              COALESCE(games_played, 0)    AS games_played,
              COALESCE(high_score, 0)      AS high_score,
              COALESCE(total_play_time, 0) AS total_play_time,
+             COALESCE(meow_taps, 0)       AS meow_taps,
+             meow_taps_date,
              avatar_url,
              COALESCE(vip_level, 0)       AS vip_level,
              last_login_date,
@@ -272,12 +292,27 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
       const userData = userResult.rows[0];
+
+      // --- Meow taps daily reset (server-side) ---
+      const todayStr = getTashkentDate();
+      if (!userData.meow_taps_date || String(userData.meow_taps_date) !== todayStr) {
+        const resetRes = await client.query(
+          `UPDATE users
+             SET meow_taps = 0,
+                 meow_taps_date = $1
+           WHERE telegram_id = $2
+           RETURNING meow_taps, meow_taps_date`,
+          [todayStr, user.id]
+        );
+        userData.meow_taps = resetRes.rows[0].meow_taps;
+        userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
+      }
+
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
 
       // --- Derived daily metrics (display correctness) ---
-      const todayStr = getTashkentDate();
 
       // 1) Today's high score (Asia/Tashkent)
       const highTodayResult = await client.query(
@@ -457,6 +492,84 @@ router.post('/update-avatar', validateUser, async (req, res) => {
     }
   } catch (error) {
     console.error('🚨 Error in /api/update-avatar:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* -------------------------------------------
+   NEW: Счётчик мяу (daily up to 42)
+------------------------------------------- */
+
+router.post('/meow-tap', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const now = Date.now();
+    const last = meowTapThrottle.get(user.id) || 0;
+    if (now - last < TAP_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'Too many taps, slow down.' });
+    }
+
+    const todayStr = getTashkentDate();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Lock row, read current taps
+      const rowRes = await client.query(
+        `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
+           FROM users
+          WHERE telegram_id = $1
+          FOR UPDATE`,
+        [user.id]
+      );
+      if (rowRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      let { meow_taps, meow_taps_date } = rowRes.rows[0];
+
+      // Reset if first tap of the day (Asia/Tashkent)
+      if (!meow_taps_date || String(meow_taps_date) !== todayStr) {
+        meow_taps = 0;
+        meow_taps_date = todayStr;
+        await client.query(
+          `UPDATE users SET meow_taps = 0, meow_taps_date = $1 WHERE telegram_id = $2`,
+          [todayStr, user.id]
+        );
+      }
+
+      if (meow_taps >= 42) {
+        await client.query('COMMIT');
+        meowTapThrottle.set(user.id, now);
+        return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
+      }
+
+      const newTaps = meow_taps + 1;
+      await client.query(
+        `UPDATE users
+           SET meow_taps = $1, meow_taps_date = $2
+         WHERE telegram_id = $3`,
+        [newTaps, todayStr, user.id]
+      );
+
+      await client.query('COMMIT');
+      meowTapThrottle.set(user.id, now);
+
+      return res.status(200).json({
+        meow_taps: newTaps,
+        locked: newTaps >= 42,
+        remaining: Math.max(42 - newTaps, 0)
+      });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/meow-tap:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
