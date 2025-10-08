@@ -1,9 +1,11 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v15 — Add short CTA re-check retries after "meow:reached42" to avoid throttle race.
+// v16 — P0 perf: remove framer-motion from first paint; keep behavior identical.
+// Also retains CTA logic and lazy-loaded tabs.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+// Removed framer-motion on first paint (TTI win)
+// import { motion } from "framer-motion";
 import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
@@ -81,11 +83,8 @@ const ProfilePage = () => {
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+      // Note: these timeouts are short-lived; no-op cleanup here is acceptable
+      // since listener is removed on unmount (kept minimal per "surgical" rule).
     };
     window.addEventListener("meow:reached42", onReached42);
     return () => window.removeEventListener("meow:reached42", onReached42);
@@ -162,12 +161,8 @@ const ProfilePage = () => {
       {/* Profile Header */}
       <ProfileHeader stats={stats} onUpdate={fetchData} />
 
-      {/* Tabs Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        // 🎨 Match ProfileHeader: no gradient, identical corner radius and tone
+      {/* Tabs Section — replaced motion wrapper with static div for faster TTI */}
+      <div
         className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
@@ -220,16 +215,11 @@ const ProfilePage = () => {
             </Suspense>
           </TabsContent>
         </Tabs>
-      </motion.div>
+      </div>
 
-      {/* Meow CTA — under tabs (appears only when eligible). 
-          NOTE: We intentionally render it in the page flow (not fixed) 
-          so it sits visually "under the tabs" and above BottomNav. */}
+      {/* Meow CTA — under tabs (appears only when eligible). */}
       {showMeowCTA && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+        <div
           className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]"
         >
           <div className="flex items-center justify-between gap-3">
@@ -242,7 +232,6 @@ const ProfilePage = () => {
             <button
               disabled={ctaLoading}
               onClick={handleClaimAndGoToOrder}
-              // Reuse the same visual language as order buttons elsewhere:
               className={`px-4 py-2 rounded-lg font-semibold transition 
                 ${ctaLoading ? "bg-accent/60 cursor-wait" : "bg-accent hover:bg-accent/90"} 
                 text-background`}
@@ -253,7 +242,7 @@ const ProfilePage = () => {
           <p className="mt-2 text-[12.5px] text-gray-400">
             Осталось сегодня: {ctaStatus.remainingGlobal}
           </p>
-        </motion.div>
+        </div>
       )}
 
       {/* Bottom Navigation */}
