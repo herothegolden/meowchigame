@@ -1,3 +1,5 @@
+// Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
@@ -28,23 +30,43 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
-  // Local state for meow taps to get instant feedback on tap (starts at server value or 0)
-  const [meowTapsLocal, setMeowTapsLocal] = useState(
-    Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0
-  );
+  // ---- Meow Counter local state with session fallback to prevent "0" flicker on remount ----
+  const storageKey = "meowchi:meow_taps";
+  const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
+    const serverVal = Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      const cached = Number.parseInt(raw ?? "NaN", 10);
+      if (Number.isFinite(cached)) return Math.max(cached, serverVal);
+    } catch (_) {}
+    return serverVal;
+  });
 
-  // ⚠️ Monotonic sync: only adopt higher server values (avoid snap-back to lower numbers)
+  // ⚠️ Monotonic sync: only adopt higher server values; also persist to session storage
   useEffect(() => {
     if (Number.isFinite(stats?.meow_taps)) {
-      setMeowTapsLocal((prev) => Math.max(prev, stats.meow_taps));
+      setMeowTapsLocal((prev) => {
+        const next = Math.max(prev, stats.meow_taps);
+        try {
+          sessionStorage.setItem(storageKey, String(next));
+        } catch (_) {}
+        return next;
+      });
     }
   }, [stats?.meow_taps]);
 
-  // Cooldown to avoid accidental ultra-fast repeats; server also rate-limits.
-  const tapCooldownRef = useRef(0);
-  const CLIENT_COOLDOWN_MS = 150; // faster reaction
+  // Persist local changes so navigation back to Profile doesn't briefly show 0
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKey, String(meowTapsLocal));
+    } catch (_) {}
+  }, [meowTapsLocal]);
 
-  // ✅ Use lifetime games played for the “Уровень дзена” value
+  // Client-side small cooldown to avoid accidental ultra-fast repeats; server also rate-limits.
+  const tapCooldownRef = useRef(0);
+  const CLIENT_COOLDOWN_MS = 150; // fast, feels snappy
+
+  // ✅ Use lifetime games played for the “Уровень дзена” value (per spec)
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
   // Robust backend base URL resolution (no empty relative fallbacks)
@@ -169,7 +191,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
       // Reconcile with server answer — but never decrease local value
       if (res.ok && data && typeof data.meow_taps === "number") {
-        setMeowTapsLocal((prev) => Math.min(42, Math.max(prev, data.meow_taps)));
+        setMeowTapsLocal((prev) => {
+          const next = Math.min(42, Math.max(prev, data.meow_taps));
+          try {
+            sessionStorage.setItem(storageKey, String(next));
+          } catch (_) {}
+          return next;
+        });
       }
       // On throttled/429/other: do nothing — we already optimistically incremented.
     } catch (_) {
@@ -186,7 +214,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     // Immediate feedback
     haptic();
-    setMeowTapsLocal((n) => Math.min(n + 1, 42));
+    setMeowTapsLocal((n) => {
+      const next = Math.min(n + 1, 42);
+      try {
+        sessionStorage.setItem(storageKey, String(next));
+      } catch (_) {}
+      return next;
+    });
 
     // Fire-and-forget server update
     void sendTap();
