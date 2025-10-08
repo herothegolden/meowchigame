@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
+// ⬇️ P0 change: remove eager import of browser-image-compression to avoid adding ~40–60KB gz on first paint
+// import imageCompression from 'browser-image-compression';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
@@ -89,6 +90,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       console.log('Compressing image...');
       setUploadProgress(20);
 
+      // ⬇️ P0 change: dynamic import only when needed (on avatar edit)
+      const { default: imageCompression } = await import('browser-image-compression');
+
       const compressionOptions = {
         maxSizeMB: 0.5,
         maxWidthOrHeight: 800,
@@ -163,10 +167,14 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         <div className="relative flex-shrink-0">
           <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
             {avatarUrl && !avatarError ? (
-              <img 
+              <img
                 src={avatarUrl}
                 alt="Avatar"
                 key={avatarUrl}
+                // ⬇️ Added explicit dimensions + async decode for stability/perf in WebView
+                width={80}
+                height={80}
+                decoding="async"
                 className="w-full h-full object-cover"
                 onError={() => {
                   console.error('Avatar load error:', avatarUrl);
