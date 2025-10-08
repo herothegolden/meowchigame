@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from 'react';
+// Path: frontend/src/App.jsx
+// v17 — P0 perf for TMA:
+// - Route-level code splitting (lazy + Suspense) to shrink initial bundle
+// - Call Telegram WebApp.ready() after first meaningful content is mounted
+
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from './components/BottomNav';
 import { initializeUser } from './utils/api';
 
-// Import all page components
-import HomePage from './pages/HomePage';
-import ProfilePage from './pages/ProfilePage';
-import GamePage from './pages/GamePage';
-import ShopPage from './pages/ShopPage';
-import TasksPage from './pages/TasksPage';
-import PartnersPage from './pages/PartnersPage';
-import LeaderboardsPage from './pages/LeaderboardsPage';
-import DevToolsPage from './pages/DevToolsPage';
-import OrderPage from './pages/OrderPage';
+// ✅ Lazy-load all page components (route code-splitting)
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const GamePage = lazy(() => import('./pages/GamePage'));
+const ShopPage = lazy(() => import('./pages/ShopPage'));
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const PartnersPage = lazy(() => import('./pages/PartnersPage'));
+const LeaderboardsPage = lazy(() => import('./pages/LeaderboardsPage'));
+const DevToolsPage = lazy(() => import('./pages/DevToolsPage'));
+const OrderPage = lazy(() => import('./pages/OrderPage'));
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -30,14 +35,12 @@ function App() {
     "Glitter detonation in 3… 2… 💥"
   ];
 
-  // Cycle through chaotic text every 2 seconds (faster since we have less time)
+  // Cycle through chaotic text every 2 seconds
   useEffect(() => {
     if (!isLoading) return;
-
     const textInterval = setInterval(() => {
       setCurrentTextIndex((prev) => (prev + 1) % loadingTexts.length);
-    }, 2000); // Reduced from 2500ms to 2000ms
-
+    }, 2000);
     return () => clearInterval(textInterval);
   }, [isLoading, loadingTexts.length]);
 
@@ -56,7 +59,6 @@ function App() {
         setIsInitialized(false);
       }
     };
-
     initialize();
   }, []);
 
@@ -70,13 +72,9 @@ function App() {
       const remainingTime = minimumLoadingTime - elapsedTime;
 
       if (isInitialized) {
-        // If initialization finished early, wait for minimum loading time
         if (remainingTime > 0) {
-          setTimeout(() => {
-            setIsLoading(false);
-          }, remainingTime);
+          setTimeout(() => setIsLoading(false), remainingTime);
         } else {
-          // Initialization took longer than minimum, hide immediately
           setIsLoading(false);
         }
       }
@@ -85,12 +83,23 @@ function App() {
     checkAndHideLoading();
   }, [isInitialized]);
 
+  // ✅ TMA: Call Telegram WebApp.ready() AFTER the first meaningful content is on screen
+  useEffect(() => {
+    if (!isLoading && !initError) {
+      try {
+        window.Telegram?.WebApp?.ready?.();
+      } catch (_) {
+        // no-op
+      }
+    }
+  }, [isLoading, initError]);
+
   // Retry initialization
   const handleRetry = () => {
     setInitError(null);
     setIsInitialized(false);
     setIsLoading(true);
-    
+
     const initialize = async () => {
       try {
         console.log('🔄 Retrying initialization...');
@@ -109,6 +118,13 @@ function App() {
     initialize();
   };
 
+  // Minimal Suspense fallback for route chunks
+  const RouteFallback = (
+    <div className="flex items-center justify-center h-full text-secondary text-sm">
+      Loading…
+    </div>
+  );
+
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden relative">
       <AnimatePresence mode="wait">
@@ -117,7 +133,7 @@ function App() {
           <motion.div
             key="loading"
             className="absolute inset-0 flex flex-col items-center justify-center z-50"
-            style={{ backgroundColor: '#FDF6E3' }} // Matches body background
+            style={{ backgroundColor: '#FDF6E3' }}
             initial={{ opacity: 1 }}
             exit={{
               opacity: 0,
@@ -132,8 +148,8 @@ function App() {
                 "circle(0% at 50% 50%)"
               ]
             }}
-            transition={{ 
-              duration: 1.2, 
+            transition={{
+              duration: 1.2,
               ease: "easeInOut",
               clipPath: { duration: 1.2, times: [0, 0.2, 0.4, 0.6, 0.8, 1] }
             }}
@@ -150,7 +166,6 @@ function App() {
                 alt="Meowchi Loading"
                 className="w-32 h-32 object-contain rounded-2xl"
                 onError={(e) => {
-                  // Fallback if local image fails
                   e.target.src = "https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672";
                 }}
               />
@@ -181,16 +196,8 @@ function App() {
                 <motion.div
                   key={i}
                   className="w-3 h-3 bg-amber-500 rounded-full"
-                  animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.6, 1, 0.6]
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: i * 0.2,
-                    ease: "easeInOut"
-                  }}
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.6, 1, 0.6] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
                 />
               ))}
             </motion.div>
@@ -206,10 +213,7 @@ function App() {
                 <motion.div
                   key={i}
                   className="absolute w-2 h-2 bg-amber-400 rounded-full opacity-60"
-                  style={{
-                    left: `${Math.random() * 100}%`,
-                    top: `${Math.random() * 100}%`,
-                  }}
+                  style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%` }}
                   animate={{
                     y: [0, -20, 0],
                     x: [0, Math.random() * 40 - 20, 0],
@@ -260,17 +264,20 @@ function App() {
           >
             {/* Main content area */}
             <main className="flex-grow overflow-y-auto pb-20 bg-background text-primary h-screen">
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/game" element={<GamePage />} />
-                <Route path="/shop" element={<ShopPage />} />
-                <Route path="/tasks" element={<TasksPage />} />
-                <Route path="/partners" element={<PartnersPage />} />
-                <Route path="/leaderboards" element={<LeaderboardsPage />} />
-                <Route path="/dev-tools" element={<DevToolsPage />} />
-                <Route path="/order" element={<OrderPage />} />
-              </Routes>
+              {/* ✅ Suspense wrapper provides a tiny fallback while route chunks load */}
+              <Suspense fallback={<div className="flex items-center justify-center h-full text-secondary text-sm">Loading…</div>}>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/game" element={<GamePage />} />
+                  <Route path="/shop" element={<ShopPage />} />
+                  <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/partners" element={<PartnersPage />} />
+                  <Route path="/leaderboards" element={<LeaderboardsPage />} />
+                  <Route path="/dev-tools" element={<DevToolsPage />} />
+                  <Route path="/order" element={<OrderPage />} />
+                </Routes>
+              </Suspense>
             </main>
 
             {/* Bottom Navigation Bar */}
