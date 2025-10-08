@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v12 — Adds Meow CTA under tabs (uses backend /api/meow-cta-status and /api/meow-claim)
+// v13 — Fix apiCall usage: always POST body-based. Uses /api/meow-cta-status and /api/meow-claim via POST.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -48,7 +48,8 @@ const ProfilePage = () => {
 
   const fetchCtaStatus = useCallback(async () => {
     try {
-      const res = await apiCall("/api/meow-cta-status", "GET");
+      // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
+      const res = await apiCall("/api/meow-cta-status");
       setCtaStatus({
         eligible: !!res.eligible,
         usedToday: !!res.usedToday,
@@ -76,7 +77,8 @@ const ProfilePage = () => {
     if (ctaLoading) return;
     try {
       setCtaLoading(true);
-      const res = await apiCall("/api/meow-claim", "POST");
+      // apiCall always posts; backend route is POST /api/meow-claim
+      const res = await apiCall("/api/meow-claim");
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         // Hide CTA locally to avoid double-taps
