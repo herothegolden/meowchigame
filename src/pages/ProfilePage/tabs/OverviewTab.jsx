@@ -55,18 +55,18 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     },
     {
       title: "Приглашено друзей",
-      value: "11",
+      value: (stats?.invited_friends || 0).toLocaleString(), // ← wired to backend value
       subtitle: "Каждый получил полотенце. Никто не вернул.",
       tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
     },
     {
       title: "Счётчик мяу",
       value:
-        meowTaps >= 314
-          ? "314"
+        meowTaps >= 42
+          ? "42" // ← daily cap shown and locked at 42
           : `${meowTaps.toLocaleString()}`,
       subtitle:
-        meowTaps >= 314
+        meowTaps >= 42
           ? "Совершенство достигнуто — мир в равновесии."
           : "Нажимай дальше. Мяу ждёт.",
       tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
