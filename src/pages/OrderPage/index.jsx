@@ -48,18 +48,19 @@ const OrderPage = () => {
     triggerHaptic('light');
     setSelectedFlavor(flavor);
     setShowFlavorBurst(flavor);
-    
-    setTimeout(() => {
-      setShowFlavorBurst(null);
-    }, 800);
+    setTimeout(() => setShowFlavorBurst(null), 800);
+  };
+
+  const handleCardKeyDown = (flavor) => (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleFlavorSelect(flavor);
+    }
   };
 
   const handleAddToCart = (product) => {
     triggerHaptic('medium');
-    const flavorPrefix = selectedFlavor === 'classic' 
-      ? 'Viral Classic' 
-      : 'Viral Matcha';
-    
+    const flavorPrefix = selectedFlavor === 'classic' ? 'Viral Classic' : 'Viral Matcha';
     const shortName = `${flavorPrefix} ${product.name.split(' ')[0]}`; // "Viral Classic Jar"
     const fullProductName = `${flavorPrefix} Strawberry & Oreo ${product.name}`;
 
@@ -83,8 +84,6 @@ const OrderPage = () => {
     triggerHaptic('medium');
     const newCart = cart.filter(item => item.id !== itemId);
     setCart(newCart);
-    
-    // If removed item was selected, clear selection
     if (selectedCartItemId === itemId) {
       setSelectedCartItemId(newCart.length > 0 ? newCart[0].id : null);
     }
@@ -95,9 +94,7 @@ const OrderPage = () => {
     setSelectedCartItemId(itemId);
   };
 
-  const getSelectedItem = () => {
-    return cart.find(item => item.id === selectedCartItemId);
-  };
+  const getSelectedItem = () => cart.find(item => item.id === selectedCartItemId);
 
   const incrementQuantity = () => {
     triggerHaptic('light');
@@ -107,11 +104,7 @@ const OrderPage = () => {
     const newCart = cart.map(item => {
       if (item.id === selectedCartItemId) {
         const newQuantity = item.quantity + 1;
-        return {
-          ...item,
-          quantity: newQuantity,
-          totalPrice: item.unitPrice * newQuantity
-        };
+        return { ...item, quantity: newQuantity, totalPrice: item.unitPrice * newQuantity };
       }
       return item;
     });
@@ -126,34 +119,23 @@ const OrderPage = () => {
     const newCart = cart.map(item => {
       if (item.id === selectedCartItemId) {
         const newQuantity = item.quantity - 1;
-        return {
-          ...item,
-          quantity: newQuantity,
-          totalPrice: item.unitPrice * newQuantity
-        };
+        return { ...item, quantity: newQuantity, totalPrice: item.unitPrice * newQuantity };
       }
       return item;
     });
     setCart(newCart);
   };
 
-  const calculateSubtotal = () => {
-    return cart.reduce((sum, item) => sum + item.totalPrice, 0);
-  };
-
-  const formatPrice = (price) => {
-    return `${price.toLocaleString()} UZS`;
-  };
+  const calculateSubtotal = () => cart.reduce((sum, item) => sum + item.totalPrice, 0);
+  const formatPrice = (price) => `${price.toLocaleString()} UZS`;
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
       showError('Please add items to your cart');
       return;
     }
-
     triggerHaptic('heavy');
     setIsSubmitting(true);
-
     try {
       const result = await apiCall('/api/create-order', {
         items: cart.map(item => ({
@@ -168,13 +150,11 @@ const OrderPage = () => {
 
       setOrderSuccess(true);
       showSuccess('Order submitted! Admin will contact you via Telegram.');
-
       setTimeout(() => {
         setCart([]);
         setSelectedCartItemId(null);
         setOrderSuccess(false);
       }, 3000);
-
     } catch (error) {
       console.error('Order submission error:', error);
       showError(error.message || 'Failed to submit order. Please try again.');
@@ -191,24 +171,16 @@ const OrderPage = () => {
           animate={{ opacity: 1, scale: 1 }}
           className="bg-nav p-8 rounded-lg border border-accent text-center max-w-md"
         >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring" }}
-          >
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring" }}>
             <ShoppingCart className="w-16 h-16 text-accent mx-auto mb-4" />
           </motion.div>
           <h2 className="text-2xl font-bold text-primary mb-2">Order Submitted!</h2>
-          <p className="text-secondary mb-4">
-            Our admin will contact you via Telegram to arrange payment and delivery.
-          </p>
+          <p className="text-secondary mb-4">Our admin will contact you via Telegram to arrange payment and delivery.</p>
           <div className="bg-accent/10 p-4 rounded-lg border border-accent/30">
             <p className="text-sm text-primary">
               <strong>Total Items:</strong> {cart.reduce((sum, item) => sum + item.quantity, 0)}
             </p>
-            <p className="text-lg font-bold text-accent mt-2">
-              {formatPrice(calculateSubtotal())}
-            </p>
+            <p className="text-lg font-bold text-accent mt-2">{formatPrice(calculateSubtotal())}</p>
           </div>
         </motion.div>
       </div>
@@ -220,76 +192,108 @@ const OrderPage = () => {
   return (
     <div className="min-h-screen bg-background p-4 pb-24">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
         <h1 className="text-2xl font-bold text-primary mb-2">Закажи свои 쫀득쿠ки</h1>
         <p className="text-secondary text-sm">Strawberry & Oreo vibes прямо в Ташкенте ✨</p>
       </motion.div>
 
-      {/* Flavor Selection */}
+      {/* Flavor Selection (Cards replace buttons) */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="mb-6"
       >
-        <div className="flex gap-3 relative">
-          <button
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Classic Card */}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={selectedFlavor === 'classic'}
             onClick={() => handleFlavorSelect('classic')}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
-              selectedFlavor === 'classic'
-                ? 'bg-pink-500 text-white border-2 border-pink-400'
-                : 'bg-nav text-secondary border-2 border-gray-700 hover:border-pink-400/50'
-            }`}
+            onKeyDown={handleCardKeyDown('classic')}
+            className={`rounded-2xl border-2 p-3 bg-white/5 backdrop-blur-lg transition-all
+              ${selectedFlavor === 'classic'
+                ? 'border-pink-400'
+                : 'border-gray-700 hover:border-pink-400/50'}`}
           >
-            Viral Classic
-            <div className="text-xs font-normal mt-1">🍓 + Oreo = культовый вкус</div>
-          </button>
-          
-          <button
-            onClick={() => handleFlavorSelect('matcha')}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
-              selectedFlavor === 'matcha'
-                ? 'bg-green-500 text-white border-2 border-green-400'
-                : 'bg-nav text-secondary border-2 border-gray-700 hover:border-green-400/50'
-            }`}
-          >
-            Viral Matcha
-            <div className="text-xs font-normal mt-1">🍵 + Oreo = новый obsession</div>
-          </button>
+            <div className="rounded-xl overflow-hidden">
+              <video
+                src="https://ik.imagekit.io/59r2kpz8r/G2.webm/ik-video.mp4?updatedAt=1759689992885"
+                className="w-full h-36 object-cover"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                decoding="async"
+              />
+            </div>
+            <div className="mt-3">
+              <h3 className="text-primary font-semibold leading-tight">Viral Classic</h3>
+              <p className="text-xs text-secondary">🍓 + Oreo = культовый вкус</p>
+            </div>
+          </div>
 
-          {/* Flavor Burst Animation */}
+          {/* Matcha Card */}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={selectedFlavor === 'matcha'}
+            onClick={() => handleFlavorSelect('matcha')}
+            onKeyDown={handleCardKeyDown('matcha')}
+            className={`rounded-2xl border-2 p-3 bg-white/5 backdrop-blur-lg transition-all
+              ${selectedFlavor === 'matcha'
+                ? 'border-green-400'
+                : 'border-gray-700 hover:border-green-400/50'}`}
+          >
+            <div className="rounded-xl overflow-hidden">
+              <video
+                src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
+                className="w-full h-36 object-cover"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                decoding="async"
+              />
+            </div>
+            <div className="mt-3">
+              <h3 className="text-primary font-semibold leading-tight">Viral Matcha</h3>
+              <p className="text-xs text-secondary">🍵 + Oreo = новый obsession</p>
+            </div>
+          </div>
+
+          {/* Flavor Burst Animation (unchanged) */}
           <AnimatePresence>
             {showFlavorBurst && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                {[0, 1, 2, 3, 4].map((index) => {
-                  const angle = (index * 72) - 90; // Distribute 5 items in circle
-                  const distance = 60;
-                  const x = Math.cos((angle * Math.PI) / 180) * distance;
-                  const y = Math.sin((angle * Math.PI) / 180) * distance;
-                  
-                  return (
-                    <motion.div
-                      key={`burst-${index}`}
-                      initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
-                      animate={{ 
-                        scale: [0, 1.5, 1.2], 
-                        x: x, 
-                        y: y,
-                        opacity: [1, 1, 0],
-                        rotate: Math.random() * 360
-                      }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="absolute text-4xl"
-                    >
-                      {showFlavorBurst === 'classic' ? '🍓' : '🍵'}
-                    </motion.div>
-                  );
-                })}
+              <div className="sm:col-span-2 relative">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  {[0, 1, 2, 3, 4].map((index) => {
+                    const angle = (index * 72) - 90;
+                    const distance = 60;
+                    const x = Math.cos((angle * Math.PI) / 180) * distance;
+                    const y = Math.sin((angle * Math.PI) / 180) * distance;
+                    return (
+                      <motion.div
+                        key={`burst-${index}`}
+                        initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+                        animate={{
+                          scale: [0, 1.5, 1.2],
+                          x, y,
+                          opacity: [1, 1, 0],
+                          rotate: Math.random() * 360
+                        }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="absolute text-4xl"
+                      >
+                        {showFlavorBurst === 'classic' ? '🍓' : '🍵'}
+                      </motion.div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </AnimatePresence>
@@ -314,9 +318,9 @@ const OrderPage = () => {
                   src={product.imageUrl}
                   alt={product.name}
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                  }}
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => { e.target.style.display = 'none'; }}
                 />
               </div>
 
@@ -337,11 +341,7 @@ const OrderPage = () => {
 
       {/* Cart and Quantity Section - Only show if cart has items */}
       {cart.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-nav p-6 rounded-lg border border-gray-700 mb-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-nav p-6 rounded-lg border border-gray-700 mb-6">
           <h3 className="text-primary font-bold mb-4">Выбери сколько баночек счастья 🍪</h3>
 
           {/* Quantity Controls */}
@@ -355,12 +355,8 @@ const OrderPage = () => {
             </button>
 
             <div className="text-center">
-              <div className="text-4xl font-bold text-primary">
-                {selectedItem ? selectedItem.quantity : 0}
-              </div>
-              <div className="text-xs text-secondary mt-1">
-                {selectedItem ? selectedItem.displayName : 'Select item'}
-              </div>
+              <div className="text-4xl font-bold text-primary">{selectedItem ? selectedItem.quantity : 0}</div>
+              <div className="text-xs text-secondary mt-1">{selectedItem ? selectedItem.displayName : 'Select item'}</div>
             </div>
 
             <button
@@ -376,7 +372,7 @@ const OrderPage = () => {
           <div className="mb-4 space-y-3">
             <p className="text-xs text-secondary font-semibold mb-2">Order Items:</p>
             {cart.map((item, index) => (
-              <div 
+              <div
                 key={item.id}
                 onClick={() => handleSelectCartItem(item.id)}
                 className={`p-3 rounded-lg cursor-pointer transition-all ${
@@ -387,18 +383,13 @@ const OrderPage = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-primary mb-1">
-                      {index + 1}. {item.displayName}
-                    </p>
+                    <p className="text-sm font-semibold text-primary mb-1">{index + 1}. {item.displayName}</p>
                     <p className="text-xs text-secondary">
                       Qty: {item.quantity} × {formatPrice(item.unitPrice)} = {formatPrice(item.totalPrice)}
                     </p>
                   </div>
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveFromCart(item.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleRemoveFromCart(item.id); }}
                     className="text-red-500 hover:text-red-400 transition-colors ml-3"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -410,7 +401,6 @@ const OrderPage = () => {
 
           {/* Pricing Summary */}
           <div className="bg-accent/10 p-4 rounded-lg border border-accent/30 space-y-3">
-            {/* Available Discounts */}
             <div className="space-y-1">
               <p className="text-xs text-secondary font-semibold mb-1">💡 Доступные бонусы:</p>
               <div className="flex items-center justify-between text-xs">
@@ -424,31 +414,20 @@ const OrderPage = () => {
             </div>
 
             <div className="border-t border-accent/20 pt-3 space-y-2">
-              {/* Subtotal */}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-secondary">Subtotal:</span>
-                <span className="text-primary font-semibold">
-                  {formatPrice(calculateSubtotal())}
-                </span>
+                <span className="text-primary font-semibold">{formatPrice(calculateSubtotal())}</span>
               </div>
-
-              {/* Discounts */}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-secondary">Discounts:</span>
                 <span className="text-primary font-semibold">-0 UZS</span>
               </div>
-
-              {/* Total */}
               <div className="border-t border-accent/20 pt-2 mt-2">
                 <div className="flex items-center justify-between">
                   <span className="text-secondary font-semibold">Итого:</span>
-                  <span className="text-xl font-bold text-accent">
-                    {formatPrice(calculateSubtotal())}
-                  </span>
+                  <span className="text-xl font-bold text-accent">{formatPrice(calculateSubtotal())}</span>
                 </div>
-                <p className="text-xs text-secondary text-right mt-1 italic">
-                  (да, так вкусно и так доступно 😋)
-                </p>
+                <p className="text-xs text-secondary text-right mt-1 italic">(да, так вкусно и так доступно 😋)</p>
               </div>
             </div>
           </div>
@@ -456,12 +435,7 @@ const OrderPage = () => {
       )}
 
       {/* Submit Button - Always Visible */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="mt-6"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="mt-6">
         <button
           onClick={handleSubmitOrder}
           disabled={isSubmitting || cart.length === 0}
