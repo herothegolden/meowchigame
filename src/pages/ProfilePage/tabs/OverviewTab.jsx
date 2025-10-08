@@ -1,8 +1,7 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v17 — One-shot retry if final tap didn't commit (covers both throttled and non-throttled 41)
-// - Keeps v15 behavior (no early notify on optimistic 42)
-// - If /api/meow-tap returns { throttled:true } OR { meow_taps:41 } while local==42 → single retry ~260ms later
-// - Dispatch "meow:reached42" only after server-confirmed/reconciled 42
+// v19 — Streaks auto-claim (once/day) + robust CTA trigger
+// - NEW: Auto-claim daily streak when eligible (no UI changes). Safe: once/day via sessionStorage.
+// - IMPROVED: Fire `meow:reached42` once when server OR local reaches 42 (handles throttle/race).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -18,7 +17,7 @@ const formatPlayTime = (seconds) => {
 /**
  * Props:
  * - stats: object returned from /api/get-profile-complete (or similar)
- * - streakInfo: optional
+ * - streakInfo: optional (contains canClaim/claimedToday/etc. from backend)
  * - onUpdate: optional callback to trigger parent refetch
  * - backendUrl / BACKEND_URL: optional backend base URL
  */
@@ -31,7 +30,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
-  // --- Day-aware cache (prevents stale carry-over and "start from 1" after reset) ---
+  // --- Day-aware cache for Meow Counter (prevents stale carry-over) ---
   const storageKey = "meowchi:v2:meow_taps";
   const serverDay =
     (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
@@ -53,10 +52,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal0;
   });
 
-  // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
+  // Broadcast helpers
+  const notified42Ref = useRef(false);
   const notifyReached42 = useCallback(() => {
+    if (notified42Ref.current) return;
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
+      notified42Ref.current = true;
     } catch (_) {}
   }, []);
 
@@ -78,17 +80,27 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((prev) => {
       let next;
       if (newDay !== prevDay) {
+        // new day — reset local cache and notification guard
+        notified42Ref.current = false;
         next = serverVal0;
       } else {
         next = Math.max(prev, serverVal0);
       }
       persist(next);
-      if (next === 42 && prev !== 42) notifyReached42();
+      // If reconciliation shows 42, emit event (server-confirmed path)
+      if (next >= 42 && prev < 42) notifyReached42();
       return next;
     });
 
     dayRef.current = newDay;
   }, [serverDay, serverVal0, notifyReached42, persist]);
+
+  // 🔔 Also guard against the race where local hits 42 before server confirms.
+  useEffect(() => {
+    if (meowTapsLocal >= 42 || serverVal0 >= 42) {
+      notifyReached42();
+    }
+  }, [meowTapsLocal, serverVal0, notifyReached42]);
 
   // Client small cooldown (aligns with backend 220ms)
   const tapCooldownRef = useRef(0);
@@ -127,6 +139,38 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (HW?.impactOccurred) HW.impactOccurred("light");
     } catch (_) {}
   }, []);
+
+  // --- 🔁 Auto-claim Daily Streak (silent, once per day) ---
+  useEffect(() => {
+    const dayKey = `meowchi:v1:streak_claimed:${serverDay}`;
+    const already = sessionStorage.getItem(dayKey);
+
+    // Claim only if backend says it's claimable and we haven't tried this day
+    if (streakInfo?.canClaim === true && !already) {
+      (async () => {
+        try {
+          const url = `${backendBase}/api/streak/claim-streak`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initData: initDataRef.current }),
+            keepalive: true,
+          });
+          // Mark attempt regardless of result to avoid loops; parent will refresh stats
+          sessionStorage.setItem(dayKey, "1");
+          if (res.ok) {
+            // Refresh profile stats so the card shows the new streak and points
+            if (typeof onUpdate === "function") onUpdate();
+          } else {
+            // If backend rejected (race), we still hold the "once/day" guard; value will be stable on next load
+          }
+        } catch (_) {
+          // Network error — keep guard to avoid spamming; user will still see 0 until next refresh
+          sessionStorage.setItem(dayKey, "1");
+        }
+      })();
+    }
+  }, [streakInfo?.canClaim, backendBase, serverDay, onUpdate]);
 
   // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
@@ -182,7 +226,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  // ---- One-shot retry guard for final-commit edge cases ----
+  // ---- One-shot retry guard for final-commit edge cases (meow tap) ----
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
@@ -205,16 +249,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
           persist(next);
-          if (next === 42 && prev !== 42) notifyReached42();
+          if (next >= 42 && prev < 42) notifyReached42();
           return next;
         });
 
         // 🔁 If server says "throttled" while our local shows 42, retry once
-        const throttledAt42 = data?.throttled === true && meowTapsLocal === 42;
+        const throttledAt42 = data?.throttled === true && meowTapsLocal >= 42;
 
         // 🔁 If server returns 41 (non-throttled) while local already 42, retry once
         const nonThrottled41AtLocal42 =
-          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal === 42;
+          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal >= 42;
 
         if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
           retryOnceRef.current = true;
@@ -235,7 +279,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
                     persist(next);
-                    if (next === 42 && prev !== 42) notifyReached42();
+                    if (next >= 42 && prev < 42) notifyReached42();
                     return next;
                   });
                 }
@@ -268,7 +312,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // no early notify here
+      // No early notify here; dedicated effect handles local-42 case safely.
       return next;
     });
 
