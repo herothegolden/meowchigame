@@ -1,11 +1,15 @@
-// src/pages/ShopPage/index.jsx
-// v8 — Fix: perfectly aligned emoji + divider grid in Cookie Pack card (no other changes)
+// Path: frontend/src/pages/ShopPage/index.jsx
+// v9 — Instant paint (no black loading screen):
+// - Removed full-screen loading return; render page shell immediately.
+// - Added lightweight inline skeleton for header while data hydrates.
+// - Kept session cache + background refetch; no unrelated logic changed.
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiCall, showError } from "../../utils/api";
 import { ErrorState } from "../../components/ErrorState";
-import { LoadingState } from "../../components/LoadingState";
+// NOTE: LoadingState import removed (unused)
+
 import ShopHeader from "./ShopHeader";
 import CategorySection from "./CategorySection";
 
@@ -35,7 +39,7 @@ const ShopPage = () => {
       try {
         const parsed = JSON.parse(cached);
         setData(parsed);
-        setLoading(false);
+        setLoading(false); // instant paint with cached data
       } catch {
         sessionStorage.removeItem("shopData");
       }
@@ -137,23 +141,22 @@ const ShopPage = () => {
     };
   }, [data?.items]);
 
-  if (loading && !data)
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-gray-400">
-        <div className="rounded-2xl w-64 h-64 bg-white/10 mb-4" />
-        <p className="text-sm opacity-75">Loading shop...</p>
-      </div>
-    );
-
+  // Keep error as a page-level state (rare, explicit failure)
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
-  if (!data)
-    return <ErrorState error="No data available" onRetry={fetchData} />;
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
-      <ShopHeader points={data.userPoints} />
+      {/* Header — skeleton while loading, otherwise real header */}
+      {loading && !data ? (
+        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse max-w-md">
+          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
+          <div className="h-4 w-64 bg-white/10 rounded" />
+        </div>
+      ) : (
+        <ShopHeader points={data?.userPoints || 0} />
+      )}
 
-      {/* 🍪 Meowchi WebM Header Section */}
+      {/* 🍪 Meowchi WebM Header Section (kept for visual parity; does not block) */}
       <div className="text-center space-y-4 mb-10">
         <video
           src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
@@ -201,14 +204,14 @@ const ShopPage = () => {
         </div>
       </div>
 
-      {/* Shop Categories */}
+      {/* Shop Categories — always render; hydrate with data when ready */}
       {["time", "bomb", "multiplier"].map((category) => (
         <CategorySection
           key={category}
           category={category}
           items={itemsByCategory[category]}
-          userPoints={data.userPoints}
-          inventory={data.inventory}
+          userPoints={data?.userPoints || 0}
+          inventory={data?.inventory || []}
           ownedBadges={[]}
           onPurchase={handlePurchase}
           purchasing={purchasing}
