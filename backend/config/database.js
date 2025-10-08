@@ -54,7 +54,11 @@ export const setupDatabase = async () => {
       { name: 'vip_level', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'longest_streak', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'last_login_date', type: 'DATE' },
-      { name: 'streak_claimed_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' }
+      { name: 'streak_claimed_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
+
+      // 🆕 Meow counter (daily, capped at 42)
+      { name: 'meow_taps', type: 'INT DEFAULT 0 NOT NULL' },
+      { name: 'meow_taps_date', type: 'DATE' }
     ];
 
     for (const column of columnsToAdd) {
