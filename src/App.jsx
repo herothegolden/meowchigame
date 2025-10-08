@@ -1,17 +1,19 @@
 // Path: frontend/src/App.jsx
-// v17 — P0 perf for TMA:
-// - Route-level code splitting (lazy + Suspense) to shrink initial bundle
-// - Call Telegram WebApp.ready() after first meaningful content is mounted
+// v20 — No loading screen on Profile:
+// - ProfilePage is imported eagerly (not lazy) → no Suspense fallback on /profile
+// - Other routes remain code-split
+// - Init runs in background; WebApp.ready() on next frame
 
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from './components/BottomNav';
 import { initializeUser } from './utils/api';
 
-// ✅ Lazy-load all page components (route code-splitting)
+// ✅ Eager-load Profile to avoid any "Loading…" fallback on that route
+import ProfilePage from './pages/ProfilePage';
+
+// ✅ Keep other pages lazy to preserve small entry chunk
 const HomePage = lazy(() => import('./pages/HomePage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const GamePage = lazy(() => import('./pages/GamePage'));
 const ShopPage = lazy(() => import('./pages/ShopPage'));
 const TasksPage = lazy(() => import('./pages/TasksPage'));
@@ -21,270 +23,43 @@ const DevToolsPage = lazy(() => import('./pages/DevToolsPage'));
 const OrderPage = lazy(() => import('./pages/OrderPage'));
 
 function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentTextIndex, setCurrentTextIndex] = useState(1);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [initError, setInitError] = useState(null);
-
-  // Chaotic loading text messages
-  const loadingTexts = [
-    "Summoning sprinkle storms…", // This shows in static loading
-    "Oops! Dropped a marshmallow (again).",
-    "Whisking up Pi secrets…",
-    "Meowchi is hiding your cookies (don't tell).",
-    "Glitter detonation in 3… 2… 💥"
-  ];
-
-  // Cycle through chaotic text every 2 seconds
+  // Background initialization (non-blocking)
   useEffect(() => {
-    if (!isLoading) return;
-    const textInterval = setInterval(() => {
-      setCurrentTextIndex((prev) => (prev + 1) % loadingTexts.length);
-    }, 2000);
-    return () => clearInterval(textInterval);
-  }, [isLoading, loadingTexts.length]);
-
-  // User initialization phase (runs immediately)
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        console.log('🔍 Initializing user...');
-        const userData = await initializeUser();
-        console.log('✅ User initialized:', userData);
-        setIsInitialized(true);
-        setInitError(null);
-      } catch (error) {
-        console.error('❌ Initialization failed:', error);
-        setInitError(error.message);
-        setIsInitialized(false);
-      }
-    };
-    initialize();
+    (async () => {
+      try { await initializeUser(); } catch {}
+    })();
   }, []);
 
-  // Hide loading screen only after BOTH animation (2.5s) AND initialization complete
+  // Signal Telegram readiness on next frame (prevents early jank)
   useEffect(() => {
-    const minimumLoadingTime = 2500;
-    const startTime = Date.now();
+    const raf = requestAnimationFrame(() => {
+      try { window.Telegram?.WebApp?.ready?.(); } catch {}
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
-    const checkAndHideLoading = () => {
-      const elapsedTime = Date.now() - startTime;
-      const remainingTime = minimumLoadingTime - elapsedTime;
-
-      if (isInitialized) {
-        if (remainingTime > 0) {
-          setTimeout(() => setIsLoading(false), remainingTime);
-        } else {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    checkAndHideLoading();
-  }, [isInitialized]);
-
-  // ✅ TMA: Call Telegram WebApp.ready() AFTER the first meaningful content is on screen
-  useEffect(() => {
-    if (!isLoading && !initError) {
-      try {
-        window.Telegram?.WebApp?.ready?.();
-      } catch (_) {
-        // no-op
-      }
-    }
-  }, [isLoading, initError]);
-
-  // Retry initialization
-  const handleRetry = () => {
-    setInitError(null);
-    setIsInitialized(false);
-    setIsLoading(true);
-
-    const initialize = async () => {
-      try {
-        console.log('🔄 Retrying initialization...');
-        const userData = await initializeUser();
-        console.log('✅ User initialized:', userData);
-        setIsInitialized(true);
-        setInitError(null);
-      } catch (error) {
-        console.error('❌ Retry failed:', error);
-        setInitError(error.message);
-        setIsInitialized(false);
-        setIsLoading(false);
-      }
-    };
-
-    initialize();
-  };
-
-  // Minimal Suspense fallback for route chunks
-  const RouteFallback = (
-    <div className="flex items-center justify-center h-full text-secondary text-sm">
-      Loading…
-    </div>
-  );
+  // Minimal, neutral fallback for lazy route chunks (no big overlay)
+  const RouteFallback = <div style={{ height: 1 }} />;
 
   return (
-    <div className="h-screen w-screen flex flex-col font-sans overflow-hidden relative">
-      <AnimatePresence mode="wait">
-        {isLoading && !initError ? (
-          // Loading Screen - matches body pastel background
-          <motion.div
-            key="loading"
-            className="absolute inset-0 flex flex-col items-center justify-center z-50"
-            style={{ backgroundColor: '#FDF6E3' }}
-            initial={{ opacity: 1 }}
-            exit={{
-              opacity: 0,
-              scale: 0.8,
-              filter: "blur(10px)",
-              clipPath: [
-                "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
-                "polygon(10% 10%, 90% 5%, 85% 90%, 15% 95%)",
-                "polygon(20% 20%, 80% 15%, 75% 80%, 25% 85%)",
-                "polygon(30% 30%, 70% 25%, 65% 70%, 35% 75%)",
-                "polygon(40% 40%, 60% 35%, 55% 60%, 45% 65%)",
-                "circle(0% at 50% 50%)"
-              ]
-            }}
-            transition={{
-              duration: 1.2,
-              ease: "easeInOut",
-              clipPath: { duration: 1.2, times: [0, 0.2, 0.4, 0.6, 0.8, 1] }
-            }}
-          >
-            {/* Meowchi Image */}
-            <motion.div
-              className="mb-8"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-            >
-              <img
-                src="/3f4ea614-4f4d-47f5-9569-a5a81818cc6f.png"
-                alt="Meowchi Loading"
-                className="w-32 h-32 object-contain rounded-2xl"
-                onError={(e) => {
-                  e.target.src = "https://ik.imagekit.io/59r2kpz8r/Meowchi%202%20/MeowchiCat.webp?updatedAt=1758909417672";
-                }}
-              />
-            </motion.div>
+    <div className="h-screen w-screen flex flex-col font-sans overflow-hidden bg-background text-primary">
+      <main className="flex-grow overflow-y-auto pb-20">
+        <Suspense fallback={RouteFallback}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/profile" element={<ProfilePage />} /> {/* ← eager, no fallback */}
+            <Route path="/game" element={<GamePage />} />
+            <Route path="/shop" element={<ShopPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/partners" element={<PartnersPage />} />
+            <Route path="/leaderboards" element={<LeaderboardsPage />} />
+            <Route path="/dev-tools" element={<DevToolsPage />} />
+            <Route path="/order" element={<OrderPage />} />
+          </Routes>
+        </Suspense>
+      </main>
 
-            {/* Cycling Chaotic Text */}
-            <motion.div
-              className="text-center px-6 max-w-sm"
-              key={currentTextIndex}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-            >
-              <p className="text-lg font-bold text-amber-600 mb-2">
-                {loadingTexts[currentTextIndex]}
-              </p>
-            </motion.div>
-
-            {/* Loading Indicator */}
-            <motion.div
-              className="mt-8 flex space-x-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="w-3 h-3 bg-amber-500 rounded-full"
-                  animate={{ scale: [1, 1.2, 1], opacity: [0.6, 1, 0.6] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
-                />
-              ))}
-            </motion.div>
-
-            {/* Floating Cookie Crumbs for Effect */}
-            <motion.div
-              className="absolute inset-0 pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1 }}
-            >
-              {[...Array(12)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  className="absolute w-2 h-2 bg-amber-400 rounded-full opacity-60"
-                  style={{ left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%` }}
-                  animate={{
-                    y: [0, -20, 0],
-                    x: [0, Math.random() * 40 - 20, 0],
-                    opacity: [0.6, 0.3, 0.6],
-                    scale: [1, 0.8, 1]
-                  }}
-                  transition={{
-                    duration: 3 + Math.random() * 2,
-                    repeat: Infinity,
-                    delay: Math.random() * 2,
-                    ease: "easeInOut"
-                  }}
-                />
-              ))}
-            </motion.div>
-          </motion.div>
-        ) : initError ? (
-          // Initialization Error Screen
-          <motion.div
-            key="init-error"
-            className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-background p-4"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="bg-red-600/20 border border-red-500 rounded-lg p-6 max-w-sm w-full">
-              <div className="text-center">
-                <div className="text-6xl mb-4">⚠️</div>
-                <h1 className="text-xl font-bold text-primary mb-2">Initialization Error</h1>
-                <p className="text-secondary text-sm mb-4">{initError}</p>
-                <button
-                  onClick={handleRetry}
-                  className="bg-accent hover:bg-accent/80 text-background px-4 py-2 rounded-lg font-bold transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        ) : (
-          // Main App Content
-          <motion.div
-            key="app"
-            className="h-full w-full bg-background"
-            initial={{ opacity: 0, scale: 1.1 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
-            {/* Main content area */}
-            <main className="flex-grow overflow-y-auto pb-20 bg-background text-primary h-screen">
-              {/* ✅ Suspense wrapper provides a tiny fallback while route chunks load */}
-              <Suspense fallback={<div className="flex items-center justify-center h-full text-secondary text-sm">Loading…</div>}>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/game" element={<GamePage />} />
-                  <Route path="/shop" element={<ShopPage />} />
-                  <Route path="/tasks" element={<TasksPage />} />
-                  <Route path="/partners" element={<PartnersPage />} />
-                  <Route path="/leaderboards" element={<LeaderboardsPage />} />
-                  <Route path="/dev-tools" element={<DevToolsPage />} />
-                  <Route path="/order" element={<OrderPage />} />
-                </Routes>
-              </Suspense>
-            </main>
-
-            {/* Bottom Navigation Bar */}
-            <BottomNav />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <BottomNav />
     </div>
   );
 }
