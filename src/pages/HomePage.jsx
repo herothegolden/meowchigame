@@ -1,3 +1,5 @@
+// Path: frontend/src/pages/HomePage.jsx
+
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -142,8 +144,8 @@ const HomePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans relative flex flex-col">
-      <div className="absolute inset-0 -z-10 bg-gradient-radial from-purple-900/40 via-black to-black"></div>
+    <div className="min-h-screen bg-background text-primary font-sans relative flex flex-col">
+      <div className="absolute inset-0 -z-10 bg-gradient-radial from-background/0 via-background to-background"></div>
 
       <div className="flex-grow max-w-2xl mx-auto px-6 py-12 space-y-12">
         <motion.div
@@ -157,11 +159,11 @@ const HomePage = () => {
             Стильно. <br />
             쫀득.
           </h1>
-          <p className="text-lg text-gray-300 leading-relaxed">
+          <p className="text-lg text-secondary leading-relaxed">
             Это Meowchi — мраморные маршмеллоу-куки из Ташкента. <br />
             Вкус, который тянется, текстура, которая попадает в ваши Stories.
           </p>
-          <p className="text-white font-semibold text-lg">
+          <p className="font-semibold text-lg text-primary">
             Your new viral obsession.
           </p>
 
@@ -183,39 +185,39 @@ const HomePage = () => {
         </motion.div>
 
         <motion.div
-  initial={{ opacity: 0, y: 40 }}
-  whileInView={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.8 }}
-  viewport={{ once: true }}
-  className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
->
-  <h2 className="text-2xl font-bold mb-3">Почему Meowchi особенный?</h2>
-  <p className="text-gray-300 leading-relaxed mb-3">
-    Meowchi — больше, чем печенье. Это{" "}
-    <span className="font-semibold text-white">쫀득-текстура</span>,
-    которая делает каждый укус{" "}
-    <span className="italic">ASMR moment</span>. Мраморный рисунок,
-    эстетика для Instagram, вкус, который объединяет друзей. Сделано в
-    Ташкенте, вдохновлено Korean dessert culture, создано для того,
-    чтобы стать <span className="font-semibold">global trend</span>.
-  </p>
-  <p className="mt-3 text-emerald-300 italic font-medium">
-    Chewy. Marble. Shareable.
-  </p>
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true }}
+          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
+        >
+          <h2 className="text-2xl font-bold mb-3">Почему Meowchi особенный?</h2>
+          <p className="text-secondary leading-relaxed mb-3">
+            Meowchi — больше, чем печенье. Это{" "}
+            <span className="font-semibold text-primary">쫀득-текстура</span>,
+            которая делает каждый укус{" "}
+            <span className="italic">ASMR moment</span>. Мраморный рисунок,
+            эстетика для Instagram, вкус, который объединяет друзей. Сделано в
+            Ташкенте, вдохновлено Korean dessert culture, создано для того,
+            чтобы стать <span className="font-semibold">global trend</span>.
+          </p>
+          <p className="mt-3 text-emerald-300 italic font-medium">
+            Chewy. Marble. Shareable.
+          </p>
 
-  {/* Replace image with WebM */}
-  <div className="w-full flex justify-center mt-4">
-    <video
-      src="https://ik.imagekit.io/59r2kpz8r/G4.webm/ik-video.mp4?updatedAt=1759692598673"
-      autoPlay
-      loop
-      muted
-      playsInline
-      preload="auto"
-      className="w-full max-w-md h-auto aspect-[4/5] object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
-    />
-  </div>
-</motion.div>
+          {/* Replace image with WebM */}
+          <div className="w-full flex justify-center mt-4">
+            <video
+              src="https://ik.imagekit.io/59r2kpz8r/G4.webm/ik-video.mp4?updatedAt=1759692598673"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              className="w-full max-w-md h-auto aspect-[4/5] object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+            />
+          </div>
+        </motion.div>
 
         <div className="space-y-8">
           <GlobalPulse />
@@ -232,22 +234,22 @@ const HomePage = () => {
 
           {/* Shopping Image */}
           <div className="flex justify-center my-6">
-  <video
-    src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
-    autoPlay
-    loop
-    muted
-    playsInline
-    className="w-full max-w-md h-auto rounded-2xl"
-  />
-</div>
+            <video
+              src="https://ik.imagekit.io/59r2kpz8r/G1.webm/ik-video.mp4?updatedAt=1759688155167"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full max-w-md h-auto rounded-2xl"
+            />
+          </div>
 
           {cards.map((item, i) => (
             <motion.div
               key={i}
               whileHover={{ scale: item.locked ? 1.0 : 1.02 }}
               onClick={() => handleCardClick(i, item)}
-              className={`p-8 rounded-3xl bg-gradient-to-b from-black/60 to-black/80 backdrop-blur-lg border border-emerald-400/10 shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
+              className={`p-8 rounded-3xl bg-nav border border-gray-700 backdrop-blur-lg shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
                 item.locked ? "cursor-not-allowed opacity-80" : item.hiFiveRequired ? "cursor-default" : "cursor-pointer"
               }`}
             >
@@ -257,12 +259,12 @@ const HomePage = () => {
               
               {item.hiFiveRequired ? (
                 openCard === i ? (
-                  <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                  <p className="text-secondary text-base leading-relaxed whitespace-pre-line">
                     {item.content}
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-gray-400 whitespace-pre-line">{item.teaser}</p>
+                    <p className="text-secondary whitespace-pre-line">{item.teaser}</p>
                     
                     <div className="relative inline-block">
                       <motion.img
@@ -331,12 +333,12 @@ const HomePage = () => {
               ) : (
                 <>
                   {openCard === i && !item.locked ? (
-                    <p className="text-gray-300 text-base leading-relaxed whitespace-pre-line">
+                    <p className="text-secondary text-base leading-relaxed whitespace-pre-line">
                       {item.content}
                     </p>
                   ) : (
                     <div className="min-h-[96px] flex items-center justify-center">
-                      <p className="text-gray-400 whitespace-pre-line">
+                      <p className="text-secondary whitespace-pre-line">
                         {item.alternateTexts ? item.alternateTexts[lockedCardTextIndex] : item.teaser}
                       </p>
                     </div>
@@ -348,51 +350,51 @@ const HomePage = () => {
         </div>
 
         <div>
-  <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
-  <div className="grid grid-cols-1 gap-6">
-    
-    {/* Product 1 — Strawberry & Oreo */}
-    <motion.div
-      whileHover={{ scale: 1.03 }}
-      className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
-    >
-      <video
-        src="https://ik.imagekit.io/59r2kpz8r/G2.webm/ik-video.mp4?updatedAt=1759689992885"
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="auto"
-        className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(255,0,150,0.3)] border border-white/10 mb-4"
-      />
-      <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
-      <p className="text-gray-300 text-sm">
-        розовое настроение, playful, вирусный фаворит.
-      </p>
-    </motion.div>
+          <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
+          <div className="grid grid-cols-1 gap-6">
+            
+            {/* Product 1 — Strawberry & Oreo */}
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
+            >
+              <video
+                src="https://ik.imagekit.io/59r2kpz8r/G2.webm/ik-video.mp4?updatedAt=1759689992885"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(255,0,150,0.3)] border border-white/10 mb-4"
+              />
+              <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
+              <p className="text-secondary text-sm">
+                розовое настроение, playful, вирусный фаворит.
+              </p>
+            </motion.div>
 
-    {/* Product 2 — Matcha Strawberry & Oreo */}
-    <motion.div
-      whileHover={{ scale: 1.03 }}
-      className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
-    >
-      <video
-        src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="auto"
-        className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(0,255,200,0.3)] border border-white/10 mb-4"
-      />
-      <h3 className="text-xl font-semibold">Matcha Strawberry & Oreo</h3>
-      <p className="text-gray-300 text-sm">
-        earthy + strawberry twist, эстетика для тех, кто ценит баланс.
-      </p>
-    </motion.div>
+            {/* Product 2 — Matcha Strawberry & Oreo */}
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
+            >
+              <video
+                src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(0,255,200,0.3)] border border-white/10 mb-4"
+              />
+              <h3 className="text-xl font-semibold">Matcha Strawberry & Oreo</h3>
+              <p className="text-secondary text-sm">
+                earthy + strawberry twist, эстетика для тех, кто ценит баланс.
+              </p>
+            </motion.div>
 
-  </div>
-</div>
+          </div>
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -402,9 +404,9 @@ const HomePage = () => {
           className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
         >
           <h2 className="text-xl font-bold">Как заказать?</h2>
-          <p className="text-gray-300">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
-          <p className="text-gray-300">❄️ Хранение: 30 дней в холодильнике</p>
-          <p className="text-gray-300">
+          <p className="text-secondary">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
+          <p className="text-secondary">❄️ Хранение: 30 дней в холодильнике</p>
+          <p className="text-secondary">
             ☎️ Телефон: <a href="tel:+998913141142" className="text-emerald-300 hover:underline">+998 91 314 11 42</a>
           </p>
           <motion.button
@@ -451,7 +453,7 @@ const HomePage = () => {
             </svg>
           </a>
         </div>
-        <p className="text-center text-gray-500 text-sm mt-3">
+        <p className="text-center text-secondary text-sm mt-3">
           © {new Date().getFullYear()} Meowchi. All rights reserved.
         </p>
       </footer>
