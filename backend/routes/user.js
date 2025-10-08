@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v6 — Wire “Счётчик мяу”: daily (Asia/Tashkent) tap counter up to 42 with server-side reset & rate-limit.
+// v7 — Fix daily reset for “Счётчик мяу”: compare dates in SQL (no JS string mismatch)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -183,17 +183,18 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // --- Meow taps daily reset (server-side) ---
+      // --- Meow taps daily reset (server-side) with SQL date compare ---
       const todayStr = getTashkentDate();
-      if (!userData.meow_taps_date || String(userData.meow_taps_date) !== todayStr) {
-        const resetRes = await client.query(
-          `UPDATE users
-             SET meow_taps = 0,
-                 meow_taps_date = $1
-           WHERE telegram_id = $2
-           RETURNING meow_taps, meow_taps_date`,
-          [todayStr, user.id]
-        );
+      const resetRes = await client.query(
+        `UPDATE users
+            SET meow_taps = 0,
+                meow_taps_date = $1
+          WHERE telegram_id = $2
+            AND (meow_taps_date IS NULL OR meow_taps_date::date <> $1::date)
+          RETURNING meow_taps, meow_taps_date`,
+        [todayStr, user.id]
+      );
+      if (resetRes.rowCount > 0) {
         userData.meow_taps = resetRes.rows[0].meow_taps;
         userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
       }
@@ -293,17 +294,18 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // --- Meow taps daily reset (server-side) ---
+      // --- Meow taps daily reset (server-side) with SQL date compare ---
       const todayStr = getTashkentDate();
-      if (!userData.meow_taps_date || String(userData.meow_taps_date) !== todayStr) {
-        const resetRes = await client.query(
-          `UPDATE users
-             SET meow_taps = 0,
-                 meow_taps_date = $1
-           WHERE telegram_id = $2
-           RETURNING meow_taps, meow_taps_date`,
-          [todayStr, user.id]
-        );
+      const resetRes = await client.query(
+        `UPDATE users
+            SET meow_taps = 0,
+                meow_taps_date = $1
+          WHERE telegram_id = $2
+            AND (meow_taps_date IS NULL OR meow_taps_date::date <> $1::date)
+          RETURNING meow_taps, meow_taps_date`,
+        [todayStr, user.id]
+      );
+      if (resetRes.rowCount > 0) {
         userData.meow_taps = resetRes.rows[0].meow_taps;
         userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
       }
@@ -530,8 +532,8 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       let { meow_taps, meow_taps_date } = rowRes.rows[0];
 
-      // Reset if first tap of the day (Asia/Tashkent)
-      if (!meow_taps_date || String(meow_taps_date) !== todayStr) {
+      // Reset if first tap of the day (SQL date semantics)
+      if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
         meow_taps = 0;
         meow_taps_date = todayStr;
         await client.query(
