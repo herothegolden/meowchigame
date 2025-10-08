@@ -1,16 +1,15 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v16 — P0 perf: remove framer-motion from first paint; keep behavior identical.
-// Also retains CTA logic and lazy-loaded tabs.
+// v17 — Instant paint:
+// - Removed full-screen loading gate to avoid black screen.
+// - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
+// - Kept tabs lazy + local fallbacks; CTA logic unchanged.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
-// Removed framer-motion on first paint (TTI win)
-// import { motion } from "framer-motion";
 import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { LoaderCircle } from "lucide-react";
 
 // ✅ Corrected lazy imports (moved to /tabs/ folder)
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
@@ -83,8 +82,11 @@ const ProfilePage = () => {
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
-      // Note: these timeouts are short-lived; no-op cleanup here is acceptable
-      // since listener is removed on unmount (kept minimal per "surgical" rule).
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     };
     window.addEventListener("meow:reached42", onReached42);
     return () => window.removeEventListener("meow:reached42", onReached42);
@@ -121,50 +123,44 @@ const ProfilePage = () => {
     }
   }, [ctaLoading, navigate, fetchCtaStatus]);
 
-  if (loading)
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-secondary">
-        <LoaderCircle className="w-6 h-6 animate-spin mb-2" />
-        <p className="text-sm">Loading profile...</p>
-      </div>
-    );
-
-  if (error)
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-center">
-        <p className="text-red-400 font-semibold mb-2">Error loading profile</p>
-        <p className="text-secondary text-sm mb-4">{error}</p>
-        <button
-          onClick={fetchData}
-          className="px-4 py-2 rounded-lg bg-accent text-background hover:bg-accent/90 transition"
-        >
-          Retry
-        </button>
-      </div>
-    );
-
-  if (!data)
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-gray-400">
-        No profile data available
-      </div>
-    );
-
-  const stats = data.stats || {};
-  const streakInfo = data.stats?.streakInfo || {};
+  const stats = data?.stats || {};
+  const streakInfo = data?.stats?.streakInfo || {};
 
   // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
   const showMeowCTA = !!ctaStatus.eligible;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
-      {/* Profile Header */}
-      <ProfileHeader stats={stats} onUpdate={fetchData} />
+      {/* Inline error banner (non-blocking) */}
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
+          Ошибка загрузки профиля: {error}{" "}
+          <button
+            onClick={fetchData}
+            className="underline underline-offset-4 hover:text-red-200 ml-2"
+          >
+            Повторить
+          </button>
+        </div>
+      )}
 
-      {/* Tabs Section — replaced motion wrapper with static div for faster TTI */}
-      <div
-        className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl"
-      >
+      {/* Profile Header — instant shell render.
+          Show a tiny skeleton while loading, otherwise real header. */}
+      {loading ? (
+        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
+          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="h-16 bg-white/10 rounded" />
+            <div className="h-16 bg-white/10 rounded" />
+            <div className="h-16 bg-white/10 rounded" />
+          </div>
+        </div>
+      ) : (
+        <ProfileHeader stats={stats} onUpdate={fetchData} />
+      )}
+
+      {/* Tabs Section — always visible; contents hydrate progressively */}
+      <div className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
           <TabsList className="grid grid-cols-3 rounded-t-lg border-b border-white/10">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
@@ -219,9 +215,7 @@ const ProfilePage = () => {
 
       {/* Meow CTA — under tabs (appears only when eligible). */}
       {showMeowCTA && (
-        <div
-          className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]"
-        >
+        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col">
               <span className="text-sm text-secondary">Достижение «42/42»</span>
