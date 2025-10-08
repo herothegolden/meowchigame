@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v7 — Fix daily reset for “Счётчик мяу”: compare dates in SQL (no JS string mismatch)
+// v8 — Meow counter: on throttle, return current value (200) instead of 429 to avoid UI snap-backs.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -507,14 +507,36 @@ router.post('/meow-tap', validateUser, async (req, res) => {
     const { user } = req;
     const now = Date.now();
     const last = meowTapThrottle.get(user.id) || 0;
-    if (now - last < TAP_COOLDOWN_MS) {
-      return res.status(429).json({ error: 'Too many taps, slow down.' });
-    }
 
     const todayStr = getTashkentDate();
 
     const client = await pool.connect();
     try {
+      // If throttled, DO NOT return 429; return the current value instead.
+      if (now - last < TAP_COOLDOWN_MS) {
+        const row = await client.query(
+          `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
+             FROM users
+            WHERE telegram_id = $1`,
+          [user.id]
+        );
+
+        let meow = row.rows[0]?.meow_taps ?? 0;
+        const meowDate = row.rows[0]?.meow_taps_date;
+        // Ensure date correctness: if stored date is older, show 0
+        if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
+          meow = 0;
+        }
+
+        meowTapThrottle.set(user.id, now);
+        return res.status(200).json({
+          meow_taps: meow,
+          locked: meow >= 42,
+          remaining: Math.max(42 - meow, 0),
+          throttled: true
+        });
+      }
+
       await client.query('BEGIN');
 
       // Lock row, read current taps
@@ -532,7 +554,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       let { meow_taps, meow_taps_date } = rowRes.rows[0];
 
-      // Reset if first tap of the day (SQL date semantics)
+      // Reset if first tap of the day (SQL date semantics via stored value check)
       if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
         meow_taps = 0;
         meow_taps_date = todayStr;
