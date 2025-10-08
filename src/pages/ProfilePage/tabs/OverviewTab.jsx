@@ -13,7 +13,7 @@ const formatPlayTime = (seconds) => {
  * Props:
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional
- * - onUpdate: optional callback to trigger parent refetch (⚠️ no longer called on tap to prevent reload)
+ * - onUpdate: optional callback to trigger parent refetch (not used here to avoid reload loops)
  * - backendUrl / BACKEND_URL: optional explicit backend base URL (preferred)
  */
 const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
@@ -33,10 +33,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0
   );
 
-  // Keep local meow taps in sync if parent refreshes stats
+  // ⚠️ Monotonic sync: only adopt higher server values (avoid snap-back to lower numbers)
   useEffect(() => {
     if (Number.isFinite(stats?.meow_taps)) {
-      setMeowTapsLocal(stats.meow_taps);
+      setMeowTapsLocal((prev) => Math.max(prev, stats.meow_taps));
     }
   }, [stats?.meow_taps]);
 
@@ -163,21 +163,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server answer if present
+      // Reconcile with server answer if present — but never decrease local value
       if (res.ok && data && typeof data.meow_taps === "number") {
-        setMeowTapsLocal(Math.min(Math.max(0, data.meow_taps), 42));
+        setMeowTapsLocal((prev) => Math.min(42, Math.max(prev, data.meow_taps)));
 
-        // ⚠️ Do NOT call onUpdate() here — it triggers a full page reload upstream.
-        // UI is already consistent via server response + local state.
-
-        // Broadcast a local event so other parts can react if they listen (non-reloading)
-        try {
-          window.dispatchEvent(
-            new CustomEvent("meowchi:stats-updated:meow", {
-              detail: { meow_taps: data.meow_taps },
-            })
-          );
-        } catch (_) {}
+        // ⚠️ Removed: no onUpdate() and no global dispatch to avoid refetch/reload loops
+        // (Other parts of the app will show the updated value on their next normal fetch)
       } else if (res.status === 429) {
         // Rate-limited: KEEP optimistic update; next allowed tap will reconcile
       } else if (!res.ok) {
