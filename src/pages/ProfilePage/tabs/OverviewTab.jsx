@@ -258,12 +258,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      if (next === 42 && n !== 42) notifyReached42();
+      // ✅ removed early notifyReached42 here; will notify after server confirms in sendTap()
       return next;
     });
 
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, persist, notifyReached42]);
+  }, [meowTapsLocal, haptic, sendTap, persist]);
 
   return (
     <motion.div
