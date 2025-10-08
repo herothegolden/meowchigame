@@ -1,10 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/ProfileHeader.jsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
-// ⬇️ P0 change: remove eager import of browser-image-compression to avoid adding ~40–60KB gz on first paint
-// import imageCompression from 'browser-image-compression';
+// image-compression stays dynamic (only when user edits avatar)
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
@@ -14,6 +12,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [avatarError, setAvatarError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const fileInputRef = useRef(null);
 
   const tg = window.Telegram?.WebApp;
@@ -23,28 +22,18 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   // Handle Base64 avatars directly
   const getAvatarUrl = (avatarData) => {
     if (!avatarData) return null;
-    
-    // If it's already a Base64 data URI, return as-is
-    if (avatarData.startsWith('data:image/')) {
-      return avatarData;
-    }
-    
-    // Legacy support: if it's an old file path, construct URL
+    if (avatarData.startsWith('data:image/')) return avatarData;
     if (avatarData.startsWith('/uploads/')) {
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
       return `${BACKEND_URL}${avatarData}`;
     }
-    
-    // If it's an external URL
-    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) {
-      return avatarData;
-    }
-    
+    if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) return avatarData;
     return null;
   };
 
   useEffect(() => {
     setAvatarError(false);
+    setImgLoaded(false); // new avatar URL → show placeholder until loaded
   }, [stats.avatar_url]);
 
   const handleUpdate = async () => {
@@ -52,7 +41,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       setIsEditing(false);
       return;
     }
-
     setIsUpdating(true);
     try {
       const result = await apiCall('/api/update-profile', { firstName: editValue.trim() });
@@ -80,17 +68,12 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       return;
     }
 
-    const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
-    console.log(`Original image size: ${originalSizeMB}MB`);
-
     setIsUploadingAvatar(true);
     setUploadProgress(10);
 
     try {
-      console.log('Compressing image...');
       setUploadProgress(20);
-
-      // ⬇️ P0 change: dynamic import only when needed (on avatar edit)
+      // dynamic import only when needed (on avatar edit)
       const { default: imageCompression } = await import('browser-image-compression');
 
       const compressionOptions = {
@@ -102,39 +85,25 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       };
 
       const compressedFile = await imageCompression(file, compressionOptions);
-      const compressedSizeMB = (compressedFile.size / 1024 / 1024).toFixed(2);
-      console.log(`Compressed size: ${compressedSizeMB}MB (${((1 - compressedFile.size / file.size) * 100).toFixed(0)}% reduction)`);
-
       setUploadProgress(40);
 
       // Convert to Base64
-      console.log('Converting to Base64...');
       const reader = new FileReader();
-      
       const base64Promise = new Promise((resolve, reject) => {
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(compressedFile);
       });
-
       const avatarBase64 = await base64Promise;
       setUploadProgress(60);
 
-      console.log(`Base64 size: ${(avatarBase64.length / 1024).toFixed(2)}KB`);
-
-      // Send via apiCall (JSON) instead of FormData
+      // Send via apiCall (JSON)
       const result = await apiCall('/api/update-avatar', { avatarBase64 });
-      
       setUploadProgress(100);
-      
-      showSuccess(`Avatar uploaded! (${compressedSizeMB}MB)`);
-      
+      showSuccess(result.message || 'Avatar uploaded!');
       await onUpdate();
-      
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
 
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
       console.error('Avatar upload error:', error);
       showError(error.message || 'Failed to upload avatar');
@@ -146,7 +115,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   const avatarUrl = getAvatarUrl(stats.avatar_url);
 
-  // 🔧 CHANGED: power now reads from backend-provided stats.power
+  // Use backend-provided power
   const userPower = stats.power ?? 0;
 
   const userRank = stats.rank || '--';
@@ -156,42 +125,46 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const placeholderAllianceRank = '--';
 
   return (
-    <motion.div
-      className="bg-nav p-6 rounded-lg border border-gray-700"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-    >
+    <div className="bg-nav p-6 rounded-lg border border-gray-700">
       {/* Row 1: Avatar + Name/Edit/VIP */}
       <div className="flex items-start space-x-4 mb-1">
         <div className="relative flex-shrink-0">
-          <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden border-2 border-accent">
+          {/* Avatar wrapper with instant placeholder + cross-fade image */}
+          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-accent relative">
+            {/* LQIP-style placeholder (solid/animated) */}
+            <div
+              className={`absolute inset-0 rounded-full bg-accent/20 ${imgLoaded && !avatarError ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+            />
             {avatarUrl && !avatarError ? (
               <img
                 src={avatarUrl}
                 alt="Avatar"
-                key={avatarUrl}
-                // ⬇️ Added explicit dimensions + async decode for stability/perf in WebView
+                // NOTE: removed key={avatarUrl} to avoid forced remount/re-decode
                 width={80}
                 height={80}
                 decoding="async"
-                className="w-full h-full object-cover"
+                fetchpriority="high"
+                className={`w-full h-full object-cover transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
                 onError={() => {
                   console.error('Avatar load error:', avatarUrl);
                   setAvatarError(true);
                 }}
-                onLoad={() => setAvatarError(false)}
+                onLoad={() => {
+                  setAvatarError(false);
+                  setImgLoaded(true);
+                }}
               />
             ) : (
-              <User className="w-10 h-10 text-accent" />
+              <div className="w-full h-full flex items-center justify-center">
+                <User className="w-10 h-10 text-accent" />
+              </div>
             )}
           </div>
-          
-          <motion.button
+
+          <button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
             className="absolute -bottom-1 -right-1 bg-accent text-background p-2 rounded-full shadow-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            whileTap={{ scale: 0.9 }}
             title="Upload avatar"
           >
             {isUploadingAvatar ? (
@@ -206,7 +179,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             ) : (
               <Camera className="w-3 h-3" />
             )}
-          </motion.button>
+          </button>
 
           <input
             ref={fileInputRef}
@@ -228,7 +201,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
                 className="bg-background border border-gray-500 rounded px-2 py-1 text-primary text-lg font-bold flex-1 min-w-0"
                 maxLength={50}
                 autoFocus
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter') handleUpdate();
                   if (e.key === 'Escape') setIsEditing(false);
                 }}
@@ -261,15 +234,15 @@ const ProfileHeader = ({ stats, onUpdate }) => {
                 <Edit2 className="w-4 h-4" />
               </button>
 
-              {/* NEW VIP gradient + Crown */}
+              {/* VIP */}
               <span className="flex items-center text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 drop-shadow-[0_0_3px_rgba(255,215,0,0.5)] ml-1">
                 <Crown className="w-4 h-4 text-yellow-400 mr-1" strokeWidth={2} />
                 VIP {userVipLevel}
               </span>
 
               {isDeveloper && (
-                <button 
-                  onClick={() => window.location.href = '/dev-tools'}
+                <button
+                  onClick={() => (window.location.href = '/dev-tools')}
                   className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
                   title="Developer Tools"
                 >
@@ -278,12 +251,12 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               )}
             </div>
           )}
-          
+
           {/* Row 2: Username + Level */}
           <p className="text-sm text-secondary mt-1">
             @{stats.username || 'user'} • Level {stats.level}
           </p>
-          
+
           {/* Row 3: Power Box */}
           <div className="mt-2">
             <div className="inline-flex items-center justify-center bg-gradient-to-r from-accent/20 to-yellow-400/20 border-2 border-accent rounded-lg px-4 py-2">
@@ -297,7 +270,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 4: Rank + Points (grid layout for alignment) */}
+      {/* Row 4: Rank + Points */}
       <div className="mt-3">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
@@ -322,7 +295,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         </div>
       </div>
 
-      {/* Row 6: Alliance Rank + Alliance Power (grid layout for alignment) */}
+      {/* Row 6: Alliance Rank + Alliance Power */}
       <div className="mt-3">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center">
@@ -337,8 +310,9 @@ const ProfileHeader = ({ stats, onUpdate }) => {
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
-export default ProfileHeader;
+// Avoid unnecessary rerenders if parent state changes elsewhere
+export default React.memo(ProfileHeader);
