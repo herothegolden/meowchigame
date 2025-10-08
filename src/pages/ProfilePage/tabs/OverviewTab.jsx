@@ -1,9 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v15 — Daily-correct caching + no optimistic first-tap:
-// - Cache { day, value } and ignore stale cache when server day changes
-// - First tap of the day waits for server (shows 0 until confirmed 1)
-// - Keep optimistic increments for taps > 0
-// - Dispatch "meow:reached42" only when confirmed (server or reconciled) hits 42
+// v16 — One-shot retry if last tap was server-throttled at local==42
+// - Keeps v15 behavior (no early notify on optimistic 42)
+// - If /api/meow-tap returns { throttled:true } while local==42 → single retry ~260ms later
+// - Dispatch "meow:reached42" only after server-confirmed/reconciled 42
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -20,18 +19,15 @@ const formatPlayTime = (seconds) => {
  * Props:
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional
- * - onUpdate: optional callback to trigger parent refetch (intentionally not used on tap to avoid reloads)
- * - backendUrl / BACKEND_URL: optional explicit backend base URL (preferred)
+ * - onUpdate: optional callback to trigger parent refetch
+ * - backendUrl / BACKEND_URL: optional backend base URL
  */
 const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
-
-  // Kept for backward-compatibility, though no longer used for the Zen card
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
       ? stats.totalPlayTime
       : formatPlayTime(stats?.totalPlayTime || 0);
-
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
@@ -41,10 +37,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                     new Date().toISOString().slice(0, 10);
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
-  const dayRef = useRef(serverDay); // track last seen server day
+  const dayRef = useRef(serverDay);
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    // Hydrate from cache if same day; otherwise trust server
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
@@ -57,7 +52,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal0;
   });
 
-  // Broadcast "hit 42" so parent can fetch CTA status immediately
+  // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
   const notifyReached42 = useCallback(() => {
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
@@ -82,10 +77,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((prev) => {
       let next;
       if (newDay !== prevDay) {
-        // New day from server → trust server value exactly
         next = serverVal0;
       } else {
-        // Same day → monotonic reconciliation
         next = Math.max(prev, serverVal0);
       }
       persist(next);
@@ -96,62 +89,45 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     dayRef.current = newDay;
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
-  // Client-side small cooldown to avoid accidental ultra-fast repeats; align with backend (200ms)
+  // Client small cooldown (aligns with backend 220ms)
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 220;
 
-  // ✅ Use lifetime games played for the “Уровень дзена” value (per spec)
+  // ✅ Zen shows lifetime games played (unchanged)
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
-  // Robust backend base URL resolution (no empty relative fallbacks)
+  // Backend base resolution
   const backendBase = useMemo(() => {
-    // 1) explicit props win
     if (typeof backendUrl === "string" && backendUrl) return backendUrl;
     if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
-
-    // 2) window globals
     if (typeof window !== "undefined") {
       if (window.BACKEND_URL) return window.BACKEND_URL;
       if (window.__MEOWCHI_BACKEND_URL__) return window.__MEOWCHI_BACKEND_URL__;
     }
-
-    // 3) Vite env (compile-time injected)
     try {
-      if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) {
+      if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) {
         return import.meta.env.VITE_BACKEND_URL;
       }
     } catch (_) {}
-
-    // 4) last resort: empty string (won't work cross-origin; but we tried everything)
     return "";
   }, [backendUrl, BACKEND_URL]);
 
-  // Cache initData once for speed
+  // Cache initData once
   const initDataRef = useRef("");
   useEffect(() => {
     try {
-      if (
-        typeof window !== "undefined" &&
-        window.Telegram &&
-        window.Telegram.WebApp &&
-        window.Telegram.WebApp.initData
-      ) {
-        initDataRef.current = window.Telegram.WebApp.initData;
-      }
+      initDataRef.current = window?.Telegram?.WebApp?.initData || "";
     } catch (_) {}
   }, []);
 
-  // Haptics helper
   const haptic = useCallback(() => {
     try {
       const HW = window?.Telegram?.WebApp?.HapticFeedback;
-      if (HW && typeof HW.impactOccurred === "function") {
-        HW.impactOccurred("light");
-      }
+      if (HW?.impactOccurred) HW.impactOccurred("light");
     } catch (_) {}
   }, []);
 
-  // Build the list (we’ll inject pointer/click handlers for the Meow Counter card)
+  // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
     () => [
       {
@@ -164,7 +140,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       {
         key: "zen",
         title: "Уровень дзена",
-        value: gamesPlayed, // ← lifetime games played
+        value: gamesPlayed,
         subtitle: "Чем больше часов, тем тише мысли.",
         tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
       },
@@ -180,9 +156,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         title: "Социальная энергия",
         value: `${dailyStreak}`,
         subtitle:
-          dailyStreak > 0
-            ? "Ты говорил с людьми. Герой дня."
-            : "Пора снова выйти в Meowchiverse.",
+          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
         tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
       },
       {
@@ -195,7 +169,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       {
         key: "meow-counter",
         title: "Счётчик мяу",
-        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // daily cap at 42
+        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
         subtitle:
           meowTapsLocal >= 42
             ? "Совершенство достигнуто — мир в равновесии."
@@ -207,9 +181,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
+  // ---- One-shot retry guard for throttled final tap ----
+  const retryOnceRef = useRef(false);
+
   const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
-
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -223,7 +199,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server answer — authoritative but non-decreasing
+      // Reconcile with server — authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -231,34 +207,64 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           if (next === 42 && prev !== 42) notifyReached42();
           return next;
         });
+
+        // 🔁 If server says "throttled" while we are already at local 42,
+        // do exactly one delayed retry to let backend increment to 42.
+        if (data.throttled === true && !retryOnceRef.current) {
+          // Only retry if our local shows 42 (i.e., we likely optimistically hit 42)
+          if (meowTapsLocal === 42) {
+            retryOnceRef.current = true;
+            setTimeout(() => {
+              // Retry fire-and-forget; reconcile will dispatch notify if 42 is confirmed
+              void (async () => {
+                try {
+                  const r2 = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ initData: initDataRef.current }),
+                    keepalive: true,
+                  });
+                  let d2 = null;
+                  try { d2 = await r2.json(); } catch (_) {}
+                  if (r2.ok && d2 && typeof d2.meow_taps === "number") {
+                    setMeowTapsLocal((prev) => {
+                      const next = Math.min(42, Math.max(prev, d2.meow_taps));
+                      persist(next);
+                      if (next === 42 && prev !== 42) notifyReached42();
+                      return next;
+                    });
+                  }
+                } catch (_) {}
+              })();
+            }, 260); // a hair above 220ms
+          }
+        }
       }
-      // On throttled/429/other: keep whatever local state we already have.
     } catch (_) {
-      // Network error: do nothing; we only optimistically increment for n>0.
+      // Network error: keep optimistic for n>0; reconcile later on next success.
     }
-  }, [backendBase, notifyReached42, persist]);
+  }, [backendBase, notifyReached42, persist, meowTapsLocal]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
-    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return; // small guard to prevent accidental double-triggers
+    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
     tapCooldownRef.current = now;
 
     if (meowTapsLocal >= 42) return;
 
-    // Immediate feedback
     haptic();
 
     if (meowTapsLocal === 0) {
-      // First tap of the day → no optimistic increment; wait for server so it starts from 0 then 1.
+      // First tap of the day: wait for server
       void sendTap();
       return;
     }
 
-    // Subsequent taps (n > 0) → optimistic + reconcile
+    // Optimistic for n > 0
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // ✅ removed early notifyReached42 here; will notify after server confirms in sendTap()
+      // no early notify here
       return next;
     });
 
@@ -283,8 +289,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
         const interactiveProps = isMeowCounter
           ? {
-              onPointerDown: handleMeowTap, // ← instant on mobile
-              onClick: handleMeowTap,       // ← fallback
+              onPointerDown: handleMeowTap,
+              onClick: handleMeowTap,
               className: `${baseClass} cursor-pointer select-none`,
             }
           : { className: baseClass };
@@ -292,17 +298,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         return (
           <motion.div
             key={i}
-            whileHover={{
-              scale: 1.015,
-              boxShadow: "0 8px 22px rgba(255,255,255,0.06)",
-            }}
+            whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
             whileTap={{ scale: 0.985 }}
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
-            {/* Top reflection */}
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-            {/* Inner glow */}
             <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
 
             <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
@@ -317,7 +318,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
               </p>
             </div>
 
-            {/* Bottom fade for depth */}
             <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
           </motion.div>
         );
