@@ -24,4 +24,3 @@ const TasksTab = () => {
 };
 
 export default TasksTab;
-``` :contentReference[oaicite:0]{index=0}
