@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
-// image-compression stays dynamic (only when user edits avatar)
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
@@ -12,16 +11,15 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [avatarError, setAvatarError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
   const fileInputRef = useRef(null);
 
   const tg = window.Telegram?.WebApp;
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
-  // Handle Base64 avatars directly
+  // Normalize avatar URL (supports data URI, /uploads path, or external URL)
   const getAvatarUrl = (avatarData) => {
-    if (!avatarData) return null;
+    if (!avatarData || typeof avatarData !== 'string') return null;
     if (avatarData.startsWith('data:image/')) return avatarData;
     if (avatarData.startsWith('/uploads/')) {
       const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -32,8 +30,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   };
 
   useEffect(() => {
+    // reset error on new url
     setAvatarError(false);
-    setImgLoaded(false); // new avatar URL → show placeholder until loaded
   }, [stats.avatar_url]);
 
   const handleUpdate = async () => {
@@ -58,7 +56,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     fileInputRef.current?.click();
   };
 
-  // Convert to Base64 and send via JSON
+  // Upload: compress on demand, send Base64 JSON
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -72,22 +70,18 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     setUploadProgress(10);
 
     try {
-      setUploadProgress(20);
-      // dynamic import only when needed (on avatar edit)
+      setUploadProgress(25);
       const { default: imageCompression } = await import('browser-image-compression');
-
       const compressionOptions = {
         maxSizeMB: 0.5,
         maxWidthOrHeight: 800,
         useWebWorker: true,
         fileType: 'image/jpeg',
-        initialQuality: 0.8
+        initialQuality: 0.8,
       };
-
       const compressedFile = await imageCompression(file, compressionOptions);
-      setUploadProgress(40);
+      setUploadProgress(55);
 
-      // Convert to Base64
       const reader = new FileReader();
       const base64Promise = new Promise((resolve, reject) => {
         reader.onload = () => resolve(reader.result);
@@ -95,9 +89,8 @@ const ProfileHeader = ({ stats, onUpdate }) => {
         reader.readAsDataURL(compressedFile);
       });
       const avatarBase64 = await base64Promise;
-      setUploadProgress(60);
+      setUploadProgress(75);
 
-      // Send via apiCall (JSON)
       const result = await apiCall('/api/update-avatar', { avatarBase64 });
       setUploadProgress(100);
       showSuccess(result.message || 'Avatar uploaded!');
@@ -115,9 +108,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   const avatarUrl = getAvatarUrl(stats.avatar_url);
 
-  // Use backend-provided power
   const userPower = stats.power ?? 0;
-
   const userRank = stats.rank || '--';
   const userVipLevel = stats.vip_level || 0;
   const placeholderAlliance = 'None';
@@ -129,33 +120,28 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       {/* Row 1: Avatar + Name/Edit/VIP */}
       <div className="flex items-start space-x-4 mb-1">
         <div className="relative flex-shrink-0">
-          {/* Avatar wrapper with instant placeholder + cross-fade image */}
+          {/* Avatar frame with non-blocking placeholder behind the image */}
           <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-accent relative">
-            {/* LQIP-style placeholder (solid/animated) */}
-            <div
-              className={`absolute inset-0 rounded-full bg-accent/20 ${imgLoaded && !avatarError ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
-            />
+            {/* Background placeholder (never sits above the image) */}
+            <div className="absolute inset-0 rounded-full bg-accent/15" style={{ zIndex: 0 }} />
+            {/* Avatar image */}
             {avatarUrl && !avatarError ? (
               <img
                 src={avatarUrl}
                 alt="Avatar"
-                // NOTE: removed key={avatarUrl} to avoid forced remount/re-decode
                 width={80}
                 height={80}
                 decoding="async"
                 fetchpriority="high"
-                className={`w-full h-full object-cover transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                className="w-full h-full object-cover relative"
+                style={{ zIndex: 1 }}
                 onError={() => {
                   console.error('Avatar load error:', avatarUrl);
                   setAvatarError(true);
                 }}
-                onLoad={() => {
-                  setAvatarError(false);
-                  setImgLoaded(true);
-                }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center relative" style={{ zIndex: 1 }}>
                 <User className="w-10 h-10 text-accent" />
               </div>
             )}
@@ -314,5 +300,4 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   );
 };
 
-// Avoid unnecessary rerenders if parent state changes elsewhere
 export default React.memo(ProfileHeader);
