@@ -13,7 +13,7 @@ const formatPlayTime = (seconds) => {
  * Props:
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional
- * - onUpdate: optional callback to trigger parent refetch (not used here to avoid reload loops)
+ * - onUpdate: optional callback to trigger parent refetch (intentionally not used on tap to avoid reloads)
  * - backendUrl / BACKEND_URL: optional explicit backend base URL (preferred)
  */
 const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
@@ -28,7 +28,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
-  // Local state for meow taps to get instant feedback on tap
+  // Local state for meow taps to get instant feedback on tap (starts at server value or 0)
   const [meowTapsLocal, setMeowTapsLocal] = useState(
     Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0
   );
@@ -40,10 +40,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     }
   }, [stats?.meow_taps]);
 
-  // Cooldown & in-flight guard to prevent spamming the backend; server also rate-limits
+  // Cooldown to avoid accidental ultra-fast repeats; server also rate-limits.
   const tapCooldownRef = useRef(0);
-  const inFlightRef = useRef(false);
-  const CLIENT_COOLDOWN_MS = 600; // avoid 429 due to network jitter/batching
+  const CLIENT_COOLDOWN_MS = 150; // faster reaction
 
   // ✅ Use lifetime games played for the “Уровень дзена” value
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
@@ -71,7 +70,32 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return "";
   }, [backendUrl, BACKEND_URL]);
 
-  // Build the list (we’ll inject onClick for the Meow Counter card)
+  // Cache initData once for speed
+  const initDataRef = useRef("");
+  useEffect(() => {
+    try {
+      if (
+        typeof window !== "undefined" &&
+        window.Telegram &&
+        window.Telegram.WebApp &&
+        window.Telegram.WebApp.initData
+      ) {
+        initDataRef.current = window.Telegram.WebApp.initData;
+      }
+    } catch (_) {}
+  }, []);
+
+  // Haptics helper
+  const haptic = useCallback(() => {
+    try {
+      const HW = window?.Telegram?.WebApp?.HapticFeedback;
+      if (HW && typeof HW.impactOccurred === "function") {
+        HW.impactOccurred("light");
+      }
+    } catch (_) {}
+  }, []);
+
+  // Build the list (we’ll inject pointer/click handlers for the Meow Counter card)
   const lifeStats = useMemo(
     () => [
       {
@@ -84,7 +108,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       {
         key: "zen",
         title: "Уровень дзена",
-        value: gamesPlayed, // ← switched from time to lifetime games played
+        value: gamesPlayed, // ← lifetime games played
         subtitle: "Чем больше часов, тем тише мысли.",
         tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
       },
@@ -108,14 +132,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       {
         key: "invites",
         title: "Приглашено друзей",
-        value: (stats?.invited_friends || 0).toLocaleString(), // ← wired to backend value
+        value: (stats?.invited_friends || 0).toLocaleString(),
         subtitle: "Каждый получил полотенце. Никто не вернул.",
         tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
       },
       {
         key: "meow-counter",
         title: "Счётчик мяу",
-        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // ← daily cap at 42
+        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // daily cap at 42
         subtitle:
           meowTapsLocal >= 42
             ? "Совершенство достигнуто — мир в равновесии."
@@ -127,34 +151,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  const handleMeowTap = useCallback(async () => {
-    const now = Date.now();
-    if (inFlightRef.current) return; // prevent overlapping requests
-    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return; // client cooldown
-    tapCooldownRef.current = now;
-
-    // Already at cap
-    if (meowTapsLocal >= 42) return;
-
-    // Optimistic UI update
-    setMeowTapsLocal((n) => Math.min(n + 1, 42));
-
-    // Telegram initData
-    const initData =
-      typeof window !== "undefined" &&
-      window.Telegram &&
-      window.Telegram.WebApp &&
-      window.Telegram.WebApp.initData
-        ? window.Telegram.WebApp.initData
-        : "";
-
+  const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
-    inFlightRef.current = true;
+
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify({ initData: initDataRef.current }),
         keepalive: true,
       });
 
@@ -163,28 +167,30 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server answer if present — but never decrease local value
+      // Reconcile with server answer — but never decrease local value
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => Math.min(42, Math.max(prev, data.meow_taps)));
-
-        // ⚠️ Removed: no onUpdate() and no global dispatch to avoid refetch/reload loops
-        // (Other parts of the app will show the updated value on their next normal fetch)
-      } else if (res.status === 429) {
-        // Rate-limited: KEEP optimistic update; next allowed tap will reconcile
-      } else if (!res.ok) {
-        // Other failures → roll back optimistic increment (best-effort)
-        setMeowTapsLocal((n) => Math.max(0, n - 1));
-        try {
-          console.warn("meow-tap failed", { status: res.status, url });
-        } catch (_) {}
       }
+      // On throttled/429/other: do nothing — we already optimistically incremented.
     } catch (_) {
-      // Network error → roll back optimistic increment (best-effort)
-      setMeowTapsLocal((n) => Math.max(0, n - 1));
-    } finally {
-      inFlightRef.current = false;
+      // Network error: keep optimistic increment (no rollback)
     }
-  }, [meowTapsLocal, backendBase]);
+  }, [backendBase]);
+
+  const handleMeowTap = useCallback(() => {
+    const now = Date.now();
+    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return; // small guard to prevent accidental double-triggers
+    tapCooldownRef.current = now;
+
+    if (meowTapsLocal >= 42) return;
+
+    // Immediate feedback
+    haptic();
+    setMeowTapsLocal((n) => Math.min(n + 1, 42));
+
+    // Fire-and-forget server update
+    void sendTap();
+  }, [meowTapsLocal, haptic, sendTap]);
 
   return (
     <motion.div
@@ -195,25 +201,20 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     >
       {lifeStats.map((stat, i) => {
         const isMeowCounter = stat.key === "meow-counter";
+        const baseClass =
+          `relative rounded-2xl border border-white/10 
+           bg-gradient-to-br ${stat.tint}
+           backdrop-blur-xl p-5 h-[155px] 
+           flex flex-col justify-center items-center text-center 
+           shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`;
+
         const interactiveProps = isMeowCounter
           ? {
-              onClick: handleMeowTap,
-              className:
-                `relative rounded-2xl border border-white/10 
-                 bg-gradient-to-br ${stat.tint}
-                 backdrop-blur-xl p-5 h-[155px] 
-                 flex flex-col justify-center items-center text-center 
-                 shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden
-                 cursor-pointer select-none`, // clickable
+              onPointerDown: handleMeowTap, // ← instant on mobile
+              onClick: handleMeowTap,       // ← fallback
+              className: `${baseClass} cursor-pointer select-none`,
             }
-          : {
-              className:
-                `relative rounded-2xl border border-white/10 
-                 bg-gradient-to-br ${stat.tint}
-                 backdrop-blur-xl p-5 h-[155px] 
-                 flex flex-col justify-center items-center text-center 
-                 shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`,
-            };
+          : { className: baseClass };
 
         return (
           <motion.div
@@ -222,7 +223,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
               scale: 1.015,
               boxShadow: "0 8px 22px rgba(255,255,255,0.06)",
             }}
-            transition={{ type: "spring", stiffness: 180, damping: 18 }}
+            whileTap={{ scale: 0.985 }}
+            transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
             {/* Top reflection */}
