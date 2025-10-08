@@ -1,4 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
+// v15 — Daily-correct caching + no optimistic first-tap:
+// - Cache { day, value } and ignore stale cache when server day changes
+// - First tap of the day waits for server (shows 0 until confirmed 1)
+// - Keep optimistic increments for taps > 0
+// - Dispatch "meow:reached42" only when confirmed (server or reconciled) hits 42
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -30,49 +35,70 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
-  // ---- Meow Counter local state with session fallback to prevent "0" flicker on remount ----
-  const storageKey = "meowchi:meow_taps";
+  // --- Day-aware cache (prevents stale carry-over and "start from 1" after reset) ---
+  const storageKey = "meowchi:v2:meow_taps";
+  const serverDay = (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
+                    new Date().toISOString().slice(0, 10);
+  const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
+
+  const dayRef = useRef(serverDay); // track last seen server day
+
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    const serverVal = Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0;
+    // Hydrate from cache if same day; otherwise trust server
     try {
       const raw = sessionStorage.getItem(storageKey);
-      const cached = Number.parseInt(raw ?? "NaN", 10);
-      if (Number.isFinite(cached)) return Math.max(cached, serverVal);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
+          return Math.max(parsed.value, serverVal0);
+        }
+      }
     } catch (_) {}
-    return serverVal;
+    return serverVal0;
   });
 
-  // helper to broadcast "hit 42" so parent can fetch CTA status immediately
+  // Broadcast "hit 42" so parent can fetch CTA status immediately
   const notifyReached42 = useCallback(() => {
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
     } catch (_) {}
   }, []);
 
-  // ⚠️ Monotonic sync: only adopt higher server values; also persist to session storage
-  useEffect(() => {
-    if (Number.isFinite(stats?.meow_taps)) {
-      setMeowTapsLocal((prev) => {
-        const next = Math.max(prev, stats.meow_taps);
-        try {
-          sessionStorage.setItem(storageKey, String(next));
-        } catch (_) {}
-        if (next === 42 && prev !== 42) notifyReached42();
-        return next;
-      });
-    }
-  }, [stats?.meow_taps, notifyReached42]);
+  // Persist helper
+  const persist = useCallback(
+    (val) => {
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify({ day: serverDay, value: val }));
+      } catch (_) {}
+    },
+    [serverDay]
+  );
 
-  // Persist local changes so navigation back to Profile doesn't briefly show 0
+  // Reconcile with server updates; reset local on server day change
   useEffect(() => {
-    try {
-      sessionStorage.setItem(storageKey, String(meowTapsLocal));
-    } catch (_) {}
-  }, [meowTapsLocal]);
+    const newDay = serverDay;
+    const prevDay = dayRef.current;
 
-  // Client-side small cooldown to avoid accidental ultra-fast repeats; server also rate-limits.
+    setMeowTapsLocal((prev) => {
+      let next;
+      if (newDay !== prevDay) {
+        // New day from server → trust server value exactly
+        next = serverVal0;
+      } else {
+        // Same day → monotonic reconciliation
+        next = Math.max(prev, serverVal0);
+      }
+      persist(next);
+      if (next === 42 && prev !== 42) notifyReached42();
+      return next;
+    });
+
+    dayRef.current = newDay;
+  }, [serverDay, serverVal0, notifyReached42, persist]);
+
+  // Client-side small cooldown to avoid accidental ultra-fast repeats; align with backend (200ms)
   const tapCooldownRef = useRef(0);
-  const CLIENT_COOLDOWN_MS = 150; // fast, feels snappy
+  const CLIENT_COOLDOWN_MS = 220;
 
   // ✅ Use lifetime games played for the “Уровень дзена” value (per spec)
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
@@ -197,22 +223,20 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server answer — but never decrease local value
+      // Reconcile with server answer — authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
-          try {
-            sessionStorage.setItem(storageKey, String(next));
-          } catch (_) {}
+          persist(next);
           if (next === 42 && prev !== 42) notifyReached42();
           return next;
         });
       }
-      // On throttled/429/other: do nothing — we already optimistically incremented.
+      // On throttled/429/other: keep whatever local state we already have.
     } catch (_) {
-      // Network error: keep optimistic increment (no rollback)
+      // Network error: do nothing; we only optimistically increment for n>0.
     }
-  }, [backendBase, notifyReached42]);
+  }, [backendBase, notifyReached42, persist]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
@@ -223,18 +247,23 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     // Immediate feedback
     haptic();
+
+    if (meowTapsLocal === 0) {
+      // First tap of the day → no optimistic increment; wait for server so it starts from 0 then 1.
+      void sendTap();
+      return;
+    }
+
+    // Subsequent taps (n > 0) → optimistic + reconcile
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
-      try {
-        sessionStorage.setItem(storageKey, String(next));
-      } catch (_) {}
+      persist(next);
       if (next === 42 && n !== 42) notifyReached42();
       return next;
     });
 
-    // Fire-and-forget server update
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, notifyReached42]);
+  }, [meowTapsLocal, haptic, sendTap, persist, notifyReached42]);
 
   return (
     <motion.div
