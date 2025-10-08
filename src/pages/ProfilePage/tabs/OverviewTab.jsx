@@ -1,7 +1,7 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v16 — One-shot retry if last tap was server-throttled at local==42
+// v17 — One-shot retry if final tap didn't commit (covers both throttled and non-throttled 41)
 // - Keeps v15 behavior (no early notify on optimistic 42)
-// - If /api/meow-tap returns { throttled:true } while local==42 → single retry ~260ms later
+// - If /api/meow-tap returns { throttled:true } OR { meow_taps:41 } while local==42 → single retry ~260ms later
 // - Dispatch "meow:reached42" only after server-confirmed/reconciled 42
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,8 +33,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
   // --- Day-aware cache (prevents stale carry-over and "start from 1" after reset) ---
   const storageKey = "meowchi:v2:meow_taps";
-  const serverDay = (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
-                    new Date().toISOString().slice(0, 10);
+  const serverDay =
+    (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
+    new Date().toISOString().slice(0, 10);
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
@@ -181,7 +182,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  // ---- One-shot retry guard for throttled final tap ----
+  // ---- One-shot retry guard for final-commit edge cases ----
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
@@ -208,36 +209,39 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           return next;
         });
 
-        // 🔁 If server says "throttled" while we are already at local 42,
-        // do exactly one delayed retry to let backend increment to 42.
-        if (data.throttled === true && !retryOnceRef.current) {
-          // Only retry if our local shows 42 (i.e., we likely optimistically hit 42)
-          if (meowTapsLocal === 42) {
-            retryOnceRef.current = true;
-            setTimeout(() => {
-              // Retry fire-and-forget; reconcile will dispatch notify if 42 is confirmed
-              void (async () => {
+        // 🔁 If server says "throttled" while our local shows 42, retry once
+        const throttledAt42 = data?.throttled === true && meowTapsLocal === 42;
+
+        // 🔁 If server returns 41 (non-throttled) while local already 42, retry once
+        const nonThrottled41AtLocal42 =
+          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal === 42;
+
+        if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
+          retryOnceRef.current = true;
+          setTimeout(() => {
+            void (async () => {
+              try {
+                const r2 = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ initData: initDataRef.current }),
+                  keepalive: true,
+                });
+                let d2 = null;
                 try {
-                  const r2 = await fetch(url, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ initData: initDataRef.current }),
-                    keepalive: true,
-                  });
-                  let d2 = null;
-                  try { d2 = await r2.json(); } catch (_) {}
-                  if (r2.ok && d2 && typeof d2.meow_taps === "number") {
-                    setMeowTapsLocal((prev) => {
-                      const next = Math.min(42, Math.max(prev, d2.meow_taps));
-                      persist(next);
-                      if (next === 42 && prev !== 42) notifyReached42();
-                      return next;
-                    });
-                  }
+                  d2 = await r2.json();
                 } catch (_) {}
-              })();
-            }, 260); // a hair above 220ms
-          }
+                if (r2.ok && d2 && typeof d2.meow_taps === "number") {
+                  setMeowTapsLocal((prev) => {
+                    const next = Math.min(42, Math.max(prev, d2.meow_taps));
+                    persist(next);
+                    if (next === 42 && prev !== 42) notifyReached42();
+                    return next;
+                  });
+                }
+              } catch (_) {}
+            })();
+          }, 260); // a hair above 220ms
         }
       }
     } catch (_) {
