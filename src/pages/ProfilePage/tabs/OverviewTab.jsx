@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 // Helper: convert seconds → "Xч Yм"
@@ -9,7 +9,14 @@ const formatPlayTime = (seconds) => {
   return `${hrs}ч ${mins}м`;
 };
 
-const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
+/**
+ * Props:
+ * - stats: object returned from /api/get-profile-complete (or similar)
+ * - streakInfo: optional
+ * - onUpdate: optional callback to trigger parent refetch
+ * - backendUrl / BACKEND_URL: optional explicit backend base URL (preferred)
+ */
+const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
 
   // Kept for backward-compatibility, though no longer used for the Zen card
@@ -26,11 +33,42 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     Number.isFinite(stats?.meow_taps) ? stats.meow_taps : 0
   );
 
+  // Keep local meow taps in sync if parent refreshes stats
+  useEffect(() => {
+    if (Number.isFinite(stats?.meow_taps)) {
+      setMeowTapsLocal(stats.meow_taps);
+    }
+  }, [stats?.meow_taps]);
+
   // Cooldown to prevent spamming the backend; server also rate-limits
   const tapCooldownRef = useRef(0);
 
   // ✅ Use lifetime games played for the “Уровень дзена” value
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
+
+  // Robust backend base URL resolution (no empty relative fallbacks)
+  const backendBase = useMemo(() => {
+    // 1) explicit props win
+    if (typeof backendUrl === "string" && backendUrl) return backendUrl;
+    if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
+
+    // 2) window globals
+    if (typeof window !== "undefined") {
+      if (window.BACKEND_URL) return window.BACKEND_URL;
+      if (window.__MEOWCHI_BACKEND_URL__) return window.__MEOWCHI_BACKEND_URL__;
+    }
+
+    // 3) Vite env (compile-time injected)
+    try {
+      // Guard so this line doesn't throw in non-Vite builds
+      if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) {
+        return import.meta.env.VITE_BACKEND_URL;
+      }
+    } catch (_) {}
+
+    // 4) last resort: empty string (won't work cross-origin; but we tried everything)
+    return "";
+  }, [backendUrl, BACKEND_URL]);
 
   // Build the list (we’ll inject onClick for the Meow Counter card)
   const lifeStats = useMemo(
@@ -76,8 +114,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       {
         key: "meow-counter",
         title: "Счётчик мяу",
-        value:
-          (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // ← daily cap at 42
+        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(), // ← daily cap at 42
         subtitle:
           meowTapsLocal >= 42
             ? "Совершенство достигнуто — мир в равновесии."
@@ -100,12 +137,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     // Optimistic UI update
     setMeowTapsLocal((n) => Math.min(n + 1, 42));
 
-    // Determine backend URL (prefer global var; otherwise relative path)
-    const backend =
-      typeof window !== "undefined" && window.__MEOWCHI_BACKEND_URL__
-        ? window.__MEOWCHI_BACKEND_URL__
-        : "";
-
+    // Telegram initData
     const initData =
       typeof window !== "undefined" &&
       window.Telegram &&
@@ -115,7 +147,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         : "";
 
     try {
-      const res = await fetch(`${backend}/api/meow-tap`, {
+      const url = `${backendBase}/api/meow-tap`;
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData }),
@@ -148,12 +181,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       } else if (!res.ok) {
         // Roll back optimistic increment on failure (best-effort)
         setMeowTapsLocal((n) => Math.max(0, n - 1));
+        // Optional: log to console to aid debugging
+        try {
+          console.warn("meow-tap failed", { status: res.status, url });
+        } catch (_) {}
       }
     } catch (_) {
       // Network error → roll back optimistic increment (best-effort)
       setMeowTapsLocal((n) => Math.max(0, n - 1));
     }
-  }, [meowTapsLocal, onUpdate]);
+  }, [meowTapsLocal, onUpdate, backendBase]);
 
   return (
     <motion.div
