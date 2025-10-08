@@ -12,7 +12,8 @@ const { BOT_TOKEN } = process.env;
 
 /** Simple per-process rate limiter for /meow-tap */
 const meowTapThrottle = new Map(); // userId -> lastTapMs
-const TAP_COOLDOWN_MS = 200;
+// Align with client-side guard (CLIENT_COOLDOWN_MS = 220) to avoid last-tap throttle races.
+const TAP_COOLDOWN_MS = 220;
 
 /* -------------------------------------------
    AUTH / VALIDATION
