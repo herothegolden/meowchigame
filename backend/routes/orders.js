@@ -1,5 +1,9 @@
 // Path: backend/routes/orders.js
-// v5 — Meow Counter promo flow + FIX: /meow-cta-status is POST (works with validateUser + apiCall POST body)
+// v4 — Adds Meow Counter promo flow:
+//   - POST /api/meow-claim         → reserve one of the daily 42 claims (idempotent)
+//   - POST /api/activate-promo     → consume claim token and activate 42% discount
+//   - GET  /api/meow-cta-status    → read-only status (user-used-today? remaining global? eligible?)
+// Existing endpoints preserved: /create-order, /confirm-payment/:orderId, /my-orders
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -10,10 +14,7 @@ const router = express.Router();
 const { BOT_TOKEN, ADMIN_TELEGRAM_ID } = process.env;
 
 // Node 18+ has global crypto.randomUUID. Fallback for older runtimes:
-const genUUID = () =>
-  (global.crypto?.randomUUID
-    ? global.crypto.randomUUID()
-    : `${Date.now()}-xxxxxxxx`.replace(/[x]/g, () => (Math.random() * 16) | 0).toString(16));
+const genUUID = () => (global.crypto?.randomUUID ? global.crypto.randomUUID() : `${Date.now()}-xxxxxxxx`.replace(/[x]/g, () => (Math.random()*16|0).toString(16)));
 
 // Helper: Send notification to admin via Telegram
 async function sendAdminNotification(orderData) {
@@ -23,12 +24,9 @@ async function sendAdminNotification(orderData) {
   }
 
   try {
-    const itemsList = orderData.items
-      .map(
-        (item, index) =>
-          `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${item.unitPrice.toLocaleString()} = ${item.totalPrice.toLocaleString()} UZS`
-      )
-      .join('\n');
+    const itemsList = orderData.items.map((item, index) => 
+      `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${item.unitPrice.toLocaleString()} = ${item.totalPrice.toLocaleString()} UZS`
+    ).join('\n');
 
     const message = `🔔 <b>NEW ORDER #${orderData.orderId}</b>
 
@@ -56,11 +54,21 @@ Contact customer via Telegram to arrange payment and delivery.`;
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '✅ Mark as Paid', callback_data: `mark_paid_${orderData.orderId}` }],
-            [{ text: '👤 Contact Customer', url: `tg://user?id=${orderData.telegramId}` }],
-          ],
-        },
-      }),
+            [
+              { 
+                text: '✅ Mark as Paid', 
+                callback_data: `mark_paid_${orderData.orderId}` 
+              }
+            ],
+            [
+              { 
+                text: '👤 Contact Customer', 
+                url: `tg://user?id=${orderData.telegramId}` 
+              }
+            ]
+          ]
+        }
+      })
     });
 
     if (!response.ok) {
@@ -71,6 +79,7 @@ Contact customer via Telegram to arrange payment and delivery.`;
 
     console.log('✅ Admin notification sent successfully');
     return true;
+
   } catch (error) {
     console.error('❌ Failed to send admin notification:', error);
     return false;
@@ -103,9 +112,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
     await client.query('BEGIN');
 
     // Compute today's date in Asia/Tashkent (from DB to avoid drift)
-    const {
-      rows: [tz],
-    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+    const { rows: [tz] } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
     const today = tz.day;
 
     // Lock user row
@@ -183,15 +190,24 @@ router.post('/meow-claim', validateUser, async (req, res) => {
     }
 
     // Mark user as used today
-    await client.query(`UPDATE users SET meow_claim_used_today = TRUE WHERE telegram_id = $1`, [user.id]);
+    await client.query(
+      `UPDATE users SET meow_claim_used_today = TRUE WHERE telegram_id = $1`,
+      [user.id]
+    );
 
     // Increment global daily counter
-    await client.query(`UPDATE meow_daily_claims SET claims_taken = claims_taken + 1 WHERE day = $1`, [today]);
+    await client.query(
+      `UPDATE meow_daily_claims
+          SET claims_taken = claims_taken + 1
+        WHERE day = $1`,
+      [today]
+    );
 
     await client.query('COMMIT');
     return res.status(200).json({ success: true, claimId: finalClaimId, promo: 'MEOW42' });
+
   } catch (err) {
-    await client.query('ROLLBACK');
+    await pool.query('ROLLBACK');
     console.error('❌ /meow-claim error:', err);
     return res.status(500).json({ error: 'Internal error' });
   } finally {
@@ -214,9 +230,7 @@ router.post('/activate-promo', validateUser, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const {
-      rows: [tz],
-    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+    const { rows: [tz] } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
     const today = tz.day;
 
     const cr = await client.query(
@@ -238,17 +252,20 @@ router.post('/activate-promo', validateUser, async (req, res) => {
       return res.status(409).json({ error: 'Claim already consumed' });
     }
 
-    await client.query(`UPDATE meow_claims SET consumed = TRUE WHERE id = $1`, [claimId]);
+    await client.query(
+      `UPDATE meow_claims SET consumed = TRUE WHERE id = $1`,
+      [claimId]
+    );
 
     await client.query('COMMIT');
     return res.status(200).json({
       success: true,
       promo: 'MEOW42',
       discountPercent: 42,
-      claimId,
+      claimId
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await pool.query('ROLLBACK');
     console.error('❌ /activate-promo error:', err);
     return res.status(500).json({ error: 'Internal error' });
   } finally {
@@ -257,11 +274,10 @@ router.post('/activate-promo', validateUser, async (req, res) => {
 });
 
 /**
- * POST /api/meow-cta-status
+ * GET /api/meow-cta-status
  * Returns: { meow_taps, usedToday, remainingGlobal, eligible }
- * NOTE: POST (not GET) because validateUser reads initData from req.body; apiCall posts by design.
  */
-router.post('/meow-cta-status', validateUser, async (req, res) => {
+router.get('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
@@ -277,7 +293,12 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
     if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     const { meow_taps, used_today } = ur.rows[0];
 
-    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [todayStr]);
+    const dr = await client.query(
+      `SELECT claims_taken
+         FROM meow_daily_claims
+        WHERE day = $1`,
+      [todayStr]
+    );
     const claimsTaken = dr.rowCount ? dr.rows[0].claims_taken : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
@@ -287,7 +308,7 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
       meow_taps,
       usedToday: used_today,
       remainingGlobal,
-      eligible,
+      eligible
     });
   } catch (err) {
     console.error('❌ /meow-cta-status error:', err);
@@ -309,32 +330,38 @@ router.post('/create-order', validateUser, async (req, res) => {
 
     // Validate input
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Missing required field: items (must be non-empty array)' });
+      return res.status(400).json({ 
+        error: 'Missing required field: items (must be non-empty array)' 
+      });
     }
 
     if (!totalAmount || totalAmount <= 0) {
-      return res.status(400).json({ error: 'Invalid total amount' });
+      return res.status(400).json({ 
+        error: 'Invalid total amount' 
+      });
     }
 
     // Validate each item
     for (const item of items) {
       if (!item.productId || !item.productName || !item.quantity || !item.unitPrice || !item.totalPrice) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid item format. Each item must have: productId, productName, quantity, unitPrice, totalPrice' });
+        return res.status(400).json({ 
+          error: 'Invalid item format. Each item must have: productId, productName, quantity, unitPrice, totalPrice' 
+        });
       }
 
       if (item.quantity < 1 || item.quantity > 100) {
-        return res.status(400).json({ error: `Invalid quantity for ${item.productName} (must be 1-100)` });
+        return res.status(400).json({ 
+          error: `Invalid quantity for ${item.productName} (must be 1-100)` 
+        });
       }
 
       // Verify price calculation
       const expectedTotal = item.unitPrice * item.quantity;
       if (item.totalPrice !== expectedTotal) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           error: `Price mismatch for ${item.productName}`,
           expected: expectedTotal,
-          received: item.totalPrice,
+          received: item.totalPrice
         });
       }
     }
@@ -342,10 +369,10 @@ router.post('/create-order', validateUser, async (req, res) => {
     // Verify total amount calculation
     const calculatedTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
     if (totalAmount !== calculatedTotal) {
-      return res.status(400).json({
+      return res.status(400).json({ 
         error: 'Total amount mismatch',
         expected: calculatedTotal,
-        received: totalAmount,
+        received: totalAmount
       });
     }
 
@@ -355,14 +382,19 @@ router.post('/create-order', validateUser, async (req, res) => {
       const orderId = `MW${Date.now().toString().slice(-8)}`;
 
       // Get user details
-      const userResult = await client.query('SELECT first_name, username FROM users WHERE telegram_id = $1', [user.id]);
+      const userResult = await client.query(
+        'SELECT first_name, username FROM users WHERE telegram_id = $1',
+        [user.id]
+      );
 
       const userData = userResult.rows[0] || {};
       const customerName = userData.first_name || 'Unknown';
       const username = userData.username || null;
 
       // Create order summary for database
-      const orderSummary = items.map((item) => `${item.productName} (${item.quantity})`).join(', ');
+      const orderSummary = items.map(item => 
+        `${item.productName} (${item.quantity})`
+      ).join(', ');
 
       // Insert order into database
       const insertQuery = `
@@ -391,7 +423,7 @@ router.post('/create-order', validateUser, async (req, res) => {
         orderSummary, // Combined product names
         totalQuantity, // Total quantity of all items
         totalAmount,
-        'pending',
+        'pending'
       ]);
 
       console.log(`✅ Order created: ${orderId} for user ${user.id} with ${items.length} items`);
@@ -403,7 +435,7 @@ router.post('/create-order', validateUser, async (req, res) => {
         customerName,
         username,
         items,
-        totalAmount,
+        totalAmount
       });
 
       if (!notificationSent) {
@@ -417,24 +449,26 @@ router.post('/create-order', validateUser, async (req, res) => {
         message: 'Order submitted successfully. Admin will contact you via Telegram.',
         order: {
           id: orderId,
-          items: items.map((item) => ({
+          items: items.map(item => ({
             product: item.productName,
             quantity: item.quantity,
-            price: item.totalPrice,
+            price: item.totalPrice
           })),
           total: totalAmount,
           status: 'pending',
-          createdAt: orderResult.rows[0].created_at,
-        },
+          createdAt: orderResult.rows[0].created_at
+        }
       });
+
     } finally {
       client.release();
     }
+
   } catch (error) {
     console.error('❌ Error creating order:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       error: 'Failed to create order',
-      message: error.message,
+      message: error.message 
     });
   }
 });
@@ -453,7 +487,10 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
     const client = await pool.connect();
     try {
       // Get order details
-      const orderResult = await client.query('SELECT telegram_id, quantity, status FROM orders WHERE id = $1', [orderId]);
+      const orderResult = await client.query(
+        'SELECT telegram_id, quantity, status FROM orders WHERE id = $1',
+        [orderId]
+      );
 
       if (orderResult.rowCount === 0) {
         return res.status(404).json({ error: 'Order not found' });
@@ -466,13 +503,16 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
       }
 
       // Update order status
-      await client.query('UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['paid', orderId]);
+      await client.query(
+        'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        ['paid', orderId]
+      );
 
       // Update user's VIP level
-      await client.query('UPDATE users SET vip_level = vip_level + $1 WHERE telegram_id = $2', [
-        order.quantity,
-        order.telegram_id,
-      ]);
+      await client.query(
+        'UPDATE users SET vip_level = vip_level + $1 WHERE telegram_id = $2',
+        [order.quantity, order.telegram_id]
+      );
 
       console.log(`✅ Order ${orderId} marked as paid. VIP level updated for user ${order.telegram_id}`);
 
@@ -480,16 +520,18 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
         success: true,
         message: 'Payment confirmed and VIP level updated',
         orderId,
-        vipIncrement: order.quantity,
+        vipIncrement: order.quantity
       });
+
     } finally {
       client.release();
     }
+
   } catch (error) {
     console.error('❌ Error confirming payment:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       error: 'Failed to confirm payment',
-      message: error.message,
+      message: error.message 
     });
   }
 });
@@ -498,7 +540,7 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
 router.post('/my-orders', validateUser, async (req, res) => {
   try {
     const { user } = req;
-
+    
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -512,16 +554,18 @@ router.post('/my-orders', validateUser, async (req, res) => {
 
       res.status(200).json({
         success: true,
-        orders: result.rows,
+        orders: result.rows
       });
+
     } finally {
       client.release();
     }
+
   } catch (error) {
     console.error('❌ Error fetching orders:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       error: 'Failed to fetch orders',
-      message: error.message,
+      message: error.message 
     });
   }
 });
