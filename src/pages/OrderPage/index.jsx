@@ -1,4 +1,11 @@
-import React, { useState } from 'react';
+// Path: frontend/src/pages/OrderPage/index.jsx
+// v3 — Applies 42% Meow promo when arriving with ?promo=MEOW42&claim=<id>
+// - On mount: verifies & consumes claim via /api/activate-promo
+// - Pricing: shows Discounts = 42% and recalculates Total
+// - All other UI/flows unchanged
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingCart, Plus, Minus, Loader, Trash2 } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
@@ -31,6 +38,8 @@ const PRODUCTS = [
 ];
 
 const OrderPage = () => {
+  const location = useLocation();
+
   const [selectedFlavor, setSelectedFlavor] = useState('classic');
   const [cart, setCart] = useState([]);
   const [selectedCartItemId, setSelectedCartItemId] = useState(null);
@@ -38,19 +47,26 @@ const OrderPage = () => {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [showFlavorBurst, setShowFlavorBurst] = useState(null); // 'classic' or 'matcha'
 
+  // ✅ Meow promo state
+  const [promoActive, setPromoActive] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [claimId, setClaimId] = useState(null);
+  const [verifyingPromo, setVerifyingPromo] = useState(false);
+
+  // Haptics
   const triggerHaptic = (style = 'light') => {
     if (window.Telegram?.WebApp?.HapticFeedback) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
     }
   };
 
+  // Flavor selection handlers
   const handleFlavorSelect = (flavor) => {
     triggerHaptic('light');
     setSelectedFlavor(flavor);
     setShowFlavorBurst(flavor);
     setTimeout(() => setShowFlavorBurst(null), 800);
   };
-
   const handleCardKeyDown = (flavor) => (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -58,6 +74,7 @@ const OrderPage = () => {
     }
   };
 
+  // Cart helpers
   const handleAddToCart = (product) => {
     triggerHaptic('medium');
     const flavorPrefix = selectedFlavor === 'classic' ? 'Viral Classic' : 'Viral Matcha';
@@ -126,9 +143,18 @@ const OrderPage = () => {
     setCart(newCart);
   };
 
+  // Pricing helpers
   const calculateSubtotal = () => cart.reduce((sum, item) => sum + item.totalPrice, 0);
   const formatPrice = (price) => `${price.toLocaleString()} UZS`;
 
+  const subtotal = useMemo(() => calculateSubtotal(), [cart]);
+  const discountAmount = useMemo(
+    () => (promoActive ? Math.floor(subtotal * (discountPercent / 100)) : 0),
+    [promoActive, discountPercent, subtotal]
+  );
+  const finalTotal = useMemo(() => Math.max(subtotal - discountAmount, 0), [subtotal, discountAmount]);
+
+  // Submit order (unchanged, but now uses finalTotal)
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
       showError('Please add items to your cart');
@@ -145,7 +171,7 @@ const OrderPage = () => {
           unitPrice: item.unitPrice,
           totalPrice: item.totalPrice
         })),
-        totalAmount: calculateSubtotal()
+        totalAmount: finalTotal
       });
 
       setOrderSuccess(true);
@@ -162,6 +188,34 @@ const OrderPage = () => {
       setIsSubmitting(false);
     }
   };
+
+  // ✅ One-time promo activation when arriving from Profile CTA
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const promo = params.get('promo');
+    const cid = params.get('claim');
+
+    if (promo === 'MEOW42' && cid && !promoActive) {
+      (async () => {
+        try {
+          setVerifyingPromo(true);
+          const res = await apiCall('/api/activate-promo', { claimId: cid });
+          if (res?.success && res?.discountPercent === 42) {
+            setPromoActive(true);
+            setDiscountPercent(42);
+            setClaimId(cid);
+            showSuccess('Скидка 42% активирована');
+          } else {
+            showError(res?.error || 'Не удалось активировать скидку');
+          }
+        } catch (e) {
+          showError(e?.message || 'Ошибка активации скидки');
+        } finally {
+          setVerifyingPromo(false);
+        }
+      })();
+    }
+  }, [location.search, promoActive]);
 
   if (orderSuccess) {
     return (
@@ -180,7 +234,7 @@ const OrderPage = () => {
             <p className="text-sm text-primary">
               <strong>Total Items:</strong> {cart.reduce((sum, item) => sum + item.quantity, 0)}
             </p>
-            <p className="text-lg font-bold text-accent mt-2">{formatPrice(calculateSubtotal())}</p>
+            <p className="text-lg font-bold text-accent mt-2">{formatPrice(finalTotal)}</p>
           </div>
         </motion.div>
       </div>
@@ -194,7 +248,9 @@ const OrderPage = () => {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
         <h1 className="text-2xl font-bold text-primary mb-2">Закажи свои 쫀득쿠ки</h1>
-        <p className="text-secondary text-sm">Strawberry & Oreo vibes прямо в Ташкенте ✨</p>
+        <p className="text-secondary text-sm">
+          Strawberry & Oreo vibes прямо в Ташкенте ✨{promoActive && ' • Активирована скидка 42%'}
+        </p>
       </motion.div>
 
       {/* Flavor Selection (Cards replace buttons) */}
@@ -265,7 +321,7 @@ const OrderPage = () => {
             </div>
           </div>
 
-          {/* Flavor Burst Animation (unchanged) */}
+          {/* Flavor Burst Animation */}
           <AnimatePresence>
             {showFlavorBurst && (
               <div className="sm:col-span-2 relative">
@@ -416,20 +472,30 @@ const OrderPage = () => {
             <div className="border-t border-accent/20 pt-3 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-secondary">Subtotal:</span>
-                <span className="text-primary font-semibold">{formatPrice(calculateSubtotal())}</span>
+                <span className="text-primary font-semibold">{formatPrice(subtotal)}</span>
               </div>
+
               <div className="flex items-center justify-between text-sm">
-                <span className="text-secondary">Discounts:</span>
-                <span className="text-primary font-semibold">-0 UZS</span>
+                <span className="text-secondary">
+                  Discounts{promoActive ? ' (MEOW42)' : ''}:
+                </span>
+                <span className="text-primary font-semibold">
+                  -{formatPrice(discountAmount)}
+                </span>
               </div>
+
               <div className="border-t border-accent/20 pt-2 mt-2">
                 <div className="flex items-center justify-between">
                   <span className="text-secondary font-semibold">Итого:</span>
-                  <span className="text-xl font-bold text-accent">{formatPrice(calculateSubtotal())}</span>
+                  <span className="text-xl font-bold text-accent">{formatPrice(finalTotal)}</span>
                 </div>
                 <p className="text-xs text-secondary text-right mt-1 italic">(да, так вкусно и так доступно 😋)</p>
               </div>
             </div>
+
+            {verifyingPromo && (
+              <p className="text-xs text-secondary mt-1">Проверяем скидку…</p>
+            )}
           </div>
         </motion.div>
       )}
