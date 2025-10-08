@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v10 — Fix daily streak date comparison: generate UTC dates from todayStr (no TZ shift)
+// v11 — Move meow daily reset out of read endpoints (cron handles reset at Tashkent midnight)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -156,7 +156,7 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
   try {
     const { user } = req;
     const client = await pool.connect();
-  try {
+    try {
       const userResult = await client.query(
         `SELECT
            first_name,
@@ -183,21 +183,8 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // --- Meow taps daily reset (server-side) with SQL date compare ---
+      // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
-      const resetRes = await client.query(
-        `UPDATE users
-            SET meow_taps = 0,
-                meow_taps_date = $1
-          WHERE telegram_id = $2
-            AND (meow_taps_date IS NULL OR meow_taps_date::date <> $1::date)
-          RETURNING meow_taps, meow_taps_date`,
-        [todayStr, user.id]
-      );
-      if (resetRes.rowCount > 0) {
-        userData.meow_taps = resetRes.rows[0].meow_taps;
-        userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
-      }
 
       // --- Derived daily metrics (display correctness) ---
       // 1) Today's high score (Asia/Tashkent)
@@ -221,7 +208,6 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       );
       const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
       let streakFromSessions = 0;
-      // ✅ Build from todayStr at UTC midnight; no TZ shift when slicing YYYY-MM-DD
       let cursor = new Date(`${todayStr}T00:00:00Z`);
       for (let i = 0; i < 60; i++) {
         const y = cursor.toISOString().slice(0, 10);
@@ -232,7 +218,6 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
           break;
         }
       }
-      // Use computed streak for display
       userData.daily_streak = streakFromSessions;
 
       res.status(200).json(userData);
@@ -295,21 +280,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // --- Meow taps daily reset (server-side) with SQL date compare ---
+      // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
-      const resetRes = await client.query(
-        `UPDATE users
-            SET meow_taps = 0,
-                meow_taps_date = $1
-          WHERE telegram_id = $2
-            AND (meow_taps_date IS NULL OR meow_taps_date::date <> $1::date)
-          RETURNING meow_taps, meow_taps_date`,
-        [todayStr, user.id]
-      );
-      if (resetRes.rowCount > 0) {
-        userData.meow_taps = resetRes.rows[0].meow_taps;
-        userData.meow_taps_date = resetRes.rows[0].meow_taps_date;
-      }
 
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
@@ -338,7 +310,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       );
       const dateSet = new Set(recentDatesResult.rows.map(r => String(r.d)));
       let streakFromSessions = 0;
-      // ✅ Build from todayStr at UTC midnight; no TZ shift when slicing YYYY-MM-DD
       let cursor = new Date(`${todayStr}T00:00:00Z`);
       for (let i = 0; i < 60; i++) {
         const y = cursor.toISOString().slice(0, 10);
@@ -349,7 +320,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
           break;
         }
       }
-      // Use computed streak for display
       const currentStreak = streakFromSessions;
 
       // Keep the claim-state logic (unchanged), but use display streak value
