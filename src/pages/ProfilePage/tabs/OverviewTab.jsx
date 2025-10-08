@@ -42,6 +42,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal;
   });
 
+  // helper to broadcast "hit 42" so parent can fetch CTA status immediately
+  const notifyReached42 = useCallback(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("meow:reached42"));
+    } catch (_) {}
+  }, []);
+
   // ⚠️ Monotonic sync: only adopt higher server values; also persist to session storage
   useEffect(() => {
     if (Number.isFinite(stats?.meow_taps)) {
@@ -50,10 +57,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         try {
           sessionStorage.setItem(storageKey, String(next));
         } catch (_) {}
+        if (next === 42 && prev !== 42) notifyReached42();
         return next;
       });
     }
-  }, [stats?.meow_taps]);
+  }, [stats?.meow_taps, notifyReached42]);
 
   // Persist local changes so navigation back to Profile doesn't briefly show 0
   useEffect(() => {
@@ -196,6 +204,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           try {
             sessionStorage.setItem(storageKey, String(next));
           } catch (_) {}
+          if (next === 42 && prev !== 42) notifyReached42();
           return next;
         });
       }
@@ -203,7 +212,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {
       // Network error: keep optimistic increment (no rollback)
     }
-  }, [backendBase]);
+  }, [backendBase, notifyReached42]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
@@ -219,12 +228,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       try {
         sessionStorage.setItem(storageKey, String(next));
       } catch (_) {}
+      if (next === 42 && n !== 42) notifyReached42();
       return next;
     });
 
     // Fire-and-forget server update
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap]);
+  }, [meowTapsLocal, haptic, sendTap, notifyReached42]);
 
   return (
     <motion.div
