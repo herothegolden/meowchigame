@@ -40,8 +40,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     }
   }, [stats?.meow_taps]);
 
-  // Cooldown to prevent spamming the backend; server also rate-limits
+  // Cooldown & in-flight guard to prevent spamming the backend; server also rate-limits
   const tapCooldownRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const CLIENT_COOLDOWN_MS = 600; // ↑ avoid 429 due to network jitter/batching
 
   // ✅ Use lifetime games played for the “Уровень дзена” value
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
@@ -60,7 +62,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     // 3) Vite env (compile-time injected)
     try {
-      // Guard so this line doesn't throw in non-Vite builds
       if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) {
         return import.meta.env.VITE_BACKEND_URL;
       }
@@ -128,7 +129,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
   const handleMeowTap = useCallback(async () => {
     const now = Date.now();
-    if (now - tapCooldownRef.current < 250) return; // tiny client cooldown
+    if (inFlightRef.current) return; // prevent overlapping requests
+    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return; // client cooldown
     tapCooldownRef.current = now;
 
     // Already at cap
@@ -146,12 +148,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         ? window.Telegram.WebApp.initData
         : "";
 
+    const url = `${backendBase}/api/meow-tap`;
+    inFlightRef.current = true;
     try {
-      const url = `${backendBase}/api/meow-tap`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData }),
+        keepalive: true,
       });
 
       let data = null;
@@ -178,10 +182,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             })
           );
         } catch (_) {}
+      } else if (res.status === 429) {
+        // Rate-limited: KEEP optimistic update; next allowed tap will reconcile
+        // (Do not roll back — this is expected transient throttle)
       } else if (!res.ok) {
-        // Roll back optimistic increment on failure (best-effort)
+        // Other failures → roll back optimistic increment (best-effort)
         setMeowTapsLocal((n) => Math.max(0, n - 1));
-        // Optional: log to console to aid debugging
         try {
           console.warn("meow-tap failed", { status: res.status, url });
         } catch (_) {}
@@ -189,6 +195,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {
       // Network error → roll back optimistic increment (best-effort)
       setMeowTapsLocal((n) => Math.max(0, n - 1));
+    } finally {
+      inFlightRef.current = false;
     }
   }, [meowTapsLocal, onUpdate, backendBase]);
 
