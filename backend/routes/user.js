@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v8 — Meow counter: on throttle, return current value (200) instead of 429 to avoid UI snap-backs.
+// v9 — Meow counter: do NOT advance throttle timestamp on throttled requests (prevents 1→2→1 snapback)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -512,7 +512,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // If throttled, DO NOT return 429; return the current value instead.
+      // If throttled, DO NOT advance the throttle window; just return current value.
       if (now - last < TAP_COOLDOWN_MS) {
         const row = await client.query(
           `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
@@ -528,7 +528,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow = 0;
         }
 
-        meowTapThrottle.set(user.id, now);
+        // 🔒 Do NOT set meowTapThrottle here — we only update it on success or lock
         return res.status(200).json({
           meow_taps: meow,
           locked: meow >= 42,
@@ -566,6 +566,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       if (meow_taps >= 42) {
         await client.query('COMMIT');
+        // ✅ Only advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
         return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
       }
@@ -579,6 +580,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       );
 
       await client.query('COMMIT');
+      // ✅ Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
 
       return res.status(200).json({
