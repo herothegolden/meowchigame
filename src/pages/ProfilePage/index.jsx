@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v14 — Listen for "meow:reached42" (from OverviewTab) and fetch CTA status immediately.
+// v15 — Add short CTA re-check retries after "meow:reached42" to avoid throttle race.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -74,7 +74,19 @@ const ProfilePage = () => {
 
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
-    const onReached42 = () => fetchCtaStatus();
+    const onReached42 = () => {
+      // Immediate check
+      fetchCtaStatus();
+      // Short retry ladder to outwait backend throttle and DB write latency
+      const t1 = setTimeout(fetchCtaStatus, 150);
+      const t2 = setTimeout(fetchCtaStatus, 400);
+      const t3 = setTimeout(fetchCtaStatus, 800);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    };
     window.addEventListener("meow:reached42", onReached42);
     return () => window.removeEventListener("meow:reached42", onReached42);
   }, [fetchCtaStatus]);
