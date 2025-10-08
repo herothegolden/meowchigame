@@ -178,18 +178,19 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors"
           >
             Заказать Сейчас
           </motion.button>
         </motion.div>
 
+        {/* Info card 1 — removed glow */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl"
+          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10"
         >
           <h2 className="text-2xl font-bold mb-3">Почему Meowchi особенный?</h2>
           <p className="text-secondary leading-relaxed mb-3">
@@ -214,7 +215,7 @@ const HomePage = () => {
               muted
               playsInline
               preload="auto"
-              className="w-full max-w-md h-auto aspect-[4/5] object-cover rounded-2xl shadow-[0_0_20px_rgba(0,255,200,0.4)] border border-white/10"
+              className="w-full max-w-md h-auto aspect-[4/5] object-cover rounded-2xl border border-white/10"
             />
           </div>
         </motion.div>
@@ -226,7 +227,7 @@ const HomePage = () => {
             <motion.button
               whileHover={{ scale: 1.05 }}
               onClick={navigateToOrder}
-              className="px-8 py-4 rounded-xl font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+              className="px-8 py-4 rounded-xl font-bold text-lg text-black bg-yellow-400 hover:bg-yellow-300 transition-colors"
             >
               Заказать Сейчас
             </motion.button>
@@ -249,7 +250,7 @@ const HomePage = () => {
               key={i}
               whileHover={{ scale: item.locked ? 1.0 : 1.02 }}
               onClick={() => handleCardClick(i, item)}
-              className={`p-8 rounded-3xl bg-nav border border-gray-700 backdrop-blur-lg shadow-[0_0_20px_rgba(0,255,200,0.4)] text-center space-y-3 transition-all ${
+              className={`p-8 rounded-3xl bg-nav border border-gray-700 backdrop-blur-lg text-center space-y-3 transition-all ${
                 item.locked ? "cursor-not-allowed opacity-80" : item.hiFiveRequired ? "cursor-default" : "cursor-pointer"
               }`}
             >
@@ -353,10 +354,10 @@ const HomePage = () => {
           <h2 className="text-2xl font-bold mb-6 text-center">Наши продукты</h2>
           <div className="grid grid-cols-1 gap-6">
             
-            {/* Product 1 — Strawberry & Oreo */}
+            {/* Product 1 — Strawberry & Oreo (card glow removed) */}
             <motion.div
               whileHover={{ scale: 1.03 }}
-              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40 shadow-[0_0_20px_rgba(255,0,150,0.3)]"
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-pink-400/40"
             >
               <video
                 src="https://ik.imagekit.io/59r2kpz8r/G2.webm/ik-video.mp4?updatedAt=1759689992885"
@@ -365,7 +366,7 @@ const HomePage = () => {
                 muted
                 playsInline
                 preload="auto"
-                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(255,0,150,0.3)] border border-white/10 mb-4"
+                className="w-full h-40 object-cover rounded-lg border border-white/10 mb-4"
               />
               <h3 className="text-xl font-semibold">Viral Strawberry & Oreo</h3>
               <p className="text-secondary text-sm">
@@ -373,10 +374,10 @@ const HomePage = () => {
               </p>
             </motion.div>
 
-            {/* Product 2 — Matcha Strawberry & Oreo */}
+            {/* Product 2 — Matcha Strawberry & Oreo (card glow removed) */}
             <motion.div
               whileHover={{ scale: 1.03 }}
-              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40 shadow-[0_0_20px_rgba(0,255,200,0.3)]"
+              className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-emerald-400/40"
             >
               <video
                 src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
@@ -385,7 +386,7 @@ const HomePage = () => {
                 muted
                 playsInline
                 preload="auto"
-                className="w-full h-40 object-cover rounded-lg shadow-[0_0_20px_rgba(0,255,200,0.3)] border border-white/10 mb-4"
+                className="w-full h-40 object-cover rounded-lg border border-white/10 mb-4"
               />
               <h3 className="text-xl font-semibold">Matcha Strawberry & Oreo</h3>
               <p className="text-secondary text-sm">
@@ -396,12 +397,13 @@ const HomePage = () => {
           </div>
         </div>
 
+        {/* CTA card — glow removed */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl text-center space-y-4"
+          className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 text-center space-y-4"
         >
           <h2 className="text-xl font-bold">Как заказать?</h2>
           <p className="text-secondary">🚚 Доставка по Ташкенту (Yandex Taxi)</p>
@@ -412,7 +414,7 @@ const HomePage = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={navigateToOrder}
-            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors shadow-lg"
+            className="px-6 py-3 rounded-xl font-semibold text-black bg-yellow-400 hover:bg-yellow-300 transition-colors"
           >
             Заказать Сейчас
           </motion.button>
