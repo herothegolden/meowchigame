@@ -1,5 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v13 — Fix apiCall usage: always POST body-based. Uses /api/meow-cta-status and /api/meow-claim via POST.
+// v14 — Listen for "meow:reached42" (from OverviewTab) and fetch CTA status immediately.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -58,13 +58,26 @@ const ProfilePage = () => {
       });
     } catch (e) {
       // Silently ignore; CTA is optional UI
-      // console.warn("CTA status fetch failed:", e);
     }
   }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
+  useEffect(() => {
+    if (data?.stats?.meow_taps >= 42) {
+      fetchCtaStatus();
+    }
+  }, [data?.stats?.meow_taps, fetchCtaStatus]);
+
+  // Listen for custom event from OverviewTab when user reaches 42 in-session.
+  useEffect(() => {
+    const onReached42 = () => fetchCtaStatus();
+    window.addEventListener("meow:reached42", onReached42);
+    return () => window.removeEventListener("meow:reached42", onReached42);
+  }, [fetchCtaStatus]);
 
   // Poll CTA status lightly (reflects global 42 cap); also on tab switch
   useEffect(() => {
