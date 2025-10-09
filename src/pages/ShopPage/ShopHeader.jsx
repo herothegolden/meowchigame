@@ -1,7 +1,7 @@
+// Path: src/pages/ShopPage/ShopHeader.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingCart, Star } from 'lucide-react';
-import BetaNote from '../../components/BetaNote';
 
 const ShopHeader = ({ points }) => {
   return (
@@ -17,7 +17,7 @@ const ShopHeader = ({ points }) => {
         <h1 className="text-3xl font-bold">Shop</h1>
       </div>
 
-      {/* Right: Points chip + BETA note */}
+      {/* Right: Points chip (BETA note moved to AnnouncementBar) */}
       <div className="flex items-center gap-3">
         <motion.div
           className="bg-nav p-2 px-4 rounded-lg flex items-center border border-gray-700"
@@ -31,9 +31,6 @@ const ShopHeader = ({ points }) => {
             {typeof points === 'number' ? points.toLocaleString() : '0'}
           </span>
         </motion.div>
-
-        {/* Non-blocking BETA pill + info tooltip */}
-        <BetaNote />
       </div>
     </motion.div>
   );
