@@ -1,8 +1,7 @@
-// Path: frontend/src/pages/ProfilePage/index.jsx
-// v21 — Deterministic CTA on 42nd tap
-// - NEW: Pass onReached42 to OverviewTab → calls fetchCtaStatus() immediately on 42.
-// - KEEP: Global "meow:reached42" listener with staggered retries (150/400/800ms).
-// - KEEP: Instant paint; no blocking loaders; minimal changes only.
+// Path: src/pages/ProfilePage/index.jsx
+// v22 — AnnouncementBar under header (no CLS, no logic changes)
+// - NEW: Import + mount <AnnouncementBar /> right below the header (skeleton and hydrated states).
+// - KEEP: Deterministic CTA fetch on 42nd tap; polling; lazy tabs; instant paint.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +9,7 @@ import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import AnnouncementBar from "../../components/AnnouncementBar"; // <-- NEW
 
 // ✅ Lazy tabs
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
@@ -158,6 +158,9 @@ const ProfilePage = () => {
         <ProfileHeader stats={stats} onUpdate={handleProfileUpdate} />
       )}
 
+      {/* Red announcement stripe with centered BETA + ℹ️ */}
+      <AnnouncementBar />
+
       {/* Tabs container (always mounted; contents hydrate lazily) */}
       <div className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
@@ -180,7 +183,7 @@ const ProfilePage = () => {
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={handleProfileUpdate}
-                // NEW: deterministic CTA trigger from the child when 42 is reached
+                // Deterministic CTA trigger from the child when 42 is reached
                 onReached42={fetchCtaStatus}
               />
             </Suspense>
