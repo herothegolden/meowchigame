@@ -1,19 +1,19 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v26 — FIX: CTA reliability when reaching 42
-// - Removed dependency on non-existent backend fields (ctaEligible, ctaRemainingGlobal, ctaUsedToday)
-// - Fires "meow:cta-check" event whenever server confirms meow_taps >= 42
-// - Simplified retry logic to avoid stale closures
-// - Server-confirmed "meow:reached42:server" event remains unchanged
+// v27 - PRODUCTION READY: All em dashes removed, CTA fix preserved
+// - ALL Cyrillic text sanitized for esbuild (no em dashes)
+// - CTA fires "meow:cta-check" when server confirms meow_taps >= 42
+// - Simplified retry logic without stale closures
+// - Server-confirmed "meow:reached42:server" event unchanged
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-// Helper: convert seconds → "XÑ‡ YÐ¼"
+// Helper: convert seconds to "Xч Yм"
 const formatPlayTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "0Ñ‡ 0Ð¼";
+  if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hrs}Ñ‡ ${mins}Ð¼`;
+  return `${hrs}ч ${mins}м`;
 };
 
 const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
@@ -30,7 +30,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const serverDay = useMemo(() => {
     if (stats?.streak_server_day) return String(stats.streak_server_day);
     if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
-    return null; // unknown until server responds
+    return null;
   }, [stats?.streak_server_day, stats?.meow_taps_date]);
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
@@ -50,7 +50,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     return serverVal0;
   });
 
-  // Broadcast helpers — server-confirmed only
+  // Broadcast helpers - server-confirmed only
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
     if (notified42Ref.current) return;
@@ -141,7 +141,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   useEffect(() => {
     if (!(streakInfo?.canClaim === true)) return;
-    if (!streakKey) return; // wait until server day is known
+    if (!streakKey) return;
     const already = sessionStorage.getItem(streakKey);
     if (already) return;
 
@@ -166,48 +166,48 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     () => [
       {
         key: "points",
-        title: "Ð¡ÑŠÐµÐ´ÐµÐ½Ð¾ Ð¿ÐµÑ‡ÐµÐ½ÐµÐº",
+        title: "Съедено печенек",
         value: totalPoints,
-        subtitle: "Ð"Ñ€Ð°Ð²Ð¸Ñ‚Ð°Ñ†Ð¸Ñ Ð´Ñ€Ð¾Ð¶Ð¸Ñ‚. Ð•Ñ‰Ñ' Ñ‡ÑƒÑ‚ÑŒ-Ñ‡ÑƒÑ‚ÑŒ — Ð¸ Ð¼Ñ‹ ÑƒÐ»ÐµÑ‚Ð¸Ð¼.",
+        subtitle: "Гравитация дрожит. Ещё чуть-чуть - и мы улетим.",
         tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
       },
       {
         key: "zen",
-        title: "Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð´Ð·ÐµÐ½Ð°",
+        title: "Уровень дзена",
         value: gamesPlayed,
-        subtitle: "Ð§ÐµÐ¼ Ð±Ð¾Ð»ÑŒÑˆÐµ Ñ‡Ð°ÑÐ¾Ð², Ñ‚ÐµÐ¼ Ñ‚Ð¸ÑˆÐµ Ð¼Ñ‹ÑÐ»Ð¸.",
+        subtitle: "Чем больше часов, тем тише мысли.",
         tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
       },
       {
         key: "power-mood",
-        title: "ÐÐ°ÑÑ‚Ñ€Ð¾ÐµÐ½Ð¸Ðµ Ð¿Ð¾ Ð¼Ð¾Ñ‰Ð½Ð¾ÑÑ‚Ð¸",
+        title: "Настроение по мощности",
         value: highScoreToday,
-        subtitle: "Ð ÐµÐºÐ¾Ñ€Ð´ Ð´Ð½Ñ. Ð¡Ð¸ÑÑ‚ÐµÐ¼Ð° ÑÐ¸ÑÐµÑ‚, Ñ‚Ñ‹ Ñ‚Ð¾Ð¶Ðµ.",
+        subtitle: "Рекорд дня. Система сисет, ты тоже.",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
         key: "social-energy",
-        title: "Ð¡Ð¾Ñ†Ð¸Ð°Ð»ÑŒÐ½Ð°Ñ ÑÐ½ÐµÑ€Ð³Ð¸Ñ",
+        title: "Социальная энергия",
         value: `${dailyStreak}`,
         subtitle:
-          dailyStreak > 0 ? "Ð¢Ñ‹ Ð³Ð¾Ð²Ð¾Ñ€Ð¸Ð» Ñ Ð»ÑŽÐ´ÑŒÐ¼Ð¸. Ð"ÐµÑ€Ð¾Ð¹ Ð´Ð½Ñ." : "ÐŸÐ¾Ñ€Ð° ÑÐ½Ð¾Ð²Ð° Ð²Ñ‹Ð¹Ñ‚Ð¸ Ð² Meowchiverse.",
+          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
         tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
       },
       {
         key: "invites",
-        title: "ÐŸÑ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¾ Ð´Ñ€ÑƒÐ·ÐµÐ¹",
+        title: "Приглашено друзей",
         value: (stats?.invited_friends || 0).toLocaleString(),
-        subtitle: "ÐšÐ°Ð¶Ð´Ñ‹Ð¹ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ð» Ð¿Ð¾Ð»Ð¾Ñ‚ÐµÐ½Ñ†Ðµ. ÐÐ¸ÐºÑ‚Ð¾ Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ».",
+        subtitle: "Каждый получил полотенце. Никто не вернул.",
         tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
       },
       {
         key: "meow-counter",
-        title: "Ð¡Ñ‡Ñ'Ñ‚Ñ‡Ð¸Ðº Ð¼ÑÑƒ",
+        title: "Счётчик мяу",
         value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
         subtitle:
           meowTapsLocal >= 42
-            ? "Ð¡Ð¾Ð²ÐµÑ€ÑˆÐµÐ½ÑÑ‚Ð²Ð¾ Ð´Ð¾ÑÑ‚Ð¸Ð³Ð½ÑƒÑ‚Ð¾ — Ð¼Ð¸Ñ€ Ð² Ñ€Ð°Ð²Ð½Ð¾Ð²ÐµÑÐ¸Ð¸."
-            : "ÐÐ°Ð¶Ð¸Ð¼Ð°Ð¹ Ð´Ð°Ð»ÑŒÑˆÐµ. ÐœÑÑƒ Ð¶Ð´Ñ'Ñ‚.",
+            ? "Совершенство достигнуто - мир в равновесии."
+            : "Нажимай дальше. Мяу ждёт.",
         tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
         tappable: true,
       },
@@ -215,7 +215,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  // ✅ FIX: Simplified retry tracking (no stale closures)
   const retryScheduledRef = useRef(false);
 
   const sendTap = useCallback(async () => {
@@ -233,7 +232,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         data = await res.json();
       } catch (_) {}
 
-      // ✅ Reconcile with server — authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -242,7 +240,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           return next;
         });
 
-        // ✅ FIX: Fire CTA check event whenever server confirms ≥42 (no dependency on missing fields)
+        // Fire CTA check event when server confirms >= 42
         if (data.meow_taps >= 42 || data.locked === true) {
           try {
             window.dispatchEvent(
@@ -251,7 +249,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           } catch (_) {}
         }
 
-        // ✅ If server explicitly signals lock, snap to 42 and stop
+        // If server explicitly signals lock, snap to 42
         if (data?.locked === true && data.meow_taps < 42) {
           setMeowTapsLocal((prev) => {
             const next = 42;
@@ -261,7 +259,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           });
         }
 
-        // ✅ FIX: Simplified final-commit retry (fresh fetch, no stale closures)
+        // Simplified final-commit retry
         const shouldRetry =
           !retryScheduledRef.current &&
           ((data?.throttled === true && data.meow_taps >= 40) ||
@@ -304,7 +302,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         }
       }
     } catch (_) {
-      // Network error: keep optimistic for n>0; reconcile later on next success.
+      // Network error: keep optimistic, reconcile on next success
     }
   }, [backendBase, notifyReached42Server, persist]);
 
@@ -322,7 +320,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       return;
     }
 
-    // Optimistic for n > 0
+    // Optimistic increment for n > 0
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
