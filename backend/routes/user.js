@@ -1,5 +1,7 @@
 // Path: backend/routes/user.js
-// v11 — Move meow daily reset out of read endpoints (cron handles reset at Tashkent midnight)
+// v12 — Meow tap responses include date context for deterministic 42 handling
+// - /meow-tap now returns { meow_taps, locked, remaining, throttled?, meow_taps_date, today }
+// - No logic changes to streaks/profile; still capped at 42; Tashkent date semantics preserved.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -506,7 +508,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps: meow,
           locked: meow >= 42,
           remaining: Math.max(42 - meow, 0),
-          throttled: true
+          throttled: true,
+          meow_taps_date: meowDate ? String(meowDate).slice(0,10) : null,
+          today: todayStr
         });
       }
 
@@ -541,10 +545,16 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         await client.query('COMMIT');
         // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
-        return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
+        return res.status(200).json({
+          meow_taps: 42,
+          locked: true,
+          remaining: 0,
+          meow_taps_date: String(meow_taps_date).slice(0,10),
+          today: todayStr
+        });
       }
 
-      const newTaps = meow_taps + 1;
+      const newTaps = Math.min(meow_taps + 1, 42);
       await client.query(
         `UPDATE users
            SET meow_taps = $1, meow_taps_date = $2
@@ -559,7 +569,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       return res.status(200).json({
         meow_taps: newTaps,
         locked: newTaps >= 42,
-        remaining: Math.max(42 - newTaps, 0)
+        remaining: Math.max(42 - newTaps, 0),
+        meow_taps_date: todayStr,
+        today: todayStr
       });
     } catch (e) {
       await client.query('ROLLBACK');
