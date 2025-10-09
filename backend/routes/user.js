@@ -1,5 +1,8 @@
 // Path: backend/routes/user.js
-// v13 — Add canonical streak_server_day (Asia/Tashkent) to /get-profile-complete stats
+// v14 — Atomic CTA eligibility in /meow-tap + guarded debug logs (LOG_CTA=1).
+// The /meow-tap response now returns CTA eligibility fields atomically when it returns 42/locked:
+//   { tz_day, ctaEligible, ctaUsedToday, ctaRemainingGlobal } alongside { meow_taps:42, locked:true }.
+// Source base: :contentReference[oaicite:0]{index=0}
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -362,7 +365,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.daily_streak = currentStreak;
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      // ✅ NEW: Provide canonical server day for client-side day-scoped guards
+      // ✅ Provide canonical server day for client-side day-scoped guards
       userData.streak_server_day = todayStr;
 
       // Power uses today's high score (not lifetime)
@@ -475,10 +478,11 @@ router.post('/update-avatar', validateUser, async (req, res) => {
 });
 
 /* -------------------------------------------
-   NEW: Счётчик мяу (daily up to 42)
+   Счётчик мяу (daily up to 42) + ATOMIC CTA ELIGIBILITY
 ------------------------------------------- */
 
 router.post('/meow-tap', validateUser, async (req, res) => {
+  const LOG_CTA = process.env.LOG_CTA === '1';
   try {
     const { user } = req;
     const now = Date.now();
@@ -491,7 +495,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       // If throttled, DO NOT advance the throttle window; just return current value.
       if (now - last < TAP_COOLDOWN_MS) {
         const row = await client.query(
-          `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
+          `SELECT COALESCE(meow_taps, 0) AS meow_taps,
+                  meow_taps_date,
+                  COALESCE(meow_claim_used_today, FALSE) AS meow_claim_used_today
              FROM users
             WHERE telegram_id = $1`,
           [user.id]
@@ -499,9 +505,33 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
         let meow = row.rows[0]?.meow_taps ?? 0;
         const meowDate = row.rows[0]?.meow_taps_date;
+        const usedToday = !!row.rows[0]?.meow_claim_used_today;
+
         // Ensure date correctness: if stored date is older, show 0
         if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
           meow = 0;
+        }
+
+        let ctaEligible = false;
+        let ctaRemainingGlobal = 0;
+
+        if (meow >= 42) {
+          const claimsRow = await client.query(
+            `SELECT COALESCE(claims_taken, 0) AS claims_taken
+               FROM meow_daily_claims
+              WHERE day = $1`,
+            [todayStr]
+          );
+          const claimsTaken = Number(claimsRow.rows[0]?.claims_taken || 0);
+          ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+          ctaEligible = meow >= 42 && usedToday === false && ctaRemainingGlobal > 0;
+
+          if (LOG_CTA) {
+            console.log(
+              "[CTA][tap:throttled] user=%s day=%s taps=%s usedToday=%s claims=%s remaining=%s eligible=%s",
+              String(user.id), todayStr, meow, usedToday, claimsTaken, ctaRemainingGlobal, ctaEligible
+            );
+          }
         }
 
         // Do NOT set throttle timestamp here
@@ -509,17 +539,23 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps: meow,
           locked: meow >= 42,
           remaining: Math.max(42 - meow, 0),
-          throttled: true,
           meow_taps_date: meowDate ? String(meowDate).slice(0,10) : null,
-          today: todayStr
+          today: todayStr,
+          // Inline CTA eligibility (only meaningful when locked)
+          tz_day: todayStr,
+          ctaEligible,
+          ctaUsedToday: usedToday,
+          ctaRemainingGlobal
         });
       }
 
       await client.query('BEGIN');
 
-      // Lock row, read current taps
+      // Lock row, read current taps + used_today flag
       const rowRes = await client.query(
-        `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
+        `SELECT COALESCE(meow_taps, 0) AS meow_taps,
+                meow_taps_date,
+                COALESCE(meow_claim_used_today, FALSE) AS meow_claim_used_today
            FROM users
           WHERE telegram_id = $1
           FOR UPDATE`,
@@ -530,31 +566,63 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      let { meow_taps, meow_taps_date } = rowRes.rows[0];
+      let { meow_taps, meow_taps_date, meow_claim_used_today } = rowRes.rows[0];
+      let usedToday = !!meow_claim_used_today;
 
       // Reset if first tap of the day (SQL date semantics via stored value check)
       if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
         meow_taps = 0;
         meow_taps_date = todayStr;
+        usedToday = false; // new day resets claim usage
         await client.query(
-          `UPDATE users SET meow_taps = 0, meow_taps_date = $1 WHERE telegram_id = $2`,
+          `UPDATE users
+             SET meow_taps = 0,
+                 meow_taps_date = $1,
+                 meow_claim_used_today = FALSE
+           WHERE telegram_id = $2`,
           [todayStr, user.id]
         );
       }
 
+      // If already locked before increment
       if (meow_taps >= 42) {
+        // Compute CTA eligibility atomically in the same transaction
+        const claimsRow = await client.query(
+          `SELECT COALESCE(claims_taken, 0) AS claims_taken
+             FROM meow_daily_claims
+            WHERE day = $1
+            FOR UPDATE`,
+          [todayStr]
+        );
+        const claimsTaken = Number(claimsRow.rows[0]?.claims_taken || 0);
+        const ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+        const ctaEligible = meow_taps >= 42 && usedToday === false && ctaRemainingGlobal > 0;
+
         await client.query('COMMIT');
         // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
+
+        if (LOG_CTA) {
+          console.log(
+            "[CTA][tap] user=%s day=%s taps:%s->%s usedToday=%s claims=%s remaining=%s eligible=%s",
+            String(user.id), todayStr, meow_taps, meow_taps, usedToday, claimsTaken, ctaRemainingGlobal, ctaEligible
+          );
+        }
+
         return res.status(200).json({
           meow_taps: 42,
           locked: true,
           remaining: 0,
           meow_taps_date: String(meow_taps_date).slice(0,10),
-          today: todayStr
+          today: todayStr,
+          tz_day: todayStr,
+          ctaEligible,
+          ctaUsedToday: usedToday,
+          ctaRemainingGlobal
         });
       }
 
+      // Increment tap
       const newTaps = Math.min(meow_taps + 1, 42);
       await client.query(
         `UPDATE users
@@ -563,13 +631,50 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         [newTaps, todayStr, user.id]
       );
 
+      // If this increment reaches the terminal state, compute CTA eligibility atomically here
+      if (newTaps >= 42) {
+        const claimsRow = await client.query(
+          `SELECT COALESCE(claims_taken, 0) AS claims_taken
+             FROM meow_daily_claims
+            WHERE day = $1
+            FOR UPDATE`,
+          [todayStr]
+        );
+        const claimsTaken = Number(claimsRow.rows[0]?.claims_taken || 0);
+        const ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+        const ctaEligible = newTaps >= 42 && usedToday === false && ctaRemainingGlobal > 0;
+
+        await client.query('COMMIT');
+        meowTapThrottle.set(user.id, now);
+
+        if (LOG_CTA) {
+          console.log(
+            "[CTA][tap] user=%s day=%s taps:%s->%s usedToday=%s claims=%s remaining=%s eligible=%s",
+            String(user.id), todayStr, meow_taps, newTaps, usedToday, claimsTaken, ctaRemainingGlobal, ctaEligible
+          );
+        }
+
+        return res.status(200).json({
+          meow_taps: newTaps,
+          locked: true,
+          remaining: 0,
+          meow_taps_date: todayStr,
+          today: todayStr,
+          tz_day: todayStr,
+          ctaEligible,
+          ctaUsedToday: usedToday,
+          ctaRemainingGlobal
+        });
+      }
+
+      // Otherwise, still below 42 — no eligibility fields are needed
       await client.query('COMMIT');
       // Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
 
       return res.status(200).json({
         meow_taps: newTaps,
-        locked: newTaps >= 42,
+        locked: false,
         remaining: Math.max(42 - newTaps, 0),
         meow_taps_date: todayStr,
         today: todayStr
