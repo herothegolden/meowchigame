@@ -34,9 +34,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   // --- Day-aware cache for Meow Counter (prevents stale carry-over) ---
   const storageKey = "meowchi:v2:meow_taps";
-  const serverDay =
-    (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
-    new Date().toISOString().slice(0, 10);
+  const serverDay = (stats?.streak_server_day || (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) || new Date().toISOString().slice(0, 10));
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
@@ -319,8 +317,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // 🔔 Fire immediately if optimistic path crosses 42
-      if (next >= 42 && n < 42) notifyReached42();
       return next;
     });
 
