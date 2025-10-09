@@ -48,17 +48,17 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const dayRef = useRef(serverDay);
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    if (!serverDay) return serverVal0;
+    if (!serverDay) return Math.max(0, serverVal0);
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          return Math.max(parsed.value, serverVal0);
+          return Math.max(0, Math.max(parsed.value, serverVal0));
         }
       }
     } catch (_) {}
-    return serverVal0;
+    return Math.max(0, serverVal0);
   });
 
   // Broadcast helpers - server-confirmed only
@@ -214,7 +214,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       {
         key: "meow-counter",
         title: "Счётчик мяу",
-        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
+        // CRITICAL: Display EXACT server value (no +1 offset)
+        // Server stores 0-42, display must match exactly
+        value: String(meowTapsLocal >= 42 ? 42 : meowTapsLocal),
         subtitle:
           meowTapsLocal >= 42
             ? "Совершенство достигнуто - мир в равновесии."
@@ -326,12 +328,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
     haptic();
 
-    if (meowTapsLocal === 0) {
-      void sendTap();
-      return;
-    }
-
-    // Optimistic increment for n > 0
+    // CRITICAL: Optimistic increment - server will return authoritative value
+    // If server has 0, client increments to 1, then server confirms 1
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
