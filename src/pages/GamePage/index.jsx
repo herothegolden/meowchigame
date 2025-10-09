@@ -17,6 +17,7 @@ import useZenTimer from "../../hooks/useZenTimer";
 
 import formatTime from "../../utils/formatTime";
 import soundManager from "../../utils/SoundManager";
+import BetaNote from "../../components/BetaNote";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -104,6 +105,11 @@ const GamePage = () => {
 
   return (
     <div className="relative flex flex-col h-full p-4 space-y-4 bg-background text-primary overflow-hidden">
+      {/* BETA note (non-blocking, header area) */}
+      <div className="flex justify-end">
+        <BetaNote />
+      </div>
+
       {/* Ghost bomb while dragging */}
       {isDraggingBomb && (
         <motion.div
