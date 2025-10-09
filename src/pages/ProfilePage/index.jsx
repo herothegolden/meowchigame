@@ -1,7 +1,7 @@
 // Path: src/pages/ProfilePage/index.jsx
-// v22 — AnnouncementBar under header (no CLS, no logic changes)
-// - NEW: Import + mount <AnnouncementBar /> right below the header (skeleton and hydrated states).
-// - KEEP: Deterministic CTA fetch on 42nd tap; polling; lazy tabs; instant paint.
+// v23 — AnnouncementBar moved to very top (no CLS, no logic changes)
+// - <AnnouncementBar /> is now the FIRST child in the page container,
+//   directly under the Telegram header, before header/skeleton.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import AnnouncementBar from "../../components/AnnouncementBar"; // <-- NEW
+import AnnouncementBar from "../../components/AnnouncementBar";
 
 // ✅ Lazy tabs
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
@@ -131,6 +131,9 @@ const ProfilePage = () => {
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
+      {/* Red announcement stripe at the very top (just under Telegram header) */}
+      <AnnouncementBar />
+
       {/* Inline error (non-blocking) */}
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
@@ -157,9 +160,6 @@ const ProfilePage = () => {
       ) : (
         <ProfileHeader stats={stats} onUpdate={handleProfileUpdate} />
       )}
-
-      {/* Red announcement stripe with centered BETA + ℹ️ */}
-      <AnnouncementBar />
 
       {/* Tabs container (always mounted; contents hydrate lazily) */}
       <div className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
