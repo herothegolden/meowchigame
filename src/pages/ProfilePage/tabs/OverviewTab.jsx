@@ -82,6 +82,23 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [serverDay]
   );
 
+  // Clear stale cache when server says 0 (fresh day or new user)
+  useEffect(() => {
+    if (serverDay && serverVal0 === 0) {
+      try {
+        const raw = sessionStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.value !== 0) {
+            // Server says 0 but cache has non-zero → clear stale cache
+            sessionStorage.removeItem(storageKey);
+            setMeowTapsLocal(0);
+          }
+        }
+      } catch (_) {}
+    }
+  }, [serverDay, serverVal0, storageKey]);
+
   useEffect(() => {
     if (!serverDay) {
       setMeowTapsLocal((prev) => {
