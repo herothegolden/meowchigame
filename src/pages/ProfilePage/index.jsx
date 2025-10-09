@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v18 — CTA reliability + tidy timers:
-// - Wrap onUpdate to refresh both profile data and CTA status.
-// - Fix event-listener timer cleanup for `meow:reached42`.
-// - Keep instant paint: no full-screen loading gate.
+// v21 — Deterministic CTA on 42nd tap
+// - NEW: Pass onReached42 to OverviewTab → calls fetchCtaStatus() immediately on 42.
+// - KEEP: Global "meow:reached42" listener with staggered retries (150/400/800ms).
+// - KEEP: Instant paint; no blocking loaders; minimal changes only.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -180,6 +180,8 @@ const ProfilePage = () => {
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={handleProfileUpdate}
+                // NEW: deterministic CTA trigger from the child when 42 is reached
+                onReached42={fetchCtaStatus}
               />
             </Suspense>
           </TabsContent>
