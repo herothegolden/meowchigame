@@ -1,14 +1,15 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v27 - PRODUCTION READY: All em dashes removed, CTA fix preserved
-// - ALL Cyrillic text sanitized for esbuild (no em dashes)
-// - CTA fires "meow:cta-check" when server confirms meow_taps >= 42
-// - Simplified retry logic without stale closures
-// - Server-confirmed "meow:reached42:server" event unchanged
+// v26 – Fixed: Meow Counter now starts from 0 with optimistic updates on ALL taps
+// - Removed special case for meowTapsLocal === 0 that skipped UI update
+// - Unified optimistic increment logic: 0→1, 1→2, ..., 41→42 all show immediate feedback
+// - Server reconciliation and all safety guards preserved unchanged
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-// Helper: convert seconds to "Xч Yм"
+const DEBUG_CTA = (import.meta?.env?.VITE_LOG_CTA === "1");
+
+// Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
@@ -17,15 +18,6 @@ const formatPlayTime = (seconds) => {
 };
 
 const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
-  // Guard: Don't render until we have stats
-  if (!stats) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    );
-  }
-
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
@@ -37,35 +29,34 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const storageKey = "meowchi:v2:meow_taps";
 
   const serverDay = useMemo(() => {
-    if (!stats) return null;
     if (stats?.streak_server_day) return String(stats.streak_server_day);
     if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
-    return null;
-  }, [stats]);
+    return null; // unknown until server responds
+  }, [stats?.streak_server_day, stats?.meow_taps_date]);
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    if (!serverDay) return Math.max(0, serverVal0);
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          return Math.max(0, Math.max(parsed.value, serverVal0));
+        if (serverDay && parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
+          return Math.max(parsed.value, serverVal0);
         }
       }
     } catch (_) {}
-    return Math.max(0, serverVal0);
+    return serverVal0;
   });
 
-  // Broadcast helpers - server-confirmed only
+  // Broadcast helpers – server-confirmed only
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
     if (notified42Ref.current) return;
     try {
+      if (DEBUG_CTA) console.log("[CTA] emit meow:reached42:server");
       window.dispatchEvent(new CustomEvent("meow:reached42:server"));
       if (typeof onReached42 === "function") onReached42();
       notified42Ref.current = true;
@@ -81,23 +72,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     },
     [serverDay]
   );
-
-  // Clear stale cache when server says 0 (fresh day or new user)
-  useEffect(() => {
-    if (serverDay && serverVal0 === 0) {
-      try {
-        const raw = sessionStorage.getItem(storageKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.value !== 0) {
-            // Server says 0 but cache has non-zero → clear stale cache
-            sessionStorage.removeItem(storageKey);
-            setMeowTapsLocal(0);
-          }
-        }
-      } catch (_) {}
-    }
-  }, [serverDay, serverVal0, storageKey]);
 
   useEffect(() => {
     if (!serverDay) {
@@ -169,7 +143,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   useEffect(() => {
     if (!(streakInfo?.canClaim === true)) return;
-    if (!streakKey) return;
+    if (!streakKey) return; // wait until server day is known
     const already = sessionStorage.getItem(streakKey);
     if (already) return;
 
@@ -196,7 +170,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         key: "points",
         title: "Съедено печенек",
         value: totalPoints,
-        subtitle: "Гравитация дрожит. Ещё чуть-чуть - и мы улетим.",
+        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
         tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
       },
       {
@@ -210,7 +184,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         key: "power-mood",
         title: "Настроение по мощности",
         value: highScoreToday,
-        subtitle: "Рекорд дня. Система сисет, ты тоже.",
+        subtitle: "Рекорд дня. Система сиеет, ты тоже.",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
@@ -231,12 +205,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       {
         key: "meow-counter",
         title: "Счётчик мяу",
-        // CRITICAL: Display EXACT server value (no +1 offset)
-        // Server stores 0-42, display must match exactly
-        value: String(meowTapsLocal >= 42 ? 42 : meowTapsLocal),
+        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
         subtitle:
           meowTapsLocal >= 42
-            ? "Совершенство достигнуто - мир в равновесии."
+            ? "Совершенство достигнуто — мир в равновесии."
             : "Нажимай дальше. Мяу ждёт.",
         tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
         tappable: true,
@@ -245,7 +217,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  const retryScheduledRef = useRef(false);
+  const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
@@ -262,6 +234,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         data = await res.json();
       } catch (_) {}
 
+      // Reconcile with server – authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -270,16 +243,32 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           return next;
         });
 
-        // Fire CTA check event when server confirms >= 42
-        if (data.meow_taps >= 42 || data.locked === true) {
+        // 🔴 NEW: inline eligibility path – atomic server response
+        if ((data.meow_taps >= 42 || data.locked === true) && data.ctaEligible === true) {
+          if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible", data);
           try {
             window.dispatchEvent(
-              new CustomEvent("meow:cta-check", { detail: { source: "tap-response-confirmed-42" } })
+              new CustomEvent("meow:cta-inline-eligible", {
+                detail: {
+                  remainingGlobal: data.ctaRemainingGlobal,
+                  usedToday: !!data.ctaUsedToday,
+                  tz_day: data.tz_day,
+                },
+              })
             );
           } catch (_) {}
         }
 
-        // If server explicitly signals lock, snap to 42
+        // Keep the earlier event for other listeners
+        if (data.meow_taps >= 42 || data.locked === true) {
+          try {
+            window.dispatchEvent(
+              new CustomEvent("meow:cta-check", { detail: { source: "tap-42-response" } })
+            );
+          } catch (_) {}
+        }
+
+        // If server explicitly signals lock, snap to 42 and stop
         if (data?.locked === true && data.meow_taps < 42) {
           setMeowTapsLocal((prev) => {
             const next = 42;
@@ -289,52 +278,57 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           });
         }
 
-        // Simplified final-commit retry
-        const shouldRetry =
-          !retryScheduledRef.current &&
-          ((data?.throttled === true && data.meow_taps >= 40) ||
-            (data?.throttled !== true && data?.meow_taps === 41));
+        // Final-commit edge retry (unchanged)
+        const throttledAt42 = data?.throttled === true && meowTapsLocal >= 42;
+        const nonThrottled41AtLocal42 =
+          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal >= 42;
 
-        if (shouldRetry) {
-          retryScheduledRef.current = true;
-          setTimeout(async () => {
-            try {
-              const r2 = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ initData: initDataRef.current }),
-                keepalive: true,
-              });
-              let d2 = null;
+        if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
+          retryOnceRef.current = true;
+          setTimeout(() => {
+            void (async () => {
               try {
-                d2 = await r2.json();
-              } catch (_) {}
-              if (r2.ok && d2 && typeof d2.meow_taps === "number") {
-                setMeowTapsLocal((prev) => {
-                  const next = Math.min(42, Math.max(prev, d2.meow_taps));
-                  persist(next);
-                  if (next >= 42 && prev < 42) notifyReached42Server();
-                  return next;
+                const r2 = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ initData: initDataRef.current }),
+                  keepalive: true,
                 });
-                if (d2.meow_taps >= 42 || d2.locked === true) {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("meow:cta-check", {
-                        detail: { source: "tap-response-retry-confirmed-42" },
-                      })
-                    );
-                  } catch (_) {}
+                let d2 = null;
+                try {
+                  d2 = await r2.json();
+                } catch (_) {}
+                if (r2.ok && d2 && typeof d2.meow_taps === "number") {
+                  setMeowTapsLocal((prev) => {
+                    const next = Math.min(42, Math.max(prev, d2.meow_taps));
+                    persist(next);
+                    if (next >= 42 && prev < 42) notifyReached42Server();
+                    return next;
+                  });
+                  if ((d2.meow_taps >= 42 || d2.locked === true) && d2.ctaEligible === true) {
+                    if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible(retry)", d2);
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("meow:cta-inline-eligible", {
+                          detail: {
+                            remainingGlobal: d2.ctaRemainingGlobal,
+                            usedToday: !!d2.ctaUsedToday,
+                            tz_day: d2.tz_day,
+                          },
+                        })
+                      );
+                    } catch (_) {}
+                  }
                 }
-              }
-            } catch (_) {}
-            retryScheduledRef.current = false;
-          }, 280);
+              } catch (_) {}
+            })();
+          }, 260);
         }
       }
     } catch (_) {
-      // Network error: keep optimistic, reconcile on next success
+      // Network error: keep optimistic for n>0; reconcile later on next success.
     }
-  }, [backendBase, notifyReached42Server, persist]);
+  }, [backendBase, notifyReached42Server, persist, meowTapsLocal]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
@@ -345,8 +339,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
     haptic();
 
-    // CRITICAL: Optimistic increment - server will return authoritative value
-    // If server has 0, client increments to 1, then server confirms 1
+    // ✅ FIXED: Optimistic update for ALL taps (including first tap from 0→1)
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
