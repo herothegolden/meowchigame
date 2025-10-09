@@ -1,7 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v19 — Streaks auto-claim (once/day) + robust CTA trigger
-// - NEW: Auto-claim daily streak when eligible (no UI changes). Safe: once/day via sessionStorage.
-// - IMPROVED: Fire `meow:reached42` once when server OR local reaches 42 (handles throttle/race).
+// v20 — Deterministic 42nd-tap CTA trigger
+// - NEW: optional onReached42 callback fired exactly once when taps reach ≥42.
+// - IMPROVED: Fire trigger immediately on optimistic 41→42 increment, in addition to
+//   server reconciliation and guard effect (covers throttle/race).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -19,9 +20,10 @@ const formatPlayTime = (seconds) => {
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional (contains canClaim/claimedToday/etc. from backend)
  * - onUpdate: optional callback to trigger parent refetch
+ * - onReached42: optional callback fired once when meow taps reach ≥ 42
  * - backendUrl / BACKEND_URL: optional backend base URL
  */
-const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
+const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
@@ -58,9 +60,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     if (notified42Ref.current) return;
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
+      if (typeof onReached42 === "function") onReached42();
       notified42Ref.current = true;
     } catch (_) {}
-  }, []);
+  }, [onReached42]);
 
   // Persist helper
   const persist = useCallback(
@@ -161,8 +164,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           if (res.ok) {
             // Refresh profile stats so the card shows the new streak and points
             if (typeof onUpdate === "function") onUpdate();
-          } else {
-            // If backend rejected (race), we still hold the "once/day" guard; value will be stable on next load
           }
         } catch (_) {
           // Network error — keep guard to avoid spamming; user will still see 0 until next refresh
@@ -312,12 +313,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // No early notify here; dedicated effect handles local-42 case safely.
+      // 🔔 NEW: fire immediately if optimistic path crosses 42
+      if (next >= 42 && n < 42) notifyReached42();
       return next;
     });
 
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, persist]);
+  }, [meowTapsLocal, haptic, sendTap, persist, notifyReached42]);
 
   return (
     <motion.div
