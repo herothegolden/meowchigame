@@ -1,8 +1,8 @@
-// Path: frontend/src/pages/ProfilePage/ProfileHeader.jsx
-
+// Path: src/pages/ProfilePage/ProfileHeader.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
+import BetaNote from '../../components/BetaNote';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -112,7 +112,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   return (
     <div className="bg-nav p-6 rounded-lg border border-gray-700">
-      {/* Row 1: Avatar + Name/Edit/VIP */}
+      {/* Row 1: Avatar + Name/Edit/VIP + (right) BETA note */}
       <div className="flex items-start space-x-4 mb-1">
         <div className="relative flex-shrink-0">
           {/* Avatar frame */}
@@ -140,7 +140,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             )}
           </div>
 
-          {/* Camera button — overlap bottom-right, slightly outside the avatar */}
+          {/* Camera button — overlap bottom-right */}
           <button
             onClick={handleAvatarClick}
             disabled={isUploadingAvatar}
@@ -251,6 +251,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
               <Zap className="w-4 h-4 text-accent ml-2" />
             </div>
           </div>
+        </div>
+
+        {/* Right-aligned non-blocking BETA note */}
+        <div className="ml-auto">
+          <BetaNote />
         </div>
       </div>
 
