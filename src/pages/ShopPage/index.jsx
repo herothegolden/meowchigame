@@ -1,4 +1,4 @@
-// Path: frontend/src/pages/ShopPage/index.jsx
+// Path: src/pages/ShopPage/index.jsx
 // v9 — Instant paint (no black loading screen):
 // - Removed full-screen loading return; render page shell immediately.
 // - Added lightweight inline skeleton for header while data hydrates.
@@ -12,6 +12,7 @@ import { ErrorState } from "../../components/ErrorState";
 
 import ShopHeader from "./ShopHeader";
 import CategorySection from "./CategorySection";
+import AnnouncementBar from "../../components/AnnouncementBar";
 
 const getCategoryFromItem = (item) => {
   if (item.name.includes("Time") || item.name.includes("time")) return "time";
@@ -155,6 +156,9 @@ const ShopPage = () => {
       ) : (
         <ShopHeader points={data?.userPoints || 0} />
       )}
+
+      {/* Red announcement stripe with centered BETA + ℹ️ */}
+      <AnnouncementBar />
 
       {/* 🍪 Meowchi WebM Header Section (kept for visual parity; does not block) */}
       <div className="text-center space-y-4 mb-10">
