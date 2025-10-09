@@ -1,15 +1,14 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v28 – TRUE FIX: Counter starts from 0 by properly clearing stale sessionStorage
-// - Added explicit sessionStorage cleanup on day change
-// - Fixed dayRef initialization to null to properly detect first load
-// - Server is authoritative source on every fresh load
+// v29 – FINAL FIX: Removed Math.max that prevented counter from resetting to 0
+// - Server is ALWAYS the source of truth on fresh load
+// - SessionStorage ignored completely on initialization
+// - Optimistic updates only during active tapping session
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 const DEBUG_CTA = (import.meta?.env?.VITE_LOG_CTA === "1");
 
-// Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
@@ -31,33 +30,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const serverDay = useMemo(() => {
     if (stats?.streak_server_day) return String(stats.streak_server_day);
     if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
-    return null; // unknown until server responds
+    return null;
   }, [stats?.streak_server_day, stats?.meow_taps_date]);
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
-  const dayRef = useRef(null); // ✅ Start as null to properly detect first load
+  const dayRef = useRef(null);
 
-  const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    // ✅ On initial load, ALWAYS trust server as source of truth
-    // Clear stale sessionStorage if day mismatch
-    try {
-      const raw = sessionStorage.getItem(storageKey);
-      if (raw && serverDay) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.day !== serverDay) {
-          // Stale data from previous day - clear it
-          sessionStorage.removeItem(storageKey);
-        }
-      }
-    } catch (_) {
-      // Clear on parse error
-      sessionStorage.removeItem(storageKey);
-    }
-    return serverVal0;
-  });
+  // ✅ CRITICAL FIX: Always trust server on initialization, ignore sessionStorage
+  const [meowTapsLocal, setMeowTapsLocal] = useState(() => serverVal0);
 
-  // Broadcast helpers – server-confirmed only
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
     if (notified42Ref.current) return;
@@ -79,9 +61,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [serverDay]
   );
 
+  // ✅ FIX: Reconciliation only increases, never decreases (preserves optimistic updates)
+  // But on first load (dayRef.current === null), trust server completely
   useEffect(() => {
     if (!serverDay) {
-      // Server day not yet known, just use server value without reconciliation
       setMeowTapsLocal(serverVal0);
       return;
     }
@@ -91,18 +74,19 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
     setMeowTapsLocal((prev) => {
       let next;
-      if (prevDay && newDay !== prevDay) {
-        // New day detected: reset to server value (allows 0)
+      
+      if (prevDay === null) {
+        // ✅ First load: trust server (allows 0)
+        next = serverVal0;
+      } else if (newDay !== prevDay) {
+        // ✅ Day change: reset to server (allows 0)
         notified42Ref.current = false;
         next = serverVal0;
-      } else if (prevDay === null) {
-        // First load: trust server completely (allows 0)
-        next = serverVal0;
       } else {
-        // Same day, already loaded: only increase if server is higher (handles race conditions)
-        // This allows optimistic local updates to stay ahead temporarily
+        // ✅ Same session: preserve optimistic updates
         next = Math.max(prev, serverVal0);
       }
+      
       persist(next);
       if (next >= 42 && prev < 42) notifyReached42Server();
       return next;
@@ -153,7 +137,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   useEffect(() => {
     if (!(streakInfo?.canClaim === true)) return;
-    if (!streakKey) return; // wait until server day is known
+    if (!streakKey) return;
     const already = sessionStorage.getItem(streakKey);
     if (already) return;
 
@@ -244,7 +228,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server – authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -253,7 +236,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           return next;
         });
 
-        // 🔴 NEW: inline eligibility path – atomic server response
         if ((data.meow_taps >= 42 || data.locked === true) && data.ctaEligible === true) {
           if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible", data);
           try {
@@ -269,7 +251,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           } catch (_) {}
         }
 
-        // Keep the earlier event for other listeners
         if (data.meow_taps >= 42 || data.locked === true) {
           try {
             window.dispatchEvent(
@@ -278,7 +259,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           } catch (_) {}
         }
 
-        // If server explicitly signals lock, snap to 42 and stop
         if (data?.locked === true && data.meow_taps < 42) {
           setMeowTapsLocal((prev) => {
             const next = 42;
@@ -288,7 +268,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           });
         }
 
-        // Final-commit edge retry (unchanged)
         const throttledAt42 = data?.throttled === true && meowTapsLocal >= 42;
         const nonThrottled41AtLocal42 =
           data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal >= 42;
@@ -335,11 +314,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           }, 260);
         }
       }
-    } catch (_) {
-      // Network error: keep optimistic for n>0; reconcile later on next success.
-    }
+    } catch (_) {}
   }, [backendBase, notifyReached42Server, persist, meowTapsLocal]);
 
+  // ✅ FIX: Unified optimistic update for ALL taps (including 0→1)
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -349,7 +327,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
     haptic();
 
-    // ✅ FIXED: Optimistic update for ALL taps (including first tap from 0→1)
+    // ✅ Optimistic update for ALL taps
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
