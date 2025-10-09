@@ -1,9 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v25 — Staleness guard + prefer-truthy for CTA; trimmed retries; light observability.
-// - Adds a monotonic request id to fetchCtaStatus() and ignores late/stale responses.
-// - Prefer-truthy rule: once eligible===true, do not demote to false unless usedToday===true.
-// - Keeps 20s polling, event trigger now: immediate + one late retry (~1400ms).
-// - Concise console logs show request id, origin, and whether a response was applied or ignored.
+// v26 — Add direct CTA trigger on tap-42 server response ("meow:cta-check").
+// - Listens for a dedicated event fired at the exact /api/meow-tap response that returns { meow_taps: 42, locked: true }.
+// - Calls fetchCtaStatus("tap-42-response") immediately on that event.
+// - Keeps v25 staleness guard + prefer-truthy intact; keeps polling.
+// - Light logs show the new event origin.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -54,7 +54,7 @@ const ProfilePage = () => {
     }
   }, []);
 
-  // origin: "mount" | "reached42:server" | "retry1400" | "poll" | "tab" | "init>=42"
+  // origin: "mount" | "reached42:server" | "retry1400" | "poll" | "tab" | "init>=42" | "tap-42-response" | "child-callback" | "post-claim-*"
   const fetchCtaStatus = useCallback(
     async (origin = "manual") => {
       const reqId = ++ctaReqSeqRef.current;
@@ -93,7 +93,7 @@ const ProfilePage = () => {
             // Keep CTA visible; still refresh ancillary fields
             applied = {
               ...prev,
-              usedToday: prev.usedToday, // do not toggle to false here
+              usedToday: prev.usedToday,
               remainingGlobal: next.remainingGlobal,
               meow_taps: next.meow_taps,
             };
@@ -162,6 +162,21 @@ const ProfilePage = () => {
       window.removeEventListener("meow:reached42:server", onReached42Server);
       timers.forEach((t) => clearTimeout(t));
     };
+  }, [fetchCtaStatus]);
+
+  // NEW: Direct trigger when the /api/meow-tap response itself returns 42/locked.
+  // OverviewTab will dispatch "meow:cta-check" at that exact moment.
+  useEffect(() => {
+    const onCtaCheck = (ev) => {
+      // eslint-disable-next-line no-console
+      console.log("[CTA] tap-42-response event", {
+        t: Math.round(performance.now()),
+        detail: ev?.detail || null,
+      });
+      fetchCtaStatus("tap-42-response");
+    };
+    window.addEventListener("meow:cta-check", onCtaCheck);
+    return () => window.removeEventListener("meow:cta-check", onCtaCheck);
   }, [fetchCtaStatus]);
 
   // Light polling (reflects global daily cap). Prefer-truthy rule ensures no demotion flicker.
@@ -257,7 +272,7 @@ const ProfilePage = () => {
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={handleProfileUpdate}
-                // Child has its own onReached42 callback, but parent relies on window event too.
+                // Child still can call parent directly; parent also listens to window event.
                 onReached42={() => fetchCtaStatus("child-callback")}
               />
             </Suspense>
