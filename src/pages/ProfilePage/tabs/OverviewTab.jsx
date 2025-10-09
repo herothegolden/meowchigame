@@ -1,20 +1,19 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v25 — Inline CTA eligibility: emit "meow:cta-inline-eligible" when tap response returns eligibility.
-// - If server /api/meow-tap returns { meow_taps>=42 || locked:true } and ctaEligible===true,
-//   dispatch a direct event with remainingGlobal & usedToday.
-// - Temporary logs guarded by VITE_LOG_CTA === "1". Remove after verification.
+// v26 — FIX: CTA reliability when reaching 42
+// - Removed dependency on non-existent backend fields (ctaEligible, ctaRemainingGlobal, ctaUsedToday)
+// - Fires "meow:cta-check" event whenever server confirms meow_taps >= 42
+// - Simplified retry logic to avoid stale closures
+// - Server-confirmed "meow:reached42:server" event remains unchanged
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-const DEBUG_CTA = (import.meta?.env?.VITE_LOG_CTA === "1");
-
-// Helper: convert seconds → "Xч Yм"
+// Helper: convert seconds → "XÑ‡ YÐ¼"
 const formatPlayTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "0ч 0м";
+  if (!seconds || isNaN(seconds)) return "0Ñ‡ 0Ð¼";
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hrs}ч ${mins}м`;
+  return `${hrs}Ñ‡ ${mins}Ð¼`;
 };
 
 const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
@@ -56,7 +55,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const notifyReached42Server = useCallback(() => {
     if (notified42Ref.current) return;
     try {
-      if (DEBUG_CTA) console.log("[CTA] emit meow:reached42:server");
       window.dispatchEvent(new CustomEvent("meow:reached42:server"));
       if (typeof onReached42 === "function") onReached42();
       notified42Ref.current = true;
@@ -168,48 +166,48 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     () => [
       {
         key: "points",
-        title: "Съедено печенек",
+        title: "Ð¡ÑŠÐµÐ´ÐµÐ½Ð¾ Ð¿ÐµÑ‡ÐµÐ½ÐµÐº",
         value: totalPoints,
-        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
+        subtitle: "Ð"Ñ€Ð°Ð²Ð¸Ñ‚Ð°Ñ†Ð¸Ñ Ð´Ñ€Ð¾Ð¶Ð¸Ñ‚. Ð•Ñ‰Ñ' Ñ‡ÑƒÑ‚ÑŒ-Ñ‡ÑƒÑ‚ÑŒ — Ð¸ Ð¼Ñ‹ ÑƒÐ»ÐµÑ‚Ð¸Ð¼.",
         tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
       },
       {
         key: "zen",
-        title: "Уровень дзена",
+        title: "Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð´Ð·ÐµÐ½Ð°",
         value: gamesPlayed,
-        subtitle: "Чем больше часов, тем тише мысли.",
+        subtitle: "Ð§ÐµÐ¼ Ð±Ð¾Ð»ÑŒÑˆÐµ Ñ‡Ð°ÑÐ¾Ð², Ñ‚ÐµÐ¼ Ñ‚Ð¸ÑˆÐµ Ð¼Ñ‹ÑÐ»Ð¸.",
         tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
       },
       {
         key: "power-mood",
-        title: "Настроение по мощности",
+        title: "ÐÐ°ÑÑ‚Ñ€Ð¾ÐµÐ½Ð¸Ðµ Ð¿Ð¾ Ð¼Ð¾Ñ‰Ð½Ð¾ÑÑ‚Ð¸",
         value: highScoreToday,
-        subtitle: "Рекорд дня. Система сияет, ты тоже.",
+        subtitle: "Ð ÐµÐºÐ¾Ñ€Ð´ Ð´Ð½Ñ. Ð¡Ð¸ÑÑ‚ÐµÐ¼Ð° ÑÐ¸ÑÐµÑ‚, Ñ‚Ñ‹ Ñ‚Ð¾Ð¶Ðµ.",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
         key: "social-energy",
-        title: "Социальная энергия",
+        title: "Ð¡Ð¾Ñ†Ð¸Ð°Ð»ÑŒÐ½Ð°Ñ ÑÐ½ÐµÑ€Ð³Ð¸Ñ",
         value: `${dailyStreak}`,
         subtitle:
-          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
+          dailyStreak > 0 ? "Ð¢Ñ‹ Ð³Ð¾Ð²Ð¾Ñ€Ð¸Ð» Ñ Ð»ÑŽÐ´ÑŒÐ¼Ð¸. Ð"ÐµÑ€Ð¾Ð¹ Ð´Ð½Ñ." : "ÐŸÐ¾Ñ€Ð° ÑÐ½Ð¾Ð²Ð° Ð²Ñ‹Ð¹Ñ‚Ð¸ Ð² Meowchiverse.",
         tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
       },
       {
         key: "invites",
-        title: "Приглашено друзей",
+        title: "ÐŸÑ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¾ Ð´Ñ€ÑƒÐ·ÐµÐ¹",
         value: (stats?.invited_friends || 0).toLocaleString(),
-        subtitle: "Каждый получил полотенце. Никто не вернул.",
+        subtitle: "ÐšÐ°Ð¶Ð´Ñ‹Ð¹ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ð» Ð¿Ð¾Ð»Ð¾Ñ‚ÐµÐ½Ñ†Ðµ. ÐÐ¸ÐºÑ‚Ð¾ Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ».",
         tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
       },
       {
         key: "meow-counter",
-        title: "Счётчик мяу",
+        title: "Ð¡Ñ‡Ñ'Ñ‚Ñ‡Ð¸Ðº Ð¼ÑÑƒ",
         value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
         subtitle:
           meowTapsLocal >= 42
-            ? "Совершенство достигнуто — мир в равновесии."
-            : "Нажимай дальше. Мяу ждёт.",
+            ? "Ð¡Ð¾Ð²ÐµÑ€ÑˆÐµÐ½ÑÑ‚Ð²Ð¾ Ð´Ð¾ÑÑ‚Ð¸Ð³Ð½ÑƒÑ‚Ð¾ — Ð¼Ð¸Ñ€ Ð² Ñ€Ð°Ð²Ð½Ð¾Ð²ÐµÑÐ¸Ð¸."
+            : "ÐÐ°Ð¶Ð¸Ð¼Ð°Ð¹ Ð´Ð°Ð»ÑŒÑˆÐµ. ÐœÑÑƒ Ð¶Ð´Ñ'Ñ‚.",
         tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
         tappable: true,
       },
@@ -217,7 +215,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  const retryOnceRef = useRef(false);
+  // ✅ FIX: Simplified retry tracking (no stale closures)
+  const retryScheduledRef = useRef(false);
 
   const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
@@ -234,7 +233,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server — authoritative but non-decreasing
+      // ✅ Reconcile with server — authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -243,32 +242,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           return next;
         });
 
-        // 🔴 NEW: inline eligibility path — atomic server response
-        if ((data.meow_taps >= 42 || data.locked === true) && data.ctaEligible === true) {
-          if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible", data);
-          try {
-            window.dispatchEvent(
-              new CustomEvent("meow:cta-inline-eligible", {
-                detail: {
-                  remainingGlobal: data.ctaRemainingGlobal,
-                  usedToday: !!data.ctaUsedToday,
-                  tz_day: data.tz_day,
-                },
-              })
-            );
-          } catch (_) {}
-        }
-
-        // Keep the earlier event for other listeners
+        // ✅ FIX: Fire CTA check event whenever server confirms ≥42 (no dependency on missing fields)
         if (data.meow_taps >= 42 || data.locked === true) {
           try {
             window.dispatchEvent(
-              new CustomEvent("meow:cta-check", { detail: { source: "tap-42-response" } })
+              new CustomEvent("meow:cta-check", { detail: { source: "tap-response-confirmed-42" } })
             );
           } catch (_) {}
         }
 
-        // If server explicitly signals lock, snap to 42 and stop
+        // ✅ If server explicitly signals lock, snap to 42 and stop
         if (data?.locked === true && data.meow_taps < 42) {
           setMeowTapsLocal((prev) => {
             const next = 42;
@@ -278,57 +261,52 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           });
         }
 
-        // Final-commit edge retry (unchanged)
-        const throttledAt42 = data?.throttled === true && meowTapsLocal >= 42;
-        const nonThrottled41AtLocal42 =
-          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal >= 42;
+        // ✅ FIX: Simplified final-commit retry (fresh fetch, no stale closures)
+        const shouldRetry =
+          !retryScheduledRef.current &&
+          ((data?.throttled === true && data.meow_taps >= 40) ||
+            (data?.throttled !== true && data?.meow_taps === 41));
 
-        if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
-          retryOnceRef.current = true;
-          setTimeout(() => {
-            void (async () => {
+        if (shouldRetry) {
+          retryScheduledRef.current = true;
+          setTimeout(async () => {
+            try {
+              const r2 = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ initData: initDataRef.current }),
+                keepalive: true,
+              });
+              let d2 = null;
               try {
-                const r2 = await fetch(url, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ initData: initDataRef.current }),
-                  keepalive: true,
-                });
-                let d2 = null;
-                try {
-                  d2 = await r2.json();
-                } catch (_) {}
-                if (r2.ok && d2 && typeof d2.meow_taps === "number") {
-                  setMeowTapsLocal((prev) => {
-                    const next = Math.min(42, Math.max(prev, d2.meow_taps));
-                    persist(next);
-                    if (next >= 42 && prev < 42) notifyReached42Server();
-                    return next;
-                  });
-                  if ((d2.meow_taps >= 42 || d2.locked === true) && d2.ctaEligible === true) {
-                    if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible(retry)", d2);
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent("meow:cta-inline-eligible", {
-                          detail: {
-                            remainingGlobal: d2.ctaRemainingGlobal,
-                            usedToday: !!d2.ctaUsedToday,
-                            tz_day: d2.tz_day,
-                          },
-                        })
-                      );
-                    } catch (_) {}
-                  }
-                }
+                d2 = await r2.json();
               } catch (_) {}
-            })();
-          }, 260);
+              if (r2.ok && d2 && typeof d2.meow_taps === "number") {
+                setMeowTapsLocal((prev) => {
+                  const next = Math.min(42, Math.max(prev, d2.meow_taps));
+                  persist(next);
+                  if (next >= 42 && prev < 42) notifyReached42Server();
+                  return next;
+                });
+                if (d2.meow_taps >= 42 || d2.locked === true) {
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("meow:cta-check", {
+                        detail: { source: "tap-response-retry-confirmed-42" },
+                      })
+                    );
+                  } catch (_) {}
+                }
+              }
+            } catch (_) {}
+            retryScheduledRef.current = false;
+          }, 280);
         }
       }
     } catch (_) {
       // Network error: keep optimistic for n>0; reconcile later on next success.
     }
-  }, [backendBase, notifyReached42Server, persist, meowTapsLocal]);
+  }, [backendBase, notifyReached42Server, persist]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
