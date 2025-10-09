@@ -1,9 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v23 — AnnouncementBar moved to very top; CTA status fetch on mount and on "reached42" event.
-// - <AnnouncementBar /> is now the FIRST child in the page container,
-//   directly under the Telegram header, before header/skeleton.
-// - Fetch /api/meow-cta-status on mount, on tab switch, on polling,
-//   and immediately when OverviewTab emits "meow:reached42".
+// v24 — Listen for server-confirmed event "meow:reached42:server" to fetch CTA.
+// - Keeps AnnouncementBar placement at top.
+// - Fetches /api/meow-cta-status on mount, tab switch, polling,
+//   and immediately when OverviewTab emits "meow:reached42:server".
+// - No unrelated changes.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -80,18 +80,18 @@ const ProfilePage = () => {
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
 
-  // Listen for "42 reached" signal from OverviewTab; retry a few times to beat throttle/latency.
+  // Listen for "42 reached (server-confirmed)" signal from OverviewTab; retry a few times to beat throttle/latency.
   useEffect(() => {
     const timers = [];
-    const onReached42 = () => {
+    const onReached42Server = () => {
       fetchCtaStatus();
       timers.push(setTimeout(fetchCtaStatus, 150));
       timers.push(setTimeout(fetchCtaStatus, 400));
       timers.push(setTimeout(fetchCtaStatus, 800));
     };
-    window.addEventListener("meow:reached42", onReached42);
+    window.addEventListener("meow:reached42:server", onReached42Server);
     return () => {
-      window.removeEventListener("meow:reached42", onReached42);
+      window.removeEventListener("meow:reached42:server", onReached42Server);
       timers.forEach((t) => clearTimeout(t));
     };
   }, [fetchCtaStatus]);
@@ -130,6 +130,10 @@ const ProfilePage = () => {
 
   // Server decides eligibility
   const showMeowCTA = !!ctaStatus.eligible;
+
+  // Late-state helper: show explicit message if user is #43+ with 42 taps
+  const isLateToday =
+    !ctaStatus.eligible && ctaStatus.meow_taps === 42 && Number(ctaStatus.remainingGlobal) === 0;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -185,7 +189,8 @@ const ProfilePage = () => {
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={handleProfileUpdate}
-                // Deterministic CTA trigger from the child when 42 is reached
+                // Parent also listens globally for the server-confirmed event,
+                // but keep this callback to allow direct child→parent trigger.
                 onReached42={fetchCtaStatus}
               />
             </Suspense>
@@ -242,6 +247,13 @@ const ProfilePage = () => {
           <p className="mt-2 text-[12.5px] text-gray-400">
             Осталось сегодня: {ctaStatus.remainingGlobal}
           </p>
+        </div>
+      )}
+
+      {/* Late message when quota exhausted but user is at 42 */}
+      {isLateToday && (
+        <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 px-3 py-2 text-sm">
+          Вы опоздали, попробуйте завтра.
         </div>
       )}
 
