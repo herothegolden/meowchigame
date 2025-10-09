@@ -1,12 +1,15 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v24 — Emit a direct CTA-check event when /api/meow-tap returns 42/locked.
-// - On the exact server response that confirms { meow_taps: 42 } or locked:true,
-//   dispatch "meow:cta-check" so ProfilePage can call fetchCtaStatus("tap-42-response") immediately.
-// - Keeps existing server-confirmed reached42 event and logic unchanged.
+// v25 — Inline CTA eligibility: emit "meow:cta-inline-eligible" when tap response returns eligibility.
+// - If server /api/meow-tap returns { meow_taps>=42 || locked:true } and ctaEligible===true,
+//   dispatch a direct event with remainingGlobal & usedToday.
+// - Temporary logs guarded by VITE_LOG_CTA === "1". Remove after verification.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
+const DEBUG_CTA = (import.meta?.env?.VITE_LOG_CTA === "1");
+
+// Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
@@ -28,7 +31,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const serverDay = useMemo(() => {
     if (stats?.streak_server_day) return String(stats.streak_server_day);
     if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
-    return null;
+    return null; // unknown until server responds
   }, [stats?.streak_server_day, stats?.meow_taps_date]);
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
@@ -48,11 +51,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     return serverVal0;
   });
 
-  // Server-confirmed only
+  // Broadcast helpers — server-confirmed only
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
     if (notified42Ref.current) return;
     try {
+      if (DEBUG_CTA) console.log("[CTA] emit meow:reached42:server");
       window.dispatchEvent(new CustomEvent("meow:reached42:server"));
       if (typeof onReached42 === "function") onReached42();
       notified42Ref.current = true;
@@ -139,7 +143,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   useEffect(() => {
     if (!(streakInfo?.canClaim === true)) return;
-    if (!streakKey) return;
+    if (!streakKey) return; // wait until server day is known
     const already = sessionStorage.getItem(streakKey);
     if (already) return;
 
@@ -239,7 +243,23 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           return next;
         });
 
-        // NEW: fire a direct CTA-check event at the exact tap-42 response
+        // 🔴 NEW: inline eligibility path — atomic server response
+        if ((data.meow_taps >= 42 || data.locked === true) && data.ctaEligible === true) {
+          if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible", data);
+          try {
+            window.dispatchEvent(
+              new CustomEvent("meow:cta-inline-eligible", {
+                detail: {
+                  remainingGlobal: data.ctaRemainingGlobal,
+                  usedToday: !!data.ctaUsedToday,
+                  tz_day: data.tz_day,
+                },
+              })
+            );
+          } catch (_) {}
+        }
+
+        // Keep the earlier event for other listeners
         if (data.meow_taps >= 42 || data.locked === true) {
           try {
             window.dispatchEvent(
@@ -258,6 +278,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           });
         }
 
+        // Final-commit edge retry (unchanged)
         const throttledAt42 = data?.throttled === true && meowTapsLocal >= 42;
         const nonThrottled41AtLocal42 =
           data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal >= 42;
@@ -284,10 +305,17 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
                     if (next >= 42 && prev < 42) notifyReached42Server();
                     return next;
                   });
-                  if (d2.meow_taps >= 42 || d2.locked === true) {
+                  if ((d2.meow_taps >= 42 || d2.locked === true) && d2.ctaEligible === true) {
+                    if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible(retry)", d2);
                     try {
                       window.dispatchEvent(
-                        new CustomEvent("meow:cta-check", { detail: { source: "tap-42-retry" } })
+                        new CustomEvent("meow:cta-inline-eligible", {
+                          detail: {
+                            remainingGlobal: d2.ctaRemainingGlobal,
+                            usedToday: !!d2.ctaUsedToday,
+                            tz_day: d2.tz_day,
+                          },
+                        })
                       );
                     } catch (_) {}
                   }
@@ -316,6 +344,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       return;
     }
 
+    // Optimistic for n > 0
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
