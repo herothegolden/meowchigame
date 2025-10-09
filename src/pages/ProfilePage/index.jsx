@@ -1,7 +1,9 @@
-// Path: src/pages/ProfilePage/index.jsx
-// v23 — AnnouncementBar moved to very top (no CLS, no logic changes)
+// Path: frontend/src/pages/ProfilePage/index.jsx
+// v23 — AnnouncementBar moved to very top; CTA status fetch on mount and on "reached42" event.
 // - <AnnouncementBar /> is now the FIRST child in the page container,
 //   directly under the Telegram header, before header/skeleton.
+// - Fetch /api/meow-cta-status on mount, on tab switch, on polling,
+//   and immediately when OverviewTab emits "meow:reached42".
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
