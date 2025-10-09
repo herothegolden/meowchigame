@@ -17,6 +17,15 @@ const formatPlayTime = (seconds) => {
 };
 
 const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
+  // Guard: Don't render until we have stats
+  if (!stats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
@@ -28,21 +37,23 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const storageKey = "meowchi:v2:meow_taps";
 
   const serverDay = useMemo(() => {
+    if (!stats) return null;
     if (stats?.streak_server_day) return String(stats.streak_server_day);
     if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
     return null;
-  }, [stats?.streak_server_day, stats?.meow_taps_date]);
+  }, [stats]);
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
+    if (!serverDay) return serverVal0;
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (serverDay && parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
+        if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
           return Math.max(parsed.value, serverVal0);
         }
       }
