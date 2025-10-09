@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v20 — Deterministic 42nd-tap CTA trigger
-// - NEW: optional onReached42 callback fired exactly once when taps reach ≥42.
-// - IMPROVED: Fire trigger immediately on optimistic 41→42 increment, in addition to
-//   server reconciliation and guard effect (covers throttle/race).
+// v21 — Streak guard uses canonical server day & v2 key
+// - Use stats.streak_server_day (Asia/Tashkent) for streak auto-claim guard.
+// - Bump key to meowchi:v2:streak_claimed:<day> to invalidate old mismatched keys.
+// - Meow Counter logic unchanged.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -144,34 +144,40 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   }, []);
 
   // --- 🔁 Auto-claim Daily Streak (silent, once per day) ---
-  useEffect(() => {
-    const dayKey = `meowchi:v1:streak_claimed:${serverDay}`;
-    const already = sessionStorage.getItem(dayKey);
+  // Use authoritative server day specifically for streak: stats.streak_server_day (Asia/Tashkent).
+  const streakServerDay = stats?.streak_server_day || null;
+  const streakKey = useMemo(
+    () => (streakServerDay ? `meowchi:v2:streak_claimed:${streakServerDay}` : null),
+    [streakServerDay]
+  );
 
-    // Claim only if backend says it's claimable and we haven't tried this day
-    if (streakInfo?.canClaim === true && !already) {
-      (async () => {
-        try {
-          const url = `${backendBase}/api/streak/claim-streak`;
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ initData: initDataRef.current }),
-            keepalive: true,
-          });
-          // Mark attempt regardless of result to avoid loops; parent will refresh stats
-          sessionStorage.setItem(dayKey, "1");
-          if (res.ok) {
-            // Refresh profile stats so the card shows the new streak and points
-            if (typeof onUpdate === "function") onUpdate();
-          }
-        } catch (_) {
-          // Network error — keep guard to avoid spamming; user will still see 0 until next refresh
-          sessionStorage.setItem(dayKey, "1");
+  useEffect(() => {
+    if (!(streakInfo?.canClaim === true)) return;
+    if (!streakKey) return; // wait until server day is known
+
+    const already = sessionStorage.getItem(streakKey);
+    if (already) return;
+
+    (async () => {
+      try {
+        const url = `${backendBase}/api/streak/claim-streak`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ initData: initDataRef.current }),
+          keepalive: true,
+        });
+        // Mark attempt regardless to avoid loops; parent will refresh stats
+        sessionStorage.setItem(streakKey, "1");
+        if (res.ok) {
+          if (typeof onUpdate === "function") onUpdate();
         }
-      })();
-    }
-  }, [streakInfo?.canClaim, backendBase, serverDay, onUpdate]);
+      } catch (_) {
+        // Network error — keep guard to avoid spamming; will refresh next day or manual reload
+        sessionStorage.setItem(streakKey, "1");
+      }
+    })();
+  }, [streakInfo?.canClaim, backendBase, streakKey, onUpdate]);
 
   // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
@@ -313,7 +319,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // 🔔 NEW: fire immediately if optimistic path crosses 42
+      // 🔔 Fire immediately if optimistic path crosses 42
       if (next >= 42 && n < 42) notifyReached42();
       return next;
     });
