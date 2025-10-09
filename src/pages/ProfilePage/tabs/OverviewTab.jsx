@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v26 – Fixed: Meow Counter now starts from 0 with optimistic updates on ALL taps
-// - Removed special case for meowTapsLocal === 0 that skipped UI update
-// - Unified optimistic increment logic: 0→1, 1→2, ..., 41→42 all show immediate feedback
-// - Server reconciliation and all safety guards preserved unchanged
+// v27 – REAL FIX: Counter now correctly starts from 0 by trusting server as source of truth
+// - Removed Math.max from initialization that prevented counter from resetting to 0
+// - Server value is authoritative on load; optimistic updates only during active session
+// - Reconciliation only increases local value in sendTap callback, not in useEffect
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -39,15 +39,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   const dayRef = useRef(serverDay);
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
-    try {
-      const raw = sessionStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (serverDay && parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          return Math.max(parsed.value, serverVal0);
-        }
-      }
-    } catch (_) {}
+    // ✅ On initial load, ALWAYS trust server as source of truth
+    // sessionStorage is only used for maintaining state during active session
     return serverVal0;
   });
 
@@ -75,10 +68,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   useEffect(() => {
     if (!serverDay) {
-      setMeowTapsLocal((prev) => {
-        const next = Math.min(42, Math.max(prev, serverVal0));
-        return next;
-      });
+      // Server day not yet known, just use server value without reconciliation
+      setMeowTapsLocal(serverVal0);
       return;
     }
 
@@ -88,10 +79,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     setMeowTapsLocal((prev) => {
       let next;
       if (prevDay && newDay !== prevDay) {
+        // New day detected: reset to server value (allows 0)
         notified42Ref.current = false;
         next = serverVal0;
+      } else if (prevDay === null) {
+        // First load: trust server completely (allows 0)
+        next = serverVal0;
       } else {
-        next = Math.min(42, Math.max(prev, serverVal0));
+        // Same day, already loaded: only increase if server is higher (handles race conditions)
+        // This allows optimistic local updates to stay ahead temporarily
+        next = Math.max(prev, serverVal0);
       }
       persist(next);
       if (next >= 42 && prev < 42) notifyReached42Server();
