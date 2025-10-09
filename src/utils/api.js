@@ -1,17 +1,31 @@
 // Path: frontend/src/utils/api.js
-// v22 — Explicit Meow helpers + no-cache POSTs
-// - Adds: getProfileComplete, meowTap, getMeowCtaStatus, claimMeow
-// - Ensures initData is sent on every call; uses cache: 'no-store'
-// - Keeps existing initializeUser, apiCall, showSuccess, showError, claimStreak
+// v23 — Keep flat responses & no-cache POSTs; add safe BACKEND_URL fallback
+// - Ensures all Meow endpoints use POST with initData and cache: 'no-store'.
+// - Exposes explicit helpers: getProfileComplete, meowTap, getMeowCtaStatus, claimMeow.
+// - Resolves BACKEND_URL from env or window globals to match page components.
+// - Leaves initializeUser, apiCall, showSuccess, showError, claimStreak intact.
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+let BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
+/**
+ * Resolve backend URL with fallbacks to align with page components.
+ */
+const resolveBackendUrl = () => {
+  if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
+  if (typeof window !== "undefined") {
+    if (window.BACKEND_URL) return String(window.BACKEND_URL);
+    if (window.__MEOWCHI_BACKEND_URL__) return String(window.__MEOWCHI_BACKEND_URL__);
+  }
+  return "";
+};
 
 /**
  * Internal: ensure Telegram WebApp context & backend URL exist.
  */
 const requireTG = () => {
   const tg = window?.Telegram?.WebApp;
-  if (!tg?.initData || !BACKEND_URL) {
+  const base = resolveBackendUrl();
+  if (!tg?.initData || !base) {
     throw new Error("Connection required. Please open from Telegram.");
   }
   return tg;
@@ -23,6 +37,7 @@ const requireTG = () => {
  */
 export const initializeUser = async () => {
   const tg = requireTG();
+  const base = resolveBackendUrl();
 
   // Extract user from Telegram initData
   const params = new URLSearchParams(tg.initData);
@@ -32,7 +47,7 @@ export const initializeUser = async () => {
   }
   const user = JSON.parse(userParam);
 
-  const response = await fetch(`${BACKEND_URL}/api/validate`, {
+  const response = await fetch(`${base}/api/validate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -60,12 +75,14 @@ export const initializeUser = async () => {
  */
 export const apiCall = async (endpoint, data = {}) => {
   const tg = requireTG();
+  const base = resolveBackendUrl();
 
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+  const response = await fetch(`${base}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
     body: JSON.stringify({ initData: tg.initData, ...data }),
+    keepalive: true,
   });
 
   if (!response.ok) {
