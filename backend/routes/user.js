@@ -1,7 +1,5 @@
 // Path: backend/routes/user.js
-// v12 — Meow tap responses include date context for deterministic 42 handling
-// - /meow-tap now returns { meow_taps, locked, remaining, throttled?, meow_taps_date, today }
-// - No logic changes to streaks/profile; still capped at 42; Tashkent date semantics preserved.
+// v13 — Add canonical streak_server_day (Asia/Tashkent) to /get-profile-complete stats
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -363,6 +361,9 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       userData.daily_streak = currentStreak;
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
+
+      // ✅ NEW: Provide canonical server day for client-side day-scoped guards
+      userData.streak_server_day = todayStr;
 
       // Power uses today's high score (not lifetime)
       const points_total = Number(userData.points || 0);
