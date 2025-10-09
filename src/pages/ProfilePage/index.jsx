@@ -1,9 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v28 — Consume inline eligibility at 42; guard logs by VITE_LOG_CTA.
-// - Listens for "meow:cta-inline-eligible" and sets CTA immediately (eligible:true, taps:42).
-// - Schedules one sanity fetch ~400ms later ("post-inline").
-// - Retains v25 staleness guard & prefer-truthy and v26/27 event/backoff paths.
-// - All logs are gated by VITE_LOG_CTA === "1".
+// v29 - FINAL FIX: Simplified CTA logic, matches OverviewTab v27 events
+// - Listens to "meow:cta-check" (primary from tap response)
+// - Listens to "meow:reached42:server" (server confirmation)
+// - Removed unused "meow:cta-inline-eligible" listener
+// - Simplified backoff logic with prefer-truthy guard
+// - Clean, maintainable code
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,9 +14,6 @@ import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AnnouncementBar from "../../components/AnnouncementBar";
 
-const DEBUG_CTA = (import.meta?.env?.VITE_LOG_CTA === "1");
-
-// ✅ Lazy tabs
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
@@ -28,7 +26,6 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Meow CTA status
   const [ctaStatus, setCtaStatus] = useState({
     eligible: false,
     usedToday: false,
@@ -37,14 +34,8 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  // ---- Staleness guard refs (monotonic request id) ----
+  // Staleness guard to prevent race conditions
   const ctaReqSeqRef = useRef(0);
-  const ctaLastStartedRef = useRef(0);
-  const ctaLastAppliedRef = useRef(0);
-
-  // ---- Commit-propagation guard (when server just confirmed 42) ----
-  const lastTap42AtRef = useRef(0);
-  const TAP42_BACKOFF_MS = 1800;
 
   const fetchData = useCallback(async () => {
     try {
@@ -53,172 +44,128 @@ const ProfilePage = () => {
       const result = await apiCall("/api/get-profile-complete");
       setData(result);
     } catch (err) {
-      if (DEBUG_CTA) console.log("❌ Failed to load profile:", err);
+      console.error("Failed to load profile:", err);
       setError(err.message || "Failed to load profile");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchCtaStatus = useCallback(
-    async (origin = "manual") => {
-      const reqId = ++ctaReqSeqRef.current;
-      ctaLastStartedRef.current = reqId;
-      if (DEBUG_CTA) console.log("[CTA] start", { reqId, origin, t: Math.round(performance.now()) });
+  const fetchCtaStatus = useCallback(async () => {
+    const reqId = ++ctaReqSeqRef.current;
 
-      try {
-        const res = await apiCall("/api/meow-cta-status");
+    try {
+      const res = await apiCall("/api/meow-cta-status");
 
-        const sinceTap42 = Date.now() - lastTap42AtRef.current;
-        if (res && typeof res.meow_taps === "number" && res.meow_taps < 42 && sinceTap42 >= 0 && sinceTap42 <= TAP42_BACKOFF_MS) {
-          if (DEBUG_CTA) console.log("[CTA] backoff-guard: stale <42 after tap-42, rescheduled", {
-            reqId, origin, meow_taps: res.meow_taps, sinceTap42, t: Math.round(performance.now()),
-          });
-          setTimeout(() => fetchCtaStatus("tap42-backoff-retry"), 300);
-          return;
-        }
+      // Ignore stale responses
+      if (reqId !== ctaReqSeqRef.current) return;
 
-        if (reqId !== ctaLastStartedRef.current) {
-          if (DEBUG_CTA) console.log("[CTA] ignore(stale)", {
-            reqId, lastStarted: ctaLastStartedRef.current, origin, res, t: Math.round(performance.now()),
-          });
-          return;
-        }
+      setCtaStatus((prev) => {
+        const next = {
+          eligible: !!res.eligible,
+          usedToday: !!res.usedToday,
+          remainingGlobal: Number(res.remainingGlobal || 0),
+          meow_taps: Number(res.meow_taps || 0),
+        };
 
-        setCtaStatus((prev) => {
-          const next = {
-            eligible: !!res.eligible,
-            usedToday: !!res.usedToday,
-            remainingGlobal: Number(res.remainingGlobal || 0),
-            meow_taps: Number(res.meow_taps || 0),
+        // Prefer-truthy guard: Don't demote eligible:true to false unless explicitly used
+        if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
+          return {
+            ...prev,
+            remainingGlobal: next.remainingGlobal,
+            meow_taps: Math.max(prev.meow_taps, next.meow_taps),
           };
+        }
 
-          const withinBackoff = Date.now() - lastTap42AtRef.current <= TAP42_BACKOFF_MS;
-          if (withinBackoff) {
-            next.meow_taps = Math.max(prev.meow_taps || 0, next.meow_taps || 0);
-          }
-
-          let applied;
-          if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
-            applied = {
-              ...prev,
-              usedToday: prev.usedToday,
-              remainingGlobal: next.remainingGlobal,
-              meow_taps: next.meow_taps,
-            };
-            if (DEBUG_CTA) console.log("[CTA] applied(prefer-truthy, no demote)", {
-              reqId, origin, prev, next, t: Math.round(performance.now()),
-            });
-          } else {
-            applied = next;
-            if (DEBUG_CTA) console.log("[CTA] applied", {
-              reqId, origin, applied, t: Math.round(performance.now()),
-            });
-          }
-          ctaLastAppliedRef.current = reqId;
-          return applied;
-        });
-      } catch (e) {
-        if (DEBUG_CTA) console.log("[CTA] error", {
-          reqId, origin, err: e?.message || String(e), t: Math.round(performance.now()),
-        });
-      }
-    },
-    []
-  );
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to fetch CTA status:", err);
+    }
+  }, []);
 
   const handleProfileUpdate = useCallback(async () => {
     await fetchData();
-    await fetchCtaStatus("tab");
+    await fetchCtaStatus();
   }, [fetchData, fetchCtaStatus]);
 
+  // Initial data fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // If already at 42 on initial load, fetch CTA immediately
   useEffect(() => {
     if (data?.stats?.meow_taps >= 42) {
-      fetchCtaStatus("init>=42");
+      fetchCtaStatus();
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
 
-  // Server-confirmed 42 event (+ one late retry)
+  // Listen for server-confirmed 42 event from OverviewTab
   useEffect(() => {
     const timers = [];
-    const onReached42Server = () => {
-      fetchCtaStatus("reached42:server");
-      timers.push(setTimeout(() => fetchCtaStatus("retry1400"), 1400));
+    
+    const handleReached42 = () => {
+      fetchCtaStatus();
+      // Retry a few times to account for database replication lag
+      timers.push(setTimeout(fetchCtaStatus, 200));
+      timers.push(setTimeout(fetchCtaStatus, 500));
+      timers.push(setTimeout(fetchCtaStatus, 1000));
     };
-    window.addEventListener("meow:reached42:server", onReached42Server);
+
+    window.addEventListener("meow:reached42:server", handleReached42);
+
     return () => {
-      window.removeEventListener("meow:reached42:server", onReached42Server);
+      window.removeEventListener("meow:reached42:server", handleReached42);
       timers.forEach((t) => clearTimeout(t));
     };
   }, [fetchCtaStatus]);
 
-  // Direct trigger when /api/meow-tap returns 42/locked (OverviewTab emits "meow:cta-check")
+  // Listen for CTA check event when tap response confirms 42
   useEffect(() => {
     const timers = [];
-    const onCtaCheck = (ev) => {
-      lastTap42AtRef.current = Date.now();
-      if (DEBUG_CTA) console.log("[CTA] tap-42-response event", {
-        t: Math.round(performance.now()), detail: ev?.detail || null,
-      });
-      fetchCtaStatus("tap-42-response");
-      timers.push(setTimeout(() => fetchCtaStatus("tap42-backoff-300"), 300));
-      timers.push(setTimeout(() => fetchCtaStatus("tap42-backoff-1200"), 1200));
+    
+    const handleCtaCheck = () => {
+      fetchCtaStatus();
+      // Multiple retries to beat race conditions
+      timers.push(setTimeout(fetchCtaStatus, 150));
+      timers.push(setTimeout(fetchCtaStatus, 400));
+      timers.push(setTimeout(fetchCtaStatus, 800));
     };
-    window.addEventListener("meow:cta-check", onCtaCheck);
+
+    window.addEventListener("meow:cta-check", handleCtaCheck);
+
     return () => {
-      window.removeEventListener("meow:cta-check", onCtaCheck);
+      window.removeEventListener("meow:cta-check", handleCtaCheck);
       timers.forEach((t) => clearTimeout(t));
     };
   }, [fetchCtaStatus]);
 
-  // 🔴 NEW: Inline eligibility path — consume "meow:cta-inline-eligible"
+  // Light polling to reflect global daily cap
   useEffect(() => {
-    const onInlineEligible = (ev) => {
-      const detail = ev?.detail || {};
-      if (DEBUG_CTA) console.log("[CTA] inline-eligible", detail);
-
-      // Immediate CTA ON, taps forced to 42; respect prefer-truthy semantics.
-      setCtaStatus((s) => ({
-        eligible: true,
-        usedToday: !!detail.usedToday,
-        remainingGlobal: Number(detail.remainingGlobal || 0),
-        meow_taps: 42,
-      }));
-
-      // One sanity read-after-write to confirm server state; guard prevents demotion.
-      setTimeout(() => fetchCtaStatus("post-inline"), 400);
-    };
-    window.addEventListener("meow:cta-inline-eligible", onInlineEligible);
-    return () => window.removeEventListener("meow:cta-inline-eligible", onInlineEligible);
-  }, [fetchCtaStatus]);
-
-  // Light polling
-  useEffect(() => {
-    fetchCtaStatus("mount");
-    const t = setInterval(() => fetchCtaStatus("poll"), 20000);
-    return () => clearInterval(t);
+    fetchCtaStatus();
+    const interval = setInterval(fetchCtaStatus, 20000);
+    return () => clearInterval(interval);
   }, [fetchCtaStatus, activeTab]);
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
+    
     try {
       setCtaLoading(true);
       const res = await apiCall("/api/meow-claim");
+      
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
         navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
       } else {
         showError(res?.error || "Не удалось активировать предложение");
-        fetchCtaStatus("post-claim-fail");
+        fetchCtaStatus();
       }
     } catch (e) {
       showError(e?.message || "Сеть недоступна");
-      fetchCtaStatus("post-claim-error");
+      fetchCtaStatus();
     } finally {
       setCtaLoading(false);
     }
@@ -226,11 +173,13 @@ const ProfilePage = () => {
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
-
   const showMeowCTA = !!ctaStatus.eligible;
 
+  // Show "you're late" message if user reached 42 but all claims are taken
   const isLateToday =
-    !ctaStatus.eligible && ctaStatus.meow_taps === 42 && Number(ctaStatus.remainingGlobal) === 0;
+    !ctaStatus.eligible &&
+    ctaStatus.meow_taps === 42 &&
+    Number(ctaStatus.remainingGlobal) === 0;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -271,20 +220,28 @@ const ProfilePage = () => {
 
           <TabsContent value="overview">
             <Suspense
-              fallback={<div className="p-4 text-center text-secondary text-sm">Loading overview...</div>}
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading overview...
+                </div>
+              }
             >
               <OverviewTab
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={handleProfileUpdate}
-                onReached42={() => fetchCtaStatus("child-callback")}
+                onReached42={fetchCtaStatus}
               />
             </Suspense>
           </TabsContent>
 
           <TabsContent value="leaderboard">
             <Suspense
-              fallback={<div className="p-4 text-center text-secondary text-sm">Loading leaderboard...</div>}
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading leaderboard...
+                </div>
+              }
             >
               <LeaderboardTab />
             </Suspense>
@@ -292,7 +249,11 @@ const ProfilePage = () => {
 
           <TabsContent value="tasks">
             <Suspense
-              fallback={<div className="p-4 text-center text-secondary text-sm">Loading tasks...</div>}
+              fallback={
+                <div className="p-4 text-center text-secondary text-sm">
+                  Loading tasks...
+                </div>
+              }
             >
               <TasksTab />
             </Suspense>
@@ -305,7 +266,9 @@ const ProfilePage = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col">
               <span className="text-sm text-secondary">Достижение «42/42»</span>
-              <span className="text-base font-semibold text-white">Первым 42 — скидка 42%</span>
+              <span className="text-base font-semibold text-white">
+                Первым 42 - скидка 42%
+              </span>
             </div>
             <button
               disabled={ctaLoading}
