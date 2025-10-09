@@ -1,14 +1,12 @@
 // Path: src/pages/ShopPage/index.jsx
-// v9 — Instant paint (no black loading screen):
-// - Removed full-screen loading return; render page shell immediately.
-// - Added lightweight inline skeleton for header while data hydrates.
-// - Kept session cache + background refetch; no unrelated logic changed.
+// v10 — AnnouncementBar moved to top (no CLS, no logic changes)
+// - <AnnouncementBar /> is now the FIRST child in the page container,
+//   directly under the Telegram header, before ShopHeader/skeleton.
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiCall, showError } from "../../utils/api";
 import { ErrorState } from "../../components/ErrorState";
-// NOTE: LoadingState import removed (unused)
 
 import ShopHeader from "./ShopHeader";
 import CategorySection from "./CategorySection";
@@ -85,9 +83,7 @@ const ShopPage = () => {
     const existingItem = inventory.find((inv) => inv.item_id === itemId);
     if (existingItem) {
       return inventory.map((inv) =>
-        inv.item_id === itemId
-          ? { ...inv, quantity: inv.quantity + 1 }
-          : inv
+        inv.item_id === itemId ? { ...inv, quantity: inv.quantity + 1 } : inv
       );
     } else {
       return [...inventory, { item_id: itemId, quantity: 1 }];
@@ -147,6 +143,9 @@ const ShopPage = () => {
 
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
+      {/* Red announcement stripe at the very top (just under Telegram header) */}
+      <AnnouncementBar />
+
       {/* Header — skeleton while loading, otherwise real header */}
       {loading && !data ? (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse max-w-md">
@@ -156,9 +155,6 @@ const ShopPage = () => {
       ) : (
         <ShopHeader points={data?.userPoints || 0} />
       )}
-
-      {/* Red announcement stripe with centered BETA + ℹ️ */}
-      <AnnouncementBar />
 
       {/* 🍪 Meowchi WebM Header Section (kept for visual parity; does not block) */}
       <div className="text-center space-y-4 mb-10">
