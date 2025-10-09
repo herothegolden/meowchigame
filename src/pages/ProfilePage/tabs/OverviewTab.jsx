@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v21 — Streak guard uses canonical server day & v2 key
-// - Use stats.streak_server_day (Asia/Tashkent) for streak auto-claim guard.
-// - Bump key to meowchi:v2:streak_claimed:<day> to invalidate old mismatched keys.
-// - Meow Counter logic unchanged.
+// v22 — Remove UTC fallback; only reconcile after canonical server day is known
+// - serverDay now derives ONLY from stats.streak_server_day (Asia/Tashkent) or meow_taps_date.
+// - When serverDay is not yet available, we skip "new day" resets and avoid persisting a day key.
+// - Everything else (optimistic UI, haptics, retries, broadcasts) unchanged.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -34,7 +34,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   // --- Day-aware cache for Meow Counter (prevents stale carry-over) ---
   const storageKey = "meowchi:v2:meow_taps";
-  const serverDay = (stats?.streak_server_day || (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) || new Date().toISOString().slice(0, 10));
+
+  // ✅ Canonical day: only from server (Asia/Tashkent) or meow_taps_date — no UTC fallback
+  const serverDay = useMemo(() => {
+    if (stats?.streak_server_day) return String(stats.streak_server_day);
+    if (stats?.meow_taps_date) return String(stats.meow_taps_date).slice(0, 10);
+    return null; // unknown until server responds
+  }, [stats?.streak_server_day, stats?.meow_taps_date]);
+
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
@@ -44,11 +51,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
+        // Only trust cached value if it matches a known server day
+        if (serverDay && parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
           return Math.max(parsed.value, serverVal0);
         }
       }
     } catch (_) {}
+    // Until serverDay known, default to serverVal0 (0 on fresh day)
     return serverVal0;
   });
 
@@ -63,9 +72,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     } catch (_) {}
   }, [onReached42]);
 
-  // Persist helper
+  // Persist helper — only when serverDay is known
   const persist = useCallback(
     (val) => {
+      if (!serverDay) return;
       try {
         sessionStorage.setItem(storageKey, JSON.stringify({ day: serverDay, value: val }));
       } catch (_) {}
@@ -73,19 +83,30 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [serverDay]
   );
 
-  // Reconcile with server updates; reset local on server day change
+  // Reconcile with server updates; reset local only when a known server day actually changes
   useEffect(() => {
+    // If we still don't know the canonical server day, just reconcile value non-decreasingly.
+    if (!serverDay) {
+      setMeowTapsLocal((prev) => {
+        const next = Math.min(42, Math.max(prev, serverVal0));
+        // no persist without serverDay
+        if (next >= 42 && prev < 42) notifyReached42();
+        return next;
+      });
+      return;
+    }
+
     const newDay = serverDay;
     const prevDay = dayRef.current;
 
     setMeowTapsLocal((prev) => {
       let next;
-      if (newDay !== prevDay) {
-        // new day — reset local cache and notification guard
+      if (prevDay && newDay !== prevDay) {
+        // real new day — reset local cache and notification guard
         notified42Ref.current = false;
         next = serverVal0;
       } else {
-        next = Math.max(prev, serverVal0);
+        next = Math.min(42, Math.max(prev, serverVal0));
       }
       persist(next);
       // If reconciliation shows 42, emit event (server-confirmed path)
