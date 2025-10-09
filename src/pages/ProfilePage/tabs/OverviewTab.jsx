@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v29 – FINAL FIX: Removed Math.max that prevented counter from resetting to 0
-// - Server is ALWAYS the source of truth on fresh load
-// - SessionStorage ignored completely on initialization
-// - Optimistic updates only during active tapping session
+// v30 – FINAL CORRECTED: Removed Math.max from useState that prevented reset to 0
+// - CRITICAL FIX Line 58: Changed Math.max(parsed.value, serverVal0) → serverVal0
+// - Server is ALWAYS authoritative on page load
+// - Optimistic updates preserved during active session
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -37,8 +37,21 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   const dayRef = useRef(null);
 
-  // ✅ CRITICAL FIX: Always trust server on initialization, ignore sessionStorage
-  const [meowTapsLocal, setMeowTapsLocal] = useState(() => serverVal0);
+  // ✅ CRITICAL FIX: Server is ALWAYS source of truth on load
+  const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
+          // ✅ FIXED: Return server value, not Math.max
+          // This allows counter to reset to 0 after server reset
+          return serverVal0;
+        }
+      }
+    } catch (_) {}
+    return serverVal0;
+  });
 
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
@@ -61,8 +74,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     [serverDay]
   );
 
-  // ✅ FIX: Reconciliation only increases, never decreases (preserves optimistic updates)
-  // But on first load (dayRef.current === null), trust server completely
   useEffect(() => {
     if (!serverDay) {
       setMeowTapsLocal(serverVal0);
@@ -76,14 +87,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       let next;
       
       if (prevDay === null) {
-        // ✅ First load: trust server (allows 0)
+        // First load: trust server completely
         next = serverVal0;
       } else if (newDay !== prevDay) {
-        // ✅ Day change: reset to server (allows 0)
+        // Day change: reset to server
         notified42Ref.current = false;
         next = serverVal0;
       } else {
-        // ✅ Same session: preserve optimistic updates
+        // Same session: preserve optimistic updates
         next = Math.max(prev, serverVal0);
       }
       
@@ -317,7 +328,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     } catch (_) {}
   }, [backendBase, notifyReached42Server, persist, meowTapsLocal]);
 
-  // ✅ FIX: Unified optimistic update for ALL taps (including 0→1)
+  // ✅ FIXED: Unified optimistic update for ALL taps (including 0→1)
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
