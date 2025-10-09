@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v27 – REAL FIX: Counter now correctly starts from 0 by trusting server as source of truth
-// - Removed Math.max from initialization that prevented counter from resetting to 0
-// - Server value is authoritative on load; optimistic updates only during active session
-// - Reconciliation only increases local value in sendTap callback, not in useEffect
+// v28 – TRUE FIX: Counter starts from 0 by properly clearing stale sessionStorage
+// - Added explicit sessionStorage cleanup on day change
+// - Fixed dayRef initialization to null to properly detect first load
+// - Server is authoritative source on every fresh load
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -36,11 +36,24 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
-  const dayRef = useRef(serverDay);
+  const dayRef = useRef(null); // ✅ Start as null to properly detect first load
 
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
     // ✅ On initial load, ALWAYS trust server as source of truth
-    // sessionStorage is only used for maintaining state during active session
+    // Clear stale sessionStorage if day mismatch
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw && serverDay) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.day !== serverDay) {
+          // Stale data from previous day - clear it
+          sessionStorage.removeItem(storageKey);
+        }
+      }
+    } catch (_) {
+      // Clear on parse error
+      sessionStorage.removeItem(storageKey);
+    }
     return serverVal0;
   });
 
