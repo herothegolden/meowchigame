@@ -1,8 +1,9 @@
 // Path: backend/routes/user.js
-// v14 — Atomic CTA eligibility in /meow-tap + guarded debug logs (LOG_CTA=1).
-// The /meow-tap response now returns CTA eligibility fields atomically when it returns 42/locked:
-//   { tz_day, ctaEligible, ctaUsedToday, ctaRemainingGlobal } alongside { meow_taps:42, locked:true }.
-// Source base: :contentReference[oaicite:0]{index=0}
+// v15 — CTA snapshot added to /get-profile-complete (minimal, additive)
+// - Keeps v14 atomic CTA eligibility in /meow-tap unchanged
+// - Adds read-only CTA snapshot fields to the profile payload:
+//   stats.tz_day, stats.ctaEligible, stats.ctaUsedToday, stats.ctaRemainingGlobal
+// - No unrelated changes
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -263,7 +264,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
              avatar_url,
              COALESCE(vip_level, 0)       AS vip_level,
              last_login_date,
-             COALESCE(streak_claimed_today, FALSE) AS streak_claimed_today
+             COALESCE(streak_claimed_today, FALSE) AS streak_claimed_today,
+             COALESCE(meow_claim_used_today, FALSE) AS meow_claim_used_today
            FROM users
            WHERE telegram_id = $1`,
           [user.id]
@@ -392,6 +394,35 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
           new Date(userShopResult.rows[0].point_booster_expires_at) > new Date(),
         boosterExpiresAt: userShopResult.rows[0]?.point_booster_expires_at || null
       };
+
+      // 🔎 Read-only CTA snapshot so Profile payload can reflect eligibility without waiting for a tap
+      const meowTaps = Number(userData.meow_taps || 0);
+      const usedToday = !!userData.meow_claim_used_today;
+
+      // If user's stored meow_taps date is not today, treat as 0
+      if (!userData.meow_taps_date || String(userData.meow_taps_date).slice(0, 10) !== todayStr) {
+        userData.meow_taps = 0;
+      }
+
+      let ctaEligible = false;
+      let ctaRemainingGlobal = 0;
+      if (meowTaps >= 42) {
+        const claimsRow = await client.query(
+          `SELECT COALESCE(claims_taken, 0) AS claims_taken
+             FROM meow_daily_claims
+            WHERE day = $1`,
+          [todayStr]
+        );
+        const claimsTaken = Number(claimsRow.rows[0]?.claims_taken || 0);
+        ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+        ctaEligible = meowTaps >= 42 && usedToday === false && ctaRemainingGlobal > 0;
+      }
+
+      // Attach snapshot fields
+      userData.tz_day = todayStr;
+      userData.ctaEligible = ctaEligible;
+      userData.ctaUsedToday = usedToday;
+      userData.ctaRemainingGlobal = ctaRemainingGlobal;
 
       res.status(200).json({ stats: userData, shopData });
     } finally {
