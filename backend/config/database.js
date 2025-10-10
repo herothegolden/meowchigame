@@ -1,5 +1,8 @@
-// Path: backend/config/database (1).js
-// v2 — Badge tables and badge seeding commented out only
+// Path: backend/config/database.js
+// v8 — Full database setup with Meow CTA table (meow_claims)
+// - Keeps existing schema/setup from your project
+// - Adds idempotent DDL for meow_claims with UNIQUE(day) + UNIQUE(user_id, day) semantics
+//   using column name `claim_date` to match cta.js
 
 import pg from 'pg';
 
@@ -17,6 +20,9 @@ export const setupDatabase = async () => {
   try {
     console.log('🗄️ Setting up enhanced database tables...');
 
+    // ------------------------------------------------------------
+    // USERS (base + incremental columns)
+    // ------------------------------------------------------------
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -40,9 +46,9 @@ export const setupDatabase = async () => {
       FROM information_schema.columns 
       WHERE table_name='users'
     `);
-    
+
     const existingColumns = userColumns.rows.map(row => row.column_name);
-    
+
     const columnsToAdd = [
       { name: 'point_booster_active', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
       { name: 'point_booster_expires_at', type: 'TIMESTAMP WITH TIME ZONE' },
@@ -55,12 +61,10 @@ export const setupDatabase = async () => {
       { name: 'longest_streak', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'last_login_date', type: 'DATE' },
       { name: 'streak_claimed_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' },
-
       // 🆕 Meow counter (daily, capped at 42)
       { name: 'meow_taps', type: 'INT DEFAULT 0 NOT NULL' },
       { name: 'meow_taps_date', type: 'DATE' },
-
-      // 🆕 Meow CTA one-time per day usage flag
+      // (Optional) per-user flag, not required for CTA logic but harmless
       { name: 'meow_claim_used_today', type: 'BOOLEAN DEFAULT FALSE NOT NULL' }
     ];
 
@@ -77,7 +81,6 @@ export const setupDatabase = async () => {
         FROM information_schema.columns 
         WHERE table_name='users' AND column_name='avatar_url'
       `);
-      
       if (columnTypeCheck.rows[0]?.data_type === 'character varying') {
         console.log('🔧 Migrating avatar_url from VARCHAR to TEXT for Base64 storage...');
         await client.query(`ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT`);
@@ -85,7 +88,9 @@ export const setupDatabase = async () => {
       }
     }
 
-    // ---- ORDERS TABLE ----
+    // ------------------------------------------------------------
+    // ORDERS
+    // ------------------------------------------------------------
     await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id VARCHAR(50) PRIMARY KEY,
@@ -107,9 +112,8 @@ export const setupDatabase = async () => {
     const orderColumns = await client.query(`
       SELECT column_name FROM information_schema.columns WHERE table_name='orders'
     `);
-    
     const existingOrderColumns = orderColumns.rows.map(row => row.column_name);
-    
+
     const orderColumnsToAdd = [
       { name: 'telegram_id', type: 'BIGINT' },
       { name: 'product_name', type: 'VARCHAR(255)' },
@@ -127,6 +131,9 @@ export const setupDatabase = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);`);
     console.log('✅ Orders table setup complete');
 
+    // ------------------------------------------------------------
+    // SHOP + INVENTORY
+    // ------------------------------------------------------------
     const tableCheck = await client.query(`
       SELECT column_name FROM information_schema.columns WHERE table_name='shop_items'
     `);
@@ -150,7 +157,7 @@ export const setupDatabase = async () => {
         await client.query(`ALTER TABLE shop_items ADD COLUMN type VARCHAR(50) DEFAULT 'consumable' NOT NULL`);
       }
     }
-    
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_inventory (
         id SERIAL PRIMARY KEY,
@@ -190,32 +197,9 @@ export const setupDatabase = async () => {
 
     console.log('✅ user_inventory table schema updated successfully');
 
-    // 🟡 COMMENTED OUT: BADGE TABLES (no structural drop)
-    /*
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_badges (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        badge_name VARCHAR(255) NOT NULL,
-        acquired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, badge_name)
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS badge_progress (
-        id SERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(telegram_id),
-        badge_name VARCHAR(255) NOT NULL,
-        current_progress INT DEFAULT 0,
-        target_progress INT NOT NULL,
-        progress_data JSONB,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, badge_name)
-      );
-    `);
-    */
-
+    // ------------------------------------------------------------
+    // GAME + LEADERBOARD + FRIENDS
+    // ------------------------------------------------------------
     await client.query(`
       CREATE TABLE IF NOT EXISTS game_sessions (
         id SERIAL PRIMARY KEY,
@@ -229,8 +213,7 @@ export const setupDatabase = async () => {
       );
     `);
 
-    // ✅ Idempotency support: add game_id + unique index (user_id, game_id)
-    //    This allows /api/update-score to be INSERT ... ON CONFLICT DO NOTHING
+    // Idempotency support: add game_id + unique index (user_id, game_id)
     const gsCols = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -242,12 +225,10 @@ export const setupDatabase = async () => {
       await client.query(`ALTER TABLE game_sessions ADD COLUMN game_id UUID`);
       console.log('✅ game_id column added');
     }
-    // Unique index (user_id, game_id) — permits nulls; collisions only when game_id provided
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_game_sessions_user_game 
       ON game_sessions (user_id, game_id)
     `);
-    console.log('✅ Unique index on (user_id, game_id) ensured');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS item_usage_history (
@@ -283,7 +264,10 @@ export const setupDatabase = async () => {
         UNIQUE(user_id, friend_username)
       );
     `);
-    
+
+    // ------------------------------------------------------------
+    // SHOP seeding (idempotent)
+    // ------------------------------------------------------------
     const itemCount = await client.query('SELECT COUNT(*) as count FROM shop_items');
     if (parseInt(itemCount.rows[0].count) === 0) {
       console.log('🛒 Seeding shop items...');
@@ -296,6 +280,9 @@ export const setupDatabase = async () => {
       await client.query(`SELECT setval('shop_items_id_seq', 4, true)`);
     }
 
+    // ------------------------------------------------------------
+    // USER TASKS
+    // ------------------------------------------------------------
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_tasks (
         id SERIAL PRIMARY KEY,
@@ -311,8 +298,10 @@ export const setupDatabase = async () => {
       );
     `);
 
+    // ------------------------------------------------------------
+    // GLOBAL STATS (seeded once)
+    // ------------------------------------------------------------
     console.log('📊 Setting up global_stats table...');
-    
     await client.query(`
       CREATE TABLE IF NOT EXISTS global_stats (
         id INT PRIMARY KEY DEFAULT 1,
@@ -332,46 +321,41 @@ export const setupDatabase = async () => {
       const initialEaten = Math.floor(Math.random() * 15) + 5;
       const initialPlayers = Math.floor(Math.random() * 20) + 10;
       const initialActive = Math.floor(Math.random() * (150 - 37 + 1)) + 37;
-      
+
       await client.query(`
         INSERT INTO global_stats (id, just_sold, total_eaten_today, active_players, new_players_today)
         VALUES (1, 'Viral Classic', $1, $2, $3)
       `, [initialEaten, initialActive, initialPlayers]);
-      
+
       console.log(`📊 Seed values: Eaten=${initialEaten}, Active=${initialActive}, NewPlayers=${initialPlayers}`);
     }
 
     console.log('✅ Global stats table ready');
 
-    // 🆕 Meow Daily Claims (global cap per day)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS meow_daily_claims (
-        day DATE PRIMARY KEY,
-        claims_taken INT NOT NULL DEFAULT 0
-      );
-    `);
-
-    // 🆕 Meow Claims (per-user, per-day, idempotent; token-based)
+    // ------------------------------------------------------------
+    // MEOW CTA (global first-42 per Tashkent day)
+    // ------------------------------------------------------------
+    // NOTE: We intentionally use a simple SERIAL id + DATE (claim_date)
+    // to align exactly with backend/routes/cta.js expectations.
     await client.query(`
       CREATE TABLE IF NOT EXISTS meow_claims (
-        id UUID PRIMARY KEY,
-        user_id BIGINT NOT NULL REFERENCES users(telegram_id),
-        day DATE NOT NULL,
-        consumed BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        claim_date DATE NOT NULL,
+        user_id BIGINT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // Ensure idempotency: one claim per (user_id, day)
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS ux_meow_claims_user_day
-      ON meow_claims (user_id, day);
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_meow_claims_day ON meow_claims (claim_date);
     `);
 
-    // Useful lookup indices
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_meow_claims_day ON meow_claims (day);`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_meow_claims_user_day ON meow_claims (user_id, claim_date);
+    `);
 
-    console.log('✅ Meow claims tables ready');
+    console.log('✅ Meow CTA (meow_claims) schema ensured');
+
     console.log('✅ Enhanced database setup complete!');
   } catch (err) {
     console.error('🚨 Database setup error:', err);
