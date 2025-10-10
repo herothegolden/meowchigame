@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v17 — One-shot retry if final tap didn't commit (covers both throttled and non-throttled 41)
-// - Keeps v15 behavior (no early notify on optimistic 42)
-// - If /api/meow-tap returns { throttled:true } OR { meow_taps:41 } while local==42 → single retry ~260ms later
-// - Dispatch "meow:reached42" only after server-confirmed/reconciled 42
+// v18 — Magical tap glow (minimal, local-only)
+// - Adds a brief radial glow overlay on each tap of the Meow Counter card
+// - No changes to logic/CTA; styling is purely decorative and pointer-safe
+// - Keeps prior fixes (trust server 0 on hydration & reconciliation)
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -46,7 +46,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          // PATCH: trust server 0; do not lift from cache when serverVal0 === 0
+          // trust server 0; do not lift from cache when serverVal0 === 0
           return serverVal0 === 0 ? 0 : Math.max(parsed.value, serverVal0);
         }
       }
@@ -81,7 +81,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (newDay !== prevDay) {
         next = serverVal0;
       } else {
-        // PATCH: trust server 0; do not preserve stale local when serverVal0 === 0
+        // trust server 0; do not preserve stale local when serverVal0 === 0
         next = (serverVal0 === 0) ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
@@ -129,6 +129,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (HW?.impactOccurred) HW.impactOccurred("light");
     } catch (_) {}
   }, []);
+
+  // 🔮 Magical glow tick (purely visual)
+  const [glowTick, setGlowTick] = useState(0);
 
   // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
@@ -260,6 +263,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     haptic();
 
+    // 🔮 trigger glow pulse on every tap attempt
+    setGlowTick((t) => t + 1);
+
     if (meowTapsLocal === 0) {
       // First tap of the day: wait for server
       void sendTap();
@@ -309,8 +315,26 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
+            {/* sheen */}
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
             <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
+
+            {/* 🔮 Magical glow overlay — re-mounts on each tap via glowTick key */}
+            {isMeowCounter && (
+              <motion.div
+                key={glowTick}
+                className="pointer-events-none absolute inset-0"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 0.55, scale: 1.12 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                style={{
+                  background:
+                    "radial-gradient(60% 60% at 50% 50%, rgba(255,255,200,0.35) 0%, rgba(255,200,120,0.18) 35%, rgba(255,170,80,0.08) 60%, rgba(0,0,0,0) 100%)",
+                  filter: "blur(8px)",
+                }}
+              />
+            )}
 
             <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
               <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
