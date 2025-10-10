@@ -1,6 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v36 — ULTRA DEBUG: Shows all counter values and CTA logic in real-time
-// This will tell us exactly why CTA isn't appearing
+// v37 — FINAL FIX: Listen for counter-changed events + show quota warning
+// CHANGES:
+// 1. Listens for "meow:counter-changed" event from OverviewTab
+// 2. Shows warning when quota exhausted BEFORE user reaches 42
+// 3. Properly tracks real-time counter value
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -30,28 +33,10 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  const ctaReqSeqRef = useRef(0);
+  // 🆕 Track real-time counter from OverviewTab events
+  const [liveCounterValue, setLiveCounterValue] = useState(0);
 
-  // Helper to read and validate cached counter
-  const getClientMeowCounter = useCallback((serverDay) => {
-    if (!serverDay) return 0;
-    
-    try {
-      const cached = sessionStorage.getItem("meowchi:v2:meow_taps");
-      if (!cached) return 0;
-      
-      const parsed = JSON.parse(cached);
-      
-      // Only trust cache if day matches
-      if (parsed.day !== serverDay) {
-        return 0;
-      }
-      
-      return Number(parsed?.value) || 0;
-    } catch {
-      return 0;
-    }
-  }, []);
+  const ctaReqSeqRef = useRef(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,18 +90,26 @@ const ProfilePage = () => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchCtaStatus(); // Fetch quota status on mount
+  }, [fetchData, fetchCtaStatus]);
 
-  const serverDay = data?.stats?.meow_taps_date || data?.stats?.streak_server_day || null;
-
+  // 🆕 Listen for real-time counter updates from OverviewTab
   useEffect(() => {
-    const serverTaps = data?.stats?.meow_taps || 0;
-    const clientTaps = getClientMeowCounter(serverDay);
-    
-    if (serverTaps >= 42 || clientTaps >= 42) {
-      fetchCtaStatus();
-    }
-  }, [data?.stats?.meow_taps, serverDay, fetchCtaStatus, getClientMeowCounter]);
+    const handleCounterChanged = (evt) => {
+      const count = evt?.detail?.count;
+      if (typeof count === "number") {
+        setLiveCounterValue(count);
+        
+        // When reaching 42, immediately fetch CTA status
+        if (count >= 42) {
+          fetchCtaStatus();
+        }
+      }
+    };
+
+    window.addEventListener("meow:counter-changed", handleCounterChanged);
+    return () => window.removeEventListener("meow:counter-changed", handleCounterChanged);
+  }, [fetchCtaStatus]);
 
   useEffect(() => {
     const handleInlineEligible = (evt) => {
@@ -174,16 +167,13 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus]);
 
+  // Poll CTA status when user is approaching or at 42
   useEffect(() => {
-    const clientTaps = getClientMeowCounter(serverDay);
-    const serverTaps = data?.stats?.meow_taps || 0;
-    
-    if (clientTaps >= 42 || serverTaps >= 42) {
-      fetchCtaStatus();
+    if (liveCounterValue >= 42 || (data?.stats?.meow_taps || 0) >= 42) {
       const interval = setInterval(fetchCtaStatus, 20000);
       return () => clearInterval(interval);
     }
-  }, [fetchCtaStatus, activeTab, serverDay, getClientMeowCounter, data?.stats?.meow_taps]);
+  }, [fetchCtaStatus, liveCounterValue, data?.stats?.meow_taps]);
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
@@ -211,89 +201,27 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // Debug: Get all counter values
-  const clientMeowTaps = getClientMeowCounter(serverDay);
-  const serverMeowTaps = stats.meow_taps || 0;
-  const ctaMeowTaps = ctaStatus.meow_taps;
-  const maxTaps = Math.max(clientMeowTaps, serverMeowTaps, ctaMeowTaps);
+  // Use live counter value as primary source
+  const currentCounter = Math.max(liveCounterValue, stats.meow_taps || 0, ctaStatus.meow_taps);
+  const userReached42 = currentCounter >= 42;
   
-  const userReached42 = maxTaps >= 42;
   const showMeowCTA = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal > 0;
   const isLateToday = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal === 0;
   const alreadyUsedToday = userReached42 && ctaStatus.usedToday;
-
-  // Get cached data for debug display
-  let cachedData = null;
-  try {
-    const raw = sessionStorage.getItem("meowchi:v2:meow_taps");
-    if (raw) cachedData = JSON.parse(raw);
-  } catch {}
+  
+  // 🆕 Show warning when quota exhausted (even before reaching 42)
+  const quotaExhausted = ctaStatus.remainingGlobal === 0 && !ctaStatus.usedToday;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
       <AnnouncementBar />
 
-      {/* 🔍 ULTRA DEBUG PANEL */}
-      <div className="rounded-lg border-2 border-purple-500/50 bg-purple-500/10 p-3 text-xs font-mono space-y-1">
-        <div className="text-purple-300 font-bold text-sm mb-2">🔍 DEBUG: Counter & CTA Logic</div>
-        
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className="text-purple-200">Server Day:</div>
-            <div className="text-white">{serverDay || "null"}</div>
-          </div>
-          <div>
-            <div className="text-purple-200">Cached Day:</div>
-            <div className="text-white">{cachedData?.day || "null"}</div>
-          </div>
+      {/* 🆕 Quota Warning - Shows when all 42 slots taken */}
+      {quotaExhausted && currentCounter < 42 && (
+        <div className="rounded-xl border border-orange-400/30 bg-orange-400/10 text-orange-200 px-3 py-2 text-sm">
+          ⚠️ Внимание: Все 42 места на сегодня уже заняты. Скидка будет недоступна.
         </div>
-
-        <div className="border-t border-purple-500/30 pt-2 mt-2">
-          <div className="text-purple-200 mb-1">Counter Values:</div>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <div className="text-xs text-purple-300">Client (cache):</div>
-              <div className="text-lg font-bold text-white">{clientMeowTaps}</div>
-            </div>
-            <div>
-              <div className="text-xs text-purple-300">Server (profile):</div>
-              <div className="text-lg font-bold text-white">{serverMeowTaps}</div>
-            </div>
-            <div>
-              <div className="text-xs text-purple-300">CTA Status:</div>
-              <div className="text-lg font-bold text-white">{ctaMeowTaps}</div>
-            </div>
-          </div>
-          <div className="mt-1">
-            <div className="text-xs text-purple-300">Max (used for CTA):</div>
-            <div className="text-lg font-bold text-yellow-300">{maxTaps}</div>
-          </div>
-        </div>
-
-        <div className="border-t border-purple-500/30 pt-2 mt-2">
-          <div className="text-purple-200 mb-1">CTA Conditions:</div>
-          <div className="space-y-0.5">
-            <div className={userReached42 ? "text-green-300" : "text-red-300"}>
-              ✓ Reached 42: {String(userReached42)} (need: true)
-            </div>
-            <div className={!ctaStatus.usedToday ? "text-green-300" : "text-red-300"}>
-              ✓ Not Used Today: {String(!ctaStatus.usedToday)} (need: true)
-            </div>
-            <div className={ctaStatus.remainingGlobal > 0 ? "text-green-300" : "text-red-300"}>
-              ✓ Quota Available: {String(ctaStatus.remainingGlobal > 0)} (remaining: {ctaStatus.remainingGlobal})
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-purple-500/30 pt-2 mt-2">
-          <div className="text-lg font-bold">
-            <span className="text-purple-200">CTA Visible: </span>
-            <span className={showMeowCTA ? "text-green-400" : "text-red-400"}>
-              {String(showMeowCTA)}
-            </span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
