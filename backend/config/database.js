@@ -1,8 +1,8 @@
 // Path: backend/config/database.js
-// v8 — Full database setup with Meow CTA table (meow_claims)
-// - Keeps existing schema/setup from your project
-// - Adds idempotent DDL for meow_claims with UNIQUE(day) + UNIQUE(user_id, day) semantics
-//   using column name `claim_date` to match cta.js
+// v9 — Full database setup with safe Meow CTA migration
+// - Adds idempotent DDL for meow_claims
+// - **Also** detects legacy meow_claims missing columns and ALTERs them in-place (no data loss)
+// - Then creates required UNIQUE indexes
 
 import pg from 'pg';
 
@@ -44,7 +44,7 @@ export const setupDatabase = async () => {
     const userColumns = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name='users'
+      WHERE table_name='users' AND table_schema='public'
     `);
 
     const existingColumns = userColumns.rows.map(row => row.column_name);
@@ -79,7 +79,7 @@ export const setupDatabase = async () => {
       const columnTypeCheck = await client.query(`
         SELECT data_type 
         FROM information_schema.columns 
-        WHERE table_name='users' AND column_name='avatar_url'
+        WHERE table_name='users' AND column_name='avatar_url' AND table_schema='public'
       `);
       if (columnTypeCheck.rows[0]?.data_type === 'character varying') {
         console.log('🔧 Migrating avatar_url from VARCHAR to TEXT for Base64 storage...');
@@ -110,7 +110,7 @@ export const setupDatabase = async () => {
     `);
 
     const orderColumns = await client.query(`
-      SELECT column_name FROM information_schema.columns WHERE table_name='orders'
+      SELECT column_name FROM information_schema.columns WHERE table_name='orders' AND table_schema='public'
     `);
     const existingOrderColumns = orderColumns.rows.map(row => row.column_name);
 
@@ -135,7 +135,7 @@ export const setupDatabase = async () => {
     // SHOP + INVENTORY
     // ------------------------------------------------------------
     const tableCheck = await client.query(`
-      SELECT column_name FROM information_schema.columns WHERE table_name='shop_items'
+      SELECT column_name FROM information_schema.columns WHERE table_name='shop_items' AND table_schema='public'
     `);
 
     if (tableCheck.rowCount === 0) {
@@ -181,6 +181,7 @@ export const setupDatabase = async () => {
     const constraintCheck = await client.query(`
       SELECT constraint_name FROM information_schema.table_constraints 
       WHERE table_name='user_inventory' 
+      AND table_schema='public'
       AND constraint_type='UNIQUE'
       AND constraint_name='user_inventory_user_item_unique'
     `);
@@ -217,7 +218,7 @@ export const setupDatabase = async () => {
     const gsCols = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name='game_sessions'
+      WHERE table_name='game_sessions' AND table_schema='public'
     `);
     const gsHasGameId = gsCols.rows.some(r => r.column_name === 'game_id');
     if (!gsHasGameId) {
@@ -335,8 +336,7 @@ export const setupDatabase = async () => {
     // ------------------------------------------------------------
     // MEOW CTA (global first-42 per Tashkent day)
     // ------------------------------------------------------------
-    // NOTE: We intentionally use a simple SERIAL id + DATE (claim_date)
-    // to align exactly with backend/routes/cta.js expectations.
+    // Create table if missing (does not modify existing tables)
     await client.query(`
       CREATE TABLE IF NOT EXISTS meow_claims (
         id SERIAL PRIMARY KEY,
@@ -346,6 +346,27 @@ export const setupDatabase = async () => {
       );
     `);
 
+    // 🔎 Ensure legacy installs have required columns
+    const mcCols = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name='meow_claims' AND table_schema='public'
+    `);
+    const mcExisting = mcCols.rows.map(r => r.column_name);
+
+    if (!mcExisting.includes('claim_date')) {
+      console.log('🛠 Adding missing column meow_claims.claim_date (DATE) ...');
+      await client.query(`ALTER TABLE meow_claims ADD COLUMN claim_date DATE`);
+    }
+    if (!mcExisting.includes('user_id')) {
+      console.log('🛠 Adding missing column meow_claims.user_id (BIGINT) ...');
+      await client.query(`ALTER TABLE meow_claims ADD COLUMN user_id BIGINT`);
+    }
+    if (!mcExisting.includes('created_at')) {
+      console.log('🛠 Adding missing column meow_claims.created_at (timestamptz) ...');
+      await client.query(`ALTER TABLE meow_claims ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`);
+    }
+
+    // Now ensure indexes (safe when columns now exist)
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS ux_meow_claims_day ON meow_claims (claim_date);
     `);
