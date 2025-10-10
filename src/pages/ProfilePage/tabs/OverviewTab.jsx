@@ -338,7 +338,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
             {/* ✨ GOLD FRAME when locked (42) — persistent elegant ring + glow */}
             {isLocked && (
-              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-8 ring-amber-300/90 shadow-[0_0_52px_rgba(246,196,83,0.75)]" />
+              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
             )}
 
             {/* base sheen + inner ring above backlight */}
