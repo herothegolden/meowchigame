@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v18 — Magical tap glow (minimal, local-only)
-// - Adds a brief radial glow overlay on each tap of the Meow Counter card
-// - No changes to logic/CTA; styling is purely decorative and pointer-safe
-// - Keeps prior fixes (trust server 0 on hydration & reconciliation)
+// v19 — Magical frame glow on tap (minimal, local-only)
+// - On each tap of the Meow Counter card, animate a glowing frame (border glow)
+// - No logic/CTA changes; purely decorative and pointer-safe
+// - Keeps server-0 trust fixes from earlier versions
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -130,7 +130,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // 🔮 Magical glow tick (purely visual)
+  // 🔮 Magical frame glow tick (purely visual)
   const [glowTick, setGlowTick] = useState(0);
 
   // Build stats list (Meow Counter card is tappable)
@@ -263,7 +263,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     haptic();
 
-    // 🔮 trigger glow pulse on every tap attempt
+    // 🔮 trigger frame glow pulse on every tap attempt
     setGlowTick((t) => t + 1);
 
     if (meowTapsLocal === 0) {
@@ -315,24 +315,26 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
-            {/* sheen */}
+            {/* base sheen + inner ring */}
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
             <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
 
-            {/* 🔮 Magical glow overlay — re-mounts on each tap via glowTick key */}
+            {/* 🔮 FRAME GLOW — a border glow that pulses on each tap (keyed by glowTick) */}
             {isMeowCounter && (
               <motion.div
-                key={glowTick}
-                className="pointer-events-none absolute inset-0"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 0.55, scale: 1.12 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-                style={{
-                  background:
-                    "radial-gradient(60% 60% at 50% 50%, rgba(255,255,200,0.35) 0%, rgba(255,200,120,0.18) 35%, rgba(255,170,80,0.08) 60%, rgba(0,0,0,0) 100%)",
-                  filter: "blur(8px)",
+                key={`frame-${glowTick}`}
+                className="pointer-events-none absolute inset-0 rounded-2xl"
+                initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(255,210,120,0.0)" }}
+                animate={{
+                  opacity: [0, 1, 0],
+                  boxShadow: [
+                    "0 0 0 0 rgba(255,210,120,0.0)",
+                    "0 0 18px 6px rgba(255,210,120,0.45)",
+                    "0 0 0 0 rgba(255,210,120,0.0)"
+                  ]
                 }}
+                transition={{ duration: 0.38, times: [0, 0.5, 1], ease: "easeOut" }}
+                style={{ borderRadius: "1rem" }}
               />
             )}
 
