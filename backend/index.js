@@ -1,9 +1,10 @@
 // Path: backend/index.js
-// v4 — Add /healthz DB-ping healthcheck for Railway; keep existing behavior intact
-// CHANGES (v4):
-// - Import { pool } from './config/database.js'
-// - Add GET /healthz that pings the DB (SELECT 1) and returns JSON
-// - Keep existing /health endpoint for backward compatibility
+// v5 — Ensure Meow routes are mounted before Orders to guarantee /api/meow-* handlers
+// CHANGES (v5):
+// - Move `app.use('/api', meowRoutes)` ABOVE `ordersRoutes` mount so that the
+//   tap/cta-status/claim endpoints are handled by the meow router that returns
+//   `ctaEligible` atomically on the 42nd tap.
+// - No other behavior changed.
 
 import 'dotenv/config';
 import express from 'express';
@@ -25,7 +26,7 @@ import tasksRoutes from './routes/tasks.js';
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
-import meowRoutes from './routes/meow.js'; // Meow counter & CTA
+import meowRoutes from './routes/meow.js'; // Meow counter & CTA (must come before Orders)
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,9 +78,13 @@ app.use('/api', leaderboardRoutes);
 app.use('/api', friendsRoutes);
 app.use('/api', tasksRoutes);
 app.use('/api', globalStatsRoutes);
+
+// IMPORTANT: mount Meow before Orders so /api/meow-* uses the atomic-eligibility handlers.
+app.use('/api', meowRoutes); // /meow-tap, /meow-cta-status, /meow-claim
+
+// Other routes (including any order flows) come after Meow.
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
-app.use('/api', meowRoutes); // /meow-tap, /meow-cta-status, /meow-claim
 
 // ---- START SERVER ----
 const startServer = async () => {
