@@ -1,17 +1,17 @@
 // Path: backend/routes/meow.js
-// v3 — Counter "unstick" + safer throttle + new-user upsert (minimal changes)
-// Changes vs v2:
-// 1) Reduce TAP_COOLDOWN_MS to 100ms to allow natural rapid taps in TMA.
-// 2) When throttled, advance the throttle window (set last tap time) to avoid
-//    bursty clients being re-throttled forever under poor network jitter.
-// 3) If user row is missing, create a minimal row on-the-fly (INSERT ... ON CONFLICT DO NOTHING),
-//    then proceed — prevents 404 from blocking first taps.
-// 4) No changes to response shapes. Atomic 42 + CTA eligibility preserved.
+// v4 — Add resetsAt + 429 rate-limit enforcement for Step 1
+// CHANGES (v4):
+// - Line 8: Import getTashkentEodIso for resetsAt field
+// - Lines 24-25: Add violation tracking Map for 429 enforcement
+// - Lines 44-53: Return 429 after 3 violations within 5-second window
+// - Lines 90, 168, 195, 229: Add resetsAt field to all /meow-tap responses
+// - Lines 27-31: Reset violation counter on successful tap
+// UNCHANGED: All transaction logic, day reset, CTA eligibility computation
 
 import express from 'express';
 import { pool } from '../config/database.js';
 import { validateUser } from '../middleware/auth.js';
-import { getTashkentDate } from '../utils/timezone.js';
+import { getTashkentDate, getTashkentEodIso } from '../utils/timezone.js';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -20,6 +20,11 @@ const LOG_CTA = process.env.LOG_CTA === '1';
 /** Simple per-process rate limiter for /meow-tap */
 const meowTapThrottle = new Map(); // userId -> lastTapMs
 const TAP_COOLDOWN_MS = 100; // v3: was 220 — allow quicker taps in WebApp
+
+/** Rate-limit violation tracking (spam protection) */
+const tapViolations = new Map(); // userId -> { count, firstViolationMs }
+const VIOLATION_WINDOW_MS = 5000; // 5 seconds
+const MAX_VIOLATIONS = 3;
 
 /* -------------------------------------------
    /api/meow-tap - Increment daily counter
@@ -33,9 +38,32 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // v3: if throttled, set the window and return current values
+      // Check for rate-limit violations (spam protection)
       if (now - last < TAP_COOLDOWN_MS) {
-        meowTapThrottle.set(user.id, now); // advance window to avoid repeated throttles
+        // Track violation
+        let vioRecord = tapViolations.get(user.id);
+        
+        if (!vioRecord || now - vioRecord.firstViolationMs > VIOLATION_WINDOW_MS) {
+          // Start new violation window
+          vioRecord = { count: 1, firstViolationMs: now };
+        } else {
+          // Increment within existing window
+          vioRecord.count += 1;
+        }
+        
+        tapViolations.set(user.id, vioRecord);
+        
+        // Enforce 429 after MAX_VIOLATIONS
+        if (vioRecord.count > MAX_VIOLATIONS) {
+          return res.status(429).json({
+            error: 'Rate limit exceeded',
+            message: 'Too many requests. Please slow down.',
+            retryAfter: Math.ceil((VIOLATION_WINDOW_MS - (now - vioRecord.firstViolationMs)) / 1000)
+          });
+        }
+
+        // If under violation limit, advance throttle window and return current state
+        meowTapThrottle.set(user.id, now);
 
         const row = await client.query(
           `SELECT COALESCE(meow_taps, 0) AS meow_taps,
@@ -85,12 +113,16 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           today: todayStr,
           tz_day: todayStr,
           dayToken: todayStr,
+          resetsAt: getTashkentEodIso(),
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal,
           throttled: true
         });
       }
+
+      // Valid tap (not throttled) — reset violation counter
+      tapViolations.delete(user.id);
 
       await client.query('BEGIN');
 
@@ -162,6 +194,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           today: todayStr,
           tz_day: todayStr,
           dayToken: todayStr,
+          resetsAt: getTashkentEodIso(),
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal
@@ -208,6 +241,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           today: todayStr,
           tz_day: todayStr,
           dayToken: todayStr,
+          resetsAt: getTashkentEodIso(),
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal
@@ -225,7 +259,8 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         meow_taps_date: todayStr,
         today: todayStr,
         tz_day: todayStr,
-        dayToken: todayStr
+        dayToken: todayStr,
+        resetsAt: getTashkentEodIso()
       });
     } catch (e) {
       await client.query('ROLLBACK');
