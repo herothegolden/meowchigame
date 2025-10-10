@@ -1,9 +1,10 @@
-// Path: backend/auth.js
-// v3 — Consistent Telegram identity extraction for all /api/meow-* routes
-// - Accepts initData from body, Authorization header ("Telegram <initData>"), or x-telegram-init-data header.
-// - Verifies signature with BOT_TOKEN via utils.validate.
-// - Normalizes req.user to a stable shape { id, username, first_name, last_name }.
-// - Returns precise 4xx codes for common failures.
+// Path: backend/middleware/auth.js
+// v4 — Fix type mismatch: ID must be Number to match DB BIGINT column
+// CHANGES (v4):
+// - Line 72: Changed `id: String(id)` → `id: Number(id)` to match telegram_id BIGINT type
+// - Line 68: Added numeric validation to catch invalid IDs early
+// - Root cause fix: PostgreSQL BIGINT columns don't match string parameters in WHERE clauses
+// UNCHANGED: All other validation, extraction, and error handling logic
 
 import { validate } from '../utils.js';
 
@@ -65,9 +66,16 @@ export const validateUser = (req, res, next) => {
       return res.status(400).json({ error: 'Invalid user data in initData' });
     }
 
-    // Normalize shape used by routes/DB (Telegram id treated as string for safety)
+    // Validate ID is numeric (Telegram IDs are always integers)
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return res.status(400).json({ error: 'Invalid Telegram ID format' });
+    }
+
+    // Normalize shape used by routes/DB
+    // CRITICAL: ID must be Number to match telegram_id BIGINT in PostgreSQL
     req.user = {
-      id: String(id),
+      id: numericId,
       username: parsed.username || null,
       first_name: parsed.first_name || null,
       last_name: parsed.last_name || null,
@@ -75,7 +83,7 @@ export const validateUser = (req, res, next) => {
 
     return next();
   } catch (err) {
-    console.error('🔐 validateUser error:', err);
+    console.error('🔒 validateUser error:', err);
     return res.status(500).json({ error: 'Auth middleware error' });
   }
 };
