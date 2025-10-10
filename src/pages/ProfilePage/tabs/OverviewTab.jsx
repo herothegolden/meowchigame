@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v30 – FINAL CORRECTED: Removed Math.max from useState that prevented reset to 0
-// - CRITICAL FIX Line 58: Changed Math.max(parsed.value, serverVal0) → serverVal0
-// - Server is ALWAYS authoritative on page load
-// - Optimistic updates preserved during active session
+// v31 — Counter event emission for real-time tracking
+// NEW: Emits "meow:counter-changed" event whenever counter updates
+// - ProfilePage can now track real counter value from React state
+// - Fixes cache staleness issues across daily resets
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -14,6 +14,15 @@ const formatPlayTime = (seconds) => {
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   return `${hrs}ч ${mins}м`;
+};
+
+// 🆕 Helper to emit counter changes to ProfilePage
+const emitCounterChange = (count, day) => {
+  try {
+    window.dispatchEvent(new CustomEvent("meow:counter-changed", { 
+      detail: { count, day } 
+    }));
+  } catch {}
 };
 
 const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
@@ -37,15 +46,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
   const dayRef = useRef(null);
 
-  // ✅ CRITICAL FIX: Server is ALWAYS source of truth on load
+  // Server is ALWAYS source of truth on load
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          // ✅ FIXED: Return server value, not Math.max
-          // This allows counter to reset to 0 after server reset
           return serverVal0;
         }
       }
@@ -77,6 +84,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   useEffect(() => {
     if (!serverDay) {
       setMeowTapsLocal(serverVal0);
+      emitCounterChange(serverVal0, serverDay); // 🆕 Emit event
       return;
     }
 
@@ -100,6 +108,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       
       persist(next);
       if (next >= 42 && prev < 42) notifyReached42Server();
+      
+      emitCounterChange(next, serverDay); // 🆕 Emit event
+      
       return next;
     });
 
@@ -244,6 +255,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           const next = Math.min(42, Math.max(prev, data.meow_taps));
           persist(next);
           if (next >= 42 && prev < 42) notifyReached42Server();
+          
+          emitCounterChange(next, serverDay); // 🆕 Emit event
+          
           return next;
         });
 
@@ -275,6 +289,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
             const next = 42;
             persist(next);
             if (prev < 42) notifyReached42Server();
+            
+            emitCounterChange(next, serverDay); // 🆕 Emit event
+            
             return next;
           });
         }
@@ -303,6 +320,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
                     persist(next);
                     if (next >= 42 && prev < 42) notifyReached42Server();
+                    
+                    emitCounterChange(next, serverDay); // 🆕 Emit event
+                    
                     return next;
                   });
                   if ((d2.meow_taps >= 42 || d2.locked === true) && d2.ctaEligible === true) {
@@ -326,9 +346,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         }
       }
     } catch (_) {}
-  }, [backendBase, notifyReached42Server, persist, meowTapsLocal]);
+  }, [backendBase, notifyReached42Server, persist, meowTapsLocal, serverDay]);
 
-  // ✅ FIXED: Unified optimistic update for ALL taps (including 0→1)
+  // Unified optimistic update for ALL taps
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -338,15 +358,18 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
     haptic();
 
-    // ✅ Optimistic update for ALL taps
+    // Optimistic update for ALL taps
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
+      
+      emitCounterChange(next, serverDay); // 🆕 Emit event
+      
       return next;
     });
 
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, persist]);
+  }, [meowTapsLocal, haptic, sendTap, persist, serverDay]);
 
   return (
     <motion.div
