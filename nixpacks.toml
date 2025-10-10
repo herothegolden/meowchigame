@@ -6,7 +6,7 @@
 nixPkgs = ["nodejs_20", "caddy"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install"]
 
 [phases.build]
 cmds = ["npm run build"]
