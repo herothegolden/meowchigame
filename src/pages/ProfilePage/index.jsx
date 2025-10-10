@@ -1,6 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v32 — DEBUG VERSION: Added console logs to trace CTA state flow
-// Use this to diagnose why CTA doesn't appear at 42
+// v34 — ULTRA-SIMPLE FIX: Read meow counter from sessionStorage cache
+// CHANGES:
+// 1. Reads client counter from sessionStorage (same key as OverviewTab)
+// 2. Shows CTA when client counter OR server counter >= 42
+// 3. No new events needed - uses existing infrastructure
+// 4. Handles daily reset race condition elegantly
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -33,6 +37,18 @@ const ProfilePage = () => {
   // Staleness guard to prevent race conditions
   const ctaReqSeqRef = useRef(0);
 
+  // ✅ NEW: Helper to read cached counter from sessionStorage (same key as OverviewTab)
+  const getClientMeowCounter = useCallback(() => {
+    try {
+      const cached = sessionStorage.getItem("meowchi:v2:meow_taps");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Number(parsed?.value) || 0;
+      }
+    } catch {}
+    return 0;
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -52,13 +68,9 @@ const ProfilePage = () => {
 
     try {
       const res = await apiCall("/api/meow-cta-status");
-      console.log("🔍 [CTA-DEBUG] /meow-cta-status response:", res);
 
       // Ignore stale responses
-      if (reqId !== ctaReqSeqRef.current) {
-        console.log("⏭️ [CTA-DEBUG] Ignoring stale response, reqId:", reqId);
-        return;
-      }
+      if (reqId !== ctaReqSeqRef.current) return;
 
       setCtaStatus((prev) => {
         const next = {
@@ -68,11 +80,8 @@ const ProfilePage = () => {
           meow_taps: Number(res.meow_taps || 0),
         };
 
-        console.log("🔍 [CTA-DEBUG] fetchCtaStatus state transition:", { prev, next });
-
         // Prefer-truthy guard: Don't demote eligible:true to false unless explicitly used
         if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
-          console.log("🛡️ [CTA-DEBUG] Prefer-truthy guard activated, keeping eligible=true");
           return {
             ...prev,
             remainingGlobal: next.remainingGlobal,
@@ -80,11 +89,10 @@ const ProfilePage = () => {
           };
         }
 
-        console.log("✅ [CTA-DEBUG] Setting new CTA state:", next);
         return next;
       });
     } catch (err) {
-      console.error("❌ [CTA-DEBUG] Failed to fetch CTA status:", err);
+      console.error("Failed to fetch CTA status:", err);
     }
   }, []);
 
@@ -100,44 +108,36 @@ const ProfilePage = () => {
 
   // If already at 42 on initial load, fetch CTA immediately
   useEffect(() => {
-    if (data?.stats?.meow_taps >= 42) {
-      console.log("🎯 [CTA-DEBUG] User already at 42 on load, fetching CTA status");
+    const serverTaps = data?.stats?.meow_taps || 0;
+    const clientTaps = getClientMeowCounter();
+    
+    if (serverTaps >= 42 || clientTaps >= 42) {
       fetchCtaStatus();
     }
-  }, [data?.stats?.meow_taps, fetchCtaStatus]);
+  }, [data?.stats?.meow_taps, fetchCtaStatus, getClientMeowCounter]);
 
   // Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
   useEffect(() => {
     const handleInlineEligible = (evt) => {
-      console.log("🎉 [CTA-DEBUG] Received meow:cta-inline-eligible event:", evt.detail);
       const d = (evt && evt.detail) || {};
-      setCtaStatus((prev) => {
-        const newState = {
-          ...prev,
-          eligible: true,
-          usedToday: !!d.usedToday || false,
-          remainingGlobal: Number(
-            d.remainingGlobal !== undefined ? d.remainingGlobal : prev.remainingGlobal
-          ),
-          meow_taps: Math.max(prev.meow_taps || 0, 42),
-        };
-        console.log("✅ [CTA-DEBUG] handleInlineEligible state transition:", { prev, new: newState });
-        return newState;
-      });
+      setCtaStatus((prev) => ({
+        ...prev,
+        eligible: true,
+        usedToday: !!d.usedToday || false,
+        remainingGlobal: Number(
+          d.remainingGlobal !== undefined ? d.remainingGlobal : prev.remainingGlobal
+        ),
+        meow_taps: Math.max(prev.meow_taps || 0, 42),
+      }));
 
-      // Optional sanity check shortly after to sync with global status
+      // Sanity check shortly after
       setTimeout(() => {
-        console.log("🔄 [CTA-DEBUG] Running sanity check fetchCtaStatus after inline event");
         fetchCtaStatus();
       }, 600);
     };
 
-    console.log("👂 [CTA-DEBUG] Adding meow:cta-inline-eligible event listener");
     window.addEventListener("meow:cta-inline-eligible", handleInlineEligible);
-    return () => {
-      console.log("🔇 [CTA-DEBUG] Removing meow:cta-inline-eligible event listener");
-      window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
-    };
+    return () => window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
   }, [fetchCtaStatus]);
 
   // Listen for server-confirmed 42 event from OverviewTab
@@ -145,7 +145,6 @@ const ProfilePage = () => {
     const timers = [];
 
     const handleReached42 = () => {
-      console.log("🎯 [CTA-DEBUG] Received meow:reached42:server event");
       fetchCtaStatus();
       timers.push(setTimeout(fetchCtaStatus, 200));
       timers.push(setTimeout(fetchCtaStatus, 500));
@@ -164,7 +163,6 @@ const ProfilePage = () => {
     const timers = [];
 
     const handleCtaCheck = () => {
-      console.log("🔍 [CTA-DEBUG] Received meow:cta-check event");
       fetchCtaStatus();
       timers.push(setTimeout(fetchCtaStatus, 150));
       timers.push(setTimeout(fetchCtaStatus, 400));
@@ -178,15 +176,17 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus]);
 
-  // Light polling to reflect global daily cap
+  // Light polling to reflect global daily cap - ONLY when user reached 42
   useEffect(() => {
-    fetchCtaStatus();
-    const interval = setInterval(() => {
-      console.log("⏰ [CTA-DEBUG] Polling interval triggered");
+    const clientTaps = getClientMeowCounter();
+    const serverTaps = data?.stats?.meow_taps || 0;
+    
+    if (clientTaps >= 42 || serverTaps >= 42) {
       fetchCtaStatus();
-    }, 20000);
-    return () => clearInterval(interval);
-  }, [fetchCtaStatus, activeTab]);
+      const interval = setInterval(fetchCtaStatus, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchCtaStatus, activeTab, getClientMeowCounter, data?.stats?.meow_taps]);
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
@@ -214,20 +214,19 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // CTA visibility logic
-  const showMeowCTA = ctaStatus.eligible;
+  // ✅ CRITICAL FIX: Check BOTH client cache AND server state for 42
+  const clientMeowTaps = getClientMeowCounter();
+  const serverMeowTaps = Math.max(stats.meow_taps || 0, ctaStatus.meow_taps);
+  const userReached42 = Math.max(clientMeowTaps, serverMeowTaps) >= 42;
   
-  // Debug output on every render
-  console.log("🎨 [CTA-DEBUG] RENDER - ctaStatus:", ctaStatus);
-  console.log("🎨 [CTA-DEBUG] RENDER - showMeowCTA:", showMeowCTA);
+  // Show CTA only when: reached 42 AND not used today AND quota available
+  const showMeowCTA = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal > 0;
 
-  // Show "you're late" message if user reached 42 but all claims are taken
-  const isLateToday =
-    !ctaStatus.eligible &&
-    ctaStatus.meow_taps === 42 &&
-    Number(ctaStatus.remainingGlobal) === 0;
-
-  console.log("🎨 [CTA-DEBUG] RENDER - isLateToday:", isLateToday);
+  // Show "you're late" message if reached 42 but quota exhausted
+  const isLateToday = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal === 0;
+  
+  // Show "already used" message if reached 42 but used today
+  const alreadyUsedToday = userReached42 && ctaStatus.usedToday;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -309,16 +308,7 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
-      {/* 🔍 DEBUG: Always show CTA state for visibility */}
-      <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 px-3 py-2 text-xs font-mono">
-        <div>DEBUG CTA State:</div>
-        <div>eligible: {String(ctaStatus.eligible)}</div>
-        <div>usedToday: {String(ctaStatus.usedToday)}</div>
-        <div>remainingGlobal: {ctaStatus.remainingGlobal}</div>
-        <div>meow_taps: {ctaStatus.meow_taps}</div>
-        <div>showMeowCTA: {String(showMeowCTA)}</div>
-      </div>
-
+      {/* CTA Button - Shows when user reached 42 and eligible */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
@@ -344,9 +334,17 @@ const ProfilePage = () => {
         </div>
       )}
 
+      {/* Too Late Message - Quota exhausted */}
       {isLateToday && (
         <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 px-3 py-2 text-sm">
-          Вы опоздали, попробуйте завтра.
+          😿 Вы опоздали! Все 42 места заняты. Попробуйте завтра.
+        </div>
+      )}
+
+      {/* Already Used Message - User already claimed today */}
+      {alreadyUsedToday && (
+        <div className="rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-200 px-3 py-2 text-sm">
+          ✅ Скидка уже активирована сегодня. Приходите завтра за новой!
         </div>
       )}
 
