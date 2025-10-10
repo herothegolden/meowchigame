@@ -1,5 +1,5 @@
 // Path: backend/index.js
-// v2 — badgesRoutes import and mount removed only
+// v3 — Mount Meow CTA router
 
 import 'dotenv/config';
 import express from 'express';
@@ -22,6 +22,7 @@ import tasksRoutes from './routes/tasks.js';
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
+import ctaRouter from './routes/cta.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,21 +61,22 @@ app.use('/api', tasksRoutes);
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
+app.use('/api', ctaRouter); // ← NEW
 
 // ---- START SERVER ----
 const startServer = async () => {
   try {
     await setupDatabase();
-    
+
     // Schedule daily streak reset cron job
     scheduleDailyReset();
-    
+
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
       console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
       console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
-      
+
       await startGlobalStatsSimulation(PORT);
     });
   } catch (err) {
