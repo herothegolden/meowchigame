@@ -1,10 +1,12 @@
 // Path: backend/routes/meow.js
-// v1 – Meow counter, CTA eligibility, and claim endpoints
-// Extracted from user.js for better organization
-// ENDPOINTS:
-// - POST /api/meow-tap: Increment daily meow counter (max 42)
-// - POST /api/meow-cta-status: Check CTA eligibility (read-only) ✅ FIXES v38 BUG
-// - POST /api/meow-claim: Claim 42% discount (consumes quota)
+// v2 — Atomic CTA eligibility on tap + add `dayToken` in responses (alias of tz_day)
+// Notes:
+// - Computes Tashkent-day token, increments, locks at 42.
+// - On the exact 42nd tap (and when already locked), returns CTA eligibility atomically
+//   in the same response to avoid read-after-write races.
+// - Returns unified payload fields expected by frontend:
+//   { meow_taps, locked, ctaEligible, ctaUsedToday, ctaRemainingGlobal, dayToken }
+//   (Plus: meow_taps_date/today/tz_day for compatibility.)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -80,6 +82,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps_date: meowDate ? String(meowDate).slice(0, 10) : null,
           today: todayStr,
           tz_day: todayStr,
+          dayToken: todayStr,
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal,
@@ -152,6 +155,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps_date: String(meow_taps_date).slice(0, 10),
           today: todayStr,
           tz_day: todayStr,
+          dayToken: todayStr,
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal
@@ -197,6 +201,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps_date: todayStr,
           today: todayStr,
           tz_day: todayStr,
+          dayToken: todayStr,
           ctaEligible,
           ctaUsedToday: usedToday,
           ctaRemainingGlobal
@@ -212,7 +217,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         locked: false,
         remaining: Math.max(42 - newTaps, 0),
         meow_taps_date: todayStr,
-        today: todayStr
+        today: todayStr,
+        tz_day: todayStr,
+        dayToken: todayStr
       });
     } catch (e) {
       await client.query('ROLLBACK');
@@ -228,7 +235,6 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
 /* -------------------------------------------
    /api/meow-cta-status - Check eligibility (read-only)
-   ✅ NEW ENDPOINT - Fixes v38 bug
 ------------------------------------------- */
 router.post('/meow-cta-status', validateUser, async (req, res) => {
   try {
@@ -290,7 +296,8 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
         usedToday,
         remainingGlobal,
         meow_taps,
-        tz_day: todayStr
+        tz_day: todayStr,
+        dayToken: todayStr
       });
     } finally {
       client.release();
@@ -303,7 +310,6 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 
 /* -------------------------------------------
    /api/meow-claim - Claim 42% discount
-   ✅ NEW ENDPOINT - Atomic claim with token generation
 ------------------------------------------- */
 router.post('/meow-claim', validateUser, async (req, res) => {
   try {
@@ -428,7 +434,8 @@ router.post('/meow-claim', validateUser, async (req, res) => {
       res.status(200).json({
         success: true,
         claimId,
-        message: 'Скидка 42% активирована!'
+        message: 'Скидка 42% активирована!',
+        dayToken: todayStr
       });
 
     } catch (e) {
