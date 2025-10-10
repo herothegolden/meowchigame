@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v20 — Backlight glow from behind card on tap (minimal, local-only)
-// - On each tap of the Meow Counter card, emit a strong radial backlight from behind the card
-// - No logic/CTA changes; purely decorative, pointer-safe, overflow respected
-// - Keeps server-0 trust fixes from earlier versions
+// v21 — Backlight + one-time gold flash on lock (42)
+// - Keeps backlight pulse on each tap
+// - Adds a one-time golden frame flash the moment the counter *reaches* 42
+// - Persistent gold ring still shown while locked
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -132,6 +132,17 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
   // 🔮 Backlight glow tick (purely visual)
   const [glowTick, setGlowTick] = useState(0);
+
+  // ✨ One-time gold frame flash when entering locked state (42)
+  const [goldFlashTick, setGoldFlashTick] = useState(0);
+  const prevMeowRef = useRef(meowTapsLocal);
+  useEffect(() => {
+    const prev = prevMeowRef.current;
+    if (meowTapsLocal === 42 && prev < 42) {
+      setGoldFlashTick((t) => t + 1);
+    }
+    prevMeowRef.current = meowTapsLocal;
+  }, [meowTapsLocal]);
 
   // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
@@ -338,7 +349,26 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
             {/* ✨ GOLD FRAME when locked (42) — persistent elegant ring + glow */}
             {isLocked && (
-              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
+              <>
+                {/* Persistent gold ring while locked */}
+                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
+                {/* One-time gold flash on entering locked state */}
+                <motion.div
+                  key={`goldflash-${goldFlashTick}`}
+                  className="pointer-events-none absolute inset-0 rounded-2xl"
+                  initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
+                  animate={{
+                    opacity: [0, 1, 0],
+                    boxShadow: [
+                      "0 0 0 0 rgba(246,196,83,0)",
+                      "0 0 90px 26px rgba(246,196,83,0.95)",
+                      "0 0 0 0 rgba(246,196,83,0)"
+                    ]
+                  }}
+                  transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
+                  style={{ borderRadius: "1rem" }}
+                />
+              </>
             )}
 
             {/* base sheen + inner ring above backlight */}
