@@ -1,12 +1,12 @@
 // Path: backend/routes/meow.js
-// v2 — Atomic CTA eligibility on tap + add `dayToken` in responses (alias of tz_day)
-// Notes:
-// - Computes Tashkent-day token, increments, locks at 42.
-// - On the exact 42nd tap (and when already locked), returns CTA eligibility atomically
-//   in the same response to avoid read-after-write races.
-// - Returns unified payload fields expected by frontend:
-//   { meow_taps, locked, ctaEligible, ctaUsedToday, ctaRemainingGlobal, dayToken }
-//   (Plus: meow_taps_date/today/tz_day for compatibility.)
+// v3 — Counter "unstick" + safer throttle + new-user upsert (minimal changes)
+// Changes vs v2:
+// 1) Reduce TAP_COOLDOWN_MS to 100ms to allow natural rapid taps in TMA.
+// 2) When throttled, advance the throttle window (set last tap time) to avoid
+//    bursty clients being re-throttled forever under poor network jitter.
+// 3) If user row is missing, create a minimal row on-the-fly (INSERT ... ON CONFLICT DO NOTHING),
+//    then proceed — prevents 404 from blocking first taps.
+// 4) No changes to response shapes. Atomic 42 + CTA eligibility preserved.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -19,7 +19,7 @@ const LOG_CTA = process.env.LOG_CTA === '1';
 
 /** Simple per-process rate limiter for /meow-tap */
 const meowTapThrottle = new Map(); // userId -> lastTapMs
-const TAP_COOLDOWN_MS = 220; // Align with client-side (CLIENT_COOLDOWN_MS = 220)
+const TAP_COOLDOWN_MS = 100; // v3: was 220 — allow quicker taps in WebApp
 
 /* -------------------------------------------
    /api/meow-tap - Increment daily counter
@@ -33,8 +33,10 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // If throttled, return current value without advancing throttle window
+      // v3: if throttled, set the window and return current values
       if (now - last < TAP_COOLDOWN_MS) {
+        meowTapThrottle.set(user.id, now); // advance window to avoid repeated throttles
+
         const row = await client.query(
           `SELECT COALESCE(meow_taps, 0) AS meow_taps,
                   meow_taps_date,
@@ -92,6 +94,14 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       await client.query('BEGIN');
 
+      // Ensure user row exists (v3: defensive upsert for fresh accounts)
+      await client.query(
+        `INSERT INTO users (telegram_id, meow_taps, meow_taps_date, meow_claim_used_today)
+         VALUES ($1, 0, $2, FALSE)
+         ON CONFLICT (telegram_id) DO NOTHING`,
+        [user.id, todayStr]
+      );
+
       // Lock row, read current state
       const rowRes = await client.query(
         `SELECT COALESCE(meow_taps, 0) AS meow_taps,
@@ -102,15 +112,11 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           FOR UPDATE`,
         [user.id]
       );
-      if (rowRes.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'User not found' });
-      }
 
+      // Reset if first tap of new day
       let { meow_taps, meow_taps_date, meow_claim_used_today } = rowRes.rows[0];
       let usedToday = !!meow_claim_used_today;
 
-      // Reset if first tap of new day
       if (!meow_taps_date || String(meow_taps_date).slice(0, 10) !== todayStr) {
         meow_taps = 0;
         meow_taps_date = todayStr;
