@@ -1,10 +1,6 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v35 — CRITICAL FIX: Only read cache if it matches today's server day
-// BUG FIXED: CTA was showing at counter=0 because stale cache wasn't validated
-// CHANGES:
-// 1. getClientMeowCounter now validates cached day matches server day
-// 2. Returns 0 if day mismatch (prevents showing CTA after daily reset)
-// 3. Only shows CTA when ACTUAL counter (validated) >= 42
+// v36 — ULTRA DEBUG: Shows all counter values and CTA logic in real-time
+// This will tell us exactly why CTA isn't appearing
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -34,12 +30,11 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  // Staleness guard to prevent race conditions
   const ctaReqSeqRef = useRef(0);
 
-  // ✅ CRITICAL FIX: Only read cache if it matches TODAY (prevents stale data bug)
+  // Helper to read and validate cached counter
   const getClientMeowCounter = useCallback((serverDay) => {
-    if (!serverDay) return 0; // No server day = can't validate cache
+    if (!serverDay) return 0;
     
     try {
       const cached = sessionStorage.getItem("meowchi:v2:meow_taps");
@@ -47,9 +42,9 @@ const ProfilePage = () => {
       
       const parsed = JSON.parse(cached);
       
-      // CRITICAL: Only trust cache if day matches server's current day
+      // Only trust cache if day matches
       if (parsed.day !== serverDay) {
-        return 0; // Stale data from previous day
+        return 0;
       }
       
       return Number(parsed?.value) || 0;
@@ -78,7 +73,6 @@ const ProfilePage = () => {
     try {
       const res = await apiCall("/api/meow-cta-status");
 
-      // Ignore stale responses
       if (reqId !== ctaReqSeqRef.current) return;
 
       setCtaStatus((prev) => {
@@ -89,7 +83,6 @@ const ProfilePage = () => {
           meow_taps: Number(res.meow_taps || 0),
         };
 
-        // Prefer-truthy guard: Don't demote eligible:true to false unless explicitly used
         if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
           return {
             ...prev,
@@ -110,15 +103,12 @@ const ProfilePage = () => {
     await fetchCtaStatus();
   }, [fetchData, fetchCtaStatus]);
 
-  // Initial data fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Get server's current day for cache validation
   const serverDay = data?.stats?.meow_taps_date || data?.stats?.streak_server_day || null;
 
-  // If already at 42 on initial load, fetch CTA immediately
   useEffect(() => {
     const serverTaps = data?.stats?.meow_taps || 0;
     const clientTaps = getClientMeowCounter(serverDay);
@@ -128,7 +118,6 @@ const ProfilePage = () => {
     }
   }, [data?.stats?.meow_taps, serverDay, fetchCtaStatus, getClientMeowCounter]);
 
-  // Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
   useEffect(() => {
     const handleInlineEligible = (evt) => {
       const d = (evt && evt.detail) || {};
@@ -142,7 +131,6 @@ const ProfilePage = () => {
         meow_taps: Math.max(prev.meow_taps || 0, 42),
       }));
 
-      // Sanity check shortly after
       setTimeout(() => {
         fetchCtaStatus();
       }, 600);
@@ -152,7 +140,6 @@ const ProfilePage = () => {
     return () => window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
   }, [fetchCtaStatus]);
 
-  // Listen for server-confirmed 42 event from OverviewTab
   useEffect(() => {
     const timers = [];
 
@@ -170,7 +157,6 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus]);
 
-  // Listen for CTA check event when tap response confirms 42
   useEffect(() => {
     const timers = [];
 
@@ -188,7 +174,6 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus]);
 
-  // Light polling to reflect global daily cap - ONLY when user reached 42
   useEffect(() => {
     const clientTaps = getClientMeowCounter(serverDay);
     const serverTaps = data?.stats?.meow_taps || 0;
@@ -226,23 +211,89 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // ✅ CRITICAL FIX: Validate client counter is from TODAY before using it
+  // Debug: Get all counter values
   const clientMeowTaps = getClientMeowCounter(serverDay);
-  const serverMeowTaps = Math.max(stats.meow_taps || 0, ctaStatus.meow_taps);
-  const userReached42 = Math.max(clientMeowTaps, serverMeowTaps) >= 42;
+  const serverMeowTaps = stats.meow_taps || 0;
+  const ctaMeowTaps = ctaStatus.meow_taps;
+  const maxTaps = Math.max(clientMeowTaps, serverMeowTaps, ctaMeowTaps);
   
-  // Show CTA only when: reached 42 AND not used today AND quota available
+  const userReached42 = maxTaps >= 42;
   const showMeowCTA = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal > 0;
-
-  // Show "you're late" message if reached 42 but quota exhausted
   const isLateToday = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal === 0;
-  
-  // Show "already used" message if reached 42 but used today
   const alreadyUsedToday = userReached42 && ctaStatus.usedToday;
+
+  // Get cached data for debug display
+  let cachedData = null;
+  try {
+    const raw = sessionStorage.getItem("meowchi:v2:meow_taps");
+    if (raw) cachedData = JSON.parse(raw);
+  } catch {}
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
       <AnnouncementBar />
+
+      {/* 🔍 ULTRA DEBUG PANEL */}
+      <div className="rounded-lg border-2 border-purple-500/50 bg-purple-500/10 p-3 text-xs font-mono space-y-1">
+        <div className="text-purple-300 font-bold text-sm mb-2">🔍 DEBUG: Counter & CTA Logic</div>
+        
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-purple-200">Server Day:</div>
+            <div className="text-white">{serverDay || "null"}</div>
+          </div>
+          <div>
+            <div className="text-purple-200">Cached Day:</div>
+            <div className="text-white">{cachedData?.day || "null"}</div>
+          </div>
+        </div>
+
+        <div className="border-t border-purple-500/30 pt-2 mt-2">
+          <div className="text-purple-200 mb-1">Counter Values:</div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <div className="text-xs text-purple-300">Client (cache):</div>
+              <div className="text-lg font-bold text-white">{clientMeowTaps}</div>
+            </div>
+            <div>
+              <div className="text-xs text-purple-300">Server (profile):</div>
+              <div className="text-lg font-bold text-white">{serverMeowTaps}</div>
+            </div>
+            <div>
+              <div className="text-xs text-purple-300">CTA Status:</div>
+              <div className="text-lg font-bold text-white">{ctaMeowTaps}</div>
+            </div>
+          </div>
+          <div className="mt-1">
+            <div className="text-xs text-purple-300">Max (used for CTA):</div>
+            <div className="text-lg font-bold text-yellow-300">{maxTaps}</div>
+          </div>
+        </div>
+
+        <div className="border-t border-purple-500/30 pt-2 mt-2">
+          <div className="text-purple-200 mb-1">CTA Conditions:</div>
+          <div className="space-y-0.5">
+            <div className={userReached42 ? "text-green-300" : "text-red-300"}>
+              ✓ Reached 42: {String(userReached42)} (need: true)
+            </div>
+            <div className={!ctaStatus.usedToday ? "text-green-300" : "text-red-300"}>
+              ✓ Not Used Today: {String(!ctaStatus.usedToday)} (need: true)
+            </div>
+            <div className={ctaStatus.remainingGlobal > 0 ? "text-green-300" : "text-red-300"}>
+              ✓ Quota Available: {String(ctaStatus.remainingGlobal > 0)} (remaining: {ctaStatus.remainingGlobal})
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-purple-500/30 pt-2 mt-2">
+          <div className="text-lg font-bold">
+            <span className="text-purple-200">CTA Visible: </span>
+            <span className={showMeowCTA ? "text-green-400" : "text-red-400"}>
+              {String(showMeowCTA)}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
@@ -320,7 +371,6 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
-      {/* CTA Button - Shows ONLY when user reached 42 TODAY and eligible */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
@@ -346,14 +396,12 @@ const ProfilePage = () => {
         </div>
       )}
 
-      {/* Too Late Message - Quota exhausted */}
       {isLateToday && (
         <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 px-3 py-2 text-sm">
           😿 Вы опоздали! Все 42 места заняты. Попробуйте завтра.
         </div>
       )}
 
-      {/* Already Used Message - User already claimed today */}
       {alreadyUsedToday && (
         <div className="rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-200 px-3 py-2 text-sm">
           ✅ Скидка уже активирована сегодня. Приходите завтра за новой!
