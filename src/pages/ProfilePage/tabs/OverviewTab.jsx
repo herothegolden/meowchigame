@@ -46,7 +46,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          return Math.max(parsed.value, serverVal0);
+          // PATCH: trust server 0; do not lift from cache when serverVal0 === 0
+          return serverVal0 === 0 ? 0 : Math.max(parsed.value, serverVal0);
         }
       }
     } catch (_) {}
@@ -80,7 +81,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (newDay !== prevDay) {
         next = serverVal0;
       } else {
-        next = Math.max(prev, serverVal0);
+        // PATCH: trust server 0; do not preserve stale local when serverVal0 === 0
+        next = (serverVal0 === 0) ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
       if (next === 42 && prev !== 42) notifyReached42();
