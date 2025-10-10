@@ -1,8 +1,11 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v31 — Counter event emission for real-time tracking
-// NEW: Emits "meow:counter-changed" event whenever counter updates
-// - ProfilePage can now track real counter value from React state
-// - Fixes cache staleness issues across daily resets
+// v32 – DEBUG VERSION: Comprehensive tap logging
+// CHANGES:
+// 1. Accepts addDebugLog prop from ProfilePage
+// 2. Logs every tap attempt
+// 3. Logs every network request to /api/meow-tap
+// 4. Logs every response (success/failure)
+// 5. Logs state changes after each tap
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -16,7 +19,7 @@ const formatPlayTime = (seconds) => {
   return `${hrs}ч ${mins}м`;
 };
 
-// 🆕 Helper to emit counter changes to ProfilePage
+// Helper to emit counter changes to ProfilePage
 const emitCounterChange = (count, day) => {
   try {
     window.dispatchEvent(new CustomEvent("meow:counter-changed", { 
@@ -25,7 +28,15 @@ const emitCounterChange = (count, day) => {
   } catch {}
 };
 
-const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BACKEND_URL }) => {
+const OverviewTab = ({ 
+  stats, 
+  streakInfo, 
+  onUpdate, 
+  onReached42, 
+  backendUrl, 
+  BACKEND_URL,
+  addDebugLog // 🐛 NEW: Debug logging callback
+}) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
@@ -65,11 +76,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
     if (notified42Ref.current) return;
     try {
       if (DEBUG_CTA) console.log("[CTA] emit meow:reached42:server");
+      if (addDebugLog) addDebugLog("🎉 Reached 42 - firing server event");
       window.dispatchEvent(new CustomEvent("meow:reached42:server"));
       if (typeof onReached42 === "function") onReached42();
       notified42Ref.current = true;
     } catch (_) {}
-  }, [onReached42]);
+  }, [onReached42, addDebugLog]);
 
   const persist = useCallback(
     (val) => {
@@ -84,7 +96,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   useEffect(() => {
     if (!serverDay) {
       setMeowTapsLocal(serverVal0);
-      emitCounterChange(serverVal0, serverDay); // 🆕 Emit event
+      emitCounterChange(serverVal0, serverDay);
       return;
     }
 
@@ -97,25 +109,28 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
       if (prevDay === null) {
         // First load: trust server completely
         next = serverVal0;
+        if (addDebugLog) addDebugLog(`📊 Initial load: server=${serverVal0}`);
       } else if (newDay !== prevDay) {
         // Day change: reset to server
         notified42Ref.current = false;
         next = serverVal0;
+        if (addDebugLog) addDebugLog(`📅 Day changed: resetting to ${serverVal0}`);
       } else {
         // Same session: preserve optimistic updates
         next = Math.max(prev, serverVal0);
+        if (addDebugLog) addDebugLog(`🔄 Sync: local=${prev}, server=${serverVal0}, using=${next}`);
       }
       
       persist(next);
       if (next >= 42 && prev < 42) notifyReached42Server();
       
-      emitCounterChange(next, serverDay); // 🆕 Emit event
+      emitCounterChange(next, serverDay);
       
       return next;
     });
 
     dayRef.current = newDay;
-  }, [serverDay, serverVal0, notifyReached42Server, persist]);
+  }, [serverDay, serverVal0, notifyReached42Server, persist, addDebugLog]);
 
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 220;
@@ -141,8 +156,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   useEffect(() => {
     try {
       initDataRef.current = window?.Telegram?.WebApp?.initData || "";
+      if (addDebugLog && initDataRef.current) {
+        addDebugLog(`🔑 InitData length: ${initDataRef.current.length}`);
+      }
     } catch (_) {}
-  }, []);
+  }, [addDebugLog]);
 
   const haptic = useCallback(() => {
     try {
@@ -234,9 +252,17 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
   );
 
   const retryOnceRef = useRef(false);
+  const tapCountRef = useRef(0); // 🐛 Track total taps sent
 
   const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
+    const tapNum = ++tapCountRef.current;
+    
+    // 🐛 Log tap attempt
+    if (addDebugLog) {
+      addDebugLog(`📤 Sending tap #${tapNum} to ${url.slice(-20)}`);
+    }
+    
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -245,10 +271,23 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
         keepalive: true,
       });
 
+      // 🐛 Log response status
+      if (addDebugLog) {
+        addDebugLog(`📥 Tap #${tapNum} response: ${res.status} ${res.statusText}`);
+      }
+
       let data = null;
       try {
         data = await res.json();
-      } catch (_) {}
+        // 🐛 Log response data
+        if (addDebugLog) {
+          addDebugLog(`📊 Tap #${tapNum} data: taps=${data.meow_taps}, locked=${data.locked}`);
+        }
+      } catch (e) {
+        if (addDebugLog) {
+          addDebugLog(`❌ Tap #${tapNum} JSON parse failed: ${e.message}`);
+        }
+      }
 
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
@@ -256,13 +295,19 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
           persist(next);
           if (next >= 42 && prev < 42) notifyReached42Server();
           
-          emitCounterChange(next, serverDay); // 🆕 Emit event
+          emitCounterChange(next, serverDay);
+          
+          // 🐛 Log state update
+          if (addDebugLog) {
+            addDebugLog(`✅ Tap #${tapNum} updated: ${prev} → ${next}`);
+          }
           
           return next;
         });
 
         if ((data.meow_taps >= 42 || data.locked === true) && data.ctaEligible === true) {
           if (DEBUG_CTA) console.log("[CTA] emit meow:cta-inline-eligible", data);
+          if (addDebugLog) addDebugLog(`🎯 Tap #${tapNum} triggered CTA eligible event`);
           try {
             window.dispatchEvent(
               new CustomEvent("meow:cta-inline-eligible", {
@@ -290,7 +335,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
             persist(next);
             if (prev < 42) notifyReached42Server();
             
-            emitCounterChange(next, serverDay); // 🆕 Emit event
+            emitCounterChange(next, serverDay);
             
             return next;
           });
@@ -302,6 +347,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
 
         if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
           retryOnceRef.current = true;
+          if (addDebugLog) addDebugLog(`🔄 Retry triggered for tap #${tapNum}`);
           setTimeout(() => {
             void (async () => {
               try {
@@ -321,7 +367,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
                     persist(next);
                     if (next >= 42 && prev < 42) notifyReached42Server();
                     
-                    emitCounterChange(next, serverDay); // 🆕 Emit event
+                    emitCounterChange(next, serverDay);
                     
                     return next;
                   });
@@ -344,32 +390,53 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, onReached42, backendUrl, BAC
             })();
           }, 260);
         }
+      } else {
+        // 🐛 Log failed response
+        if (addDebugLog) {
+          addDebugLog(`❌ Tap #${tapNum} failed: status=${res.status}, hasData=${!!data}`);
+        }
       }
-    } catch (_) {}
-  }, [backendBase, notifyReached42Server, persist, meowTapsLocal, serverDay]);
+    } catch (err) {
+      // 🐛 Log network error
+      if (addDebugLog) {
+        addDebugLog(`❌ Tap #${tapNum} network error: ${err.message}`);
+      }
+    }
+  }, [backendBase, notifyReached42Server, persist, meowTapsLocal, serverDay, addDebugLog]);
 
   // Unified optimistic update for ALL taps
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
-    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
+    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) {
+      if (addDebugLog) addDebugLog(`⏸️ Tap throttled (${now - tapCooldownRef.current}ms since last)`);
+      return;
+    }
     tapCooldownRef.current = now;
 
-    if (meowTapsLocal >= 42) return;
+    if (meowTapsLocal >= 42) {
+      if (addDebugLog) addDebugLog(`🛑 Tap ignored (already at 42)`);
+      return;
+    }
 
     haptic();
+
+    // 🐛 Log optimistic update
+    if (addDebugLog) {
+      addDebugLog(`👆 Tap! Optimistic: ${meowTapsLocal} → ${Math.min(meowTapsLocal + 1, 42)}`);
+    }
 
     // Optimistic update for ALL taps
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
       
-      emitCounterChange(next, serverDay); // 🆕 Emit event
+      emitCounterChange(next, serverDay);
       
       return next;
     });
 
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, persist, serverDay]);
+  }, [meowTapsLocal, haptic, sendTap, persist, serverDay, addDebugLog]);
 
   return (
     <motion.div
