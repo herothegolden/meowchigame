@@ -1,9 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v37 — FINAL FIX: Listen for counter-changed events + show quota warning
+// v38 — FINAL FIX: Trust server eligibility, not client counter
+// BUG FIXED: CTA now only appears when SERVER confirms counter >= 42
 // CHANGES:
-// 1. Listens for "meow:counter-changed" event from OverviewTab
-// 2. Shows warning when quota exhausted BEFORE user reaches 42
-// 3. Properly tracks real-time counter value
+// 1. Removed client-side eligibility computation
+// 2. Only show CTA when server's `ctaStatus.eligible === true`
+// 3. Server does all validation in /api/meow-cta-status
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -33,7 +34,7 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  // 🆕 Track real-time counter from OverviewTab events
+  // Track real-time counter from OverviewTab for display only
   const [liveCounterValue, setLiveCounterValue] = useState(0);
 
   const ctaReqSeqRef = useRef(0);
@@ -68,6 +69,7 @@ const ProfilePage = () => {
           meow_taps: Number(res.meow_taps || 0),
         };
 
+        // Prefer-truthy guard: Don't demote eligible:true to false unless explicitly used
         if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
           return {
             ...prev,
@@ -90,17 +92,17 @@ const ProfilePage = () => {
 
   useEffect(() => {
     fetchData();
-    fetchCtaStatus(); // Fetch quota status on mount
+    fetchCtaStatus();
   }, [fetchData, fetchCtaStatus]);
 
-  // 🆕 Listen for real-time counter updates from OverviewTab
+  // Listen for real-time counter updates from OverviewTab (for display only)
   useEffect(() => {
     const handleCounterChanged = (evt) => {
       const count = evt?.detail?.count;
       if (typeof count === "number") {
         setLiveCounterValue(count);
         
-        // When reaching 42, immediately fetch CTA status
+        // When reaching 42, fetch CTA status from server
         if (count >= 42) {
           fetchCtaStatus();
         }
@@ -167,10 +169,10 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus]);
 
-  // Poll CTA status when user is approaching or at 42
+  // Poll CTA status when user is at or approaching 42
   useEffect(() => {
-    if (liveCounterValue >= 42 || (data?.stats?.meow_taps || 0) >= 42) {
-      const interval = setInterval(fetchCtaStatus, 20000);
+    if (liveCounterValue >= 40 || (data?.stats?.meow_taps || 0) >= 40) {
+      const interval = setInterval(fetchCtaStatus, 15000);
       return () => clearInterval(interval);
     }
   }, [fetchCtaStatus, liveCounterValue, data?.stats?.meow_taps]);
@@ -201,23 +203,29 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // Use live counter value as primary source
-  const currentCounter = Math.max(liveCounterValue, stats.meow_taps || 0, ctaStatus.meow_taps);
-  const userReached42 = currentCounter >= 42;
+  // ✅ CRITICAL FIX: Trust server eligibility ONLY
+  // Server validates: meow_taps >= 42 && !usedToday && remainingGlobal > 0
+  const showMeowCTA = ctaStatus.eligible;
   
-  const showMeowCTA = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal > 0;
+  // For display purposes: show highest counter value
+  const displayCounter = Math.max(liveCounterValue, stats.meow_taps || 0, ctaStatus.meow_taps);
+  const userReached42 = displayCounter >= 42;
+  
+  // Show "too late" when user reached 42 but quota exhausted
   const isLateToday = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal === 0;
+  
+  // Show "already used" when user reached 42 but already claimed
   const alreadyUsedToday = userReached42 && ctaStatus.usedToday;
   
-  // 🆕 Show warning when quota exhausted (even before reaching 42)
-  const quotaExhausted = ctaStatus.remainingGlobal === 0 && !ctaStatus.usedToday;
+  // Show quota warning when approaching 42 but quota is already gone
+  const quotaExhausted = ctaStatus.remainingGlobal === 0 && !ctaStatus.usedToday && displayCounter < 42;
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
       <AnnouncementBar />
 
-      {/* 🆕 Quota Warning - Shows when all 42 slots taken */}
-      {quotaExhausted && currentCounter < 42 && (
+      {/* Quota Warning - Shows when approaching 42 but all slots taken */}
+      {quotaExhausted && (
         <div className="rounded-xl border border-orange-400/30 bg-orange-400/10 text-orange-200 px-3 py-2 text-sm">
           ⚠️ Внимание: Все 42 места на сегодня уже заняты. Скидка будет недоступна.
         </div>
@@ -299,6 +307,7 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
+      {/* CTA Button - Only shows when SERVER confirms eligibility */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
@@ -324,12 +333,14 @@ const ProfilePage = () => {
         </div>
       )}
 
+      {/* Too Late Message */}
       {isLateToday && (
         <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-200 px-3 py-2 text-sm">
           😿 Вы опоздали! Все 42 места заняты. Попробуйте завтра.
         </div>
       )}
 
+      {/* Already Used Message */}
       {alreadyUsedToday && (
         <div className="rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-200 px-3 py-2 text-sm">
           ✅ Скидка уже активирована сегодня. Приходите завтра за новой!
