@@ -1,7 +1,7 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v19 — Magical frame glow on tap (minimal, local-only)
-// - On each tap of the Meow Counter card, animate a glowing frame (border glow)
-// - No logic/CTA changes; purely decorative and pointer-safe
+// v20 — Backlight glow from behind card on tap (minimal, local-only)
+// - On each tap of the Meow Counter card, emit a strong radial backlight from behind the card
+// - No logic/CTA changes; purely decorative, pointer-safe, overflow respected
 // - Keeps server-0 trust fixes from earlier versions
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -130,7 +130,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // 🔮 Magical frame glow tick (purely visual)
+  // 🔮 Backlight glow tick (purely visual)
   const [glowTick, setGlowTick] = useState(0);
 
   // Build stats list (Meow Counter card is tappable)
@@ -263,7 +263,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     haptic();
 
-    // 🔮 trigger frame glow pulse on every tap attempt
+    // 🔮 trigger backlight pulse on every tap attempt
     setGlowTick((t) => t + 1);
 
     if (meowTapsLocal === 0) {
@@ -315,30 +315,31 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
-            {/* base sheen + inner ring */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
-
-            {/* 🔮 FRAME GLOW — a border glow that pulses on each tap (keyed by glowTick) */}
+            {/* 🔮 BACKLIGHT — sits "behind" the card content; clipped by card radius */}
             {isMeowCounter && (
               <motion.div
-                key={`frame-${glowTick}`}
+                key={`backlight-${glowTick}`}
                 className="pointer-events-none absolute inset-0 rounded-2xl"
-                initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(255,210,120,0.0)" }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{
-                  opacity: [0, 1, 0],
-                  boxShadow: [
-                    "0 0 0 0 rgba(255,210,120,0.0)",
-                    "0 0 18px 6px rgba(255,210,120,0.45)",
-                    "0 0 0 0 rgba(255,210,120,0.0)"
-                  ]
+                  opacity: [0, 0.75, 0],
+                  scale: [0.95, 1.12, 1.0],
                 }}
-                transition={{ duration: 0.38, times: [0, 0.5, 1], ease: "easeOut" }}
-                style={{ borderRadius: "1rem" }}
+                transition={{ duration: 0.45, times: [0, 0.4, 1], ease: "easeOut" }}
+                style={{
+                  zIndex: 0,
+                  background:
+                    "radial-gradient(65% 65% at 50% 50%, rgba(255, 230, 160, 0.60) 0%, rgba(255, 200, 110, 0.38) 30%, rgba(255, 160, 70, 0.14) 58%, rgba(0,0,0,0) 100%)",
+                  filter: "blur(14px)",
+                }}
               />
             )}
 
-            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
+            {/* base sheen + inner ring above backlight */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
+            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
+
+            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
               <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
                 {stat.title}
               </p>
@@ -350,7 +351,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
               </p>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
+            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
           </motion.div>
         );
       })}
