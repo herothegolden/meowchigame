@@ -1,8 +1,8 @@
 // Path: backend/cron/dailyReset.js
-// v2 - Fixed: meow_taps_date no longer set by cron (only set on first tap)
+// ROLLBACK VERSION - Original (has counter-starts-at-1 bug but deploys)
 // Purpose: Run daily resets at midnight Asia/Tashkent (UTC+5)
 // - Resets streak_claimed_today for all users
-// - Resets meow counter for the day (meow_taps -> 0)
+// - Resets meow counter for the day (meow_taps -> 0, meow_taps_date -> today in Tashkent)
 // - Resets per-user meow claim usage (meow_claim_used_today -> false)
 // - Resets the global first-42 counter (meow_daily_claims for today's date -> claims_taken = 0)
 
@@ -33,15 +33,16 @@ export const scheduleDailyReset = () => {
         );
 
         // 1) Reset per-user flags & meow daily counters
-        // NOTE: meow_taps_date is NOT reset here - it will be set on first tap
         const resetUsers = await client.query(
           `
           UPDATE users
           SET
             streak_claimed_today   = FALSE,
             meow_claim_used_today  = FALSE,
-            meow_taps              = 0
-        `
+            meow_taps              = 0,
+            meow_taps_date         = $1
+        `,
+          [tz_date]
         );
 
         // 2) Reset global "first 42" counter for the new day (UPSERT to ensure a row exists)
