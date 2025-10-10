@@ -32,6 +32,7 @@ export const scheduleDailyReset = () => {
         );
 
         // 1) Reset per-user flags & meow daily counters
+        //    Ensure the daily counter STARTS AT 0 (not 1) by explicitly setting meow_taps = 0.
         const resetUsers = await client.query(
           `
           UPDATE users
