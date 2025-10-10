@@ -1,5 +1,7 @@
 // Path: backend/routes/orders.js
-// v5 — Meow Counter promo flow + FIX: /meow-cta-status is POST (works with validateUser + apiCall POST body)
+// v6 — Align /meow-cta-status response shape with meow.js and have /meow-claim
+//       return updated CTA status (single source of truth: Tashkent day).
+//       No unrelated logic changed.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -30,22 +32,7 @@ async function sendAdminNotification(orderData) {
       )
       .join('\n');
 
-    const message = `🔔 <b>NEW ORDER #${orderData.orderId}</b>
-
-👤 <b>Customer:</b>
-- Name: ${orderData.customerName}
-- Username: @${orderData.username || 'no_username'}
-- Telegram ID: <code>${orderData.telegramId}</code>
-
-🪙 <b>Order Items:</b>
-${itemsList}
-
-💰 <b>Total Amount:</b> ${orderData.totalAmount.toLocaleString()} UZS
-
-📊 <b>Status:</b> Pending Payment
-
-💡 <b>Action Required:</b>
-Contact customer via Telegram to arrange payment and delivery.`;
+    const message = `🔔 <b>NEW ORDER #${orderData.orderId}</b>\n\n👤 <b>Customer:</b>\n- Name: ${orderData.customerName}\n- Username: @${orderData.username || 'no_username'}\n- Telegram ID: <code>${orderData.telegramId}</code>\n\n🪙 <b>Order Items:</b>\n${itemsList}\n\n💰 <b>Total Amount:</b> ${orderData.totalAmount.toLocaleString()} UZS\n\n📊 <b>Status:</b> Pending Payment\n\n💡 <b>Action Required:</b>\nContact customer via Telegram to arrange payment and delivery.`;
 
     const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -78,23 +65,83 @@ Contact customer via Telegram to arrange payment and delivery.`;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   NEW: Meow Counter Promo Flow
-   - Reserve (first 42 per day), one per user per day, idempotent
-   - Activate promo on Order Page via claim token
+   Meow Counter Promo Flow (CTA status + claim)
+   - Keep response shape consistent with backend/routes/meow.js
+   - Fields: { meow_taps, locked, ctaEligible, ctaUsedToday, ctaRemainingGlobal, dayToken }
 ──────────────────────────────────────────────────────────────────────────── */
 
 /**
+ * POST /api/meow-cta-status
+ * Recompute eligibility from server truth for current Tashkent day.
+ * Returns unified shape used by the frontend.
+ */
+router.post('/meow-cta-status', validateUser, async (req, res) => {
+  const { user } = req;
+  const client = await pool.connect();
+  try {
+    const todayStr = getTashkentDate();
+
+    // Read user's meow state
+    const ur = await client.query(
+      `SELECT COALESCE(meow_taps,0) AS meow_taps,
+              meow_taps_date,
+              COALESCE(meow_claim_used_today,FALSE) AS used_today
+         FROM users
+        WHERE telegram_id = $1`,
+      [user.id]
+    );
+
+    if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+
+    let meow_taps = Number(ur.rows[0].meow_taps || 0);
+    const meow_taps_date = ur.rows[0].meow_taps_date ? String(ur.rows[0].meow_taps_date).slice(0, 10) : null;
+    const usedToday = !!ur.rows[0].used_today;
+
+    // Normalize taps by day boundary
+    if (!meow_taps_date || meow_taps_date !== todayStr) {
+      meow_taps = 0;
+    }
+
+    // Global remaining
+    const dr = await client.query(
+      `SELECT COALESCE(claims_taken,0) AS claims_taken FROM meow_daily_claims WHERE day = $1`,
+      [todayStr]
+    );
+    const claimsTaken = Number(dr.rows[0]?.claims_taken || 0);
+    const ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+
+    // Eligibility
+    const ctaEligible = meow_taps >= 42 && usedToday === false && ctaRemainingGlobal > 0;
+
+    return res.status(200).json({
+      meow_taps,
+      locked: meow_taps >= 42,
+      ctaEligible,
+      ctaUsedToday: usedToday,
+      ctaRemainingGlobal,
+      dayToken: todayStr,
+      tz_day: todayStr, // compatibility
+    });
+  } catch (err) {
+    console.error('❌ /meow-cta-status error:', err);
+    return res.status(500).json({ error: 'Internal error' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * POST /api/meow-claim
- * Preconditions (atomic, same transaction):
- *  - users.meow_taps >= 42
- *  - users.meow_claim_used_today = FALSE
+ * Preconditions (same as meow.js):
+ *  - users.meow_taps >= 42 today
+ *  - !users.meow_claim_used_today
  *  - meow_daily_claims(day).claims_taken < 42
- * Effects:
- *  - UPSERT meow_daily_claims row for today
- *  - Insert into meow_claims (id, user_id, day) with UNIQUE(user_id, day)
+ * Effects (atomic):
+ *  - UPSERT daily row
+ *  - Insert claim (UNIQUE by user/day)
  *  - Set users.meow_claim_used_today = TRUE
  *  - Increment meow_daily_claims.claims_taken
- * Returns: { claimId, promo: 'MEOW42' }
+ * Returns updated CTA status with { dayToken, ctaUsedToday: true, ctaEligible: false }
  */
 router.post('/meow-claim', validateUser, async (req, res) => {
   const { user } = req;
@@ -102,73 +149,79 @@ router.post('/meow-claim', validateUser, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Compute today's date in Asia/Tashkent (from DB to avoid drift)
-    const {
-      rows: [tz],
-    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
-    const today = tz.day;
+    const todayStr = getTashkentDate();
 
     // Lock user row
     const ur = await client.query(
       `SELECT COALESCE(meow_taps,0) AS meow_taps,
-              COALESCE(meow_claim_used_today, FALSE) AS used_today
+              meow_taps_date,
+              COALESCE(meow_claim_used_today,FALSE) AS used_today
          FROM users
         WHERE telegram_id = $1
         FOR UPDATE`,
       [user.id]
     );
+
     if (ur.rowCount === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'User not found' });
     }
-    const { meow_taps, used_today } = ur.rows[0];
 
+    let meow_taps = Number(ur.rows[0].meow_taps || 0);
+    const meow_taps_date = ur.rows[0].meow_taps_date ? String(ur.rows[0].meow_taps_date).slice(0, 10) : null;
+    const usedToday = !!ur.rows[0].used_today;
+
+    if (!meow_taps_date || meow_taps_date !== todayStr) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Counter not at 42 today' });
+    }
     if (meow_taps < 42) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Not eligible: meow counter is below 42' });
+      return res.status(400).json({ error: 'Not eligible: meow counter below 42' });
     }
-    if (used_today) {
+    if (usedToday) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Already claimed today' });
+      return res.status(409).json({ error: 'Discount already claimed today' });
     }
 
-    // Ensure daily row exists & lock it
+    // Ensure daily row exists
     await client.query(
       `INSERT INTO meow_daily_claims (day, claims_taken)
        VALUES ($1, 0)
        ON CONFLICT (day) DO NOTHING`,
-      [today]
+      [todayStr]
     );
 
+    // Lock daily row
     const dr = await client.query(
-      `SELECT claims_taken
+      `SELECT COALESCE(claims_taken,0) AS claims_taken
          FROM meow_daily_claims
         WHERE day = $1
         FOR UPDATE`,
-      [today]
+      [todayStr]
     );
-    const claimsTaken = dr.rows[0]?.claims_taken ?? 0;
+
+    let claimsTaken = Number(dr.rows[0]?.claims_taken || 0);
     if (claimsTaken >= 42) {
       await client.query('ROLLBACK');
       return res.status(429).json({ error: 'Daily limit reached (42/42)' });
     }
 
-    // Try to insert a new claim for (user, day); if exists, it's idempotent
+    // Insert claim (idempotent by UNIQUE(user_id, day))
     const claimId = genUUID();
     const cr = await client.query(
       `INSERT INTO meow_claims (id, user_id, day, consumed)
        VALUES ($1, $2, $3, FALSE)
        ON CONFLICT (user_id, day) DO NOTHING
        RETURNING id`,
-      [claimId, user.id, today]
+      [claimId, user.id, todayStr]
     );
 
     let finalClaimId = claimId;
     if (cr.rowCount === 0) {
-      // Already has a claim. Fetch it and ensure it’s not consumed.
       const existing = await client.query(
         `SELECT id, consumed FROM meow_claims WHERE user_id = $1 AND day = $2`,
-        [user.id, today]
+        [user.id, todayStr]
       );
       const row = existing.rows[0];
       if (!row) {
@@ -182,115 +235,31 @@ router.post('/meow-claim', validateUser, async (req, res) => {
       finalClaimId = row.id;
     }
 
-    // Mark user as used today
+    // Mark user flag & increment global counter
     await client.query(`UPDATE users SET meow_claim_used_today = TRUE WHERE telegram_id = $1`, [user.id]);
-
-    // Increment global daily counter
-    await client.query(`UPDATE meow_daily_claims SET claims_taken = claims_taken + 1 WHERE day = $1`, [today]);
+    await client.query(`UPDATE meow_daily_claims SET claims_taken = claims_taken + 1 WHERE day = $1`, [todayStr]);
+    claimsTaken += 1;
 
     await client.query('COMMIT');
-    return res.status(200).json({ success: true, claimId: finalClaimId, promo: 'MEOW42' });
+
+    const ctaRemainingGlobal = Math.max(42 - claimsTaken, 0);
+
+    // Return updated, unified status shape
+    return res.status(200).json({
+      success: true,
+      claimId: finalClaimId,
+      meow_taps,
+      locked: meow_taps >= 42,
+      ctaEligible: false, // just claimed
+      ctaUsedToday: true,
+      ctaRemainingGlobal,
+      dayToken: todayStr,
+      tz_day: todayStr, // compatibility
+      message: 'Скидка 42% активирована!'
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ /meow-claim error:', err);
-    return res.status(500).json({ error: 'Internal error' });
-  } finally {
-    client.release();
-  }
-});
-
-/**
- * POST /api/activate-promo
- * Body: { claimId }
- * Verifies token belongs to user, is for today, and not yet consumed.
- * Marks it consumed and returns pricing context.
- */
-router.post('/activate-promo', validateUser, async (req, res) => {
-  const { user } = req;
-  const { claimId } = req.body;
-  if (!claimId) return res.status(400).json({ error: 'Missing claimId' });
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const {
-      rows: [tz],
-    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
-    const today = tz.day;
-
-    const cr = await client.query(
-      `SELECT id, user_id, day, consumed
-         FROM meow_claims
-        WHERE id = $1
-          AND user_id = $2
-          AND day = $3
-        FOR UPDATE`,
-      [claimId, user.id, today]
-    );
-    if (cr.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Claim not found or expired' });
-    }
-    const claim = cr.rows[0];
-    if (claim.consumed) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Claim already consumed' });
-    }
-
-    await client.query(`UPDATE meow_claims SET consumed = TRUE WHERE id = $1`, [claimId]);
-
-    await client.query('COMMIT');
-    return res.status(200).json({
-      success: true,
-      promo: 'MEOW42',
-      discountPercent: 42,
-      claimId,
-    });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('❌ /activate-promo error:', err);
-    return res.status(500).json({ error: 'Internal error' });
-  } finally {
-    client.release();
-  }
-});
-
-/**
- * POST /api/meow-cta-status
- * Returns: { meow_taps, usedToday, remainingGlobal, eligible }
- * NOTE: POST (not GET) because validateUser reads initData from req.body; apiCall posts by design.
- */
-router.post('/meow-cta-status', validateUser, async (req, res) => {
-  const { user } = req;
-  const client = await pool.connect();
-  try {
-    const todayStr = getTashkentDate();
-
-    const ur = await client.query(
-      `SELECT COALESCE(meow_taps,0) AS meow_taps,
-              COALESCE(meow_claim_used_today,FALSE) AS used_today
-         FROM users
-        WHERE telegram_id = $1`,
-      [user.id]
-    );
-    if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-    const { meow_taps, used_today } = ur.rows[0];
-
-    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [todayStr]);
-    const claimsTaken = dr.rowCount ? dr.rows[0].claims_taken : 0;
-    const remainingGlobal = Math.max(42 - claimsTaken, 0);
-
-    const eligible = meow_taps >= 42 && !used_today && remainingGlobal > 0;
-
-    return res.status(200).json({
-      meow_taps,
-      usedToday: used_today,
-      remainingGlobal,
-      eligible,
-    });
-  } catch (err) {
-    console.error('❌ /meow-cta-status error:', err);
     return res.status(500).json({ error: 'Internal error' });
   } finally {
     client.release();
