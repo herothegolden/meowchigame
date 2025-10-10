@@ -1,10 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v34 — ULTRA-SIMPLE FIX: Read meow counter from sessionStorage cache
+// v35 — CRITICAL FIX: Only read cache if it matches today's server day
+// BUG FIXED: CTA was showing at counter=0 because stale cache wasn't validated
 // CHANGES:
-// 1. Reads client counter from sessionStorage (same key as OverviewTab)
-// 2. Shows CTA when client counter OR server counter >= 42
-// 3. No new events needed - uses existing infrastructure
-// 4. Handles daily reset race condition elegantly
+// 1. getClientMeowCounter now validates cached day matches server day
+// 2. Returns 0 if day mismatch (prevents showing CTA after daily reset)
+// 3. Only shows CTA when ACTUAL counter (validated) >= 42
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,16 +37,25 @@ const ProfilePage = () => {
   // Staleness guard to prevent race conditions
   const ctaReqSeqRef = useRef(0);
 
-  // ✅ NEW: Helper to read cached counter from sessionStorage (same key as OverviewTab)
-  const getClientMeowCounter = useCallback(() => {
+  // ✅ CRITICAL FIX: Only read cache if it matches TODAY (prevents stale data bug)
+  const getClientMeowCounter = useCallback((serverDay) => {
+    if (!serverDay) return 0; // No server day = can't validate cache
+    
     try {
       const cached = sessionStorage.getItem("meowchi:v2:meow_taps");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        return Number(parsed?.value) || 0;
+      if (!cached) return 0;
+      
+      const parsed = JSON.parse(cached);
+      
+      // CRITICAL: Only trust cache if day matches server's current day
+      if (parsed.day !== serverDay) {
+        return 0; // Stale data from previous day
       }
-    } catch {}
-    return 0;
+      
+      return Number(parsed?.value) || 0;
+    } catch {
+      return 0;
+    }
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -106,15 +115,18 @@ const ProfilePage = () => {
     fetchData();
   }, [fetchData]);
 
+  // Get server's current day for cache validation
+  const serverDay = data?.stats?.meow_taps_date || data?.stats?.streak_server_day || null;
+
   // If already at 42 on initial load, fetch CTA immediately
   useEffect(() => {
     const serverTaps = data?.stats?.meow_taps || 0;
-    const clientTaps = getClientMeowCounter();
+    const clientTaps = getClientMeowCounter(serverDay);
     
     if (serverTaps >= 42 || clientTaps >= 42) {
       fetchCtaStatus();
     }
-  }, [data?.stats?.meow_taps, fetchCtaStatus, getClientMeowCounter]);
+  }, [data?.stats?.meow_taps, serverDay, fetchCtaStatus, getClientMeowCounter]);
 
   // Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
   useEffect(() => {
@@ -178,7 +190,7 @@ const ProfilePage = () => {
 
   // Light polling to reflect global daily cap - ONLY when user reached 42
   useEffect(() => {
-    const clientTaps = getClientMeowCounter();
+    const clientTaps = getClientMeowCounter(serverDay);
     const serverTaps = data?.stats?.meow_taps || 0;
     
     if (clientTaps >= 42 || serverTaps >= 42) {
@@ -186,7 +198,7 @@ const ProfilePage = () => {
       const interval = setInterval(fetchCtaStatus, 20000);
       return () => clearInterval(interval);
     }
-  }, [fetchCtaStatus, activeTab, getClientMeowCounter, data?.stats?.meow_taps]);
+  }, [fetchCtaStatus, activeTab, serverDay, getClientMeowCounter, data?.stats?.meow_taps]);
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
@@ -214,8 +226,8 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // ✅ CRITICAL FIX: Check BOTH client cache AND server state for 42
-  const clientMeowTaps = getClientMeowCounter();
+  // ✅ CRITICAL FIX: Validate client counter is from TODAY before using it
+  const clientMeowTaps = getClientMeowCounter(serverDay);
   const serverMeowTaps = Math.max(stats.meow_taps || 0, ctaStatus.meow_taps);
   const userReached42 = Math.max(clientMeowTaps, serverMeowTaps) >= 42;
   
@@ -308,7 +320,7 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
-      {/* CTA Button - Shows when user reached 42 and eligible */}
+      {/* CTA Button - Shows ONLY when user reached 42 TODAY and eligible */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
