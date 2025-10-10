@@ -1,11 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v34 — Handle locked + resetsAt from server (Step 1 complete)
-// CHANGES (v34):
-// - Lines 68-69: Add locked and resetsAt state from server
-// - Lines 108-113: Update locked/resetsAt on server response
-// - Lines 231-237: Dynamic subtitle showing reset time when locked
-// - Line 345: Check locked state from server (not just local count)
-// UNCHANGED: No optimistic increment, server-truth-only approach from v33
+// v35 — EMERGENCY FIX: Add null safety guard to prevent white screen
+// CHANGES (v35):
+// - Lines 66-72: Add null check for stats object before rendering
+// - Prevents TypeError when stats is undefined during initial load
+// UNCHANGED: All other functionality from v34
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -60,6 +58,15 @@ const OverviewTab = ({
   BACKEND_URL,
   addDebugLog // optional debug logger from ProfilePage
 }) => {
+  // EMERGENCY FIX: Prevent rendering if stats is not loaded yet
+  if (!stats || typeof stats !== 'object') {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
