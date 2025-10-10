@@ -1,0 +1,18 @@
+# Path: nixpacks.toml (place at ROOT of your project, same level as package.json)
+# Railway Frontend Build Configuration
+# This tells Railway how to build and start the Mini App Frontend service
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "caddy"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[phases.start]
+cmd = "caddy run --config Caddyfile --adapter caddyfile"
+
+[start]
+cmd = "caddy run --config Caddyfile --adapter caddyfile"
