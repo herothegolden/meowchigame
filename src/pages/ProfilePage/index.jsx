@@ -1,10 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v29 - FINAL FIX: Simplified CTA logic, matches OverviewTab v27 events
-// - Listens to "meow:cta-check" (primary from tap response)
-// - Listens to "meow:reached42:server" (server confirmation)
-// - Removed unused "meow:cta-inline-eligible" listener
-// - Simplified backoff logic with prefer-truthy guard
-// - Clean, maintainable code
+// v30 — Atomic CTA wiring (minimal patch)
+// - Restores listener for "meow:cta-inline-eligible" and lights CTA directly from the /meow-tap response
+// - Keeps existing /meow-cta-status reads as sanity checks; prefer-truthy guard preserved
+// - No unrelated changes
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -101,10 +99,37 @@ const ProfilePage = () => {
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
 
+  // NEW (v30): Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
+  // This is the authoritative, immediate signal to light the CTA at the 42nd tap.
+  useEffect(() => {
+    const handleInlineEligible = (evt) => {
+      const d = (evt && evt.detail) || {};
+      setCtaStatus((prev) => ({
+        // Do not demote later unless usedToday becomes true
+        ...prev,
+        eligible: true,
+        usedToday: !!d.usedToday || false,
+        remainingGlobal: Number(
+          d.remainingGlobal !== undefined ? d.remainingGlobal : prev.remainingGlobal
+        ),
+        // Ensure UI shows 42 even if a background read lags
+        meow_taps: Math.max(prev.meow_taps || 0, 42),
+      }));
+
+      // Optional sanity check shortly after to sync with global status
+      setTimeout(() => {
+        fetchCtaStatus();
+      }, 600);
+    };
+
+    window.addEventListener("meow:cta-inline-eligible", handleInlineEligible);
+    return () => window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
+  }, [fetchCtaStatus]);
+
   // Listen for server-confirmed 42 event from OverviewTab
   useEffect(() => {
     const timers = [];
-    
+
     const handleReached42 = () => {
       fetchCtaStatus();
       // Retry a few times to account for database replication lag
@@ -124,7 +149,7 @@ const ProfilePage = () => {
   // Listen for CTA check event when tap response confirms 42
   useEffect(() => {
     const timers = [];
-    
+
     const handleCtaCheck = () => {
       fetchCtaStatus();
       // Multiple retries to beat race conditions
@@ -150,11 +175,11 @@ const ProfilePage = () => {
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
-    
+
     try {
       setCtaLoading(true);
       const res = await apiCall("/api/meow-claim");
-      
+
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
