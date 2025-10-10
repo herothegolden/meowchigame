@@ -1,9 +1,11 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v33 — Server truth on tap + immediate CTA signal
-// - Uses server response as the ONLY source of truth for meow count/lock.
-// - Emits CTA inline event when `ctaEligible === true` on (or after) the 42nd tap.
-// - Fixes off-by-one: initial render shows exact server value; first confirmed tap shows 1.
-// - Removes optimistic increment; no client-side +1 before server confirms.
+// v34 — Handle locked + resetsAt from server (Step 1 complete)
+// CHANGES (v34):
+// - Lines 68-69: Add locked and resetsAt state from server
+// - Lines 108-113: Update locked/resetsAt on server response
+// - Lines 231-237: Dynamic subtitle showing reset time when locked
+// - Line 345: Check locked state from server (not just local count)
+// UNCHANGED: No optimistic increment, server-truth-only approach from v33
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -24,6 +26,29 @@ const emitCounterChange = (count, day) => {
       detail: { count, day }
     }));
   } catch {}
+};
+
+// Format reset time for display
+const formatResetTime = (isoString) => {
+  if (!isoString) return null;
+  try {
+    const resetTime = new Date(isoString);
+    const now = new Date();
+    const diffMs = resetTime - now;
+    
+    if (diffMs <= 0) return "Скоро сброс...";
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `Сброс через ${hours}ч ${minutes}м`;
+    } else {
+      return `Сброс через ${minutes}м`;
+    }
+  } catch {
+    return null;
+  }
 };
 
 const OverviewTab = ({
@@ -59,6 +84,10 @@ const OverviewTab = ({
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
     return serverVal0;
   });
+
+  // Track lock state and reset time from server
+  const [locked, setLocked] = useState(false);
+  const [resetsAt, setResetsAt] = useState(null);
 
   const notified42Ref = useRef(false);
   const notifyReached42Server = useCallback(() => {
@@ -161,59 +190,6 @@ const OverviewTab = ({
     })();
   }, [streakInfo?.canClaim, backendBase, streakKey, onUpdate]);
 
-  const lifeStats = useMemo(
-    () => [
-      {
-        key: "points",
-        title: "Съедено печенек",
-        value: totalPoints,
-        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
-        tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
-      },
-      {
-        key: "zen",
-        title: "Уровень дзена",
-        value: gamesPlayed,
-        subtitle: "Чем больше часов, тем тише мысли.",
-        tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
-      },
-      {
-        key: "power-mood",
-        title: "Настроение по мощности",
-        value: highScoreToday,
-        subtitle: "Рекорд дня. Система сиеет, ты тоже.",
-        tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
-      },
-      {
-        key: "social-energy",
-        title: "Социальная энергия",
-        value: `${dailyStreak}`,
-        subtitle:
-          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
-        tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
-      },
-      {
-        key: "invites",
-        title: "Приглашено друзей",
-        value: (stats?.invited_friends || 0).toLocaleString(),
-        subtitle: "Каждый получил полотенце. Никто не вернул.",
-        tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
-      },
-      {
-        key: "meow-counter",
-        title: "Счётчик мяу",
-        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
-        subtitle:
-          meowTapsLocal >= 42
-            ? "Совершенство достигнуто — мир в равновесии."
-            : "Нажимай дальше. Мяу ждёт.",
-        tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
-        tappable: true,
-      },
-    ],
-    [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
-  );
-
   const tapCountRef = useRef(0);
 
   const sendTap = useCallback(async () => {
@@ -242,6 +218,8 @@ const OverviewTab = ({
 
       if (res.ok && data && typeof data.meow_taps === "number") {
         const serverCount = Math.min(42, data.meow_taps);
+        
+        // Update counter state
         setMeowTapsLocal((prev) => {
           const next = serverCount; // server truth only
           persist(next);
@@ -250,6 +228,14 @@ const OverviewTab = ({
           if (addDebugLog) addDebugLog(`✅ Tap #${tapNum} applied: ${prev} → ${next}`);
           return next;
         });
+
+        // Update lock state and reset time from server
+        if (typeof data.locked === "boolean") {
+          setLocked(data.locked);
+        }
+        if (typeof data.resetsAt === "string") {
+          setResetsAt(data.resetsAt);
+        }
 
         // Inline CTA eligibility from same response
         if ((serverCount >= 42 || data.locked === true) && data.ctaEligible === true) {
@@ -293,8 +279,9 @@ const OverviewTab = ({
     }
     tapCooldownRef.current = now;
 
-    if (meowTapsLocal >= 42) {
-      if (addDebugLog) addDebugLog(`🛑 Tap ignored (already at 42)`);
+    // Block tap if locked OR at 42
+    if (locked || meowTapsLocal >= 42) {
+      if (addDebugLog) addDebugLog(`🛑 Tap ignored (locked=${locked}, count=${meowTapsLocal})`);
       return;
     }
 
@@ -305,7 +292,69 @@ const OverviewTab = ({
     } catch (_) {}
 
     void sendTap();
-  }, [meowTapsLocal, sendTap, addDebugLog]);
+  }, [locked, meowTapsLocal, sendTap, addDebugLog]);
+
+  // Dynamic subtitle for meow counter
+  const meowSubtitle = useMemo(() => {
+    if (meowTapsLocal >= 42 || locked) {
+      const resetInfo = formatResetTime(resetsAt);
+      if (resetInfo) {
+        return `Совершенство достигнуто. ${resetInfo}.`;
+      }
+      return "Совершенство достигнуто — мир в равновесии.";
+    }
+    return "Нажимай дальше. Мяу ждёт.";
+  }, [meowTapsLocal, locked, resetsAt]);
+
+  const lifeStats = useMemo(
+    () => [
+      {
+        key: "points",
+        title: "Съедено печенек",
+        value: totalPoints,
+        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
+        tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
+      },
+      {
+        key: "zen",
+        title: "Уровень дзена",
+        value: gamesPlayed,
+        subtitle: "Чем больше часов, тем тише мысли.",
+        tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
+      },
+      {
+        key: "power-mood",
+        title: "Настроение по мощности",
+        value: highScoreToday,
+        subtitle: "Рекорд дня. Система сиеет, ты тоже.",
+        tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
+      },
+      {
+        key: "social-energy",
+        title: "Социальная энергия",
+        value: `${dailyStreak}`,
+        subtitle:
+          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
+        tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
+      },
+      {
+        key: "invites",
+        title: "Приглашено друзей",
+        value: (stats?.invited_friends || 0).toLocaleString(),
+        subtitle: "Каждый получил полотенце. Никто не вернул.",
+        tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
+      },
+      {
+        key: "meow-counter",
+        title: "Счётчик мяу",
+        value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
+        subtitle: meowSubtitle,
+        tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
+        tappable: true,
+      },
+    ],
+    [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal, meowSubtitle]
+  );
 
   return (
     <motion.div
