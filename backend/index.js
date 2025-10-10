@@ -1,5 +1,8 @@
 // Path: backend/index.js
-// v2 — badgesRoutes import and mount removed only
+// v3 – Added meowRoutes for meow counter & CTA endpoints
+// CHANGES:
+// - Added import for meowRoutes from './routes/meow.js'
+// - Mounted meowRoutes at '/api'
 
 import 'dotenv/config';
 import express from 'express';
@@ -18,10 +21,10 @@ import shopRoutes from './routes/shop.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import friendsRoutes from './routes/friends.js';
 import tasksRoutes from './routes/tasks.js';
-// import badgesRoutes from './routes/badges.js'; // 🔸 Removed safely
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
+import meowRoutes from './routes/meow.js'; // ✅ NEW - Meow counter & CTA
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,10 +59,10 @@ app.use('/api', shopRoutes);
 app.use('/api', leaderboardRoutes);
 app.use('/api', friendsRoutes);
 app.use('/api', tasksRoutes);
-// app.use('/api', badgesRoutes); // 🔸 Removed safely
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
+app.use('/api', meowRoutes); // ✅ NEW - Meow endpoints: /meow-tap, /meow-cta-status, /meow-claim
 
 // ---- START SERVER ----
 const startServer = async () => {
@@ -71,9 +74,9 @@ const startServer = async () => {
     
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+      console.log(`🥐 Health check: http://localhost:${PORT}/health`);
       console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
-      console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
+      console.log(`🌐 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
       
       await startGlobalStatsSimulation(PORT);
     });
