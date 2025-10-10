@@ -1,11 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v39 – DEBUG VERSION: Comprehensive logging for CTA debugging
-// CHANGES:
-// 1. Added DEBUG flag (set to true)
-// 2. Logs all fetchCtaStatus calls and responses
-// 3. Logs counter events and state changes
-// 4. Logs CTA visibility decisions
-// 5. Visual debug panel at top of page
+// v40 – Inline-eligibility listener + late sanity check with prefer‑truthy guard
+// - Listens to "meow:cta-inline-eligible" raised by OverviewTab tap=42 response.
+// - Performs late sanity checks via /api/meow-cta-status, but does NOT demote from
+//   eligible=true unless usedToday===true or remainingGlobal===0.
+// - Keeps CTA visibility local to Profile. Adds compact debug panel (DEBUG=true).
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -48,7 +46,7 @@ const ProfilePage = () => {
   const addDebugLog = useCallback((msg) => {
     const timestamp = new Date().toLocaleTimeString();
     console.log(`[DEBUG ${timestamp}]`, msg);
-    setDebugLogs(prev => [...prev.slice(-9), `${timestamp}: ${msg}`]);
+    setDebugLogs((prev) => [...prev.slice(-9), `${timestamp}: ${msg}`]);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -88,10 +86,12 @@ const ProfilePage = () => {
           meow_taps: Number(res.meow_taps || 0),
         };
 
-        addDebugLog(`📊 CTA State Update: eligible=${next.eligible}, taps=${next.meow_taps}, remaining=${next.remainingGlobal}, used=${next.usedToday}`);
+        addDebugLog(
+          `📊 CTA State Update: eligible=${next.eligible}, taps=${next.meow_taps}, remaining=${next.remainingGlobal}, used=${next.usedToday}`
+        );
 
-        // Prefer-truthy guard
-        if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
+        // Prefer-truthy guard: don't demote unless usedToday or quota exhausted
+        if (prev.eligible === true && next.eligible === false && next.usedToday !== true && next.remainingGlobal > 0) {
           addDebugLog(`🛡️ Guard triggered: keeping eligible=true`);
           return {
             ...prev,
@@ -125,7 +125,7 @@ const ProfilePage = () => {
       if (typeof count === "number") {
         addDebugLog(`🎯 Counter event: ${liveCounterValue} → ${count}`);
         setLiveCounterValue(count);
-        
+
         // When reaching 42, fetch CTA status
         if (count >= 42) {
           addDebugLog(`🔔 Counter reached 42! Fetching CTA status...`);
@@ -138,6 +138,7 @@ const ProfilePage = () => {
     return () => window.removeEventListener("meow:counter-changed", handleCounterChanged);
   }, [fetchCtaStatus, liveCounterValue, addDebugLog]);
 
+  // Inline eligibility signal from tap response
   useEffect(() => {
     const handleInlineEligible = (evt) => {
       const d = (evt && evt.detail) || {};
@@ -152,6 +153,7 @@ const ProfilePage = () => {
         meow_taps: Math.max(prev.meow_taps || 0, 42),
       }));
 
+      // One late sanity check (non-demoting due to guard above)
       setTimeout(() => {
         fetchCtaStatus();
       }, 600);
@@ -161,6 +163,7 @@ const ProfilePage = () => {
     return () => window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
   }, [fetchCtaStatus, addDebugLog]);
 
+  // Backstop: when 42 is reached (server-confirmed), poll briefly
   useEffect(() => {
     const timers = [];
 
@@ -179,6 +182,7 @@ const ProfilePage = () => {
     };
   }, [fetchCtaStatus, addDebugLog]);
 
+  // Backstop: CTA check triggers from other parts of the app
   useEffect(() => {
     const timers = [];
 
@@ -237,11 +241,11 @@ const ProfilePage = () => {
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
-  
+
   // Use live counter value as primary source
   const displayCounter = Math.max(liveCounterValue, stats.meow_taps || 0, ctaStatus.meow_taps);
   const userReached42 = displayCounter >= 42;
-  
+
   // CTA visibility logic
   const showMeowCTA = ctaStatus.eligible;
   const isLateToday = userReached42 && !ctaStatus.usedToday && ctaStatus.remainingGlobal === 0;
@@ -264,14 +268,14 @@ const ProfilePage = () => {
         <div className="rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-3 text-xs font-mono">
           <div className="flex justify-between items-center mb-2">
             <span className="font-bold text-yellow-200">🐛 DEBUG MODE</span>
-            <button 
+            <button
               onClick={() => setDebugLogs([])}
               className="text-yellow-200 hover:text-yellow-100 text-[10px]"
             >
               Clear
             </button>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-2 mb-2 text-yellow-100">
             <div>Counter: <span className="font-bold">{displayCounter}</span></div>
             <div>Live: <span className="font-bold">{liveCounterValue}</span></div>
