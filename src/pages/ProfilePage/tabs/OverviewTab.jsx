@@ -319,6 +319,91 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             }
           : { className: baseClass };
 
+        // --- Render Meow Counter with OUTER gold glow wrapper (allows spill beyond card) ---
+        if (isMeowCounter) {
+          return (
+            <div key={`wrap-${i}`} className="relative">
+              {/* Static subtle golden aura */}
+              <motion.div
+                key={`gold-base-${isLocked ? 'locked' : 'idle'}`}
+                className="pointer-events-none absolute -inset-3 rounded-[22px]"
+                initial={false}
+                animate={{ opacity: isLocked ? 0.35 : 0.22 }}
+                transition={{ duration: 0.3 }}
+                style={{
+                  background:
+                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.55) 0%, rgba(246,196,83,0.28) 35%, rgba(246,196,83,0.10) 60%, rgba(0,0,0,0) 100%)",
+                  filter: "blur(18px)",
+                }}
+              />
+
+              {/* Pulse on every tap */}
+              <motion.div
+                key={`gold-pulse-${glowTick}`}
+                className="pointer-events-none absolute -inset-5 rounded-[26px]"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: [0, 0.7, 0], scale: [0.96, 1.08, 1.02] }}
+                transition={{ duration: 0.5, times: [0, 0.4, 1], ease: "easeOut" }}
+                style={{
+                  background:
+                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.75) 0%, rgba(246,196,83,0.42) 30%, rgba(246,196,83,0.16) 58%, rgba(0,0,0,0) 100%)",
+                  filter: "blur(22px)",
+                }}
+              />
+
+              {/* Card itself */}
+              <motion.div
+                whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: "spring", stiffness: 220, damping: 18 }}
+                {...interactiveProps}
+              >
+                {/* GOLD FRAME when locked (persistent) */}
+                {isLocked && (
+                  <>
+                    <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
+                    {/* One-time gold flash on entering locked state */}
+                    <motion.div
+                      key={`goldflash-${goldFlashTick}`}
+                      className="pointer-events-none absolute inset-0 rounded-2xl"
+                      initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
+                      animate={{
+                        opacity: [0, 1, 0],
+                        boxShadow: [
+                          "0 0 0 0 rgba(246,196,83,0)",
+                          "0 0 90px 26px rgba(246,196,83,0.95)",
+                          "0 0 0 0 rgba(246,196,83,0)"
+                        ]
+                      }}
+                      transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
+                      style={{ borderRadius: "1rem" }}
+                    />
+                  </>
+                )}
+
+                {/* base sheen + inner ring above content */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
+                <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
+
+                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
+                  <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
+                    {stat.title}
+                  </p>
+                  <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
+                    {stat.value}
+                  </p>
+                  <p className="text-[12.5px] text-gray-400 leading-snug">
+                    {stat.subtitle}
+                  </p>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
+              </motion.div>
+            </div>
+          );
+        }
+
+        // --- Default cards (no outer glow wrapper) ---
         return (
           <motion.div
             key={i}
@@ -327,55 +412,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             {...interactiveProps}
           >
-            {/* 🔮 BACKLIGHT — sits "behind" the card content; clipped by card radius */}
-            {isMeowCounter && (
-              <motion.div
-                key={`backlight-${glowTick}`}
-                className="pointer-events-none absolute inset-0 rounded-2xl"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{
-                  opacity: [0, 0.75, 0],
-                  scale: [0.95, 1.12, 1.0],
-                }}
-                transition={{ duration: 0.45, times: [0, 0.4, 1], ease: "easeOut" }}
-                style={{
-                  zIndex: 0,
-                  background:
-                    "radial-gradient(65% 65% at 50% 50%, rgba(255, 230, 160, 0.60) 0%, rgba(255, 200, 110, 0.38) 30%, rgba(255, 160, 70, 0.14) 58%, rgba(0,0,0,0) 100%)",
-                  filter: "blur(14px)",
-                }}
-              />
-            )}
+            {/* base sheen + inner ring */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
 
-            {/* ✨ GOLD FRAME when locked (42) — persistent elegant ring + glow */}
-            {isLocked && (
-              <>
-                {/* Persistent gold ring while locked */}
-                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
-                {/* One-time gold flash on entering locked state */}
-                <motion.div
-                  key={`goldflash-${goldFlashTick}`}
-                  className="pointer-events-none absolute inset-0 rounded-2xl"
-                  initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
-                  animate={{
-                    opacity: [0, 1, 0],
-                    boxShadow: [
-                      "0 0 0 0 rgba(246,196,83,0)",
-                      "0 0 90px 26px rgba(246,196,83,0.95)",
-                      "0 0 0 0 rgba(246,196,83,0)"
-                    ]
-                  }}
-                  transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
-                  style={{ borderRadius: "1rem" }}
-                />
-              </>
-            )}
-
-            {/* base sheen + inner ring above backlight */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
-            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
-
-            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
+            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
               <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
                 {stat.title}
               </p>
@@ -387,7 +428,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
               </p>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
+            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
           </motion.div>
         );
       })}
