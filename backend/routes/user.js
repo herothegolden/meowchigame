@@ -1,5 +1,7 @@
 // Path: backend/routes/user.js
-// v11 — Move meow daily reset out of read endpoints (cron handles reset at Tashkent midnight)
+// v12 — Display-only Tashkent day guard for meow_taps in /get-user-stats and /get-profile-complete
+// - Ensures Profile never shows stale meow_taps from a previous day if daily cron hasn't run yet
+// - NO DB mutation here; cron + /meow-tap remain the only writers
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -187,6 +189,12 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
 
+      // 🔒 DISPLAY-ONLY DAY GUARD: if stored date is not today, present 0 to client
+      if (!userData.meow_taps_date || String(userData.meow_taps_date).slice(0,10) !== todayStr) {
+        userData.meow_taps = 0;
+        userData.meow_taps_date = todayStr;
+      }
+
       // --- Derived daily metrics (display correctness) ---
       // 1) Today's high score (Asia/Tashkent)
       const highTodayResult = await client.query(
@@ -283,6 +291,12 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
+
+      // 🔒 DISPLAY-ONLY DAY GUARD for Profile payload
+      if (!userData.meow_taps_date || String(userData.meow_taps_date).slice(0,10) !== todayStr) {
+        userData.meow_taps = 0;
+        userData.meow_taps_date = todayStr;
+      }
 
       userData.averageScore = Math.floor(avgResult.rows[0]?.avg_score || 0);
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
