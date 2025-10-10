@@ -292,6 +292,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     >
       {lifeStats.map((stat, i) => {
         const isMeowCounter = stat.key === "meow-counter";
+        const isLocked = isMeowCounter && meowTapsLocal >= 42;
         const baseClass =
           `relative rounded-2xl border border-white/10 
            bg-gradient-to-br ${stat.tint}
@@ -333,6 +334,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                   filter: "blur(14px)",
                 }}
               />
+            )}
+
+            {/* ✨ GOLD FRAME when locked (42) — persistent elegant ring + glow */}
+            {isLocked && (
+              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-amber-300/80 shadow-[0_0_28px_rgba(246,196,83,0.55)]" />
             )}
 
             {/* base sheen + inner ring above backlight */}
