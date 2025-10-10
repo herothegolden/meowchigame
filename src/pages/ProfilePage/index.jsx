@@ -1,9 +1,6 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v31 — CRITICAL BUG FIX: CTA now appears at 42nd tap
-// FIXED: Line 213 changed from `!ctaStatus.eligible` to `ctaStatus.eligible`
-// - Single-character fix resolves CTA never appearing when user is eligible
-// - All other logic (atomic transactions, events, timezone) already correct
-// - No unrelated changes
+// v32 — DEBUG VERSION: Added console logs to trace CTA state flow
+// Use this to diagnose why CTA doesn't appear at 42
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -55,9 +52,13 @@ const ProfilePage = () => {
 
     try {
       const res = await apiCall("/api/meow-cta-status");
+      console.log("🔍 [CTA-DEBUG] /meow-cta-status response:", res);
 
       // Ignore stale responses
-      if (reqId !== ctaReqSeqRef.current) return;
+      if (reqId !== ctaReqSeqRef.current) {
+        console.log("⏭️ [CTA-DEBUG] Ignoring stale response, reqId:", reqId);
+        return;
+      }
 
       setCtaStatus((prev) => {
         const next = {
@@ -67,8 +68,11 @@ const ProfilePage = () => {
           meow_taps: Number(res.meow_taps || 0),
         };
 
+        console.log("🔍 [CTA-DEBUG] fetchCtaStatus state transition:", { prev, next });
+
         // Prefer-truthy guard: Don't demote eligible:true to false unless explicitly used
         if (prev.eligible === true && next.eligible === false && next.usedToday !== true) {
+          console.log("🛡️ [CTA-DEBUG] Prefer-truthy guard activated, keeping eligible=true");
           return {
             ...prev,
             remainingGlobal: next.remainingGlobal,
@@ -76,10 +80,11 @@ const ProfilePage = () => {
           };
         }
 
+        console.log("✅ [CTA-DEBUG] Setting new CTA state:", next);
         return next;
       });
     } catch (err) {
-      console.error("Failed to fetch CTA status:", err);
+      console.error("❌ [CTA-DEBUG] Failed to fetch CTA status:", err);
     }
   }, []);
 
@@ -96,35 +101,43 @@ const ProfilePage = () => {
   // If already at 42 on initial load, fetch CTA immediately
   useEffect(() => {
     if (data?.stats?.meow_taps >= 42) {
+      console.log("🎯 [CTA-DEBUG] User already at 42 on load, fetching CTA status");
       fetchCtaStatus();
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
 
-  // NEW (v30): Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
-  // This is the authoritative, immediate signal to light the CTA at the 42nd tap.
+  // Listen for inline eligibility from OverviewTab (atomic /meow-tap response)
   useEffect(() => {
     const handleInlineEligible = (evt) => {
+      console.log("🎉 [CTA-DEBUG] Received meow:cta-inline-eligible event:", evt.detail);
       const d = (evt && evt.detail) || {};
-      setCtaStatus((prev) => ({
-        // Do not demote later unless usedToday becomes true
-        ...prev,
-        eligible: true,
-        usedToday: !!d.usedToday || false,
-        remainingGlobal: Number(
-          d.remainingGlobal !== undefined ? d.remainingGlobal : prev.remainingGlobal
-        ),
-        // Ensure UI shows 42 even if a background read lags
-        meow_taps: Math.max(prev.meow_taps || 0, 42),
-      }));
+      setCtaStatus((prev) => {
+        const newState = {
+          ...prev,
+          eligible: true,
+          usedToday: !!d.usedToday || false,
+          remainingGlobal: Number(
+            d.remainingGlobal !== undefined ? d.remainingGlobal : prev.remainingGlobal
+          ),
+          meow_taps: Math.max(prev.meow_taps || 0, 42),
+        };
+        console.log("✅ [CTA-DEBUG] handleInlineEligible state transition:", { prev, new: newState });
+        return newState;
+      });
 
       // Optional sanity check shortly after to sync with global status
       setTimeout(() => {
+        console.log("🔄 [CTA-DEBUG] Running sanity check fetchCtaStatus after inline event");
         fetchCtaStatus();
       }, 600);
     };
 
+    console.log("👂 [CTA-DEBUG] Adding meow:cta-inline-eligible event listener");
     window.addEventListener("meow:cta-inline-eligible", handleInlineEligible);
-    return () => window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
+    return () => {
+      console.log("🔇 [CTA-DEBUG] Removing meow:cta-inline-eligible event listener");
+      window.removeEventListener("meow:cta-inline-eligible", handleInlineEligible);
+    };
   }, [fetchCtaStatus]);
 
   // Listen for server-confirmed 42 event from OverviewTab
@@ -132,15 +145,14 @@ const ProfilePage = () => {
     const timers = [];
 
     const handleReached42 = () => {
+      console.log("🎯 [CTA-DEBUG] Received meow:reached42:server event");
       fetchCtaStatus();
-      // Retry a few times to account for database replication lag
       timers.push(setTimeout(fetchCtaStatus, 200));
       timers.push(setTimeout(fetchCtaStatus, 500));
       timers.push(setTimeout(fetchCtaStatus, 1000));
     };
 
     window.addEventListener("meow:reached42:server", handleReached42);
-
     return () => {
       window.removeEventListener("meow:reached42:server", handleReached42);
       timers.forEach((t) => clearTimeout(t));
@@ -152,15 +164,14 @@ const ProfilePage = () => {
     const timers = [];
 
     const handleCtaCheck = () => {
+      console.log("🔍 [CTA-DEBUG] Received meow:cta-check event");
       fetchCtaStatus();
-      // Multiple retries to beat race conditions
       timers.push(setTimeout(fetchCtaStatus, 150));
       timers.push(setTimeout(fetchCtaStatus, 400));
       timers.push(setTimeout(fetchCtaStatus, 800));
     };
 
     window.addEventListener("meow:cta-check", handleCtaCheck);
-
     return () => {
       window.removeEventListener("meow:cta-check", handleCtaCheck);
       timers.forEach((t) => clearTimeout(t));
@@ -170,7 +181,10 @@ const ProfilePage = () => {
   // Light polling to reflect global daily cap
   useEffect(() => {
     fetchCtaStatus();
-    const interval = setInterval(fetchCtaStatus, 20000);
+    const interval = setInterval(() => {
+      console.log("⏰ [CTA-DEBUG] Polling interval triggered");
+      fetchCtaStatus();
+    }, 20000);
     return () => clearInterval(interval);
   }, [fetchCtaStatus, activeTab]);
 
@@ -200,16 +214,20 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
   
-  // ✅ CRITICAL FIX (v31): Show CTA when eligible=true, not when eligible=false
-  // Previous bug: `!ctaStatus.eligible` inverted the boolean
-  // Fixed: Direct boolean check shows CTA when user meets all conditions
+  // CTA visibility logic
   const showMeowCTA = ctaStatus.eligible;
+  
+  // Debug output on every render
+  console.log("🎨 [CTA-DEBUG] RENDER - ctaStatus:", ctaStatus);
+  console.log("🎨 [CTA-DEBUG] RENDER - showMeowCTA:", showMeowCTA);
 
   // Show "you're late" message if user reached 42 but all claims are taken
   const isLateToday =
     !ctaStatus.eligible &&
     ctaStatus.meow_taps === 42 &&
     Number(ctaStatus.remainingGlobal) === 0;
+
+  console.log("🎨 [CTA-DEBUG] RENDER - isLateToday:", isLateToday);
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -289,6 +307,16 @@ const ProfilePage = () => {
             </Suspense>
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* 🔍 DEBUG: Always show CTA state for visibility */}
+      <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 px-3 py-2 text-xs font-mono">
+        <div>DEBUG CTA State:</div>
+        <div>eligible: {String(ctaStatus.eligible)}</div>
+        <div>usedToday: {String(ctaStatus.usedToday)}</div>
+        <div>remainingGlobal: {ctaStatus.remainingGlobal}</div>
+        <div>meow_taps: {ctaStatus.meow_taps}</div>
+        <div>showMeowCTA: {String(showMeowCTA)}</div>
       </div>
 
       {showMeowCTA && (
