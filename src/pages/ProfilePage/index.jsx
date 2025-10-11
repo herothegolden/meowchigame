@@ -1,4 +1,4 @@
-// Path: frontend/src/pages/ProfilePage/index.jsx
+// Path: src/pages/ProfilePage/index.jsx
 // v17 — Instant paint:
 // - Removed full-screen loading gate to avoid black screen.
 // - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
@@ -9,12 +9,12 @@ import { useNavigate } from "react-router-dom";
 import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 
 // ✅ Corrected lazy imports (moved to /tabs/ folder)
-const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
-const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
-const TasksTab = lazy(() => import("./tabs/TasksTab"));
+const OverviewTab = lazy(() => import("./tabs/OverviewTab.jsx"));
+const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab.jsx"));
+const TasksTab = lazy(() => import("./tabs/TasksTab.jsx"));
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -24,12 +24,10 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Meow CTA status
-  const [ctaStatus, setCtaStatus] = useState({
-    eligible: false,
-    usedToday: false,
-    remainingGlobal: 0,
-    meow_taps: 0,
+  // Meow counter status
+  const [meowCounter, setMeowCounter] = useState({
+    count: 0,
+    showCTA: false,
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
@@ -47,18 +45,16 @@ const ProfilePage = () => {
     }
   }, []);
 
-  const fetchCtaStatus = useCallback(async () => {
+  const refreshMeowCounter = useCallback(async () => {
     try {
-      // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
-      const res = await apiCall("/api/meow-cta-status");
-      setCtaStatus({
-        eligible: !!res.eligible,
-        usedToday: !!res.usedToday,
-        remainingGlobal: Number(res.remainingGlobal || 0),
-        meow_taps: Number(res.meow_taps || 0),
+      const res = await apiCall("/api/meow-counter");
+      const count = Number(res?.count ?? res?.meow_taps ?? 0);
+      setMeowCounter({
+        count,
+        showCTA: Boolean(res?.showCTA ?? (res?.locked && count >= 42)),
       });
     } catch (e) {
-      // Silently ignore; CTA is optional UI
+      // Optional UI; swallow network errors
     }
   }, []);
 
@@ -69,65 +65,63 @@ const ProfilePage = () => {
   // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
   useEffect(() => {
     if (data?.stats?.meow_taps >= 42) {
-      fetchCtaStatus();
+      refreshMeowCounter();
     }
-  }, [data?.stats?.meow_taps, fetchCtaStatus]);
+  }, [data?.stats?.meow_taps, refreshMeowCounter]);
 
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
-    const onReached42 = () => {
-      // Immediate check
-      fetchCtaStatus();
-      // Short retry ladder to outwait backend throttle and DB write latency
-      const t1 = setTimeout(fetchCtaStatus, 150);
-      const t2 = setTimeout(fetchCtaStatus, 400);
-      const t3 = setTimeout(fetchCtaStatus, 800);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+    const pendingTimeouts = new Set();
+
+    const queueRefresh = () => {
+      refreshMeowCounter();
+      [150, 400, 800].forEach((delay) => {
+        const id = setTimeout(() => {
+          refreshMeowCounter();
+          pendingTimeouts.delete(id);
+        }, delay);
+        pendingTimeouts.add(id);
+      });
     };
+
+    const onReached42 = () => {
+      pendingTimeouts.forEach(clearTimeout);
+      pendingTimeouts.clear();
+      queueRefresh();
+    };
+
     window.addEventListener("meow:reached42", onReached42);
-    return () => window.removeEventListener("meow:reached42", onReached42);
-  }, [fetchCtaStatus]);
+    return () => {
+      window.removeEventListener("meow:reached42", onReached42);
+      pendingTimeouts.forEach(clearTimeout);
+    };
+  }, [refreshMeowCounter]);
 
   // Poll CTA status lightly (reflects global 42 cap); also on tab switch
   useEffect(() => {
-    fetchCtaStatus();
-    const t = setInterval(fetchCtaStatus, 20000);
+    refreshMeowCounter();
+    const t = setInterval(refreshMeowCounter, 20000);
     return () => clearInterval(t);
-  }, [fetchCtaStatus, activeTab]);
+  }, [refreshMeowCounter, activeTab]);
 
-  const handleClaimAndGoToOrder = useCallback(async () => {
+  const handleGoToOrder = useCallback(() => {
     if (ctaLoading) return;
+    setCtaLoading(true);
     try {
-      setCtaLoading(true);
-      // apiCall always posts; backend route is POST /api/meow-claim
-      const res = await apiCall("/api/meow-claim");
-      if (res?.success && res?.claimId) {
-        showSuccess("Скидка 42% активирована на заказ 🎉");
-        // Hide CTA locally to avoid double-taps
-        setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
-        navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
-      } else {
-        showError(res?.error || "Не удалось активировать предложение");
-        // Refresh CTA status to reflect server truth
-        fetchCtaStatus();
-      }
+      showSuccess("Скидка 42% активирована на заказ 🎉");
+      navigate("/order?promo=MEOW42");
     } catch (e) {
-      showError(e?.message || "Сеть недоступна");
-      fetchCtaStatus();
+      showError(e?.message || "Не удалось открыть страницу заказа");
     } finally {
       setCtaLoading(false);
     }
-  }, [ctaLoading, navigate, fetchCtaStatus]);
+  }, [ctaLoading, navigate]);
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
 
-  // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
-  const showMeowCTA = !!ctaStatus.eligible;
+  const meowCount = Math.max(0, Number(meowCounter.count || 0));
+  const showMeowCTA = Boolean(meowCounter.showCTA);
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -225,16 +219,16 @@ const ProfilePage = () => {
             </div>
             <button
               disabled={ctaLoading}
-              onClick={handleClaimAndGoToOrder}
-              className={`px-4 py-2 rounded-lg font-semibold transition 
-                ${ctaLoading ? "bg-accent/60 cursor-wait" : "bg-accent hover:bg-accent/90"} 
+              onClick={handleGoToOrder}
+              className={`px-4 py-2 rounded-lg font-semibold transition
+                ${ctaLoading ? "bg-accent/60 cursor-wait" : "bg-accent hover:bg-accent/90"}
                 text-background`}
             >
               {ctaLoading ? "Подождите..." : "Заказать сейчас"}
             </button>
           </div>
           <p className="mt-2 text-[12.5px] text-gray-400">
-            Осталось сегодня: {ctaStatus.remainingGlobal}
+            Прогресс: {Math.min(meowCount, 42)} / 42 мяу за сегодня
           </p>
         </div>
       )}
