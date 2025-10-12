@@ -1,0 +1,444 @@
+import express from 'express';
+import { pool } from '../config/database.js';
+import { validateUser } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Helper function for badge progress updates
+const updateBadgeProgress = async (client, userId, score, gamesPlayed, highScore) => {
+  const badgeUpdates = [
+    {
+      name: 'Cookie Master Badge',
+      current: Math.floor(score),
+      target: 5000,
+      condition: score >= 5000
+    },
+    {
+      name: 'Speed Demon Badge',
+      current: Math.floor(gamesPlayed >= 10 ? 75 : gamesPlayed * 7.5),
+      target: 100,
+      condition: false
+    },
+    {
+      name: 'Champion Badge',
+      current: Math.floor(highScore >= 3000 ? 25 : Math.floor(highScore / 120)),
+      target: 100,
+      condition: false
+    }
+  ];
+
+  for (const badge of badgeUpdates) {
+    await client.query(
+      `INSERT INTO badge_progress (user_id, badge_name, current_progress, target_progress)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, badge_name)
+       DO UPDATE SET current_progress = GREATEST(badge_progress.current_progress, $3), updated_at = CURRENT_TIMESTAMP`,
+      [userId, badge.name, badge.current, badge.target]
+    );
+
+    if (badge.condition) {
+      await client.query(
+        `INSERT INTO user_badges (user_id, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, badge.name]
+      );
+    }
+  }
+};
+
+// ---- UPDATE SCORE (with server-side idempotency via gameId) ----
+router.post('/update-score', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { score, duration = 30, itemsUsed = [], gameId } = req.body;
+    if (score === undefined) {
+      return res.status(400).json({ error: 'Score is required' });
+    }
+
+    const baseScore = Math.floor(Number(score) || 0);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Lock user row for safe increments
+      const userResult = await client.query(
+        'SELECT points, point_booster_expires_at, high_score, games_played FROM users WHERE telegram_id = $1 FOR UPDATE',
+        [user.id]
+      );
+      if (userResult.rowCount === 0) throw new Error('User not found');
+
+      const { points, point_booster_expires_at, high_score, games_played } = userResult.rows[0];
+      const boosterActive = point_booster_expires_at && new Date(point_booster_expires_at) > new Date();
+      const finalScore = boosterActive ? baseScore * 2 : baseScore;
+
+      const startingPoints = Number(points) || 0;
+      const newHighScore = Math.max(high_score || 0, finalScore);
+      const newGamesPlayed = (games_played || 0) + 1;
+
+      let insertedSessionId = null;
+      let usedIdempotency = false;
+
+      // If client provided a gameId, try idempotent insert first.
+      if (typeof gameId === 'string' && gameId.length > 0) {
+        usedIdempotency = true;
+        try {
+          // Attempt idempotent insert (requires DB column + unique index)
+          const sessionResult = await client.query(
+            `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier, game_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (user_id, game_id) DO NOTHING
+             RETURNING id`,
+            [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0, gameId]
+          );
+
+          if (sessionResult.rowCount > 0) {
+            insertedSessionId = sessionResult.rows[0].id;
+
+            // Only on first insert do we increment users.*
+            const newPoints = startingPoints + (Number(finalScore) || 0);
+
+            const updateResult = await client.query(
+              `UPDATE users SET
+                 points = $1,
+                 point_booster_active = FALSE,
+                 point_booster_expires_at = NULL,
+                 high_score = $3,
+                 games_played = $4
+               WHERE telegram_id = $2
+               RETURNING points`,
+              [newPoints, user.id, newHighScore, newGamesPlayed]
+            );
+
+            await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
+            await client.query('COMMIT');
+
+            return res.status(200).json({
+              new_points: updateResult.rows[0].points,
+              score_awarded: finalScore,
+              session_id: insertedSessionId,
+              idempotent: true,
+              inserted: true
+            });
+          } else {
+            // Duplicate (same user_id + game_id) → do not mutate points/games_played
+            await client.query('ROLLBACK'); // nothing changed in this tx
+            return res.status(200).json({
+              new_points: startingPoints, // unchanged
+              score_awarded: 0,
+              session_id: null,
+              idempotent: true,
+              inserted: false
+            });
+          }
+        } catch (e) {
+          // Graceful fallback if game_id column/index not yet migrated
+          const msg = String(e?.message || '');
+          const columnMissing =
+            msg.includes('column "game_id"') ||
+            msg.includes('game_id') && msg.includes('does not exist');
+
+          const conflictTargetMissing =
+            msg.includes('ON CONFLICT') && msg.includes('game_id');
+
+          if (!columnMissing && !conflictTargetMissing) {
+            // Unexpected error → bubble up
+            throw e;
+          }
+          // Else: continue to legacy non-idempotent path below (no game_id)
+          console.warn('⚠️ Idempotency fallback: game_id not available yet. Proceeding without idempotency.');
+        }
+      }
+
+      // ---- Legacy (non-idempotent) path OR fallback if game_id not available ----
+      const sessionResult = await client.query(
+        `INSERT INTO game_sessions (user_id, score, duration, items_used, boost_multiplier)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [user.id, finalScore, duration, JSON.stringify(itemsUsed), boosterActive ? 2.0 : 1.0]
+      );
+      insertedSessionId = sessionResult.rows[0].id;
+
+      // ✅ ensure numeric addition
+      const newPoints = (Number(points) || 0) + (Number(finalScore) || 0);
+
+      const updateResult = await client.query(
+        `UPDATE users SET
+           points = $1,
+           point_booster_active = FALSE,
+           point_booster_expires_at = NULL,
+           high_score = $3,
+           games_played = $4
+         WHERE telegram_id = $2 RETURNING points`,
+        [newPoints, user.id, newHighScore, newGamesPlayed]
+      );
+
+      await updateBadgeProgress(client, user.id, finalScore, newGamesPlayed, newHighScore);
+      await client.query('COMMIT');
+
+      return res.status(200).json({
+        new_points: updateResult.rows[0].points,
+        score_awarded: finalScore,
+        session_id: insertedSessionId,
+        idempotent: !!usedIdempotency && false, // attempted but fell back
+        inserted: true
+      });
+
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/update-score:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- USE TIME BOOSTER ----
+router.post('/use-time-booster', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId, timeBonus } = req.body;
+
+    if (!itemId || itemId !== 1) {
+      return res.status(400).json({ error: 'Only Extra Time +10s can be used this way.' });
+    }
+    if (!timeBonus || timeBonus !== 10) {
+      return res.status(400).json({ error: 'Invalid time bonus value.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const inventoryResult = await client.query(
+        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [user.id, itemId]
+      );
+      if (inventoryResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'You do not own this item.' });
+      }
+
+      const quantity = inventoryResult.rows[0].quantity;
+      if (quantity > 1) {
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Extra Time +10s')`,
+        [user.id, itemId]
+      );
+
+      await client.query('COMMIT');
+      console.log(`⏰ Extra Time +10s used by user ${user.id}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Extra Time +10s used successfully!',
+        timeBonus: timeBonus
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/use-time-booster:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- ACTIVATE ITEM (Double Points) ----
+router.post('/activate-item', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    if (!itemId || itemId !== 4) {
+      return res.status(400).json({ error: 'Only Double Points can be activated this way.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inventoryResult = await client.query(
+        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [user.id, itemId]
+      );
+
+      if (inventoryResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'You do not own this item.' });
+      }
+
+      const quantity = inventoryResult.rows[0].quantity;
+      if (quantity > 1) {
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
+
+      const expirationTime = new Date(Date.now() + 20000);
+      await client.query(
+        'UPDATE users SET point_booster_active = TRUE, point_booster_expires_at = $1 WHERE telegram_id = $2',
+        [expirationTime, user.id]
+      );
+
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Double Points')`,
+        [user.id, itemId]
+      );
+
+      await client.query('COMMIT');
+      console.log(`⚡ Point booster activated for user ${user.id} (expires in 20s)`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Point Booster activated for 20 seconds!',
+        expiresAt: expirationTime.toISOString()
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/activate-item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- USE BOMB ----
+router.post('/use-bomb', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { itemId } = req.body;
+    if (!itemId || itemId !== 3) {
+      return res.status(400).json({ error: 'Only Cookie Bomb can be used this way.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inventoryResult = await client.query(
+        'SELECT quantity FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [user.id, itemId]
+      );
+
+      if (inventoryResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'You do not own this item.' });
+      }
+
+      const quantity = inventoryResult.rows[0].quantity;
+      if (quantity > 1) {
+        await client.query(
+          'UPDATE user_inventory SET quantity = quantity - 1 WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      } else {
+        await client.query(
+          'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+          [user.id, itemId]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO item_usage_history (user_id, item_id, item_name)
+         VALUES ($1, $2, 'Cookie Bomb')`,
+        [user.id, itemId]
+      );
+
+      await client.query('COMMIT');
+      console.log(`💥 Cookie Bomb used by user ${user.id}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Cookie Bomb used successfully!'
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/use-bomb:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---- GET ITEM USAGE HISTORY ----
+router.post('/get-item-usage-history', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const client = await pool.connect();
+    try {
+      const historyResult = await client.query(
+        `SELECT item_name, used_at, game_score
+         FROM item_usage_history
+         WHERE user_id = $1
+         ORDER BY used_at DESC
+         LIMIT 20`,
+        [user.id]
+      );
+      res.status(200).json(historyResult.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/get-item-usage-history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/* ------------------------------------------------------------
+   ✅ NEW ENDPOINT — RECORD GAME TIME (Zen Level)
+   ------------------------------------------------------------ */
+router.post('/game/record-time', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const { duration = 0 } = req.body;
+
+    if (typeof duration !== 'number' || duration <= 0) {
+      return res.status(400).json({ error: 'Invalid duration value' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET total_play_time = COALESCE(total_play_time, 0) + $1
+       WHERE telegram_id = $2
+       RETURNING total_play_time`,
+      [duration, user.id]
+    );
+
+    console.log(`🧘 Zen time recorded for ${user.id}: +${duration}s`);
+    res.status(200).json({ success: true, total_play_time: result.rows[0].total_play_time });
+  } catch (error) {
+    console.error('🚨 Error in /api/game/record-time:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
