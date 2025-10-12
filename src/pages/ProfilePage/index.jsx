@@ -4,12 +4,12 @@
 // - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
 // - Kept tabs lazy + local fallbacks; CTA logic unchanged.
 
-import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
+import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ✅ Corrected lazy imports (moved to /tabs/ folder)
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
@@ -30,22 +30,11 @@ const ProfilePage = () => {
     showCTA: false,
   });
   const [ctaLoading, setCtaLoading] = useState(false);
-  const initRetryRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      if (typeof window === "undefined") {
-        return;
-      }
-      const tg = window?.Telegram?.WebApp;
-      if (!tg?.initData) {
-        setError("Ожидаем данные Telegram...");
-        if (initRetryRef.current) clearTimeout(initRetryRef.current);
-        initRetryRef.current = setTimeout(fetchData, 320);
-        return;
-      }
       const result = await apiCall("/api/get-profile-complete");
       setData(result);
     } catch (err) {
@@ -56,20 +45,8 @@ const ProfilePage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (initRetryRef.current) {
-        clearTimeout(initRetryRef.current);
-        initRetryRef.current = null;
-      }
-    };
-  }, []);
-
   const refreshMeowCounter = useCallback(async () => {
     try {
-      if (typeof window === "undefined") return;
-      const tg = window?.Telegram?.WebApp;
-      if (!tg?.initData) return;
       const res = await apiCall("/api/meow-counter");
       const count = Number(res?.count ?? res?.meow_taps ?? 0);
       setMeowCounter({
