@@ -1,8 +1,8 @@
-// Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v21 — Backlight + one-time gold flash on lock (42)
-// - Keeps backlight pulse on each tap
-// - Adds a one-time golden frame flash the moment the counter *reaches* 42
-// - Persistent gold ring still shown while locked
+// Path: src/pages/ProfilePage/tabs/OverviewTab.jsx
+// v22 — Robust "reached 42" dispatch
+// - Dispatches CustomEvent('meow:reached42') with { bubbles: true, composed: true }
+// - Sends to both window and document, plus deferred re-dispatches to avoid mount/ordering races
+// - No changes to visuals, copy, flows, or API calls
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -54,10 +54,35 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal0;
   });
 
-  // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
+  // Robust broadcaster for "hit 42" so parent can fetch CTA status immediately.
   const notifyReached42 = useCallback(() => {
     try {
-      window.dispatchEvent(new CustomEvent("meow:reached42"));
+      // Primary immediate dispatch (window + document) with bubbling/composed enabled
+      const mk = (detail) =>
+        new CustomEvent("meow:reached42", {
+          detail,
+          bubbles: true,
+          composed: true,
+          cancelable: false,
+        });
+
+      const t = Date.now();
+      try { window.dispatchEvent(mk({ t, phase: "immediate" })); } catch {}
+      try { document.dispatchEvent(mk({ t, phase: "immediate" })); } catch {}
+
+      // Microtask / next tick — in case listener mounts right after first dispatch
+      setTimeout(() => {
+        const t2 = Date.now();
+        try { window.dispatchEvent(mk({ t: t2, phase: "deferred-0" })); } catch {}
+        try { document.dispatchEvent(mk({ t: t2, phase: "deferred-0" })); } catch {}
+      }, 0);
+
+      // Short delay to outrun any DB write/read race on the parent status fetch
+      setTimeout(() => {
+        const t3 = Date.now();
+        try { window.dispatchEvent(mk({ t: t3, phase: "deferred-150" })); } catch {}
+        try { document.dispatchEvent(mk({ t: t3, phase: "deferred-150" })); } catch {}
+      }, 150);
     } catch (_) {}
   }, []);
 
