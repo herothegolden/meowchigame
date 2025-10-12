@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v17 — Instant paint:
-// - Removed full-screen loading gate to avoid black screen.
-// - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
-// - Kept tabs lazy + local fallbacks; CTA logic unchanged.
+// v18 — Fix meow tap persistence:
+// - Added BACKEND_URL constant from env
+// - Pass BACKEND_URL to OverviewTab to fix /api/meow-tap calls
+// - No other changes to instant paint, CTA logic, or tab structure
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +15,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
+
+// 🔧 FIX: Get backend URL from environment
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -177,10 +180,12 @@ const ProfilePage = () => {
                 </div>
               }
             >
+              {/* 🔧 FIX: Pass BACKEND_URL prop to OverviewTab */}
               <OverviewTab
                 stats={stats}
                 streakInfo={streakInfo}
                 onUpdate={fetchData}
+                BACKEND_URL={BACKEND_URL}
               />
             </Suspense>
           </TabsContent>
