@@ -1,10 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v17 — Instant paint:
-// - Removed full-screen loading gate to avoid black screen.
-// - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
-// - Kept tabs lazy + local fallbacks; CTA logic unchanged.
+// v18 — CTA flow fixes:
+// - Properly clear post-42 retry timers using a ref (fixes hidden timer leak).
+// - Render CTA only on Overview tab to match intended UX.
+// - Kept: instant paint shell, lazy tabs, CTA polling & retries.
 
-import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
+import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiCall, showError, showSuccess } from "../../utils/api";
 import ProfileHeader from "./ProfileHeader";
@@ -32,6 +32,9 @@ const ProfilePage = () => {
     meow_taps: 0,
   });
   const [ctaLoading, setCtaLoading] = useState(false);
+
+  // Track post-42 retry timers so we can clear them on unmount
+  const post42TimersRef = useRef([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -78,18 +81,23 @@ const ProfilePage = () => {
     const onReached42 = () => {
       // Immediate check
       fetchCtaStatus();
+
       // Short retry ladder to outwait backend throttle and DB write latency
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+
+      // Remember timers for cleanup
+      post42TimersRef.current.push(t1, t2, t3);
     };
+
     window.addEventListener("meow:reached42", onReached42);
-    return () => window.removeEventListener("meow:reached42", onReached42);
+    return () => {
+      window.removeEventListener("meow:reached42", onReached42);
+      // Clear any outstanding retry timers on unmount
+      for (const t of post42TimersRef.current) clearTimeout(t);
+      post42TimersRef.current = [];
+    };
   }, [fetchCtaStatus]);
 
   // Poll CTA status lightly (reflects global 42 cap); also on tab switch
@@ -213,8 +221,8 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
-      {/* Meow CTA — under tabs (appears only when eligible). */}
-      {showMeowCTA && (
+      {/* Meow CTA — under tabs (appears only when eligible) and only on Overview tab. */}
+      {showMeowCTA && activeTab === "overview" && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col">
