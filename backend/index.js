@@ -1,5 +1,5 @@
 // Path: backend/index.js
-// v2 — badgesRoutes import and mount removed only
+// v3 — Guard daily reset to schedule exactly once; no other flow changes.
 
 import 'dotenv/config';
 import express from 'express';
@@ -30,7 +30,7 @@ const { PORT = 3000 } = process.env;
 
 // ---- ENV VALIDATION ----
 if (!process.env.DATABASE_URL || !process.env.BOT_TOKEN) {
-  console.error("⛔ Missing DATABASE_URL or BOT_TOKEN environment variables");
+  console.error('⛔ Missing DATABASE_URL or BOT_TOKEN environment variables');
   process.exit(1);
 }
 
@@ -65,16 +65,23 @@ app.use('/api/streak', streakRoutes);
 const startServer = async () => {
   try {
     await setupDatabase();
-    
-    // Schedule daily streak reset cron job
-    scheduleDailyReset();
-    
+
+    // Schedule daily reset at 00:00 Asia/Tashkent EXACTLY ONCE.
+    // This prevents duplicate cron jobs under dev hot-reload or multiple imports.
+    if (!globalThis.__DAILY_RESET_SCHEDULED__) {
+      scheduleDailyReset();
+      globalThis.__DAILY_RESET_SCHEDULED__ = true;
+      console.log('🗓️  Daily reset cron scheduled (guarded once).');
+    } else {
+      console.log('🗓️  Daily reset cron already scheduled — skipping.');
+    }
+
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
       console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
       console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
-      
+
       await startGlobalStatsSimulation(PORT);
     });
   } catch (err) {
