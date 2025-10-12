@@ -1,10 +1,12 @@
 // Path: backend/routes/orders.js
-// v5 — Meow Counter promo flow + FIX: /meow-cta-status is POST (works with validateUser + apiCall POST body)
+// v6 — Meow Counter promo flow
+// - /meow-cta-status now derives "today" from the DB (Asia/Tashkent) to avoid clock drift
+// - Applies display-day guard to meow_taps using meow_taps_date
+// - Returns `today` for easier debugging
 
 import express from 'express';
 import { pool } from '../config/database.js';
 import { validateUser } from '../middleware/auth.js';
-import { getTashkentDate } from '../utils/timezone.js';
 
 const router = express.Router();
 const { BOT_TOKEN, ADMIN_TELEGRAM_ID } = process.env;
@@ -258,36 +260,50 @@ router.post('/activate-promo', validateUser, async (req, res) => {
 
 /**
  * POST /api/meow-cta-status
- * Returns: { meow_taps, usedToday, remainingGlobal, eligible }
+ * Returns: { meow_taps, usedToday, remainingGlobal, eligible, today }
  * NOTE: POST (not GET) because validateUser reads initData from req.body; apiCall posts by design.
  */
 router.post('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
-    const todayStr = getTashkentDate();
+    // Derive "today" from DB to avoid Node clock drift
+    const {
+      rows: [tz],
+    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS today`);
+    const today = tz.today;
 
+    // Read user state (include date for display guard)
     const ur = await client.query(
       `SELECT COALESCE(meow_taps,0) AS meow_taps,
+              meow_taps_date,
               COALESCE(meow_claim_used_today,FALSE) AS used_today
          FROM users
         WHERE telegram_id = $1`,
       [user.id]
     );
     if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-    const { meow_taps, used_today } = ur.rows[0];
 
-    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [todayStr]);
-    const claimsTaken = dr.rowCount ? dr.rows[0].claims_taken : 0;
+    const { meow_taps, meow_taps_date, used_today } = ur.rows[0];
+
+    // Display-day guard: if stored date != today, treat as 0 for CTA logic
+    const tapDay = meow_taps_date ? String(meow_taps_date).slice(0, 10) : null;
+    const todayStr = String(today).slice(0, 10);
+    const guardedMeow = tapDay === todayStr ? Number(meow_taps || 0) : 0;
+
+    // Global remaining for "today"
+    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
+    const claimsTaken = dr.rowCount ? Number(dr.rows[0].claims_taken || 0) : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
-    const eligible = meow_taps >= 42 && !used_today && remainingGlobal > 0;
+    const eligible = guardedMeow >= 42 && !used_today && remainingGlobal > 0;
 
     return res.status(200).json({
-      meow_taps,
-      usedToday: used_today,
+      meow_taps: guardedMeow,
+      usedToday: !!used_today,
       remainingGlobal,
       eligible,
+      today: todayStr,
     });
   } catch (err) {
     console.error('❌ /meow-cta-status error:', err);
