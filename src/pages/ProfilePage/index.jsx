@@ -1,8 +1,8 @@
-// Path: frontend/src/pages/ProfilePage/index.jsx
-// v17 — Instant paint:
-// - Removed full-screen loading gate to avoid black screen.
-// - Render page shell immediately; show a tiny inline header skeleton while data hydrates.
-// - Kept tabs lazy + local fallbacks; CTA logic unchanged.
+// Path: src/pages/ProfilePage/index.jsx
+// v18 — Option A (frontend-only):
+// - On 'meow:reached42' event, optimistically set CTA eligible=true immediately,
+//   then run the existing fetchCtaStatus() + retry ladder to reconcile with server.
+// - No other mechanics/flows changed.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -76,17 +76,23 @@ const ProfilePage = () => {
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
     const onReached42 = () => {
-      // Immediate check
+      // --- Option A: Optimistic CTA reveal (frontend-only, minimal) ---
+      // Show the CTA immediately at the lock moment; server remains final authority
+      // because /api/meow-claim will still validate eligibility.
+      setCtaStatus((s) => ({
+        ...s,
+        eligible: true,
+        // Keep a sane floor at 42 for display if prior value was lower
+        meow_taps: Math.max(42, Number(s.meow_taps || 0)),
+      }));
+
+      // Immediate server reconciliation + short retry ladder to outwait DB latency
       fetchCtaStatus();
-      // Short retry ladder to outwait backend throttle and DB write latency
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-        clearTimeout(t3);
-      };
+      // Note: returning a cleanup function from the event handler is a no-op for addEventListener;
+      // timers will be GC'd shortly after firing.
     };
     window.addEventListener("meow:reached42", onReached42);
     return () => window.removeEventListener("meow:reached42", onReached42);
@@ -126,7 +132,7 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
 
-  // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
+  // Show CTA if server says eligible (or optimistic flip just occurred)
   const showMeowCTA = !!ctaStatus.eligible;
 
   return (
@@ -145,7 +151,7 @@ const ProfilePage = () => {
       )}
 
       {/* Profile Header — instant shell render.
-          Show a tiny skeleton while loading, otherwise real header. */}
+          Show a tiny skeleton while data hydrates, otherwise real header. */}
       {loading ? (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
           <div className="h-6 w-40 bg-white/10 rounded mb-3" />
