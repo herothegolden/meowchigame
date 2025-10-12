@@ -1,7 +1,10 @@
 // Path: backend/routes/user.js
-// v12 — Display-only Tashkent day guard for meow_taps in /get-user-stats and /get-profile-complete
-// - Ensures Profile never shows stale meow_taps from a previous day if daily cron hasn't run yet
-// - NO DB mutation here; cron + /meow-tap remain the only writers
+// v13 — Display-only Tashkent day guard for meow_taps in /get-user-stats and /get-profile-complete
+// + Option B (server-authoritative CTA eligibility on /meow-tap lock)
+// - When /meow-tap returns a locked response (meow_taps >= 42), also return:
+//     { eligible: <bool>, remainingGlobal: <int> }
+//   where eligible = (meow_taps >= 42) && (!meow_claim_used_today) && (remainingGlobal > 0)
+// - No other mechanics/flows changed.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -502,17 +505,37 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       // If throttled, DO NOT advance the throttle window; just return current value.
       if (now - last < TAP_COOLDOWN_MS) {
         const row = await client.query(
-          `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
-             FROM users
-            WHERE telegram_id = $1`,
+          `SELECT
+             COALESCE(meow_taps, 0)            AS meow_taps,
+             meow_taps_date,
+             COALESCE(meow_claim_used_today, FALSE) AS used_today
+           FROM users
+          WHERE telegram_id = $1`,
           [user.id]
         );
 
         let meow = row.rows[0]?.meow_taps ?? 0;
         const meowDate = row.rows[0]?.meow_taps_date;
+        const usedToday = !!row.rows[0]?.used_today;
+
         // Ensure date correctness: if stored date is older, show 0
         if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
           meow = 0;
+        }
+
+        // Compute remainingGlobal only if locked
+        let remainingGlobal;
+        let eligible;
+        if (meow >= 42) {
+          const claimsRes = await client.query(
+            `SELECT COALESCE(claims_taken, 0) AS taken
+               FROM meow_daily_claims
+              WHERE day = $1`,
+            [todayStr]
+          );
+          const taken = Number(claimsRes.rows[0]?.taken || 0);
+          remainingGlobal = Math.max(42 - taken, 0);
+          eligible = (meow >= 42) && !usedToday && (remainingGlobal > 0);
         }
 
         // Do NOT set throttle timestamp here
@@ -520,18 +543,22 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           meow_taps: meow,
           locked: meow >= 42,
           remaining: Math.max(42 - meow, 0),
-          throttled: true
+          throttled: true,
+          ...(meow >= 42 ? { eligible, remainingGlobal } : {})
         });
       }
 
       await client.query('BEGIN');
 
-      // Lock row, read current taps
+      // Lock row, read current taps (+ used_today)
       const rowRes = await client.query(
-        `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
-           FROM users
-          WHERE telegram_id = $1
-          FOR UPDATE`,
+        `SELECT
+           COALESCE(meow_taps, 0)                 AS meow_taps,
+           meow_taps_date,
+           COALESCE(meow_claim_used_today, FALSE) AS used_today
+         FROM users
+        WHERE telegram_id = $1
+        FOR UPDATE`,
         [user.id]
       );
       if (rowRes.rowCount === 0) {
@@ -539,7 +566,8 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      let { meow_taps, meow_taps_date } = rowRes.rows[0];
+      let { meow_taps, meow_taps_date, used_today } = rowRes.rows[0];
+      used_today = !!used_today;
 
       // Reset if first tap of the day (SQL date semantics via stored value check)
       if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
@@ -552,10 +580,28 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       }
 
       if (meow_taps >= 42) {
+        // Already locked: compute remainingGlobal & eligible inside the same txn
+        const claimsRes = await client.query(
+          `SELECT COALESCE(claims_taken, 0) AS taken
+             FROM meow_daily_claims
+            WHERE day = $1
+            FOR UPDATE`,
+          [todayStr]
+        );
+        const taken = Number(claimsRes.rows[0]?.taken || 0);
+        const remainingGlobal = Math.max(42 - taken, 0);
+        const eligible = (meow_taps >= 42) && !used_today && (remainingGlobal > 0);
+
         await client.query('COMMIT');
         // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
-        return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
+        return res.status(200).json({
+          meow_taps: 42,
+          locked: true,
+          remaining: 0,
+          eligible,
+          remainingGlobal
+        });
       }
 
       const newTaps = meow_taps + 1;
@@ -566,15 +612,40 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         [newTaps, todayStr, user.id]
       );
 
+      let response;
+      if (newTaps >= 42) {
+        // Just reached lock: compute remainingGlobal & eligible atomically
+        const claimsRes = await client.query(
+          `SELECT COALESCE(claims_taken, 0) AS taken
+             FROM meow_daily_claims
+            WHERE day = $1
+            FOR UPDATE`,
+          [todayStr]
+        );
+        const taken = Number(claimsRes.rows[0]?.taken || 0);
+        const remainingGlobal = Math.max(42 - taken, 0);
+        const eligible = (newTaps >= 42) && !used_today && (remainingGlobal > 0);
+
+        response = {
+          meow_taps: newTaps,
+          locked: true,
+          remaining: 0,
+          eligible,
+          remainingGlobal
+        };
+      } else {
+        response = {
+          meow_taps: newTaps,
+          locked: false,
+          remaining: Math.max(42 - newTaps, 0)
+        };
+      }
+
       await client.query('COMMIT');
       // Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
 
-      return res.status(200).json({
-        meow_taps: newTaps,
-        locked: newTaps >= 42,
-        remaining: Math.max(42 - newTaps, 0)
-      });
+      return res.status(200).json(response);
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
