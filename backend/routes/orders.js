@@ -1,5 +1,5 @@
 // Path: backend/routes/orders.js
-// v5 — Meow Counter promo flow + FIX: /meow-cta-status is POST (works with validateUser + apiCall POST body)
+// v6 – FIX: /meow-cta-status date matching (PostgreSQL timezone query, not JS string)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -77,11 +77,11 @@ Contact customer via Telegram to arrange payment and delivery.`;
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    NEW: Meow Counter Promo Flow
    - Reserve (first 42 per day), one per user per day, idempotent
    - Activate promo on Order Page via claim token
-──────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────────────────────── */
 
 /**
  * POST /api/meow-claim
@@ -165,7 +165,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
 
     let finalClaimId = claimId;
     if (cr.rowCount === 0) {
-      // Already has a claim. Fetch it and ensure it’s not consumed.
+      // Already has a claim. Fetch it and ensure it's not consumed.
       const existing = await client.query(
         `SELECT id, consumed FROM meow_claims WHERE user_id = $1 AND day = $2`,
         [user.id, today]
@@ -265,7 +265,12 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
-    const todayStr = getTashkentDate();
+    // ✅ FIX: Use PostgreSQL timezone conversion (same as cron & meow-claim)
+    // This ensures date type matching with meow_daily_claims.day column
+    const {
+      rows: [tz],
+    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+    const today = tz.day;
 
     const ur = await client.query(
       `SELECT COALESCE(meow_taps,0) AS meow_taps,
@@ -277,11 +282,15 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
     if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     const { meow_taps, used_today } = ur.rows[0];
 
-    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [todayStr]);
+    // ✅ FIX: Query with PostgreSQL DATE type (not JavaScript string)
+    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
     const claimsTaken = dr.rowCount ? dr.rows[0].claims_taken : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
     const eligible = meow_taps >= 42 && !used_today && remainingGlobal > 0;
+
+    // Debug logging for troubleshooting
+    console.log(`🔍 CTA Status: user=${user.id}, taps=${meow_taps}, used=${used_today}, global=${claimsTaken}/42, eligible=${eligible}`);
 
     return res.status(200).json({
       meow_taps,
@@ -297,9 +306,9 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
   }
 });
 
-/* ────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    Orders (existing)
-──────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────────────────────── */
 
 // ---- CREATE ORDER (WITH CART SUPPORT) ----
 router.post('/create-order', validateUser, async (req, res) => {
