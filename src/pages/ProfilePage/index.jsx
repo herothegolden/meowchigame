@@ -1,7 +1,7 @@
 // Path: src/pages/ProfilePage/index.jsx
-// v18 — Option A (frontend-only):
-// - On 'meow:reached42' event, optimistically set CTA eligible=true immediately,
-//   then run the existing fetchCtaStatus() + retry ladder to reconcile with server.
+// v19 — Option A (frontend-only, minimal & robust CTA visibility)
+// - Keep server as final authority for claim.
+// - Show CTA immediately at lock (42) via small local flag + existing fetches.
 // - No other mechanics/flows changed.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
@@ -11,7 +11,7 @@ import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-// ✅ Corrected lazy imports (moved to /tabs/ folder)
+// Lazy tabs
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
@@ -24,7 +24,7 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Meow CTA status
+  // Meow CTA status from server
   const [ctaStatus, setCtaStatus] = useState({
     eligible: false,
     usedToday: false,
@@ -32,6 +32,9 @@ const ProfilePage = () => {
     meow_taps: 0,
   });
   const [ctaLoading, setCtaLoading] = useState(false);
+
+  // NEW: tiny local optimism so CTA appears immediately on lock (42)
+  const [optimisticEligible, setOptimisticEligible] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -49,7 +52,7 @@ const ProfilePage = () => {
 
   const fetchCtaStatus = useCallback(async () => {
     try {
-      // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
+      // backend route: POST /api/meow-cta-status
       const res = await apiCall("/api/meow-cta-status");
       setCtaStatus({
         eligible: !!res.eligible,
@@ -57,8 +60,8 @@ const ProfilePage = () => {
         remainingGlobal: Number(res.remainingGlobal || 0),
         meow_taps: Number(res.meow_taps || 0),
       });
-    } catch (e) {
-      // Silently ignore; CTA is optional UI
+    } catch {
+      // ignore network hiccups; UI will retry/poll
     }
   }, []);
 
@@ -66,39 +69,39 @@ const ProfilePage = () => {
     fetchData();
   }, [fetchData]);
 
-  // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
+  // If already at 42 on initial load (navigate back), fetch CTA immediately.
   useEffect(() => {
     if (data?.stats?.meow_taps >= 42) {
       fetchCtaStatus();
+      // Also surface CTA immediately from profile payload
+      setOptimisticEligible(true);
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
 
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
     const onReached42 = () => {
-      // --- Option A: Optimistic CTA reveal (frontend-only, minimal) ---
-      // Show the CTA immediately at the lock moment; server remains final authority
-      // because /api/meow-claim will still validate eligibility.
-      setCtaStatus((s) => ({
-        ...s,
-        eligible: true,
-        // Keep a sane floor at 42 for display if prior value was lower
-        meow_taps: Math.max(42, Number(s.meow_taps || 0)),
-      }));
+      // Show CTA immediately at the lock moment; server remains final authority.
+      setOptimisticEligible(true);
 
-      // Immediate server reconciliation + short retry ladder to outwait DB latency
+      // Reconcile with backend (existing retry ladder to outwait DB latency)
       fetchCtaStatus();
-      const t1 = setTimeout(fetchCtaStatus, 150);
-      const t2 = setTimeout(fetchCtaStatus, 400);
-      const t3 = setTimeout(fetchCtaStatus, 800);
-      // Note: returning a cleanup function from the event handler is a no-op for addEventListener;
-      // timers will be GC'd shortly after firing.
+      setTimeout(fetchCtaStatus, 150);
+      setTimeout(fetchCtaStatus, 400);
+      setTimeout(fetchCtaStatus, 800);
     };
+
+    // Listen on both window and document to avoid dispatch target mismatch
     window.addEventListener("meow:reached42", onReached42);
-    return () => window.removeEventListener("meow:reached42", onReached42);
+    document.addEventListener("meow:reached42", onReached42);
+
+    return () => {
+      window.removeEventListener("meow:reached42", onReached42);
+      document.removeEventListener("meow:reached42", onReached42);
+    };
   }, [fetchCtaStatus]);
 
-  // Poll CTA status lightly (reflects global 42 cap); also on tab switch
+  // Poll CTA status lightly (reflects global 42 cap) and on tab switch
   useEffect(() => {
     fetchCtaStatus();
     const t = setInterval(fetchCtaStatus, 20000);
@@ -109,16 +112,16 @@ const ProfilePage = () => {
     if (ctaLoading) return;
     try {
       setCtaLoading(true);
-      // apiCall always posts; backend route is POST /api/meow-claim
+      // backend route: POST /api/meow-claim (server validates)
       const res = await apiCall("/api/meow-claim");
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         // Hide CTA locally to avoid double-taps
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
+        setOptimisticEligible(false);
         navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
       } else {
         showError(res?.error || "Не удалось активировать предложение");
-        // Refresh CTA status to reflect server truth
         fetchCtaStatus();
       }
     } catch (e) {
@@ -132,8 +135,14 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
 
-  // Show CTA if server says eligible (or optimistic flip just occurred)
-  const showMeowCTA = !!ctaStatus.eligible;
+  // FINAL gate for visibility (frontend-only, minimal)
+  // 1) server says eligible OR
+  // 2) we reached 42 this session (optimistic) OR
+  // 3) profile already reports 42 today and not used
+  const showMeowCTA =
+    !!ctaStatus.eligible ||
+    optimisticEligible ||
+    ((data?.stats?.meow_taps ?? 0) >= 42 && !ctaStatus.usedToday);
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -150,8 +159,7 @@ const ProfilePage = () => {
         </div>
       )}
 
-      {/* Profile Header — instant shell render.
-          Show a tiny skeleton while data hydrates, otherwise real header. */}
+      {/* Profile Header */}
       {loading ? (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
           <div className="h-6 w-40 bg-white/10 rounded mb-3" />
@@ -165,7 +173,7 @@ const ProfilePage = () => {
         <ProfileHeader stats={stats} onUpdate={fetchData} />
       )}
 
-      {/* Tabs Section — always visible; contents hydrate progressively */}
+      {/* Tabs Section */}
       <div className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
           <TabsList className="grid grid-cols-3 rounded-t-lg border-b border-white/10">
@@ -219,7 +227,7 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
-      {/* Meow CTA — under tabs (appears only when eligible). */}
+      {/* Meow CTA — appears only when visible by rules above */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
