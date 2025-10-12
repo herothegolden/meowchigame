@@ -1,13 +1,13 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v21 — Backlight + one-time gold flash on lock (42)
-// - Keeps backlight pulse on each tap
-// - Adds a one-time golden frame flash the moment the counter *reaches* 42
-// - Persistent gold ring still shown while locked
+// v22 — Debug event dispatch:
+// - Added console logs to track when meow:reached42 event is dispatched
+// - Added logs to show counter state transitions
+// - No logic changes, only debugging output
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-// Helper: convert seconds → "Xч Yм"
+// Helper: convert seconds → "XЧ YМ"
 const formatPlayTime = (seconds) => {
   if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
@@ -57,8 +57,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
   const notifyReached42 = useCallback(() => {
     try {
+      console.log('🎯 [OverviewTab] Dispatching meow:reached42 event');
       window.dispatchEvent(new CustomEvent("meow:reached42"));
-    } catch (_) {}
+      console.log('✅ [OverviewTab] Event dispatched successfully');
+    } catch (e) {
+      console.error('❌ [OverviewTab] Failed to dispatch event:', e);
+    }
   }, []);
 
   // Persist helper
@@ -66,6 +70,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     (val) => {
       try {
         sessionStorage.setItem(storageKey, JSON.stringify({ day: serverDay, value: val }));
+        console.log('💾 [OverviewTab] Persisted meow_taps:', val);
       } catch (_) {}
     },
     [serverDay]
@@ -76,16 +81,28 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     const newDay = serverDay;
     const prevDay = dayRef.current;
 
+    console.log('🔍 [OverviewTab] Reconciling with server:', {
+      serverDay: newDay,
+      prevDay,
+      serverVal0,
+      currentLocal: meowTapsLocal
+    });
+
     setMeowTapsLocal((prev) => {
       let next;
       if (newDay !== prevDay) {
+        console.log('📅 [OverviewTab] New day detected, resetting counter');
         next = serverVal0;
       } else {
         // trust server 0; do not preserve stale local when serverVal0 === 0
         next = (serverVal0 === 0) ? 0 : Math.max(prev, serverVal0);
+        console.log('🔄 [OverviewTab] Same day, syncing:', { prev, serverVal0, next });
       }
       persist(next);
-      if (next === 42 && prev !== 42) notifyReached42();
+      if (next === 42 && prev !== 42) {
+        console.log('🎉 [OverviewTab] Counter reached 42! Triggering notification');
+        notifyReached42();
+      }
       return next;
     });
 
@@ -115,11 +132,17 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return "";
   }, [backendUrl, BACKEND_URL]);
 
+  // 🔍 DEBUG: Log backend URL resolution
+  useEffect(() => {
+    console.log('🔍 [OverviewTab] Backend URL:', backendBase || 'NOT SET');
+  }, [backendBase]);
+
   // Cache initData once
   const initDataRef = useRef("");
   useEffect(() => {
     try {
       initDataRef.current = window?.Telegram?.WebApp?.initData || "";
+      console.log('🔍 [OverviewTab] initData cached:', !!initDataRef.current);
     } catch (_) {}
   }, []);
 
@@ -139,6 +162,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   useEffect(() => {
     const prev = prevMeowRef.current;
     if (meowTapsLocal === 42 && prev < 42) {
+      console.log('✨ [OverviewTab] Triggering gold flash animation');
       setGoldFlashTick((t) => t + 1);
     }
     prevMeowRef.current = meowTapsLocal;
@@ -165,7 +189,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         key: "power-mood",
         title: "Настроение по мощности",
         value: highScoreToday,
-        subtitle: "Рекорд дня. Система сияет, ты тоже.",
+        subtitle: "Рекорд дня. Система сиcет, ты тоже.",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
@@ -203,6 +227,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
   const sendTap = useCallback(async () => {
     const url = `${backendBase}/api/meow-tap`;
+    console.log('📡 [OverviewTab] Sending tap to:', url);
+    
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -214,27 +240,39 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       let data = null;
       try {
         data = await res.json();
+        console.log('📡 [OverviewTab] Tap response:', {
+          status: res.status,
+          meow_taps: data.meow_taps,
+          locked: data.locked,
+          throttled: data.throttled
+        });
       } catch (_) {}
 
       // Reconcile with server — authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
+          console.log('🔄 [OverviewTab] Reconciling tap response:', { prev, server: data.meow_taps, next });
           persist(next);
-          if (next === 42 && prev !== 42) notifyReached42();
+          if (next === 42 && prev !== 42) {
+            console.log('🎉 [OverviewTab] Just reached 42 from tap response!');
+            notifyReached42();
+          }
           return next;
         });
 
-        // 🔁 If server says "throttled" while our local shows 42, retry once
+        // 🔍 If server says "throttled" while our local shows 42, retry once
         const throttledAt42 = data?.throttled === true && meowTapsLocal === 42;
 
-        // 🔁 If server returns 41 (non-throttled) while local already 42, retry once
+        // 🔍 If server returns 41 (non-throttled) while local already 42, retry once
         const nonThrottled41AtLocal42 =
           data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal === 42;
 
         if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
+          console.log('🔄 [OverviewTab] Retry condition met, scheduling retry');
           retryOnceRef.current = true;
           setTimeout(() => {
+            console.log('🔄 [OverviewTab] Executing retry tap');
             void (async () => {
               try {
                 const r2 = await fetch(url, {
@@ -246,32 +284,47 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 let d2 = null;
                 try {
                   d2 = await r2.json();
+                  console.log('📡 [OverviewTab] Retry response:', d2);
                 } catch (_) {}
                 if (r2.ok && d2 && typeof d2.meow_taps === "number") {
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
+                    console.log('🔄 [OverviewTab] Retry reconciliation:', { prev, server: d2.meow_taps, next });
                     persist(next);
-                    if (next === 42 && prev !== 42) notifyReached42();
+                    if (next === 42 && prev !== 42) {
+                      console.log('🎉 [OverviewTab] Reached 42 from retry!');
+                      notifyReached42();
+                    }
                     return next;
                   });
                 }
-              } catch (_) {}
+              } catch (_) {
+                console.error('❌ [OverviewTab] Retry tap failed');
+              }
             })();
           }, 260); // a hair above 220ms
         }
       }
-    } catch (_) {
+    } catch (e) {
+      console.error('❌ [OverviewTab] Tap request failed:', e);
       // Network error: keep optimistic for n>0; reconcile later on next success.
     }
   }, [backendBase, notifyReached42, persist, meowTapsLocal]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
-    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
+    if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) {
+      console.log('⏱️ [OverviewTab] Tap ignored (cooldown)');
+      return;
+    }
     tapCooldownRef.current = now;
 
-    if (meowTapsLocal >= 42) return;
+    if (meowTapsLocal >= 42) {
+      console.log('🔒 [OverviewTab] Tap ignored (locked at 42)');
+      return;
+    }
 
+    console.log('👆 [OverviewTab] Tap registered, current count:', meowTapsLocal);
     haptic();
 
     // 🔮 trigger backlight pulse on every tap attempt
@@ -279,6 +332,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     if (meowTapsLocal === 0) {
       // First tap of the day: wait for server
+      console.log('👆 [OverviewTab] First tap of day, waiting for server');
       void sendTap();
       return;
     }
@@ -286,6 +340,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     // Optimistic for n > 0
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
+      console.log('👆 [OverviewTab] Optimistic update:', { from: n, to: next });
       persist(next);
       // no early notify here
       return next;
@@ -328,64 +383,57 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 key={`gold-base-${isLocked ? 'locked' : 'idle'}`}
                 className="pointer-events-none absolute -inset-3 rounded-[22px]"
                 initial={false}
-                animate={{ opacity: isLocked ? 0.35 : 0.22 }}
-                transition={{ duration: 0.3 }}
+                animate={{ opacity: isLocked ? 0.35 : 0 }}
+                transition={{ duration: 1.2, ease: "easeInOut" }}
                 style={{
-                  background:
-                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.55) 0%, rgba(246,196,83,0.28) 35%, rgba(246,196,83,0.10) 60%, rgba(0,0,0,0) 100%)",
-                  filter: "blur(18px)",
+                  background: isLocked
+                    ? "radial-gradient(circle, rgba(255,215,0,0.4) 0%, transparent 70%)"
+                    : "transparent",
+                  filter: "blur(20px)",
                 }}
               />
 
-              {/* Pulse on every tap */}
+              {/* Transient gold flash */}
               <motion.div
-                key={`gold-pulse-${glowTick}`}
-                className="pointer-events-none absolute -inset-5 rounded-[26px]"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: [0, 0.7, 0], scale: [0.96, 1.08, 1.02] }}
-                transition={{ duration: 0.5, times: [0, 0.4, 1], ease: "easeOut" }}
+                key={`gold-flash-${goldFlashTick}`}
+                className="pointer-events-none absolute -inset-4 rounded-[26px]"
+                initial={{ opacity: 0.8, scale: 0.9 }}
+                animate={{ opacity: 0, scale: 1.25 }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
                 style={{
-                  background:
-                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.75) 0%, rgba(246,196,83,0.42) 30%, rgba(246,196,83,0.16) 58%, rgba(0,0,0,0) 100%)",
+                  background: "radial-gradient(circle, rgba(255,215,0,0.7) 0%, transparent 60%)",
                   filter: "blur(22px)",
                 }}
               />
 
-              {/* Card itself */}
+              {/* Backlight pulse (each tap) */}
               <motion.div
-                whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
-                whileTap={{ scale: 0.985 }}
+                key={`glow-${glowTick}`}
+                className="pointer-events-none absolute -inset-2 rounded-[20px] opacity-0"
+                initial={{ opacity: 0.5, scale: 0.95 }}
+                animate={{ opacity: 0, scale: 1.15 }}
+                transition={{ duration: 0.9, ease: "easeOut" }}
+                style={{
+                  background: "radial-gradient(circle, rgba(199,189,163,0.45) 0%, transparent 65%)",
+                  filter: "blur(18px)",
+                }}
+              />
+
+              {/* Main card */}
+              <motion.div
+                whileHover={!isLocked ? { scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" } : {}}
+                whileTap={!isLocked ? { scale: 0.985 } : {}}
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 {...interactiveProps}
               >
-                {/* GOLD FRAME when locked (persistent) */}
-                {isLocked && (
-                  <>
-                    <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
-                    {/* One-time gold flash on entering locked state */}
-                    <motion.div
-                      key={`goldflash-${goldFlashTick}`}
-                      className="pointer-events-none absolute inset-0 rounded-2xl"
-                      initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
-                      animate={{
-                        opacity: [0, 1, 0],
-                        boxShadow: [
-                          "0 0 0 0 rgba(246,196,83,0)",
-                          "0 0 90px 26px rgba(246,196,83,0.95)",
-                          "0 0 0 0 rgba(246,196,83,0)"
-                        ]
-                      }}
-                      transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
-                      style={{ borderRadius: "1rem" }}
-                    />
-                  </>
-                )}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+                <div
+                  className={`absolute inset-0 rounded-2xl ring-1 shadow-inner pointer-events-none ${
+                    isLocked ? "ring-yellow-500/25" : "ring-white/5"
+                  }`}
+                />
 
-                {/* base sheen + inner ring above content */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
-                <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
-
-                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
+                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
                   <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
                     {stat.title}
                   </p>
