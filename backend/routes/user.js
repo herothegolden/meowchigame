@@ -17,6 +17,41 @@ const meowTapThrottle = new Map(); // userId -> lastTapMs
 // Align with client-side guard (CLIENT_COOLDOWN_MS = 220) to avoid last-tap throttle races.
 const TAP_COOLDOWN_MS = 220;
 
+const MEOW_DAILY_CAP = 42;
+
+const sliceDate = (value) => (value ? String(value).slice(0, 10) : null);
+
+const normalizeMeowCounter = async (client, userId, row, todayStr) => {
+  const storedDate = sliceDate(row?.meow_taps_date);
+  if (storedDate === todayStr) {
+    return Number(row?.meow_taps || 0);
+  }
+
+  await client.query(
+    `UPDATE users
+        SET meow_taps = 0,
+            meow_taps_date = $1,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE telegram_id = $2`,
+    [todayStr, userId]
+  );
+
+  return 0;
+};
+
+const buildMeowResponse = (count) => {
+  const coerced = Number(count);
+  const numeric = Number.isFinite(coerced) ? coerced : 0;
+  const safeCount = Math.max(0, Math.min(numeric, MEOW_DAILY_CAP));
+  return {
+    count: safeCount,
+    meow_taps: safeCount,
+    locked: safeCount >= MEOW_DAILY_CAP,
+    remaining: Math.max(MEOW_DAILY_CAP - safeCount, 0),
+    showCTA: safeCount >= MEOW_DAILY_CAP,
+  };
+};
+
 /* -------------------------------------------
    AUTH / VALIDATION
 ------------------------------------------- */
@@ -489,6 +524,36 @@ router.post('/update-avatar', validateUser, async (req, res) => {
    NEW: Счётчик мяу (daily up to 42)
 ------------------------------------------- */
 
+router.post('/meow-counter', validateUser, async (req, res) => {
+  try {
+    const { user } = req;
+    const todayStr = getTashkentDate();
+
+    const client = await pool.connect();
+    try {
+      const rowRes = await client.query(
+        `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
+           FROM users
+          WHERE telegram_id = $1`,
+        [user.id]
+      );
+
+      if (rowRes.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const count = await normalizeMeowCounter(client, user.id, rowRes.rows[0], todayStr);
+
+      return res.status(200).json(buildMeowResponse(count));
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('🚨 Error in /api/meow-counter:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/meow-tap', validateUser, async (req, res) => {
   try {
     const { user } = req;
@@ -508,19 +573,16 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           [user.id]
         );
 
-        let meow = row.rows[0]?.meow_taps ?? 0;
-        const meowDate = row.rows[0]?.meow_taps_date;
-        // Ensure date correctness: if stored date is older, show 0
-        if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
-          meow = 0;
+        if (row.rowCount === 0) {
+          return res.status(404).json({ error: 'User not found' });
         }
+
+        const count = await normalizeMeowCounter(client, user.id, row.rows[0], todayStr);
 
         // Do NOT set throttle timestamp here
         return res.status(200).json({
-          meow_taps: meow,
-          locked: meow >= 42,
-          remaining: Math.max(42 - meow, 0),
-          throttled: true
+          ...buildMeowResponse(count),
+          throttled: true,
         });
       }
 
@@ -539,23 +601,13 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      let { meow_taps, meow_taps_date } = rowRes.rows[0];
+      let meow_taps = await normalizeMeowCounter(client, user.id, rowRes.rows[0], todayStr);
 
-      // Reset if first tap of the day (SQL date semantics via stored value check)
-      if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
-        meow_taps = 0;
-        meow_taps_date = todayStr;
-        await client.query(
-          `UPDATE users SET meow_taps = 0, meow_taps_date = $1 WHERE telegram_id = $2`,
-          [todayStr, user.id]
-        );
-      }
-
-      if (meow_taps >= 42) {
+      if (meow_taps >= MEOW_DAILY_CAP) {
         await client.query('COMMIT');
         // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
-        return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
+        return res.status(200).json(buildMeowResponse(meow_taps));
       }
 
       const newTaps = meow_taps + 1;
@@ -570,11 +622,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       // Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
 
-      return res.status(200).json({
-        meow_taps: newTaps,
-        locked: newTaps >= 42,
-        remaining: Math.max(42 - newTaps, 0)
-      });
+      return res.status(200).json(buildMeowResponse(newTaps));
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
