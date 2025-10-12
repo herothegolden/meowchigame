@@ -41,7 +41,8 @@ export const scheduleDailyReset = () => {
             meow_claim_used_today  = FALSE,
             meow_taps              = 0,
             meow_taps_date         = $1
-        `,
+          WHERE TRUE
+          `,
           [tz_date]
         );
 
