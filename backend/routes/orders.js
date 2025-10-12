@@ -1,5 +1,10 @@
 // Path: backend/routes/orders.js
-// v5 — Meow Counter promo flow + FIX: /meow-cta-status is POST (works with validateUser + apiCall POST body)
+// v6 — Meow Counter promo flow + FIXED /meow-cta-status day-guard + daily row upsert
+// - /meow-cta-status now derives today via SQL (Asia/Tashkent), reads meow_taps_date,
+//   applies a compute-only day guard (if date != today → taps=0, usedToday=false),
+//   ensures today's meow_daily_claims row exists (ON CONFLICT DO NOTHING),
+//   then returns { meow_taps, usedToday, remainingGlobal, eligible }.
+// - No other mechanics/flows changed.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -259,33 +264,63 @@ router.post('/activate-promo', validateUser, async (req, res) => {
 /**
  * POST /api/meow-cta-status
  * Returns: { meow_taps, usedToday, remainingGlobal, eligible }
- * NOTE: POST (not GET) because validateUser reads initData from req.body; apiCall posts by design.
+ * FIX: Compute "today" in SQL (Asia/Tashkent), day-guard taps & usedToday,
+ *      ensure daily row exists before reading claims_taken.
  */
 router.post('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
-    const todayStr = getTashkentDate();
+    // Compute today's date in DB (Asia/Tashkent) to avoid Node/DB drift
+    const {
+      rows: [tz],
+    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+    const today = tz.day; // DATE
 
+    // Read taps + date + used flag
     const ur = await client.query(
-      `SELECT COALESCE(meow_taps,0) AS meow_taps,
-              COALESCE(meow_claim_used_today,FALSE) AS used_today
-         FROM users
-        WHERE telegram_id = $1`,
+      `SELECT
+         COALESCE(meow_taps,0)                AS meow_taps,
+         meow_taps_date,
+         COALESCE(meow_claim_used_today,FALSE) AS used_today
+       FROM users
+       WHERE telegram_id = $1`,
       [user.id]
     );
     if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-    const { meow_taps, used_today } = ur.rows[0];
 
-    const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [todayStr]);
-    const claimsTaken = dr.rowCount ? dr.rows[0].claims_taken : 0;
+    let { meow_taps, meow_taps_date, used_today } = ur.rows[0];
+
+    // ---- Compute-only day guard (NO DB mutation here) ----
+    // If stored taps date is not today, treat taps as 0 and user as "not used today" for eligibility.
+    const sameDay =
+      !!meow_taps_date && String(meow_taps_date).slice(0, 10) === String(today).slice(0, 10);
+    const effectiveTaps = sameDay ? Number(meow_taps || 0) : 0;
+    const usedTodayEffective = sameDay ? !!used_today : false;
+
+    // Ensure daily row exists for today (idempotent)
+    await client.query(
+      `INSERT INTO meow_daily_claims (day, claims_taken)
+       VALUES ($1, 0)
+       ON CONFLICT (day) DO NOTHING`,
+      [today]
+    );
+
+    // Read global claims taken
+    const dr = await client.query(
+      `SELECT COALESCE(claims_taken,0) AS claims_taken
+         FROM meow_daily_claims
+        WHERE day = $1`,
+      [today]
+    );
+    const claimsTaken = dr.rowCount ? Number(dr.rows[0].claims_taken || 0) : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
-    const eligible = meow_taps >= 42 && !used_today && remainingGlobal > 0;
+    const eligible = effectiveTaps >= 42 && !usedTodayEffective && remainingGlobal > 0;
 
     return res.status(200).json({
-      meow_taps,
-      usedToday: used_today,
+      meow_taps: effectiveTaps,
+      usedToday: usedTodayEffective,
       remainingGlobal,
       eligible,
     });
