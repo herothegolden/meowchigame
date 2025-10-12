@@ -1,8 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/index.jsx
-// v18 — Fix meow tap persistence:
-// - Added BACKEND_URL constant from env
-// - Pass BACKEND_URL to OverviewTab to fix /api/meow-tap calls
-// - No other changes to instant paint, CTA logic, or tab structure
+// v19 — Debug + fix CTA appearance issue:
+// - Added comprehensive console logging for CTA status flow
+// - Extended retry delays to handle race condition with backend DB updates
+// - Added longer-term polling after initial retries
+// - Keep BACKEND_URL prop fix from v18
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +17,7 @@ const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
 
-// 🔧 FIX: Get backend URL from environment
+// 🔧 Backend URL from environment
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 const ProfilePage = () => {
@@ -52,16 +53,37 @@ const ProfilePage = () => {
 
   const fetchCtaStatus = useCallback(async () => {
     try {
-      // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
+      console.log('🔍 [CTA] Fetching CTA status...');
       const res = await apiCall("/api/meow-cta-status");
+      
+      // 🔍 DEBUG: Log full response
+      console.log('🔍 [CTA] Response:', {
+        meow_taps: res.meow_taps,
+        usedToday: res.usedToday,
+        remainingGlobal: res.remainingGlobal,
+        eligible: res.eligible
+      });
+
       setCtaStatus({
         eligible: !!res.eligible,
         usedToday: !!res.usedToday,
         remainingGlobal: Number(res.remainingGlobal || 0),
         meow_taps: Number(res.meow_taps || 0),
       });
+
+      // 🔍 DEBUG: Log state update
+      if (res.eligible) {
+        console.log('✅ [CTA] ELIGIBLE! CTA should appear now');
+      } else {
+        console.log('❌ [CTA] NOT ELIGIBLE:', {
+          reason: res.meow_taps < 42 ? 'Counter below 42' :
+                  res.usedToday ? 'Already used today' :
+                  res.remainingGlobal <= 0 ? 'No slots remaining' :
+                  'Unknown'
+        });
+      }
     } catch (e) {
-      // Silently ignore; CTA is optional UI
+      console.error('❌ [CTA] Failed to fetch status:', e);
     }
   }, []);
 
@@ -72,6 +94,7 @@ const ProfilePage = () => {
   // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
   useEffect(() => {
     if (data?.stats?.meow_taps >= 42) {
+      console.log('🔍 [CTA] Initial load: User at 42, fetching CTA status');
       fetchCtaStatus();
     }
   }, [data?.stats?.meow_taps, fetchCtaStatus]);
@@ -79,18 +102,54 @@ const ProfilePage = () => {
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
     const onReached42 = () => {
+      console.log('🎯 [CTA] Event received: meow:reached42');
+      console.log('🔍 [CTA] Starting aggressive retry sequence...');
+      
       // Immediate check
+      console.log('🔍 [CTA] Retry #0: Immediate');
       fetchCtaStatus();
-      // Short retry ladder to outwait backend throttle and DB write latency
-      const t1 = setTimeout(fetchCtaStatus, 150);
-      const t2 = setTimeout(fetchCtaStatus, 400);
-      const t3 = setTimeout(fetchCtaStatus, 800);
+      
+      // Extended retry ladder (more attempts, longer delays)
+      const t1 = setTimeout(() => {
+        console.log('🔍 [CTA] Retry #1: 300ms');
+        fetchCtaStatus();
+      }, 300);
+      
+      const t2 = setTimeout(() => {
+        console.log('🔍 [CTA] Retry #2: 600ms');
+        fetchCtaStatus();
+      }, 600);
+      
+      const t3 = setTimeout(() => {
+        console.log('🔍 [CTA] Retry #3: 1000ms');
+        fetchCtaStatus();
+      }, 1000);
+      
+      const t4 = setTimeout(() => {
+        console.log('🔍 [CTA] Retry #4: 1500ms');
+        fetchCtaStatus();
+      }, 1500);
+      
+      const t5 = setTimeout(() => {
+        console.log('🔍 [CTA] Retry #5: 2000ms');
+        fetchCtaStatus();
+      }, 2000);
+      
+      const t6 = setTimeout(() => {
+        console.log('🔍 [CTA] Final check: 3000ms');
+        fetchCtaStatus();
+      }, 3000);
+      
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(t5);
+        clearTimeout(t6);
       };
     };
+    
     window.addEventListener("meow:reached42", onReached42);
     return () => window.removeEventListener("meow:reached42", onReached42);
   }, [fetchCtaStatus]);
@@ -106,19 +165,24 @@ const ProfilePage = () => {
     if (ctaLoading) return;
     try {
       setCtaLoading(true);
-      // apiCall always posts; backend route is POST /api/meow-claim
+      console.log('🔍 [CTA] Claiming promo...');
+      
       const res = await apiCall("/api/meow-claim");
+      console.log('🔍 [CTA] Claim response:', res);
+      
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         // Hide CTA locally to avoid double-taps
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
+        console.log('✅ [CTA] Claim successful, navigating to order page');
         navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
       } else {
+        console.error('❌ [CTA] Claim failed:', res?.error);
         showError(res?.error || "Не удалось активировать предложение");
-        // Refresh CTA status to reflect server truth
         fetchCtaStatus();
       }
     } catch (e) {
+      console.error('❌ [CTA] Claim error:', e);
       showError(e?.message || "Сеть недоступна");
       fetchCtaStatus();
     } finally {
@@ -131,6 +195,17 @@ const ProfilePage = () => {
 
   // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
   const showMeowCTA = !!ctaStatus.eligible;
+  
+  // 🔍 DEBUG: Log CTA visibility state
+  useEffect(() => {
+    console.log('🔍 [CTA] Visibility check:', {
+      showMeowCTA,
+      eligible: ctaStatus.eligible,
+      meow_taps: ctaStatus.meow_taps,
+      usedToday: ctaStatus.usedToday,
+      remainingGlobal: ctaStatus.remainingGlobal
+    });
+  }, [showMeowCTA, ctaStatus]);
 
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -180,7 +255,7 @@ const ProfilePage = () => {
                 </div>
               }
             >
-              {/* 🔧 FIX: Pass BACKEND_URL prop to OverviewTab */}
+              {/* 🔧 Pass BACKEND_URL prop to OverviewTab */}
               <OverviewTab
                 stats={stats}
                 streakInfo={streakInfo}
@@ -218,6 +293,9 @@ const ProfilePage = () => {
         </Tabs>
       </div>
 
+      {/* 🔍 DEBUG: Always show CTA status in console */}
+      {showMeowCTA && console.log('🎨 [CTA] Rendering CTA button')}
+      
       {/* Meow CTA — under tabs (appears only when eligible). */}
       {showMeowCTA && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
