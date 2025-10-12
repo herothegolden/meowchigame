@@ -1,8 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v21 — Backlight + one-time gold flash on lock (42)
-// - Keeps backlight pulse on each tap
-// - Adds a one-time golden frame flash the moment the counter *reaches* 42
-// - Persistent gold ring still shown while locked
+// v22 — Tashkent fallback + cache bump (v3) + existing visuals
+// - Replaces UTC fallback with Asia/Tashkent day string
+// - Bumps sessionStorage key to v3 to invalidate old UTC-based cache
+// - Keeps v21 visuals and reconciliation behavior intact
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -14,6 +14,17 @@ const formatPlayTime = (seconds) => {
   const mins = Math.floor((seconds % 3600) / 60);
   return `${hrs}ч ${mins}м`;
 };
+
+// Single-source Tashkent day helper (YYYY-MM-DD)
+function tzDay(d = new Date()) {
+  // en-CA yields YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
 
 /**
  * Props:
@@ -32,10 +43,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const dailyStreak = stats?.daily_streak || 0;
 
   // --- Day-aware cache (prevents stale carry-over and "start from 1" after reset) ---
-  const storageKey = "meowchi:v2:meow_taps";
+  // v3 bumps the key to drop any old UTC-based cached day
+  const storageKey = "meowchi:v3:meow_taps";
   const serverDay =
     (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
-    new Date().toISOString().slice(0, 10);
+    tzDay(); // <-- Asia/Tashkent fallback, not UTC
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
@@ -82,7 +94,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         next = serverVal0;
       } else {
         // trust server 0; do not preserve stale local when serverVal0 === 0
-        next = (serverVal0 === 0) ? 0 : Math.max(prev, serverVal0);
+        next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
       if (next === 42 && prev !== 42) notifyReached42();
