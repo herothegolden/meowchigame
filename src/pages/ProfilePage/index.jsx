@@ -1,9 +1,5 @@
 // Path: src/pages/ProfilePage/index.jsx
-// v20 — Server-authoritative CTA reveal on tap response (Option B, frontend wire-up)
-// - Without changing other components, we intercept fetch calls to /api/meow-tap,
-//   read the response JSON clone, and if { locked: true, eligible: true }, we
-//   immediately surface the CTA (still reconciling with /api/meow-cta-status).
-// - Keeps prior optimistic/event-based logic as fallback.
+// v21 — Clean fix: remove global fetch interception; rely on server eligibility + event
 // - No other mechanics/flows changed.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy } from "react";
@@ -35,7 +31,7 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  // Small local optimism so CTA appears immediately on lock (42) if we detect it client-side.
+  // Tiny optimistic flag to surface CTA instantly at the lock moment (client event)
   const [optimisticEligible, setOptimisticEligible] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -99,85 +95,6 @@ const ProfilePage = () => {
     return () => {
       window.removeEventListener("meow:reached42", onReached42);
       document.removeEventListener("meow:reached42", onReached42);
-    };
-  }, [fetchCtaStatus]);
-
-  // NEW: Intercept fetch calls to /api/meow-tap to read server-authoritative {locked, eligible}
-  // This avoids modifying OverviewTab and removes the race between 42-lock and CTA status fetch.
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.fetch !== "function") return;
-
-    const originalFetch = window.fetch;
-    const isTapEndpoint = (url) => {
-      try {
-        // Support both relative and absolute URLs
-        const u = typeof url === "string" ? url : String(url);
-        return u.includes("/api/meow-tap");
-      } catch {
-        return false;
-      }
-    };
-
-    window.fetch = async (input, init) => {
-      const res = await originalFetch(input, init);
-
-      try {
-        const method = (init?.method || "GET").toUpperCase();
-        if (method === "POST" && isTapEndpoint(input)) {
-          // Clone so we don't consume the body returned to caller
-          const clone = res.clone();
-          // Attempt JSON parse; ignore if body not JSON/consumed
-          clone
-            .json()
-            .then((json) => {
-              // We only react when server says locked, and compute is already done server-side
-              if (json && json.locked === true) {
-                // If backend (Option B) includes eligibility + remainingGlobal, trust it
-                if (typeof json.eligible === "boolean") {
-                  if (json.eligible) {
-                    setOptimisticEligible(true);
-                    setCtaStatus((s) => ({
-                      ...s,
-                      eligible: true,
-                      meow_taps: Number.isFinite(json.meow_taps) ? Number(json.meow_taps) : s.meow_taps,
-                      remainingGlobal:
-                        Number.isFinite(json.remainingGlobal) ? Number(json.remainingGlobal) : s.remainingGlobal,
-                      usedToday: s.usedToday, // will be reconciled by fetchCtaStatus()
-                    }));
-                  } else {
-                    // Server says not eligible even when locked (e.g., usedToday=true or cap exhausted)
-                    setCtaStatus((s) => ({
-                      ...s,
-                      eligible: false,
-                      meow_taps: Number.isFinite(json.meow_taps) ? Number(json.meow_taps) : s.meow_taps,
-                      remainingGlobal:
-                        Number.isFinite(json.remainingGlobal) ? Number(json.remainingGlobal) : s.remainingGlobal,
-                    }));
-                    setOptimisticEligible(false);
-                  }
-                  // Reconcile with official status (keeps behavior consistent with backend rules)
-                  fetchCtaStatus();
-                } else {
-                  // If server did not include eligibility (older backend), fall back to optimistic
-                  setOptimisticEligible(true);
-                  fetchCtaStatus();
-                }
-              }
-            })
-            .catch(() => {
-              /* ignore parse failures */
-            });
-        }
-      } catch {
-        // Never block the original response
-      }
-
-      return res;
-    };
-
-    return () => {
-      // Restore original fetch on unmount
-      window.fetch = originalFetch;
     };
   }, [fetchCtaStatus]);
 
@@ -262,7 +179,7 @@ const ProfilePage = () => {
             <TabsTrigger value="tasks">Задания</TabsTrigger>
           </TabsList>
 
-          {/* Overview */}
+        {/* Overview */}
           <TabsContent value="overview">
             <Suspense
               fallback={
