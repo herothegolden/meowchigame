@@ -1,9 +1,5 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v25 — Daily Streak CTA: honor server flag streak_claimed_today
-// - Show Claim CTA when ANY is true:
-//     1) streakInfo.canClaim === true
-//     2) dailyStreak === 0   (first-time UX fallback)
-//     3) stats.streak_claimed_today === false  (authoritative server flag)
+// v26 — Remove duplicate inline "Claim 🔥" chip; keep floating 🔥 only
 // - No other logic or styling changed.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -476,22 +472,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 {...interactiveProps /* same base styles */}
               >
-                {/* Inline fallback "Claim 🔥" chip inside the card (top-right) */}
-                {canClaimComputed && (
-                  <button
-                    type="button"
-                    onClick={claimStreak}
-                    disabled={claiming}
-                    className="absolute top-2 right-2 z-30
-                               rounded-full px-2.5 py-1 text-[12.5px] font-semibold
-                               bg-white/10 border border-white/15 text-white
-                               hover:bg-white/15 active:scale-95"
-                    aria-label="Claim daily streak"
-                  >
-                    Claim 🔥
-                  </button>
-                )}
-
                 {/* base sheen + inner ring */}
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
