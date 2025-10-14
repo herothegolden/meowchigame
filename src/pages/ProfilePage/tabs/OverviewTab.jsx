@@ -1,8 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v23 — Daily Streak claim CTA visibility fix
-// - Floating 🔥 moved inside card (top-2, z-40) to avoid clipping
-// - Added inline fallback "Claim 🔥" chip inside the streak card (top-right)
-// - No unrelated changes to logic, styles, or other cards
+// v24 — Daily Streak CTA fallback
+// - Show Claim CTA when (streakInfo.canClaim === true) OR (dailyStreak === 0)
+//   This ensures brand-new users always see a tappable CTA.
+// - No backend changes; server remains source-of-truth (rejects if ineligible).
+// - Keeps prior visibility fixes (inside-card button + inline chip).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -298,10 +299,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   // 🔥 Daily Streak Claim CTA
   // =========================
   const [claiming, setClaiming] = useState(false);
-  const canClaim = !!(streakInfo && streakInfo.canClaim === true);
+
+  // Fallback: show CTA when server says canClaim OR when dailyStreak === 0 (brand-new user / first day)
+  const canClaimComputed = (streakInfo && streakInfo.canClaim === true) || dailyStreak === 0;
 
   const claimStreak = useCallback(async () => {
-    if (!canClaim || claiming) return;
+    if (!canClaimComputed || claiming) return;
     setClaiming(true);
     haptic();
     try {
@@ -319,7 +322,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         if (typeof onUpdate === "function") onUpdate();
       } catch (_) {}
     }
-  }, [backendBase, canClaim, claiming, onUpdate, haptic]);
+  }, [backendBase, canClaimComputed, claiming, onUpdate, haptic]);
 
   return (
     <motion.div
@@ -436,7 +439,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           return (
             <div key={`streak-wrap-${i}`} className="relative">
               {/* Floating 🔥 button (inside the wrapper to avoid clipping) */}
-              {canClaim && (
+              {canClaimComputed && (
                 <motion.button
                   type="button"
                   onClick={claimStreak}
@@ -470,7 +473,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 {...interactiveProps /* same base styles */}
               >
                 {/* Inline fallback "Claim 🔥" chip inside the card (top-right) */}
-                {canClaim && (
+                {canClaimComputed && (
                   <button
                     type="button"
                     onClick={claimStreak}
