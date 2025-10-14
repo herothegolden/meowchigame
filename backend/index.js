@@ -1,5 +1,5 @@
 // Path: backend/index.js
-// v2 — badgesRoutes import and mount removed only
+// v3 — adds on-boot schema check for meow_claim_used_today (minimal change)
 
 import 'dotenv/config';
 import express from 'express';
@@ -22,6 +22,9 @@ import tasksRoutes from './routes/tasks.js';
 import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
+
+// ⬇️ Minimal addition: import pool for one-time schema check
+import { pool } from './config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +68,17 @@ app.use('/api/streak', streakRoutes);
 const startServer = async () => {
   try {
     await setupDatabase();
+
+    // ⬇️ Tiny on-boot schema check (idempotent)
+    try {
+      await pool.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS meow_claim_used_today BOOLEAN NOT NULL DEFAULT FALSE;
+      `);
+      console.log('✅ DB check: ensured users.meow_claim_used_today column exists');
+    } catch (schemaErr) {
+      console.error('⚠️ DB check failed (non-fatal):', schemaErr);
+    }
     
     // Schedule daily streak reset cron job
     scheduleDailyReset();
