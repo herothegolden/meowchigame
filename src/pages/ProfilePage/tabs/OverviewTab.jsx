@@ -1,9 +1,8 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v22 — Daily Streak claim CTA (🔥) above "Социальная энергия"
-// - Adds floating fire emoji button when streakInfo.canClaim === true
-// - Calls /api/streak/claim-streak with initData
-// - Triggers parent refresh via onUpdate() after successful claim
-// - No unrelated changes to other cards / logic
+// v23 — Daily Streak claim CTA visibility fix
+// - Floating 🔥 moved inside card (top-2, z-40) to avoid clipping
+// - Added inline fallback "Claim 🔥" chip inside the streak card (top-right)
+// - No unrelated changes to logic, styles, or other cards
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -306,18 +305,18 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setClaiming(true);
     haptic();
     try {
-      const res = await fetch(`${backendBase}/api/streak/claim-streak`, {
+      await fetch(`${backendBase}/api/streak/claim-streak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData: initDataRef.current }),
       });
-      // We don't need the body here; parent will refetch authoritative stats.
+      // Parent will refetch authoritative stats
     } catch (_) {
-      // swallow; parent refresh below will reconcile on next load anyway
+      // swallow; parent refresh will reconcile
     } finally {
       setClaiming(false);
       try {
-        if (typeof onUpdate === "function") onUpdate(); // parent refetch
+        if (typeof onUpdate === "function") onUpdate();
       } catch (_) {}
     }
   }, [backendBase, canClaim, claiming, onUpdate, haptic]);
@@ -436,15 +435,15 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         if (isStreakCard) {
           return (
             <div key={`streak-wrap-${i}`} className="relative">
-              {/* Floating 🔥 button (only when canClaim) */}
+              {/* Floating 🔥 button (inside the wrapper to avoid clipping) */}
               {canClaim && (
                 <motion.button
                   type="button"
                   onClick={claimStreak}
                   disabled={claiming}
-                  initial={{ y: -12, opacity: 0, scale: 0.9 }}
+                  initial={{ y: -4, opacity: 0, scale: 0.95 }}
                   animate={{
-                    y: [-12, -16, -12],
+                    y: [ -4, -8, -4 ],
                     opacity: 1,
                     scale: claiming ? 0.95 : 1,
                   }}
@@ -452,7 +451,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                     y: { duration: 1.6, repeat: Infinity, ease: "easeInOut" },
                     opacity: { duration: 0.25 },
                   }}
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 z-20
+                  className="absolute top-2 left-1/2 -translate-x-1/2 z-40
                              rounded-full px-3 py-1.5 text-[16px] shadow-md
                              bg-black/40 border border-white/10 backdrop-blur
                              hover:scale-[1.02] active:scale-[0.98]"
@@ -470,6 +469,22 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 {...interactiveProps /* same base styles */}
               >
+                {/* Inline fallback "Claim 🔥" chip inside the card (top-right) */}
+                {canClaim && (
+                  <button
+                    type="button"
+                    onClick={claimStreak}
+                    disabled={claiming}
+                    className="absolute top-2 right-2 z-30
+                               rounded-full px-2.5 py-1 text-[12.5px] font-semibold
+                               bg-white/10 border border-white/15 text-white
+                               hover:bg-white/15 active:scale-95"
+                    aria-label="Claim daily streak"
+                  >
+                    Claim 🔥
+                  </button>
+                )}
+
                 {/* base sheen + inner ring */}
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
