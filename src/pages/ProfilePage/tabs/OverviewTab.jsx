@@ -1,8 +1,9 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v21 — Backlight + one-time gold flash on lock (42)
-// - Keeps backlight pulse on each tap
-// - Adds a one-time golden frame flash the moment the counter *reaches* 42
-// - Persistent gold ring still shown while locked
+// v22 — Daily Streak claim CTA (🔥) above "Социальная энергия"
+// - Adds floating fire emoji button when streakInfo.canClaim === true
+// - Calls /api/streak/claim-streak with initData
+// - Triggers parent refresh via onUpdate() after successful claim
+// - No unrelated changes to other cards / logic
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -82,7 +83,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         next = serverVal0;
       } else {
         // trust server 0; do not preserve stale local when serverVal0 === 0
-        next = (serverVal0 === 0) ? 0 : Math.max(prev, serverVal0);
+        next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
       if (next === 42 && prev !== 42) notifyReached42();
@@ -169,7 +170,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
-        key: "social-energy",
+        key: "social-energy", // Daily Streak
         title: "Социальная энергия",
         value: `${dailyStreak}`,
         subtitle:
@@ -294,6 +295,33 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     void sendTap();
   }, [meowTapsLocal, haptic, sendTap, persist]);
 
+  // =========================
+  // 🔥 Daily Streak Claim CTA
+  // =========================
+  const [claiming, setClaiming] = useState(false);
+  const canClaim = !!(streakInfo && streakInfo.canClaim === true);
+
+  const claimStreak = useCallback(async () => {
+    if (!canClaim || claiming) return;
+    setClaiming(true);
+    haptic();
+    try {
+      const res = await fetch(`${backendBase}/api/streak/claim-streak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: initDataRef.current }),
+      });
+      // We don't need the body here; parent will refetch authoritative stats.
+    } catch (_) {
+      // swallow; parent refresh below will reconcile on next load anyway
+    } finally {
+      setClaiming(false);
+      try {
+        if (typeof onUpdate === "function") onUpdate(); // parent refetch
+      } catch (_) {}
+    }
+  }, [backendBase, canClaim, claiming, onUpdate, haptic]);
+
   return (
     <motion.div
       className="grid grid-cols-2 gap-4"
@@ -303,6 +331,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     >
       {lifeStats.map((stat, i) => {
         const isMeowCounter = stat.key === "meow-counter";
+        const isStreakCard = stat.key === "social-energy";
         const isLocked = isMeowCounter && meowTapsLocal >= 42;
         const baseClass =
           `relative rounded-2xl border border-white/10 
@@ -398,6 +427,66 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
+              </motion.div>
+            </div>
+          );
+        }
+
+        // --- Daily Streak card wrapper to host floating 🔥 CTA ---
+        if (isStreakCard) {
+          return (
+            <div key={`streak-wrap-${i}`} className="relative">
+              {/* Floating 🔥 button (only when canClaim) */}
+              {canClaim && (
+                <motion.button
+                  type="button"
+                  onClick={claimStreak}
+                  disabled={claiming}
+                  initial={{ y: -12, opacity: 0, scale: 0.9 }}
+                  animate={{
+                    y: [-12, -16, -12],
+                    opacity: 1,
+                    scale: claiming ? 0.95 : 1,
+                  }}
+                  transition={{
+                    y: { duration: 1.6, repeat: Infinity, ease: "easeInOut" },
+                    opacity: { duration: 0.25 },
+                  }}
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 z-20
+                             rounded-full px-3 py-1.5 text-[16px] shadow-md
+                             bg-black/40 border border-white/10 backdrop-blur
+                             hover:scale-[1.02] active:scale-[0.98]"
+                  aria-label="Claim daily streak"
+                >
+                  <span role="img" aria-hidden="true">🔥</span>
+                </motion.button>
+              )}
+
+              {/* Card itself (non-tappable) */}
+              <motion.div
+                key={`streak-card-${i}`}
+                whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: "spring", stiffness: 220, damping: 18 }}
+                {...interactiveProps /* same base styles */}
+              >
+                {/* base sheen + inner ring */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
+
+                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
+                  <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
+                    {stat.title}
+                  </p>
+                  <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
+                    {stat.value}
+                  </p>
+                  <p className="text-[12.5px] text-gray-400 leading-snug">
+                    {stat.subtitle}
+                  </p>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
               </motion.div>
             </div>
           );
