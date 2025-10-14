@@ -1,9 +1,10 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v24 — Daily Streak CTA fallback
-// - Show Claim CTA when (streakInfo.canClaim === true) OR (dailyStreak === 0)
-//   This ensures brand-new users always see a tappable CTA.
-// - No backend changes; server remains source-of-truth (rejects if ineligible).
-// - Keeps prior visibility fixes (inside-card button + inline chip).
+// v25 — Daily Streak CTA: honor server flag streak_claimed_today
+// - Show Claim CTA when ANY is true:
+//     1) streakInfo.canClaim === true
+//     2) dailyStreak === 0   (first-time UX fallback)
+//     3) stats.streak_claimed_today === false  (authoritative server flag)
+// - No other logic or styling changed.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -300,8 +301,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   // =========================
   const [claiming, setClaiming] = useState(false);
 
-  // Fallback: show CTA when server says canClaim OR when dailyStreak === 0 (brand-new user / first day)
-  const canClaimComputed = (streakInfo && streakInfo.canClaim === true) || dailyStreak === 0;
+  const streakClaimedToday = !!stats?.streak_claimed_today;
+  const canClaimComputed =
+    (streakInfo && streakInfo.canClaim === true) ||
+    dailyStreak === 0 ||
+    !streakClaimedToday;
 
   const claimStreak = useCallback(async () => {
     if (!canClaimComputed || claiming) return;
