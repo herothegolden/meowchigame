@@ -34,15 +34,22 @@ router.post('/claim-streak', validateUser, async (req, res) => {
     const userData = userResult.rows[0];
     const currentDate = getTashkentDate();
 
-    // Check if already claimed today
-    if (userData.streak_claimed_today) {
+    // Calculate date difference first (so we can decide how to treat "claimed today")
+    const lastLoginDate = userData.last_login_date;
+    let diffDays = calculateDateDiff(lastLoginDate, currentDate);
+
+    // Hardening: if diffDays is null for any reason, treat as reset boundary
+    if (diffDays === null || Number.isNaN(diffDays)) {
+      diffDays = 999; // force reset logic below
+    }
+
+    // Resilience: if the day rolled over but cron didn't run,
+    // allow claim by ignoring yesterday's "streak_claimed_today".
+    // Only block when it's truly the same Tashkent day.
+    if (userData.streak_claimed_today && diffDays === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Streak already claimed today' });
     }
-
-    // Calculate date difference
-    const lastLoginDate = userData.last_login_date;
-    const diffDays = calculateDateDiff(lastLoginDate, currentDate);
 
     // Determine new streak value
     let newStreak;
