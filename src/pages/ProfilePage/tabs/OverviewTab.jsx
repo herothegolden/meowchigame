@@ -1,10 +1,13 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v36 – Ensure /api/meow-tap goes through authenticated apiCall with explicit payload;
-//        add strict logging so backend rejections are visible.
-// Changes from v35:
-// 1) apiCall('/api/meow-tap', {}) (explicit empty object so wrapper merges initData).
-// 2) Console logs for success/error around sendTap.
-// 3) No unrelated edits.
+// v37 – Tap Queue & Flush Worker
+// Purpose: backend is accepting taps slowly (throttle). We keep UI optimistic,
+// then feed taps to /api/meow-tap one-by-one at a safe cadence until server catches up.
+//
+// Changes vs v36:
+// 1) Introduced a tap queue with a small worker that calls apiCall('/api/meow-tap', {}) at ~140ms cadence.
+// 2) Track lastServerMeow so we know when the server caught up to the UI.
+// 3) Still dispatch 'meow:reached42' when UI hits 42; CTA polling remains in ProfilePage.
+// 4) No unrelated code changed.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -35,7 +38,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const serverVal0 = Number.isFinite(stats?.meow_taps) ? Number(stats.meow_taps) : 0;
 
   const dayRef = useRef(serverDay);
-
   const [meowTapsLocal, setMeowTapsLocal] = useState(() => {
     try {
       const raw = sessionStorage.getItem(storageKey);
@@ -49,7 +51,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     return serverVal0;
   });
 
-  // Cache initData once (apiCall reads it itself, but keep for future fallbacks)
+  // Track the server-observed counter to know when it's caught up.
+  const lastServerMeowRef = useRef(serverVal0);
+
+  // Cache initData once (the wrapper uses it; kept for fallback needs)
   const initDataRef = useRef("");
   useEffect(() => {
     try {
@@ -59,6 +64,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
 
   const notifyReached42 = useCallback(() => {
     window.dispatchEvent(new CustomEvent("meow:reached42"));
+    // Delayed backup check at 500ms to ensure DB transaction is committed
     setTimeout(async () => {
       try {
         const d = await getMeowCtaStatus();
@@ -78,6 +84,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     [serverDay]
   );
 
+  // Reconcile on server stats change
   useEffect(() => {
     const newDay = serverDay;
     const prevDay = dayRef.current;
@@ -95,11 +102,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     });
 
     dayRef.current = newDay;
+    lastServerMeowRef.current = serverVal0; // keep in sync
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
+  // Visual feel
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 80;
-
   const [glowTick, setGlowTick] = useState(0);
   const [goldFlashTick, setGoldFlashTick] = useState(0);
   const prevMeowRef = useRef(meowTapsLocal);
@@ -112,6 +120,56 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   }, [meowTapsLocal]);
 
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
+
+  // ==========================================================
+  // Tap Queue + Flush Worker (keeps server in sync up to 42)
+  // ==========================================================
+  const pendingTapsRef = useRef(0);
+  const inflightRef = useRef(false);
+  const workerTimerRef = useRef(null);
+  const FLUSH_INTERVAL_MS = 140; // feed one tap ~7/sec to survive server throttle
+
+  const stopWorker = () => {
+    if (workerTimerRef.current) {
+      clearInterval(workerTimerRef.current);
+      workerTimerRef.current = null;
+    }
+  };
+
+  const startWorker = useCallback(() => {
+    if (workerTimerRef.current) return;
+    workerTimerRef.current = setInterval(async () => {
+      // stop conditions
+      if (pendingTapsRef.current <= 0 || lastServerMeowRef.current >= 42) {
+        stopWorker();
+        return;
+      }
+      if (inflightRef.current) return;
+
+      inflightRef.current = true;
+      try {
+        const d = await apiCall("/api/meow-tap", {}); // ensures validateUser via wrapper
+        // Surface for debugging:
+        // console.log("[tap-worker] /api/meow-tap →", d);
+        if (d && typeof d.meow_taps === "number") {
+          const srv = Math.max(lastServerMeowRef.current, d.meow_taps);
+          lastServerMeowRef.current = Math.min(42, srv);
+          // We only decrement pending if server advanced.
+          if (srv > serverVal0) {
+            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - 1);
+          }
+        } else {
+          // If server did not report a number, keep pending; worker will retry next tick.
+        }
+      } catch (_) {
+        // transient fail; keep pending and try next tick
+      } finally {
+        inflightRef.current = false;
+      }
+    }, FLUSH_INTERVAL_MS);
+  }, [serverVal0]);
+
+  // ==========================================================
 
   const lifeStats = useMemo(
     () => [
@@ -166,57 +224,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  const retryOnceRef = useRef(false);
-
-  const sendTap = useCallback(async () => {
-    try {
-      // ✅ Force wrapper to include initData by passing an explicit payload object.
-      const data = await apiCall("/api/meow-tap", {});
-
-      // Strict visibility for debugging the backend path:
-      console.log("[meow] POST /api/meow-tap →", data);
-
-      if (data && typeof data.meow_taps === "number") {
-        setMeowTapsLocal((prev) => {
-          const next = Math.min(42, Math.max(prev, data.meow_taps));
-          persist(next);
-          if (next === 42 && prev !== 42) notifyReached42();
-          return next;
-        });
-
-        const throttledAt42 = data?.throttled === true && meowTapsLocal === 42;
-        const nonThrottled41AtLocal42 =
-          data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal === 42;
-
-        if (!retryOnceRef.current && (throttledAt42 || nonThrottled41AtLocal42)) {
-          retryOnceRef.current = true;
-          setTimeout(() => {
-            void (async () => {
-              try {
-                const d2 = await apiCall("/api/meow-tap", {});
-                console.log("[meow] RETRY /api/meow-tap →", d2);
-                if (d2 && typeof d2.meow_taps === "number") {
-                  setMeowTapsLocal((prev) => {
-                    const next = Math.min(42, Math.max(prev, d2.meow_taps));
-                    persist(next);
-                    if (next === 42 && prev !== 42) notifyReached42();
-                    return next;
-                  });
-                }
-              } catch (e2) {
-                console.warn("[meow] retry /api/meow-tap failed:", e2?.message || e2);
-              }
-            })();
-          }, 260);
-        }
-      } else if (data && data.error) {
-        console.warn("[meow] /api/meow-tap rejected:", data.error);
-      }
-    } catch (e) {
-      console.warn("[meow] /api/meow-tap error:", e?.message || e);
-    }
-  }, [notifyReached42, persist, meowTapsLocal]);
-
+  // ALWAYS increment optimistically; enqueue for server flush
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -234,11 +242,15 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
+      // enqueue a server tap whenever UI increments and server hasn't matched yet
+      if (lastServerMeowRef.current < 42) {
+        pendingTapsRef.current += 1;
+        startWorker();
+      }
+      if (next === 42 && n !== 42) notifyReached42();
       return next;
     });
-
-    void sendTap();
-  }, [meowTapsLocal, sendTap, persist]);
+  }, [meowTapsLocal, persist, notifyReached42, startWorker]);
 
   // =========================
   // 🔥 Daily Streak Claim CTA
@@ -270,12 +282,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     } catch (_) {
     } finally {
       setClaiming(false);
-      try {
-        if (typeof onUpdate === "function") onUpdate();
-      } catch (_) {}
+      try { if (typeof onUpdate === "function") onUpdate(); } catch (_) {}
     }
   }, [canClaimComputed, claiming, onUpdate]);
 
+  // =========================
+  // UI
+  // =========================
   const lifeStatsCards = useMemo(() => {
     return lifeStats.map((stat, i) => {
       const isMeowCounter = stat.key === "meow-counter";
@@ -441,7 +454,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         </motion.div>
       );
     });
-  }, [lifeStats, meowTapsLocal, streakInfo, stats?.streak_claimed_today, claiming, claimStreak, glowTick]);
+  }, [lifeStats, meowTapsLocal, streakInfo, stats?.streak_claimed_today, claiming, claimStreak, glowTick, handleMeowTap]);
 
   return (
     <motion.div
