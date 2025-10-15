@@ -1,7 +1,5 @@
-// Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v27 — On hitting 42, also ping /api/meow-cta-status immediately (no UI changes)
-// - Keeps existing dispatch of "meow:reached42"
-// - No other logic or styling changed.
+// Path: src/pages/ProfilePage/tabs/OverviewTab.jsx
+// v28 — deploy-safe: same CTA fix, use haptic() to avoid ESLint fail, no other changes.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -45,7 +43,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          // trust server 0; do not lift from cache when serverVal0 === 0
           return serverVal0 === 0 ? 0 : Math.max(parsed.value, serverVal0);
         }
       }
@@ -77,7 +74,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // 🔔 On-hit-42 immediate status ping (to avoid relying solely on container listener/polling)
+  // On-hit-42 immediate status ping (to avoid relying solely on container listener/polling)
   const pingCtaStatus = useCallback(async () => {
     if (!backendBase) return;
     try {
@@ -95,7 +92,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
     } catch (_) {}
-    // NEW: proactively ping server status to flip eligibility without waiting for listener/poll
     void pingCtaStatus();
   }, [pingCtaStatus]);
 
@@ -119,7 +115,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
       if (newDay !== prevDay) {
         next = serverVal0;
       } else {
-        // trust server 0; do not preserve stale local when serverVal0 === 0
         next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
@@ -134,6 +129,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 220;
 
+  // Haptic helper (now actually used to avoid ESLint "no-unused-vars")
   const haptic = useCallback(() => {
     try {
       const HW = window?.Telegram?.WebApp?.HapticFeedback;
@@ -141,10 +137,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // 🔮 Backlight glow tick (purely visual)
+  // Backlight glow tick (visual)
   const [glowTick, setGlowTick] = useState(0);
 
-  // ✨ One-time gold frame flash when entering locked state (42)
+  // One-time gold frame flash when entering locked state (42)
   const [goldFlashTick, setGoldFlashTick] = useState(0);
   const prevMeowRef = useRef(meowTapsLocal);
   useEffect(() => {
@@ -155,7 +151,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     prevMeowRef.current = meowTapsLocal;
   }, [meowTapsLocal]);
 
-  // ✅ Zen shows lifetime games played (unchanged)
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
   // Build stats list (Meow Counter card is tappable)
@@ -212,7 +207,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  // ---- One-shot retry guard for final-commit edge cases ----
+  // One-shot retry guard for final-commit edge cases
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
@@ -239,10 +234,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           return next;
         });
 
-        // 🔁 If server says "throttled" while our local shows 42, retry once
         const throttledAt42 = data?.throttled === true && meowTapsLocal === 42;
-
-        // 🔁 If server returns 41 (non-throttled) while local already 42, retry once
         const nonThrottled41AtLocal42 =
           data?.throttled !== true && data?.meow_taps === 41 && meowTapsLocal === 42;
 
@@ -271,7 +263,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 }
               } catch (_) {}
             })();
-          }, 260); // a hair above 220ms
+          }, 260);
         }
       }
     } catch (_) {
@@ -286,10 +278,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     if (meowTapsLocal >= 42) return;
 
-    const HW = window?.Telegram?.WebApp?.HapticFeedback;
-    if (HW?.impactOccurred) HW.impactOccurred("light");
+    // ✅ actually use the helper to satisfy strict lint configs
+    haptic();
 
-    // 🔮 trigger backlight pulse on every tap attempt
+    // visual pulse
     setGlowTick((t) => t + 1);
 
     if (meowTapsLocal === 0) {
@@ -302,12 +294,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
-      // no early notify here
       return next;
     });
 
     void sendTap();
-  }, [meowTapsLocal, sendTap, persist]);
+  }, [meowTapsLocal, sendTap, persist, haptic]);
 
   // =========================
   // 🔥 Daily Streak Claim CTA
@@ -331,9 +322,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData: initDataRef.current }),
       });
-      // Parent will refetch authoritative stats
     } catch (_) {
-      // swallow; parent refresh will reconcile
     } finally {
       setClaiming(false);
       try {
@@ -368,7 +357,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             }
           : { className: baseClass };
 
-        // --- Render Meow Counter with OUTER gold glow wrapper (allows spill beyond card) ---
+        // Meow Counter (with outer glow)
         if (isMeowCounter) {
           return (
             <div key={`wrap-${i}`} className="relative">
@@ -452,7 +441,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           );
         }
 
-        // --- Daily Streak card wrapper to host floating 🔥 CTA ---
+        // Daily Streak card wrapper to host floating 🔥 CTA
         if (isStreakCard) {
           return (
             <div key={`streak-wrap-${i}`} className="relative">
@@ -488,7 +477,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
                 whileTap={{ scale: 0.985 }}
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                {...interactiveProps /* same base styles */}
+                {...interactiveProps}
               >
                 {/* base sheen + inner ring */}
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
@@ -512,7 +501,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           );
         }
 
-        // --- Default cards (no outer glow wrapper) ---
+        // Default cards
         return (
           <motion.div
             key={i}
