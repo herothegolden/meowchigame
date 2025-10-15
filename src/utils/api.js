@@ -137,10 +137,15 @@ export const getMeowCtaStatus = async () => {
 };
 
 /**
- * Marks today's Meow CTA as used (idempotent). Returns: { success: true, usedToday: true } on success.
+ * Claim today's Meow CTA and normalize the response.
+ * Always returns an object with shape: { success: boolean, claimId: string|null }
+ * (Any HTTP errors will throw from apiCall.)
  */
 export const claimMeowCta = async () => {
-  return await apiCall("/api/meow-claim");
+  const res = await apiCall("/api/meow-claim");
+  const success = !!res?.success;
+  const claimId = typeof res?.claimId === "string" && res.claimId.length > 0 ? res.claimId : null;
+  return { success, claimId };
 };
 
 // Expose base for debugging if needed
