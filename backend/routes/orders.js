@@ -1,7 +1,10 @@
 // Path: backend/routes/orders.js
-// v10 — FIX: CTA eligibility tolerant to race condition (line 273)
-//       Changed: guardedMeow logic now allows eligibility when meow_taps >= 42
-//       even if meow_taps_date is momentarily stale during DB commit
+// v11 — CTA status hardening (minimal/surgical):
+//   A) Robust "today" derivation with fallback (tz.today || tz.day).
+//   B) Preserve race-tolerant guard (>=41) to avoid zeroing during 41→42 commit.
+//   C) One-shot, 200ms recheck inside /meow-cta-status when borderline (<42).
+//
+//   No other endpoints changed.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -266,11 +269,15 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
-    // Derive "today" from DB to avoid Node clock drift
+    // Derive "today" from DB to avoid Node clock drift (tolerant to alias)
     const {
       rows: [tz],
-    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS today`);
-    const today = tz.today;
+    } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS today, (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+    let today = tz?.today ?? tz?.day ?? null;
+    if (!today) {
+      const r2 = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+      today = r2.rows[0]?.day ?? null;
+    }
 
     // Read user state (include date for display guard)
     const ur = await client.query(
@@ -283,25 +290,46 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
     );
     if (ur.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
-    const { meow_taps, meow_taps_date, used_today } = ur.rows[0];
+    let { meow_taps, meow_taps_date, used_today } = ur.rows[0];
 
-    // ✅ DO NOT re-shift a local Tashkent "timestamp without time zone".
     // Compare local calendar dates directly to avoid off-by-one.
     const cmp = await client.query(
       `SELECT (($1::date) = ($2::date)) AS is_today`,
       [meow_taps_date, today]
     );
-    const isToday = !!cmp.rows[0]?.is_today;
+    let isToday = !!cmp.rows[0]?.is_today;
 
-    // ✅ v10 FIX (tolerant): avoid zeroing taps during 41→42 commit race
-    const guardedMeow = (isToday || meow_taps >= 41) ? Number(meow_taps || 0) : 0;
+    // v10 tolerance (from v1): do not zero during 41→42 commit race
+    let guardedMeow = (isToday || meow_taps >= 41) ? Number(meow_taps || 0) : 0;
+
+    // One-shot micro retry if still below 42 (absorbs commit landing)
+    if (guardedMeow < 42) {
+      await new Promise(r => setTimeout(r, 200));
+      const ur2 = await client.query(
+        `SELECT COALESCE(meow_taps,0) AS meow_taps, meow_taps_date
+           FROM users
+          WHERE telegram_id = $1`,
+        [user.id]
+      );
+      const r = ur2.rows[0];
+      if (r) {
+        meow_taps = r.meow_taps;
+        meow_taps_date = r.meow_taps_date;
+        const cmp2 = await client.query(
+          `SELECT (($1::date) = ($2::date)) AS is_today`,
+          [meow_taps_date, today]
+        );
+        isToday = !!cmp2.rows[0]?.is_today;
+        guardedMeow = (isToday || meow_taps >= 41) ? Number(meow_taps || 0) : 0;
+      }
+    }
 
     // Global remaining for "today"
     const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
     const claimsTaken = dr.rowCount ? Number(dr.rows[0].claims_taken || 0) : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
-    const todayStr = String(today).slice(0, 10);
+    const todayStr = today ? String(today).slice(0, 10) : "";
     const eligible = guardedMeow >= 42 && !used_today && remainingGlobal > 0;
 
     return res.status(200).json({
