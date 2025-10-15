@@ -1,7 +1,5 @@
-// v5 — Robust BACKEND_URL resolution (runtime + build-time)
-// - Resolves backend base from window.__MEOWCHI_BACKEND_URL__ → window.BACKEND_URL → VITE_BACKEND_URL.
-// - Keeps initializeUser() non-fatal outside Telegram to avoid blank screens in a browser.
-// - No behavior changes for existing API shapes.
+// v6 — Fix build error: use typeof import.meta !== 'undefined' instead of typeof import !== 'undefined'
+//      Robust BACKEND_URL resolution (runtime + build-time) preserved.
 
 function resolveBackendBase() {
   try {
@@ -19,8 +17,11 @@ function resolveBackendBase() {
 
     // Build-time (Vite) fallback
     // NOTE: in some prod builds this can be undefined; that's why we prefer runtime above.
-    // eslint-disable-next-line no-undef
-    const viteVal = (typeof import !== "undefined" && import.meta?.env?.VITE_BACKEND_URL) || "";
+    const viteVal =
+      (typeof import.meta !== "undefined" &&
+        import.meta.env &&
+        import.meta.env.VITE_BACKEND_URL) ||
+      "";
     if (viteVal) return String(viteVal).replace(/\/+$/, "");
 
     return "";
