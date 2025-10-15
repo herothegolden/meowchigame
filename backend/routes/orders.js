@@ -293,9 +293,8 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
     );
     const isToday = !!cmp.rows[0]?.is_today;
 
-    // ✅ v10 FIX: Guard meow_taps by display day OR if user reached 42 (must be today)
-    // This tolerates race condition where meow_taps_date hasn't committed yet
-    const guardedMeow = (isToday || meow_taps >= 42) ? Number(meow_taps || 0) : 0;
+    // ✅ v10 FIX (tolerant): avoid zeroing taps during 41→42 commit race
+    const guardedMeow = (isToday || meow_taps >= 41) ? Number(meow_taps || 0) : 0;
 
     // Global remaining for "today"
     const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
@@ -331,7 +330,7 @@ router.post('/create-order', validateUser, async (req, res) => {
     const { items, totalAmount } = req.body;
 
     // Validate input
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    if (!items || Array.isArray(items) === false || items.length === 0) {
       return res.status(400).json({ error: 'Missing required field: items (must be non-empty array)' });
     }
 
