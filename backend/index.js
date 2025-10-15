@@ -1,4 +1,3 @@
-// Path: backend/index.js
 // v4 — adds on-boot schema check + mounts CTA routes (minimal change)
 
 import 'dotenv/config';
