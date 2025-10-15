@@ -286,16 +286,22 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 
     const { meow_taps, meow_taps_date, used_today } = ur.rows[0];
 
-    // Display-day guard: if stored date != today, treat as 0 for CTA logic
-    const tapDay = meow_taps_date ? String(meow_taps_date).slice(0, 10) : null;
-    const todayStr = String(today).slice(0, 10);
-    const guardedMeow = tapDay === todayStr ? Number(meow_taps || 0) : 0;
+    // ✅ Option A: SQL-level date comparison (robust for DATE/TIMESTAMP)
+    const cmp = await client.query(
+      `SELECT ($1::date = $2::date) AS is_today`,
+      [meow_taps_date, today]
+    );
+    const isToday = !!cmp.rows[0]?.is_today;
+
+    // Guard meow_taps by display day
+    const guardedMeow = isToday ? Number(meow_taps || 0) : 0;
 
     // Global remaining for "today"
     const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
     const claimsTaken = dr.rowCount ? Number(dr.rows[0].claims_taken || 0) : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
 
+    const todayStr = String(today).slice(0, 10);
     const eligible = guardedMeow >= 42 && !used_today && remainingGlobal > 0;
 
     return res.status(200).json({
