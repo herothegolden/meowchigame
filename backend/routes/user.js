@@ -1,5 +1,5 @@
-// v18 — Adjust tap cooldown for /meow-tap to align with client queue (80ms)
-//      Minimal change from v17: TAP_COOLDOWN_MS 220 → 80
+// v19 — Remove in-process meow-tap throttle; rely on DB row lock so every tap increments up to 42.
+//        Minimal, targeted change: throttle Map & checks removed only in /meow-tap.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -9,11 +9,6 @@ import { getTashkentDate, calculateDateDiff } from '../utils/timezone.js';
 
 const router = express.Router();
 const { BOT_TOKEN } = process.env;
-
-/** Simple per-process rate limiter for /meow-tap */
-const meowTapThrottle = new Map(); // userId -> lastTapMs
-// Align with client-side queue (~140ms) and UI guard (80ms) to avoid last-tap throttle races.
-const TAP_COOLDOWN_MS = 80;
 
 /* -------------------------------------------
    AUTH / VALIDATION
@@ -186,13 +181,12 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
 
       const todayStr = getTashkentDate();
 
-      // 🔒 DISPLAY-ONLY DAY GUARD: if stored date is not today, present 0 to client
+      // DISPLAY-ONLY DAY GUARD
       if (!userData.meow_taps_date || String(userData.meow_taps_date).slice(0,10) !== todayStr) {
         userData.meow_taps = 0;
         userData.meow_taps_date = todayStr;
       }
 
-      // Today's high score
       const highTodayResult = await client.query(
         `SELECT COALESCE(MAX(score), 0) AS high_today
            FROM game_sessions
@@ -261,10 +255,9 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       if (userResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
       const userData = userResult.rows[0];
-
       const todayStr = getTashkentDate();
 
-      // 🔒 DISPLAY-ONLY DAY GUARD for Profile payload
+      // DISPLAY-ONLY DAY GUARD
       if (!userData.meow_taps_date || String(userData.meow_taps_date).slice(0,10) !== todayStr) {
         userData.meow_taps = 0;
         userData.meow_taps_date = todayStr;
@@ -284,7 +277,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.high_score_today = Number(highTodayResult.rows[0]?.high_today || 0);
 
       const currentStreak = Number(userData.daily_streak || 0);
-
       const lastLoginDate = userData.last_login_date;
       const streakClaimedToday = userData.streak_claimed_today || false;
       const diffDays = calculateDateDiff(lastLoginDate, todayStr);
@@ -432,72 +424,16 @@ router.post('/update-avatar', validateUser, async (req, res) => {
 
 /* -------------------------------------------
    NEW: Счётчик мяу (daily up to 42)
-   (v17 logic preserved; only cooldown changed)
+   v19: no in-process throttle; DB transaction handles concurrency
 ------------------------------------------- */
 
 router.post('/meow-tap', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const now = Date.now();
-    const last = meowTapThrottle.get(user.id) || 0;
-
     const todayStr = getTashkentDate();
 
     const client = await pool.connect();
     try {
-      // 🔒 Throttled path
-      if (now - last < TAP_COOLDOWN_MS) {
-        await client.query('BEGIN');
-
-        const row = await client.query(
-          `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
-             FROM users
-            WHERE telegram_id = $1
-            FOR UPDATE`,
-          [user.id]
-        );
-
-        let meow = row.rows[0]?.meow_taps ?? 0;
-        const meowDate = row.rows[0]?.meow_taps_date;
-        const dateIsToday = meowDate && String(meowDate).slice(0,10) === todayStr;
-
-        // Always stamp date if stale, even in throttled path
-        if (!dateIsToday) {
-          await client.query(
-            `UPDATE users
-               SET meow_taps = 0,
-                   meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
-             WHERE telegram_id = $1`,
-            [user.id]
-          );
-          meow = 0;
-        } else if (meow < 42) {
-          const updated = await client.query(
-            `UPDATE users
-               SET meow_taps = meow_taps + 1,
-                   meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
-             WHERE telegram_id = $1
-               AND meow_taps < 42
-             RETURNING meow_taps`,
-            [user.id]
-          );
-          if (updated.rowCount > 0) {
-            meow = updated.rows[0].meow_taps;
-          }
-        }
-
-        await client.query('COMMIT');
-        meowTapThrottle.set(user.id, now);
-
-        return res.status(200).json({
-          meow_taps: Math.min(42, meow),
-          locked: meow >= 42,
-          remaining: Math.max(42 - meow, 0),
-          throttled: true
-        });
-      }
-
-      // 🔓 Non-throttled path
       await client.query('BEGIN');
 
       const rowRes = await client.query(
@@ -527,15 +463,14 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         );
       }
 
-      // Early-return for locked state (after date stamped)
+      // Locked?
       if (meow_taps >= 42) {
         await client.query('COMMIT');
-        meowTapThrottle.set(user.id, now);
         return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
       }
 
-      // Increment
-      const newTaps = meow_taps + 1;
+      // Increment by 1 (capped at 42)
+      const newTaps = Math.min(42, meow_taps + 1);
       await client.query(
         `UPDATE users
            SET meow_taps = $1,
@@ -545,7 +480,6 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       );
 
       await client.query('COMMIT');
-      meowTapThrottle.set(user.id, now);
 
       return res.status(200).json({
         meow_taps: newTaps,
