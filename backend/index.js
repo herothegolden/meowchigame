@@ -1,5 +1,5 @@
 // Path: backend/index.js
-// v3 — adds on-boot schema check for meow_claim_used_today (minimal change)
+// v4 — adds on-boot schema check + mounts CTA routes (minimal change)
 
 import 'dotenv/config';
 import express from 'express';
@@ -23,8 +23,9 @@ import globalStatsRoutes from './routes/globalStats.js';
 import ordersRoutes from './routes/orders.js';
 import streakRoutes from './routes/streak.js';
 
-// ⬇️ Minimal addition: import pool for one-time schema check
+// ⬇️ Minimal additions:
 import { pool } from './config/database.js';
+import ctaRoutes from './routes/cta.js'; // NEW: mount CTA endpoints
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,6 +64,7 @@ app.use('/api', tasksRoutes);
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
+app.use('/api', ctaRoutes); // NEW: mounts /meow-cta-status and /meow-claim
 
 // ---- START SERVER ----
 const startServer = async () => {
@@ -79,16 +81,16 @@ const startServer = async () => {
     } catch (schemaErr) {
       console.error('⚠️ DB check failed (non-fatal):', schemaErr);
     }
-    
-    // Schedule daily streak reset cron job
+
+    // Schedule daily reset cron job
     scheduleDailyReset();
-    
+
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
       console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/global-stats/debug`);
       console.log(`🌍 Using Tashkent timezone (UTC+5) for active hours: 10AM-10PM`);
-      
+
       await startGlobalStatsSimulation(PORT);
     });
   } catch (err) {
