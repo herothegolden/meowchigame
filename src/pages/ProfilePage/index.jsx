@@ -1,8 +1,7 @@
-// v19 — Browser-safe guards (ProfilePage):
-// - Detect non-Telegram environment and avoid any apiCall() usage.
-// - Render a clear "Open in Telegram" banner instead of crashing in a normal browser.
-// - Attach post-42 listeners / polling only when inside Telegram.
-// - Preserve v18 fixes (retry timers cleanup, CTA shown only on Overview, lazy tabs).
+// v20 — consume event payload from OverviewTab
+// - onReached42(e) now reads e.detail.eligible and sets CTA immediately.
+// - Keeps existing short retries as fallback.
+// - Preserves browser-safe guards and previous logic.
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +10,6 @@ import ProfileHeader from "./ProfileHeader";
 import BottomNav from "../../components/BottomNav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-// ✅ Corrected lazy imports (moved to /tabs/ folder)
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const LeaderboardTab = lazy(() => import("./tabs/LeaderboardTab"));
 const TasksTab = lazy(() => import("./tabs/TasksTab"));
@@ -36,11 +34,10 @@ const ProfilePage = () => {
   });
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  // Track post-42 retry timers so we can clear them on unmount
   const post42TimersRef = useRef([]);
 
   const fetchData = useCallback(async () => {
-    if (!isTMA) return; // 🚫 Do not call backend outside Telegram
+    if (!isTMA) return;
     try {
       setLoading(true);
       setError(null);
@@ -55,18 +52,18 @@ const ProfilePage = () => {
   }, [isTMA]);
 
   const fetchCtaStatus = useCallback(async () => {
-    if (!isTMA) return; // 🚫 No-op in browser
+    if (!isTMA) return;
     try {
-      // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
       const res = await apiCall("/api/meow-cta-status");
-      setCtaStatus({
+      setCtaStatus((s) => ({
+        ...s,
         eligible: !!res.eligible,
         usedToday: !!res.usedToday,
-        remainingGlobal: Number(res.remainingGlobal || 0),
         meow_taps: Number(res.meow_taps || 0),
-      });
+        remainingGlobal: Number(res.remainingGlobal || 0),
+      }));
     } catch {
-      // Silently ignore; CTA is optional UI
+      // silent; CTA is optional UI
     }
   }, [isTMA]);
 
@@ -74,7 +71,7 @@ const ProfilePage = () => {
     fetchData();
   }, [fetchData]);
 
-  // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
+  // If we load a profile already at 42, check CTA immediately
   useEffect(() => {
     if (!isTMA) return;
     if (data?.stats?.meow_taps >= 42) {
@@ -82,33 +79,35 @@ const ProfilePage = () => {
     }
   }, [isTMA, data?.stats?.meow_taps, fetchCtaStatus]);
 
-  // Listen for custom event from OverviewTab when user reaches 42 in-session.
+  // 🔑 Consume payload from OverviewTab's "meow:reached42"
   useEffect(() => {
     if (!isTMA) return;
 
-    const onReached42 = () => {
-      // Immediate check
-      fetchCtaStatus();
+    const onReached42 = (e) => {
+      // Fast-path: if server already replied eligible:true, set immediately
+      if (e?.detail && e.detail.eligible === true) {
+        setCtaStatus((s) => ({ ...s, eligible: true, usedToday: !!e.detail.usedToday }));
+      } else {
+        // Fallback: fetch now (server might still be committing)
+        fetchCtaStatus();
+      }
 
-      // Short retry ladder to outwait backend throttle and DB write latency
+      // Short retry ladder to outwait any residual commit latency
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
-
-      // Remember timers for cleanup
       post42TimersRef.current.push(t1, t2, t3);
     };
 
     window.addEventListener("meow:reached42", onReached42);
     return () => {
       window.removeEventListener("meow:reached42", onReached42);
-      // Clear any outstanding retry timers on unmount
       for (const t of post42TimersRef.current) clearTimeout(t);
       post42TimersRef.current = [];
     };
   }, [isTMA, fetchCtaStatus]);
 
-  // Poll CTA status lightly (reflects global 42 cap); also on tab switch
+  // Light polling while on Profile to reflect caps/flags
   useEffect(() => {
     if (!isTMA) return;
     fetchCtaStatus();
@@ -124,16 +123,13 @@ const ProfilePage = () => {
     }
     try {
       setCtaLoading(true);
-      // apiCall always posts; backend route is POST /api/meow-claim
       const res = await apiCall("/api/meow-claim");
-      if (res?.success && res?.claimId) {
+      if (res?.success) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
-        // Hide CTA locally to avoid double-taps
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
-        navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
+        navigate(`/order?promo=MEOW42`);
       } else {
         showError(res?.error || "Не удалось активировать предложение");
-        // Refresh CTA status to reflect server truth
         fetchCtaStatus();
       }
     } catch (e) {
@@ -147,7 +143,7 @@ const ProfilePage = () => {
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
 
-  // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
+  // Show CTA solely based on server eligibility flag
   const showMeowCTA = !!ctaStatus.eligible;
 
   // -------- Non-Telegram rendering (browser deep link) --------
@@ -160,16 +156,12 @@ const ProfilePage = () => {
             Откройте бота и перейдите в «Профиль», чтобы увидеть ваши данные.
           </span>
         </div>
-
-        {/* Lightweight placeholder header */}
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
           <div className="text-white font-semibold mb-2">Профиль</div>
           <div className="text-secondary text-sm">
             Авторизация происходит через Telegram внутри мини-приложения.
           </div>
         </div>
-
-        {/* Keep BottomNav for consistent layout if you want, or remove if not applicable */}
         <BottomNav />
       </div>
     );
@@ -178,7 +170,6 @@ const ProfilePage = () => {
   // -------- Telegram rendering --------
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
-      {/* Inline error banner (non-blocking) */}
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
           Ошибка загрузки профиля: {error}{" "}
@@ -191,8 +182,6 @@ const ProfilePage = () => {
         </div>
       )}
 
-      {/* Profile Header — instant shell render.
-          Show a tiny skeleton while loading, otherwise real header. */}
       {loading ? (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
           <div className="h-6 w-40 bg-white/10 rounded mb-3" />
@@ -206,7 +195,6 @@ const ProfilePage = () => {
         <ProfileHeader stats={stats} onUpdate={fetchData} />
       )}
 
-      {/* Tabs Section — always visible; contents hydrate progressively */}
       <div className="relative overflow-hidden rounded-lg bg-[#1b1b1b] border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
           <TabsList className="grid grid-cols-3 rounded-t-lg border-b border-white/10">
@@ -215,15 +203,8 @@ const ProfilePage = () => {
             <TabsTrigger value="tasks">Задания</TabsTrigger>
           </TabsList>
 
-          {/* Overview */}
           <TabsContent value="overview">
-            <Suspense
-              fallback={
-                <div className="p-4 text-center text-secondary text-sm">
-                  Loading overview...
-                </div>
-              }
-            >
+            <Suspense fallback={<div className="p-4 text-center text-secondary text-sm">Loading overview...</div>}>
               <OverviewTab
                 stats={stats}
                 streakInfo={streakInfo}
@@ -232,35 +213,20 @@ const ProfilePage = () => {
             </Suspense>
           </TabsContent>
 
-          {/* Leaderboard */}
           <TabsContent value="leaderboard">
-            <Suspense
-              fallback={
-                <div className="p-4 text-center text-secondary text-sm">
-                  Loading leaderboard...
-                </div>
-              }
-            >
+            <Suspense fallback={<div className="p-4 text-center text-secondary text-sm">Loading leaderboard...</div>}>
               <LeaderboardTab />
             </Suspense>
           </TabsContent>
 
-          {/* Tasks */}
           <TabsContent value="tasks">
-            <Suspense
-              fallback={
-                <div className="p-4 text-center text-secondary text-sm">
-                  Loading tasks...
-                </div>
-              }
-            >
+            <Suspense fallback={<div className="p-4 text-center text-secondary text-sm">Loading tasks...</div>}>
               <TasksTab />
             </Suspense>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Meow CTA — under tabs (appears only when eligible) and only on Overview tab. */}
       {showMeowCTA && activeTab === "overview" && (
         <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
           <div className="flex items-center justify-between gap-3">
@@ -286,7 +252,6 @@ const ProfilePage = () => {
         </div>
       )}
 
-      {/* Bottom Navigation */}
       <BottomNav />
     </div>
   );
