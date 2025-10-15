@@ -1,146 +1,132 @@
-// v6 — Fix build error: use typeof import.meta !== 'undefined' instead of typeof import !== 'undefined'
-//      Robust BACKEND_URL resolution (runtime + build-time) preserved.
+// src/utils/api.js
+// v2 — Hardened API utilities for TMA
+// - Safe backend base resolution with runtime > build-time priority
+// - Centralized Telegram initData getter
+// - apiCall ensures leading slash, attaches initData, keepalive, and better errors
+// - Exposes helpers used by CTA flow
 
+// -------------------------------
+// Backend base resolution
+// -------------------------------
 function resolveBackendBase() {
   try {
-    // Runtime fallbacks (settable from index.html or any inline script)
     if (typeof window !== "undefined") {
-      const inline =
-        window.__MEOWCHI_BACKEND_URL__ ||
-        window.BACKEND_URL ||
-        null;
-
-      if (inline && typeof inline === "string") {
-        return inline.replace(/\/+$/, "");
-      }
+      const inline = window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL || null;
+      if (inline && typeof inline === "string") return inline.replace(/\/+$/, "");
     }
-
     // Build-time (Vite) fallback
-    // NOTE: in some prod builds this can be undefined; that's why we prefer runtime above.
     const viteVal =
-      (typeof import.meta !== "undefined" &&
-        import.meta.env &&
-        import.meta.env.VITE_BACKEND_URL) ||
-      "";
+      (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) || "";
     if (viteVal) return String(viteVal).replace(/\/+$/, "");
-
-    return "";
-  } catch {
+    return ""; // relative
+  } catch (_) {
     return "";
   }
 }
 
 const BACKEND_URL = resolveBackendBase();
 
-/**
- * Initialize user in database via /api/validate
- * Called once on app startup to ensure user exists
- *
- * CHANGE: Do not throw if not inside Telegram or BACKEND_URL is missing.
- * Instead, return a soft result so routes can render an "Open in Telegram" state
- * without crashing the whole page in a normal browser.
- */
+// -------------------------------
+// Telegram initData
+// -------------------------------
+function getInitData() {
+  try {
+    const s = typeof window !== "undefined" ? window.Telegram?.WebApp?.initData : "";
+    return typeof s === "string" ? s : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+// -------------------------------
+// Initialize User (soft in non‑TMA)
+// -------------------------------
 export const initializeUser = async () => {
   const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 
   if (!tg?.initData || !BACKEND_URL) {
-    // Soft signal: not in Telegram or no backend configured at runtime
+    // Soft signal for non‑Telegram/browser preview or missing runtime base
     return { ok: false, reason: !BACKEND_URL ? "no-backend-url" : "not-in-telegram" };
   }
 
-  const params = new URLSearchParams(tg.initData);
-  const userParam = params.get("user");
-  if (!userParam) {
+  let user;
+  try {
+    const params = new URLSearchParams(tg.initData);
+    const userParam = params.get("user");
+    if (!userParam) throw new Error("Invalid Telegram user data");
+    user = JSON.parse(userParam);
+  } catch (e) {
     throw new Error("Invalid Telegram user data");
   }
 
-  const user = JSON.parse(userParam);
-
-  const response = await fetch(`${BACKEND_URL}/api/validate`, {
+  const res = await fetch(`${BACKEND_URL}/api/validate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      initData: tg.initData,
-      user,
-    }),
+    body: JSON.stringify({ initData: tg.initData, user }),
+    keepalive: true,
+    credentials: "same-origin",
   });
 
-  if (!response.ok) {
-    let error = {};
-    try { error = await response.json(); } catch {}
-    throw new Error(error.error || `Initialization failed: ${response.status}`);
+  if (!res.ok) {
+    let text = "";
+    try { text = await res.text(); } catch {}
+    throw new Error(text || `Initialization failed: ${res.status}`);
   }
-
-  return response.json();
+  try { return await res.json(); } catch { return { ok: true }; }
 };
 
-/**
- * Generic POST helper that sends Telegram initData along with payload
- * Throws if Telegram env or BACKEND_URL are missing (callers should gate/try-catch).
- */
-export const apiCall = async (endpoint, data = {}) => {
-  const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
+// -------------------------------
+// Generic POST helper (strict)
+// -------------------------------
+export const apiCall = async (endpoint, data = {}, options = {}) => {
+  const base = BACKEND_URL; // prefer explicit base; if empty, allow relative
+  const path = String(endpoint || "/");
+  const url = base
+    ? `${base}${path.startsWith("/") ? path : `/${path}`}`
+    : (path.startsWith("/") ? path : `/${path}`);
 
-  if (!BACKEND_URL) {
-    throw new Error("Backend URL is not configured");
-  }
-  if (!tg?.initData) {
+  const initData = getInitData();
+  if (!initData) {
     throw new Error("Connection required. Please open from Telegram.");
   }
 
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ initData: tg.initData, ...data }),
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), options.timeoutMs || 10000);
+
+  const res = await fetch(url, {
+    method: options.method || "POST",
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    body: JSON.stringify({ initData, ...data }),
+    keepalive: true,
+    credentials: options.credentials || "same-origin",
+    signal: controller.signal,
+  }).catch((e) => {
+    clearTimeout(t);
+    throw e;
   });
 
-  if (!response.ok) {
-    let error = {};
-    try { error = await response.json(); } catch {}
-    throw new Error(error.error || `Error ${response.status}`);
+  clearTimeout(t);
+
+  if (!res.ok) {
+    let body = "";
+    try { body = await res.text(); } catch {}
+    const msg = body || `Error ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.body = body;
+    throw err;
   }
 
-  return response.json();
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return text; }
 };
 
-export const showSuccess = (message) => {
-  const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
-  try { tg?.HapticFeedback?.notificationOccurred?.("success"); } catch {}
-  if (tg?.showPopup) {
-    tg.showPopup({ title: "Success", message, buttons: [{ type: "ok" }] });
-  }
-};
-
-export const showError = (message) => {
-  const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
-  try { tg?.HapticFeedback?.notificationOccurred?.("error"); } catch {}
-  if (tg?.showPopup) {
-    tg.showPopup({ title: "Error", message, buttons: [{ type: "ok" }] });
-  } else {
-    // Fallback for browser
-    // eslint-disable-next-line no-alert
-    alert(message);
-  }
-};
-
-export const claimStreak = async () => {
-  return await apiCall("/api/streak/claim-streak");
-};
-
-// ===== Meow CTA helpers =====
-
-/**
- * Returns: { eligible: boolean, usedToday: boolean, meow_taps: number, today: "YYYY-MM-DD", ... }
- */
-export const getMeowCtaStatus = async () => {
-  return await apiCall("/api/meow-cta-status");
-};
-
-/**
- * Claim today's Meow CTA and normalize the response.
- * Always returns an object with shape: { success: boolean, claimId: string|null }
- * (Any HTTP errors will throw from apiCall.)
- */
+// -------------------------------
+// CTA helpers
+// -------------------------------
+export const getMeowCtaStatus = async () => apiCall("/api/meow-cta-status");
 export const claimMeowCta = async () => {
   const res = await apiCall("/api/meow-claim");
   const success = !!res?.success;
@@ -148,5 +134,8 @@ export const claimMeowCta = async () => {
   return { success, claimId };
 };
 
-// Expose base for debugging if needed
+// Optional dedicated helper for tap route (used by tap worker)
+export const meowTap = async () => apiCall("/api/meow-tap");
+
+// Expose base for diagnostics
 export const __BACKEND_BASE__ = BACKEND_URL;
