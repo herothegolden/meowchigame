@@ -1,18 +1,18 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v31 — Unify backend calls: use getMeowCtaStatus() from utils/api
-// - notifyReached42() now calls getMeowCtaStatus() (shared robust base) instead of building its own backendBase.
-// - Daily Streak card rendering is INCLUDED (no placeholders), matching previous behavior.
+// v32 — FIX: Don't call getMeowCtaStatus() immediately on reaching 42
+//       Fire event first, let ProfilePage handle retries to avoid race condition
+//       Add delayed backup call at 500ms to ensure ProfilePage gets notified
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { getMeowCtaStatus } from "../../../utils/api"; // ✅ shared API (robust base, Telegram checks)
+import { getMeowCtaStatus } from "../../../utils/api";
 
-// Helper: convert seconds → "Xч Yм"
+// Helper: convert seconds → "XÑ‡ YÐ¼"
 const formatPlayTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "0ч 0м";
+  if (!seconds || isNaN(seconds)) return "0Ñ‡ 0Ð¼";
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hrs}ч ${mins}м`;
+  return `${hrs}Ñ‡ ${mins}Ð¼`;
 };
 
 /**
@@ -60,15 +60,24 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     } catch (_) {}
   }, []);
 
-  // ✅ EXACT FIX: read CTA status via shared API and dispatch detail payload
-  const notifyReached42 = useCallback(async () => {
-    try {
-      const d = await getMeowCtaStatus(); // uses robust base & Telegram checks from utils/api.js
-      window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d || {} }));
-    } catch (_) {
-      // Even if it fails, fire event so parent can run its retries
-      window.dispatchEvent(new CustomEvent("meow:reached42"));
-    }
+  // ✅ v32 FIX: Fire event immediately WITHOUT calling API
+  // Let ProfilePage handle all retries to avoid race condition
+  const notifyReached42 = useCallback(() => {
+    // Immediate event dispatch (no API call)
+    window.dispatchEvent(new CustomEvent("meow:reached42"));
+
+    // Delayed backup call at 500ms to ensure DB transaction is committed
+    setTimeout(async () => {
+      try {
+        const d = await getMeowCtaStatus();
+        // Fire again with payload if eligible
+        if (d?.eligible) {
+          window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d }));
+        }
+      } catch (_) {
+        // Silent - ProfilePage's retries will handle this
+      }
+    }, 500);
   }, []);
 
   // Persist helper
@@ -94,7 +103,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
-      if (next === 42 && prev !== 42) void notifyReached42();
+      if (next === 42 && prev !== 42) notifyReached42();
       return next;
     });
 
@@ -142,7 +151,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         key: "power-mood",
         title: "Настроение по мощности",
         value: highScoreToday,
-        subtitle: "Рекорд дня. Система сияет, ты тоже.",
+        subtitle: "Рекорд дня. Система сисет, ты тоже.",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
@@ -179,7 +188,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
-    // Build a tolerant URL (falls back to app-relative /api if window/injects aren’t present)
+    // Build a tolerant URL (falls back to app-relative /api if window/injects aren't present)
     const backendBase =
       (typeof window !== "undefined" && (window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL)) ||
       (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) ||
@@ -204,7 +213,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
           persist(next);
-          if (next === 42 && prev !== 42) void notifyReached42();
+          if (next === 42 && prev !== 42) notifyReached42();
           return next;
         });
 
@@ -231,7 +240,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
                     persist(next);
-                    if (next === 42 && prev !== 42) void notifyReached42();
+                    if (next === 42 && prev !== 42) notifyReached42();
                     return next;
                   });
                 }
