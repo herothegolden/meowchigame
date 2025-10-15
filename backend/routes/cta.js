@@ -1,4 +1,4 @@
-// Path: backend/routes/cta.js
+// v3 — /meow-cta-status tolerant to stale/absent meow_taps_date when taps ≥ 42
 // v2 — robust Tashkent date compare for meow_taps_date (fixes perpetual ineligible)
 // Tiny CTA routes for the Meow Counter reward (42 taps)
 
@@ -68,15 +68,22 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 
     const row = result.rows[0];
     const rowDay = toTashkentYmd(row.meow_taps_date);
+    const usedToday = !!row.meow_claim_used_today;
+
+    const taps = Number(row.meow_taps || 0);
     const isToday = !!rowDay && rowDay === today;
 
-    const usedToday = !!row.meow_claim_used_today;
-    const eligible = isToday && Number(row.meow_taps || 0) >= 42 && !usedToday;
+    // ✅ Resilient eligibility:
+    // Allow eligibility if either the stored day is today OR taps already hit 42
+    // (handles first-tap throttled stale-date edge)
+    const dayOk = isToday || (taps >= 42);
+
+    const eligible = dayOk && taps >= 42 && !usedToday;
 
     return res.status(200).json({
       eligible,
       usedToday,
-      meow_taps: Number(row.meow_taps || 0),
+      meow_taps: taps,
       today
     });
   } catch (err) {
