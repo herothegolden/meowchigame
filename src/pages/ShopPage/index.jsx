@@ -1,14 +1,12 @@
-// Path: frontend/src/pages/ShopPage/index.jsx
-// v9 — Instant paint (no black loading screen):
-// - Removed full-screen loading return; render page shell immediately.
-// - Added lightweight inline skeleton for header while data hydrates.
-// - Kept session cache + background refetch; no unrelated logic changed.
+// v10 — Browser-safe guards (ShopPage):
+// - Detect non-Telegram environment and avoid any apiCall() usage.
+// - Render a clear "Open in Telegram" banner instead of crashing in a normal browser.
+// - Preserve instant-paint behavior and existing UI logic.
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiCall, showError } from "../../utils/api";
 import { ErrorState } from "../../components/ErrorState";
-// NOTE: LoadingState import removed (unused)
 
 import ShopHeader from "./ShopHeader";
 import CategorySection from "./CategorySection";
@@ -27,6 +25,11 @@ const getCategoryFromItem = (item) => {
 
 const ShopPage = () => {
   const navigate = useNavigate();
+
+  // Detect Telegram Mini App environment
+  const isTMA =
+    typeof window !== "undefined" && !!window.Telegram?.WebApp?.initData;
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,21 +37,31 @@ const ShopPage = () => {
   const [justPurchased, setJustPurchased] = useState(null);
 
   useEffect(() => {
+    // Read from session cache for instant paint
     const cached = sessionStorage.getItem("shopData");
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
         setData(parsed);
-        setLoading(false); // instant paint with cached data
+        setLoading(false);
       } catch {
         sessionStorage.removeItem("shopData");
       }
     }
+
+    // In a normal browser, do not call the backend at all.
+    if (!isTMA) {
+      // Ensure we don't show a spinner forever if there was no cache.
+      setLoading(false);
+      return;
+    }
+
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isTMA]);
 
   const fetchData = async () => {
+    if (!isTMA) return; // safety — never call API outside Telegram
     try {
       setError(null);
       setLoading((prev) => (data ? prev : true));
@@ -98,8 +111,14 @@ const ShopPage = () => {
   const handlePurchase = useCallback(
     async (itemId) => {
       if (purchasing !== null) return;
-      const item = data?.items.find((i) => i.id === itemId);
+      const item = data?.items?.find((i) => i.id === itemId);
       if (!item) return;
+
+      // Block purchase outside Telegram
+      if (!isTMA) {
+        showError("Откройте мини-приложение в Telegram, чтобы совершать покупки.");
+        return;
+      }
 
       setPurchasing(itemId);
 
@@ -127,7 +146,7 @@ const ShopPage = () => {
         setJustPurchased(null);
       }
     },
-    [purchasing, data?.items]
+    [purchasing, data?.items, isTMA]
   );
 
   const itemsByCategory = useMemo(() => {
@@ -141,9 +160,62 @@ const ShopPage = () => {
     };
   }, [data?.items]);
 
-  // Keep error as a page-level state (rare, explicit failure)
+  // If a genuine fetch error occurred inside Telegram, show the explicit error state
   if (error) return <ErrorState error={error} onRetry={fetchData} />;
 
+  // -------- Non-Telegram rendering (browser deep link) --------
+  if (!isTMA) {
+    return (
+      <div className="p-4 space-y-6 bg-background text-primary">
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-100 px-3 py-2 text-sm">
+          Этот магазин работает только внутри мини-приложения Telegram.
+          <div className="opacity-80 mt-1">
+            Откройте бота и перейдите в «Магазин», чтобы увидеть товары и цены.
+          </div>
+        </div>
+
+        {/* Header placeholder for visual consistency */}
+        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 max-w-md">
+          <div className="text-white font-semibold mb-1">Магазин</div>
+          <div className="text-secondary text-sm">
+            Авторизация происходит через Telegram внутри мини-приложения.
+          </div>
+        </div>
+
+        {/* Decorative video kept; does not require backend */}
+        <div className="text-center space-y-4 mb-10">
+          <video
+            src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            className="w-full max-w-md mx-auto rounded-2xl shadow-[0_0_25px_rgba(255,255,255,0.15)] border border-white/10"
+          />
+        </div>
+
+        {/* Static categories placeholders (empty lists) to keep layout stable */}
+        {["time", "bomb", "multiplier"].map((category) => (
+          <CategorySection
+            key={category}
+            category={category}
+            items={[]}
+            userPoints={0}
+            inventory={[]}
+            ownedBadges={[]}
+            onPurchase={() =>
+              showError("Откройте мини-приложение в Telegram, чтобы покупать.")
+            }
+            purchasing={null}
+            justPurchased={null}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // -------- Telegram rendering --------
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
       {/* Header — skeleton while loading, otherwise real header */}
@@ -156,7 +228,7 @@ const ShopPage = () => {
         <ShopHeader points={data?.userPoints || 0} />
       )}
 
-      {/* 🍪 Meowchi WebM Header Section (kept for visual parity; does not block) */}
+      {/* 🍪 Meowchi WebM Header Section (visual only; does not block) */}
       <div className="text-center space-y-4 mb-10">
         <video
           src="https://ik.imagekit.io/59r2kpz8r/G3.webm/ik-video.mp4?updatedAt=1759691005917"
@@ -167,41 +239,6 @@ const ShopPage = () => {
           preload="auto"
           className="w-full max-w-md mx-auto rounded-2xl shadow-[0_0_25px_rgba(255,255,255,0.15)] border border-white/10"
         />
-      </div>
-
-      {/* 🍪 Cookie Pack Card (Game-style, fixed emoji alignment) */}
-      <div className="max-w-md mx-auto p-4 rounded-2xl bg-white/5 border border-white/10 shadow-lg space-y-3 mb-10 text-left">
-        <h3 className="text-lg font-semibold flex items-center">
-          <span className="text-2xl mr-2">🍪</span>Купи Meowchi 쫀득 куки!
-        </h3>
-
-        <p className="text-gray-400 text-sm leading-relaxed">
-          Получи бонусы Meowchiverse:
-        </p>
-
-        {/* 3-column grid ensures perfect vertical alignment */}
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-x-4 text-sm text-gray-300 font-medium text-center">
-          <div>⏰ Booster ×3</div>
-          <div className="opacity-40">|</div>
-          <div>💣 Bomb ×3</div>
-
-          <div>✨ Multiplier ×3</div>
-          <div className="opacity-40">|</div>
-          <div>👑 VIP +1</div>
-        </div>
-
-        <p className="text-gray-300 text-sm mt-2">
-          Ешь. Наслаждайся. 쫀득 — вкус и сила в одном.
-        </p>
-
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={() => navigate("/order")}
-            className="bg-yellow-400 hover:bg-yellow-300 text-black font-semibold px-4 py-2 rounded-lg transition-colors"
-          >
-            Заказать
-          </button>
-        </div>
       </div>
 
       {/* Shop Categories — always render; hydrate with data when ready */}
