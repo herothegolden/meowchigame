@@ -1,5 +1,6 @@
-// Path: backend/routes/user.js
-// v15 — Throttled tap now does one bounded increment (<42) with Tashkent timestamp
+// v16 — Guarantee: first non-throttled /meow-tap call always stamps Tashkent "today"
+//       BEFORE any early returns (locked ≥42), so date/write races from throttled path recover deterministically.
+//       (Behavior in throttled branch preserved: skip DB writes when date is stale.)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -449,7 +450,10 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // If throttled, do a single bounded increment (<42) and stamp Tashkent time, then return.
+      // 🔒 Throttled path:
+      // If throttled, do a single bounded increment (<42) and stamp Tashkent time ONLY if the stored day is already today.
+      // If the stored date is stale/missing, DO NOT write here; let the first non-throttled call (below) perform the reset
+      // and stamp "today" BEFORE any early returns.
       if (now - last < TAP_COOLDOWN_MS) {
         await client.query('BEGIN');
 
@@ -464,7 +468,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         let meow = row.rows[0]?.meow_taps ?? 0;
         const meowDate = row.rows[0]?.meow_taps_date;
 
-        // If the stored date is not today, do NOT increment here; first non-throttled call handles reset.
+        // If the stored date is today → allow one bounded increment with fresh timestamp
         if (meowDate && String(meowDate).slice(0,10) === todayStr && meow < 42) {
           const updated = await client.query(
             `UPDATE users
@@ -475,11 +479,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
              RETURNING meow_taps`,
             [user.id]
           );
-          if (updated.rowCount > 0) {
-            meow = updated.rows[0].meow_taps;
-          }
+          if (updated.rowCount > 0) meow = updated.rows[0].meow_taps;
         } else {
-          // Keep display-safe zero if the date is stale
+          // Date stale/missing → no write here; return display-safe 0 so UI doesn't lie.
           if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
             meow = 0;
           }
@@ -498,6 +500,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         });
       }
 
+      // 🔓 Non-throttled path:
       await client.query('BEGIN');
 
       // Lock row, read current taps
@@ -515,7 +518,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
       let { meow_taps, meow_taps_date } = rowRes.rows[0];
 
-      // Reset if first tap of the day (SQL date semantics via stored value check)
+      // ✅ GUARANTEE: If first tap of the day (stale/missing date), stamp today's date *before* any early returns.
       if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
         meow_taps = 0;
         meow_taps_date = todayStr;
@@ -528,6 +531,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         );
       }
 
+      // Early-return lock can only happen AFTER the date is stamped to today.
       if (meow_taps >= 42) {
         await client.query('COMMIT');
         // Advance throttle window on terminal (locked) response
