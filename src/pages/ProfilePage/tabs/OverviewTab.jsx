@@ -1,5 +1,7 @@
-// Path: src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v28 — deploy-safe: same CTA fix, use haptic() to avoid ESLint fail, no other changes.
+// v29 — On-hit-42 reads CTA status and dispatches detail payload
+// - notifyReached42() now calls /api/meow-cta-status and dispatches CustomEvent with {detail}.
+// - Removed unused pingCtaStatus() to keep lint clean.
+// - All other logic/timing preserved.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -74,26 +76,28 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // On-hit-42 immediate status ping (to avoid relying solely on container listener/polling)
-  const pingCtaStatus = useCallback(async () => {
-    if (!backendBase) return;
+  // ✅ On-hit-42: call status endpoint and dispatch with payload so parent can set CTA immediately
+  const notifyReached42 = useCallback(async () => {
     try {
-      await fetch(`${backendBase}/api/meow-cta-status`, {
+      if (!backendBase) {
+        window.dispatchEvent(new CustomEvent("meow:reached42"));
+        return;
+      }
+      const r = await fetch(`${backendBase}/api/meow-cta-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData: initDataRef.current }),
         keepalive: true,
       });
-    } catch (_) {}
-  }, [backendBase]);
-
-  // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
-  const notifyReached42 = useCallback(() => {
-    try {
+      let d = null;
+      try {
+        d = await r.json();
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d || {} }));
+    } catch (_) {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
-    } catch (_) {}
-    void pingCtaStatus();
-  }, [pingCtaStatus]);
+    }
+  }, [backendBase]);
 
   // Persist helper
   const persist = useCallback(
@@ -118,7 +122,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
       }
       persist(next);
-      if (next === 42 && prev !== 42) notifyReached42();
+      if (next === 42 && prev !== 42) void notifyReached42();
       return next;
     });
 
@@ -230,7 +234,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
           persist(next);
-          if (next === 42 && prev !== 42) notifyReached42();
+          if (next === 42 && prev !== 42) void notifyReached42();
           return next;
         });
 
@@ -257,7 +261,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
                     persist(next);
-                    if (next === 42 && prev !== 42) notifyReached42();
+                    if (next === 42 && prev !== 42) void notifyReached42();
                     return next;
                   });
                 }
@@ -278,8 +282,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     if (meowTapsLocal >= 42) return;
 
-    // ✅ actually use the helper to satisfy strict lint configs
-    haptic();
+    // haptic pulse
+    try {
+      const HW = window?.Telegram?.WebApp?.HapticFeedback;
+      if (HW?.impactOccurred) HW.impactOccurred("light");
+    } catch (_) {}
 
     // visual pulse
     setGlowTick((t) => t + 1);
@@ -298,7 +305,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     });
 
     void sendTap();
-  }, [meowTapsLocal, sendTap, persist, haptic]);
+  }, [meowTapsLocal, sendTap, persist]);
 
   // =========================
   // 🔥 Daily Streak Claim CTA
