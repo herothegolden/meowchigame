@@ -1,24 +1,20 @@
 // src/utils/api.js
-// v2 — Hardened API utilities for TMA
-// - Safe backend base resolution with runtime > build-time priority
-// - Centralized Telegram initData getter
-// - apiCall ensures leading slash, attaches initData, keepalive, and better errors
-// - Exposes helpers used by CTA flow
+// v3 — add back showSuccess/showError exports for UI compatibility
+// plus the hardened base + initData logic
 
-// -------------------------------
-// Backend base resolution
-// -------------------------------
 function resolveBackendBase() {
   try {
     if (typeof window !== "undefined") {
       const inline = window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL || null;
       if (inline && typeof inline === "string") return inline.replace(/\/+$/, "");
     }
-    // Build-time (Vite) fallback
     const viteVal =
-      (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) || "";
+      (typeof import.meta !== "undefined" &&
+        import.meta.env &&
+        import.meta.env.VITE_BACKEND_URL) ||
+      "";
     if (viteVal) return String(viteVal).replace(/\/+$/, "");
-    return ""; // relative
+    return "";
   } catch (_) {
     return "";
   }
@@ -26,9 +22,6 @@ function resolveBackendBase() {
 
 const BACKEND_URL = resolveBackendBase();
 
-// -------------------------------
-// Telegram initData
-// -------------------------------
 function getInitData() {
   try {
     const s = typeof window !== "undefined" ? window.Telegram?.WebApp?.initData : "";
@@ -38,14 +31,10 @@ function getInitData() {
   }
 }
 
-// -------------------------------
-// Initialize User (soft in non‑TMA)
-// -------------------------------
 export const initializeUser = async () => {
   const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 
   if (!tg?.initData || !BACKEND_URL) {
-    // Soft signal for non‑Telegram/browser preview or missing runtime base
     return { ok: false, reason: !BACKEND_URL ? "no-backend-url" : "not-in-telegram" };
   }
 
@@ -55,7 +44,7 @@ export const initializeUser = async () => {
     const userParam = params.get("user");
     if (!userParam) throw new Error("Invalid Telegram user data");
     user = JSON.parse(userParam);
-  } catch (e) {
+  } catch {
     throw new Error("Invalid Telegram user data");
   }
 
@@ -69,26 +58,30 @@ export const initializeUser = async () => {
 
   if (!res.ok) {
     let text = "";
-    try { text = await res.text(); } catch {}
+    try {
+      text = await res.text();
+    } catch {}
     throw new Error(text || `Initialization failed: ${res.status}`);
   }
-  try { return await res.json(); } catch { return { ok: true }; }
+  try {
+    return await res.json();
+  } catch {
+    return { ok: true };
+  }
 };
 
 // -------------------------------
-// Generic POST helper (strict)
+// Generic API helper
 // -------------------------------
 export const apiCall = async (endpoint, data = {}, options = {}) => {
-  const base = BACKEND_URL; // prefer explicit base; if empty, allow relative
+  const base = BACKEND_URL;
   const path = String(endpoint || "/");
   const url = base
     ? `${base}${path.startsWith("/") ? path : `/${path}`}`
-    : (path.startsWith("/") ? path : `/${path}`);
+    : path.startsWith("/") ? path : `/${path}`;
 
   const initData = getInitData();
-  if (!initData) {
-    throw new Error("Connection required. Please open from Telegram.");
-  }
+  if (!initData) throw new Error("Connection required. Please open from Telegram.");
 
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), options.timeoutMs || 10000);
@@ -109,7 +102,9 @@ export const apiCall = async (endpoint, data = {}, options = {}) => {
 
   if (!res.ok) {
     let body = "";
-    try { body = await res.text(); } catch {}
+    try {
+      body = await res.text();
+    } catch {}
     const msg = body || `Error ${res.status}`;
     const err = new Error(msg);
     err.status = res.status;
@@ -120,22 +115,47 @@ export const apiCall = async (endpoint, data = {}, options = {}) => {
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json();
   const text = await res.text();
-  try { return JSON.parse(text); } catch { return text; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 };
 
 // -------------------------------
-// CTA helpers
+// CTA + Tap helpers
 // -------------------------------
 export const getMeowCtaStatus = async () => apiCall("/api/meow-cta-status");
 export const claimMeowCta = async () => {
   const res = await apiCall("/api/meow-claim");
   const success = !!res?.success;
-  const claimId = typeof res?.claimId === "string" && res.claimId.length > 0 ? res.claimId : null;
+  const claimId =
+    typeof res?.claimId === "string" && res.claimId.length > 0 ? res.claimId : null;
   return { success, claimId };
 };
-
-// Optional dedicated helper for tap route (used by tap worker)
 export const meowTap = async () => apiCall("/api/meow-tap");
 
-// Expose base for diagnostics
 export const __BACKEND_BASE__ = BACKEND_URL;
+
+// -------------------------------
+// UI helper compatibility (added back)
+// -------------------------------
+export const showSuccess = (msg) => {
+  try {
+    const HW = window?.Telegram?.WebApp?.HapticFeedback;
+    if (HW?.impactOccurred) HW.impactOccurred("medium");
+  } catch (_) {}
+  if (typeof window !== "undefined" && window.alert) {
+    console.log("✅", msg);
+  }
+};
+
+export const showError = (msg) => {
+  try {
+    const HW = window?.Telegram?.WebApp?.HapticFeedback;
+    if (HW?.notificationOccurred) HW.notificationOccurred("error");
+  } catch (_) {}
+  if (typeof window !== "undefined" && window.alert) {
+    console.error("❌", msg);
+  }
+};
