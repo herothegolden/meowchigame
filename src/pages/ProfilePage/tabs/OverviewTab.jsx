@@ -1,16 +1,10 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v35 – CRITICAL FIX: ensure /api/meow-tap uses the same authenticated apiCall as CTA
-// Changes from v34:
-// 1) Replaced raw fetch(.../api/meow-tap) with apiCall('/api/meow-tap') so validateUser sees initData.
-// 2) Kept all UI/animation and retry behavior unchanged.
+// v36 – Ensure /api/meow-tap goes through authenticated apiCall with explicit payload;
+//        add strict logging so backend rejections are visible.
+// Changes from v35:
+// 1) apiCall('/api/meow-tap', {}) (explicit empty object so wrapper merges initData).
+// 2) Console logs for success/error around sendTap.
 // 3) No unrelated edits.
-
-// v34 – CRITICAL FIX: Tap counter stuck at 1
-// Changes from v32:
-// 1. Removed onClick handler (kept only onPointerDown to avoid double-firing)
-// 2. ALWAYS increment optimistically (removed meowTapsLocal === 0 special case)
-// 3. Reduced CLIENT_COOLDOWN_MS from 220ms to 80ms for better responsiveness
-// 4. Kept server reconciliation for accuracy
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -24,12 +18,6 @@ const formatPlayTime = (seconds) => {
   return `${hrs}ч ${mins}м`;
 };
 
-/**
- * Props:
- * - stats: object returned from /api/get-profile-complete (or similar)
- * - streakInfo: optional
- * - onUpdate: optional callback to trigger parent refetch
- */
 const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
@@ -69,24 +57,18 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     } catch (_) {}
   }, []);
 
-  // Fire event immediately; ProfilePage handles status retries
   const notifyReached42 = useCallback(() => {
     window.dispatchEvent(new CustomEvent("meow:reached42"));
-
-    // Delayed backup check at 500ms to ensure DB transaction is committed
     setTimeout(async () => {
       try {
         const d = await getMeowCtaStatus();
         if (d?.eligible) {
           window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d }));
         }
-      } catch (_) {
-        // Silent — ProfilePage handles its own retries
-      }
+      } catch (_) {}
     }, 500);
   }, []);
 
-  // Persist helper
   const persist = useCallback(
     (val) => {
       try {
@@ -96,7 +78,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     [serverDay]
   );
 
-  // Reconcile with server updates; reset local on server day change
   useEffect(() => {
     const newDay = serverDay;
     const prevDay = dayRef.current;
@@ -116,14 +97,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     dayRef.current = newDay;
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
-  // Reduced from 220ms to 80ms for better tap responsiveness
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 80;
 
-  // Backlight glow tick (visual)
   const [glowTick, setGlowTick] = useState(0);
-
-  // One-time gold frame flash when entering locked state (42)
   const [goldFlashTick, setGoldFlashTick] = useState(0);
   const prevMeowRef = useRef(meowTapsLocal);
   useEffect(() => {
@@ -136,7 +113,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
 
   const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
-  // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
     () => [
       {
@@ -161,7 +137,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
-        key: "social-energy", // Daily Streak
+        key: "social-energy",
         title: "Социальная энергия",
         value: `${dailyStreak}`,
         subtitle:
@@ -190,15 +166,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     [totalPoints, gamesPlayed, highScoreToday, dailyStreak, stats?.invited_friends, meowTapsLocal]
   );
 
-  // One-shot retry guard for final-commit edge cases
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
     try {
-      // ✅ Use the same authenticated API wrapper as CTA endpoints.
-      const data = await apiCall("/api/meow-tap");
+      // ✅ Force wrapper to include initData by passing an explicit payload object.
+      const data = await apiCall("/api/meow-tap", {});
 
-      // Reconcile with server – authoritative but non-decreasing
+      // Strict visibility for debugging the backend path:
+      console.log("[meow] POST /api/meow-tap →", data);
+
       if (data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -216,7 +193,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
           setTimeout(() => {
             void (async () => {
               try {
-                const d2 = await apiCall("/api/meow-tap");
+                const d2 = await apiCall("/api/meow-tap", {});
+                console.log("[meow] RETRY /api/meow-tap →", d2);
                 if (d2 && typeof d2.meow_taps === "number") {
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
@@ -225,17 +203,20 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
                     return next;
                   });
                 }
-              } catch (_) {}
+              } catch (e2) {
+                console.warn("[meow] retry /api/meow-tap failed:", e2?.message || e2);
+              }
             })();
           }, 260);
         }
+      } else if (data && data.error) {
+        console.warn("[meow] /api/meow-tap rejected:", data.error);
       }
-    } catch (_) {
-      // Network/auth error: keep optimistic; server will reconcile on next success
+    } catch (e) {
+      console.warn("[meow] /api/meow-tap error:", e?.message || e);
     }
   }, [notifyReached42, persist, meowTapsLocal]);
 
-  // ALWAYS increment optimistically (no special case for 0)
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -248,7 +229,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (HW?.impactOccurred) HW.impactOccurred("light");
     } catch (_) {}
 
-    // visual pulse
     setGlowTick((t) => t + 1);
 
     setMeowTapsLocal((n) => {
@@ -296,6 +276,173 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     }
   }, [canClaimComputed, claiming, onUpdate]);
 
+  const lifeStatsCards = useMemo(() => {
+    return lifeStats.map((stat, i) => {
+      const isMeowCounter = stat.key === "meow-counter";
+      const isStreakCard = stat.key === "social-energy";
+      const isLocked = isMeowCounter && meowTapsLocal >= 42;
+
+      const baseClass =
+        `relative rounded-2xl border border-white/10 
+         bg-gradient-to-br ${stat.tint}
+         backdrop-blur-xl p-5 h-[155px] 
+         flex flex-col justify-center items-center text-center 
+         shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`;
+
+      const interactiveProps = isMeowCounter
+        ? {
+            onPointerDown: handleMeowTap,
+            className: `${baseClass} cursor-pointer select-none`,
+          }
+        : { className: baseClass };
+
+      if (isMeowCounter) {
+        return (
+          <div key={`wrap-${i}`} className="relative">
+            {/* Aura */}
+            <motion.div
+              key={`gold-base-${isLocked ? "locked" : "idle"}`}
+              className="pointer-events-none absolute -inset-3 rounded-[22px]"
+              initial={false}
+              animate={{ opacity: isLocked ? 0.35 : 0.22 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                background:
+                  "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.55) 0%, rgba(246,196,83,0.28) 35%, rgba(246,196,83,0.10) 60%, rgba(0,0,0,0) 100%)",
+                filter: "blur(18px)",
+              }}
+            />
+
+            {/* Pulse */}
+            <motion.div
+              key={`gold-pulse-${glowTick}`}
+              className="pointer-events-none absolute -inset-5 rounded-[26px]"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: [0, 0.7, 0], scale: [0.96, 1.08, 1.02] }}
+              transition={{ duration: 0.5, times: [0, 0.4, 1], ease: "easeOut" }}
+              style={{
+                background:
+                  "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.75) 0%, rgba(246,196,83,0.42) 30%, rgba(246,196,83,0.16) 58%, rgba(0,0,0,0) 100%)",
+                filter: "blur(22px)",
+              }}
+            />
+
+            {/* Card */}
+            <motion.div
+              whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
+              whileTap={{ scale: 0.985 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18 }}
+              {...interactiveProps}
+            >
+              {/* Locked frame */}
+              {isLocked && (
+                <>
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
+                  <motion.div
+                    key={`goldflash-${goldFlashTick}`}
+                    className="pointer-events-none absolute inset-0 rounded-2xl"
+                    initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
+                    animate={{
+                      opacity: [0, 1, 0],
+                      boxShadow: [
+                        "0 0 0 0 rgba(246,196,83,0)",
+                        "0 0 90px 26px rgba(246,196,83,0.95)",
+                        "0 0 0 0 rgba(246,196,83,0)"
+                      ]
+                    }}
+                    transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
+                    style={{ borderRadius: "1rem" }}
+                  />
+                </>
+              )}
+
+              {/* Sheen + inner ring */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
+              <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
+
+              <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
+                <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
+                  {stat.title}
+                </p>
+                <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
+                  {stat.value}
+                </p>
+                <p className="text-[12.5px] text-gray-400 leading-snug">
+                  {stat.subtitle}
+                </p>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
+            </motion.div>
+          </div>
+        );
+      }
+
+      if (isStreakCard) {
+        return (
+          <div key={`streak-wrap-${i}`} className="relative">
+            {( (streakInfo && streakInfo.canClaim === true) ||
+               dailyStreak === 0 ||
+               !stats?.streak_claimed_today ) && (
+              <motion.button
+                type="button"
+                onClick={async () => {
+                  if (claiming) return;
+                  try {
+                    await claimStreak();
+                  } catch (_) {}
+                }}
+                disabled={claiming}
+                initial={{ y: -4, opacity: 0, scale: 0.95 }}
+                animate={{ y: [ -4, -8, -4 ], opacity: 1, scale: claiming ? 0.95 : 1 }}
+                transition={{ y: { duration: 1.6, repeat: Infinity, ease: "easeInOut" }, opacity: { duration: 0.25 } }}
+                className="absolute top-2 left-1/2 -translate-x-1/2 z-40 rounded-full px-3 py-1.5 text-[16px] shadow-md bg-black/40 border border-white/10 backdrop-blur hover:scale-[1.02] active:scale-[0.98]"
+                aria-label="Claim daily streak"
+              >
+                <span role="img" aria-hidden="true">🔥</span>
+              </motion.button>
+            )}
+            <motion.div
+              key={`streak-card-${i}`}
+              whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
+              whileTap={{ scale: 0.985 }}
+              transition={{ type: "spring", stiffness: 220, damping: 18 }}
+              className={baseClass}
+            >
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
+              <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
+                <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">{stat.title}</p>
+                <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">{stat.value}</p>
+                <p className="text-[12.5px] text-gray-400 leading-snug">{stat.subtitle}</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
+            </motion.div>
+          </div>
+        );
+      }
+
+      return (
+        <motion.div
+          key={i}
+          whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
+          whileTap={{ scale: 0.985 }}
+          transition={{ type: "spring", stiffness: 220, damping: 18 }}
+          className={baseClass}
+        >
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+          <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
+          <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
+            <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">{stat.title}</p>
+            <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">{stat.value}</p>
+            <p className="text-[12.5px] text-gray-400 leading-snug">{stat.subtitle}</p>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
+        </motion.div>
+      );
+    });
+  }, [lifeStats, meowTapsLocal, streakInfo, stats?.streak_claimed_today, claiming, claimStreak, glowTick]);
+
   return (
     <motion.div
       className="grid grid-cols-2 gap-4"
@@ -303,206 +450,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
-      {lifeStats.map((stat, i) => {
-        const isMeowCounter = stat.key === "meow-counter";
-        const isStreakCard = stat.key === "social-energy";
-        const isLocked = isMeowCounter && meowTapsLocal >= 42;
-
-        const baseClass =
-          `relative rounded-2xl border border-white/10 
-           bg-gradient-to-br ${stat.tint}
-           backdrop-blur-xl p-5 h-[155px] 
-           flex flex-col justify-center items-center text-center 
-           shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`;
-
-        // Removed onClick, keep only onPointerDown to prevent double-firing
-        const interactiveProps = isMeowCounter
-          ? {
-              onPointerDown: handleMeowTap,
-              className: `${baseClass} cursor-pointer select-none`,
-            }
-          : { className: baseClass };
-
-        // Meow Counter (with glow + gold frame at 42)
-        if (isMeowCounter) {
-          return (
-            <div key={`wrap-${i}`} className="relative">
-              {/* Static subtle golden aura */}
-              <motion.div
-                key={`gold-base-${isLocked ? 'locked' : 'idle'}`}
-                className="pointer-events-none absolute -inset-3 rounded-[22px]"
-                initial={false}
-                animate={{ opacity: isLocked ? 0.35 : 0.22 }}
-                transition={{ duration: 0.3 }}
-                style={{
-                  background:
-                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.55) 0%, rgba(246,196,83,0.28) 35%, rgba(246,196,83,0.10) 60%, rgba(0,0,0,0) 100%)",
-                  filter: "blur(18px)",
-                }}
-              />
-
-              {/* Pulse on every tap */}
-              <motion.div
-                key={`gold-pulse-${glowTick}`}
-                className="pointer-events-none absolute -inset-5 rounded-[26px]"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: [0, 0.7, 0], scale: [0.96, 1.08, 1.02] }}
-                transition={{ duration: 0.5, times: [0, 0.4, 1], ease: "easeOut" }}
-                style={{
-                  background:
-                    "radial-gradient(70% 70% at 50% 50%, rgba(246,196,83,0.75) 0%, rgba(246,196,83,0.42) 30%, rgba(246,196,83,0.16) 58%, rgba(0,0,0,0) 100%)",
-                  filter: "blur(22px)",
-                }}
-              />
-
-              {/* Card */}
-              <motion.div
-                whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
-                whileTap={{ scale: 0.985 }}
-                transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                {...interactiveProps}
-              >
-                {/* GOLD FRAME when locked */}
-                {isLocked && (
-                  <>
-                    <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
-                    {/* One-time gold flash on entering locked state */}
-                    <motion.div
-                      key={`goldflash-${goldFlashTick}`}
-                      className="pointer-events-none absolute inset-0 rounded-2xl"
-                      initial={{ opacity: 0, boxShadow: "0 0 0 0 rgba(246,196,83,0)" }}
-                      animate={{
-                        opacity: [0, 1, 0],
-                        boxShadow: [
-                          "0 0 0 0 rgba(246,196,83,0)",
-                          "0 0 90px 26px rgba(246,196,83,0.95)",
-                          "0 0 0 0 rgba(246,196,83,0)"
-                        ]
-                      }}
-                      transition={{ duration: 0.75, times: [0, 0.4, 1], ease: "easeOut" }}
-                      style={{ borderRadius: "1rem" }}
-                    />
-                  </>
-                )}
-
-                {/* base sheen + inner ring above content */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none z-10" />
-                <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none z-10" />
-
-                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%] relative z-20">
-                  <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
-                    {stat.title}
-                  </p>
-                  <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
-                    {stat.value}
-                  </p>
-                  <p className="text-[12.5px] text-gray-400 leading-snug">
-                    {stat.subtitle}
-                  </p>
-                </div>
-
-                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl z-10" />
-              </motion.div>
-            </div>
-          );
-        }
-
-        // Daily Streak card wrapper to host floating 🔥 CTA
-        if (isStreakCard) {
-          return (
-            <div key={`streak-wrap-${i}`} className="relative">
-              {/* Floating 🔥 button (inside the wrapper to avoid clipping) */}
-              {( (streakInfo && streakInfo.canClaim === true) ||
-                 dailyStreak === 0 ||
-                 !stats?.streak_claimed_today ) && (
-                <motion.button
-                  type="button"
-                  onClick={async () => {
-                    if (claiming) return;
-                    try {
-                      await claimStreak();
-                    } catch (_) {}
-                  }}
-                  disabled={claiming}
-                  initial={{ y: -4, opacity: 0, scale: 0.95 }}
-                  animate={{
-                    y: [ -4, -8, -4 ],
-                    opacity: 1,
-                    scale: claiming ? 0.95 : 1,
-                  }}
-                  transition={{
-                    y: { duration: 1.6, repeat: Infinity, ease: "easeInOut" },
-                    opacity: { duration: 0.25 },
-                  }}
-                  className="absolute top-2 left-1/2 -translate-x-1/2 z-40
-                             rounded-full px-3 py-1.5 text-[16px] shadow-md
-                             bg-black/40 border border-white/10 backdrop-blur
-                             hover:scale-[1.02] active:scale-[0.98]"
-                  aria-label="Claim daily streak"
-                >
-                  <span role="img" aria-hidden="true">🔥</span>
-                </motion.button>
-              )}
-
-              {/* Card itself (non-tappable) */}
-              <motion.div
-                key={`streak-card-${i}`}
-                whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
-                whileTap={{ scale: 0.985 }}
-                transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                className={baseClass}
-              >
-                {/* base sheen + inner ring */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-                <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
-
-                <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
-                  <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
-                    {stat.title}
-                  </p>
-                  <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
-                    {stat.value}
-                  </p>
-                  <p className="text-[12.5px] text-gray-400 leading-snug">
-                    {stat.subtitle}
-                  </p>
-                </div>
-
-                <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
-              </motion.div>
-            </div>
-          );
-        }
-
-        // Default cards
-        return (
-          <motion.div
-            key={i}
-            whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
-            whileTap={{ scale: 0.985 }}
-            transition={{ type: "spring", stiffness: 220, damping: 18 }}
-            className={baseClass}
-          >
-            {/* base sheen + inner ring */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
-            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/5 shadow-inner pointer-events-none" />
-
-            <div className="flex flex-col items-center justify-center space-y-2 max-w-[88%]">
-              <p className="text-[13.5px] font-medium text-gray-200 tracking-wide leading-tight">
-                {stat.title}
-              </p>
-              <p className="text-[24px] font-extrabold text-white leading-none tracking-tight drop-shadow-sm">
-                {stat.value}
-              </p>
-              <p className="text-[12.5px] text-gray-400 leading-snug">
-                {stat.subtitle}
-              </p>
-            </div>
-
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/10 to-transparent pointer-events-none rounded-b-2xl" />
-          </motion.div>
-        );
-      })}
+      {lifeStatsCards}
     </motion.div>
   );
 };
