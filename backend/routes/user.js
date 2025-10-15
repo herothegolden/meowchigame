@@ -1,5 +1,6 @@
-// v19 — Remove in-process meow-tap throttle; rely on DB row lock so every tap increments up to 42.
-//        Minimal, targeted change: throttle Map & checks removed only in /meow-tap.
+// backend/routes/user.js
+// v20 — Atomic /meow-tap: single UPDATE ... RETURNING with Tashkent day guard
+// Replaces multi-step txn so server value always advances and cannot stick at 1.
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -424,71 +425,38 @@ router.post('/update-avatar', validateUser, async (req, res) => {
 
 /* -------------------------------------------
    NEW: Счётчик мяу (daily up to 42)
-   v19: no in-process throttle; DB transaction handles concurrency
+   v20: ATOMIC single UPDATE with Tashkent day guard
 ------------------------------------------- */
 
 router.post('/meow-tap', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const todayStr = getTashkentDate();
+    const todayStr = getTashkentDate(); // YYYY-MM-DD in Asia/Tashkent
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
-
-      const rowRes = await client.query(
-        `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
-           FROM users
-          WHERE telegram_id = $1
-          FOR UPDATE`,
-        [user.id]
-      );
-      if (rowRes.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      let { meow_taps, meow_taps_date } = rowRes.rows[0];
-      const dateIsToday = meow_taps_date && String(meow_taps_date).slice(0,10) === todayStr;
-
-      // If date is stale/missing, reset to 0 and stamp today BEFORE early returns
-      if (!dateIsToday) {
-        meow_taps = 0;
-        await client.query(
-          `UPDATE users
-             SET meow_taps = 0,
-                 meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
-           WHERE telegram_id = $1`,
-          [user.id]
-        );
-      }
-
-      // Locked?
-      if (meow_taps >= 42) {
-        await client.query('COMMIT');
-        return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
-      }
-
-      // Increment by 1 (capped at 42)
-      const newTaps = Math.min(42, meow_taps + 1);
-      await client.query(
+      const upd = await client.query(
         `UPDATE users
-           SET meow_taps = $1,
+           SET meow_taps = LEAST(42,
+                 CASE WHEN meow_taps_date IS NOT NULL AND (meow_taps_date AT TIME ZONE 'Asia/Tashkent')::date = $2::date
+                      THEN COALESCE(meow_taps, 0) + 1
+                      ELSE 1 END
+               ),
                meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
-         WHERE telegram_id = $2`,
-        [newTaps, user.id]
+         WHERE telegram_id = $1
+         RETURNING COALESCE(meow_taps,0) AS meow_taps, meow_taps_date`,
+        [user.id, todayStr]
       );
 
-      await client.query('COMMIT');
+      if (upd.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
+      const row = upd.rows[0];
+      const taps = Number(row.meow_taps || 0);
       return res.status(200).json({
-        meow_taps: newTaps,
-        locked: newTaps >= 42,
-        remaining: Math.max(42 - newTaps, 0)
+        meow_taps: taps,
+        locked: taps >= 42,
+        remaining: Math.max(42 - taps, 0)
       });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
     } finally {
       client.release();
     }
