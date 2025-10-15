@@ -1,8 +1,5 @@
 // Path: backend/routes/user.js
-// v13 — Daily Streak display uses DB value (claim-based); remove session-based override
-// - Keeps meow_taps display-day guard
-// - Leaves cron + /meow-tap as the only writers for taps
-// - StreakInfo now consistently uses users.daily_streak (DB), not sessions
+// v14 — ensure meow_taps_date is stored as Tashkent TIMESTAMP on every increment/reset (CTA eligibility fix)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -508,8 +505,11 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         meow_taps = 0;
         meow_taps_date = todayStr;
         await client.query(
-          `UPDATE users SET meow_taps = 0, meow_taps_date = $1 WHERE telegram_id = $2`,
-          [todayStr, user.id]
+          `UPDATE users
+             SET meow_taps = 0,
+                 meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
+           WHERE telegram_id = $1`,
+          [user.id]
         );
       }
 
@@ -523,9 +523,10 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       const newTaps = meow_taps + 1;
       await client.query(
         `UPDATE users
-           SET meow_taps = $1, meow_taps_date = $2
-         WHERE telegram_id = $3`,
-        [newTaps, todayStr, user.id]
+           SET meow_taps = $1,
+               meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
+         WHERE telegram_id = $2`,
+        [newTaps, user.id]
       );
 
       await client.query('COMMIT');
