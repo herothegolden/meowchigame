@@ -1,18 +1,21 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v32 — FIX: Don't call getMeowCtaStatus() immediately on reaching 42
-//       Fire event first, let ProfilePage handle retries to avoid race condition
-//       Add delayed backup call at 500ms to ensure ProfilePage gets notified
+// v34 – CRITICAL FIX: Tap counter stuck at 1
+// Changes from v32:
+// 1. Removed onClick handler (kept only onPointerDown to avoid double-firing)
+// 2. ALWAYS increment optimistically (removed meowTapsLocal === 0 special case)
+// 3. Reduced CLIENT_COOLDOWN_MS from 220ms to 80ms for better responsiveness
+// 4. Kept server reconciliation for accuracy
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { getMeowCtaStatus } from "../../../utils/api";
 
-// Helper: convert seconds → "XÑ‡ YÐ¼"
+// Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "0Ñ‡ 0Ð¼";
+  if (!seconds || isNaN(seconds)) return "0ч 0м";
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hrs}Ñ‡ ${mins}Ð¼`;
+  return `${hrs}ч ${mins}м`;
 };
 
 /**
@@ -110,9 +113,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     dayRef.current = newDay;
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
-  // Client small cooldown (aligns with backend 220ms)
+  // ✅ v34 FIX: Reduced from 220ms to 80ms for better tap responsiveness
   const tapCooldownRef = useRef(0);
-  const CLIENT_COOLDOWN_MS = 220;
+  const CLIENT_COOLDOWN_MS = 80;
 
   // Backlight glow tick (visual)
   const [glowTick, setGlowTick] = useState(0);
@@ -208,7 +211,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         data = await res.json();
       } catch (_) {}
 
-      // Reconcile with server — authoritative but non-decreasing
+      // Reconcile with server – authoritative but non-decreasing
       if (res.ok && data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
@@ -254,6 +257,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     }
   }, [notifyReached42, persist, meowTapsLocal]);
 
+  // ✅ v34 FIX: ALWAYS increment optimistically (removed meowTapsLocal === 0 special case)
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -269,13 +273,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     // visual pulse
     setGlowTick((t) => t + 1);
 
-    if (meowTapsLocal === 0) {
-      // First tap of the day: wait for server
-      void sendTap();
-      return;
-    }
-
-    // Optimistic for n > 0
+    // ✅ CRITICAL FIX: Always increment optimistically (no special case for 0)
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
@@ -340,10 +338,10 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
            flex flex-col justify-center items-center text-center 
            shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`;
 
+        // ✅ v34 FIX: Removed onClick, kept only onPointerDown to prevent double-firing
         const interactiveProps = isMeowCounter
           ? {
               onPointerDown: handleMeowTap,
-              onClick: handleMeowTap,
               className: `${baseClass} cursor-pointer select-none`,
             }
           : { className: baseClass };
