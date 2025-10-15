@@ -1,8 +1,5 @@
 // Path: backend/routes/orders.js
-// v6 — Meow Counter promo flow
-// - /meow-cta-status now derives "today" from the DB (Asia/Tashkent) to avoid clock drift
-// - Applies display-day guard to meow_taps using meow_taps_date
-// - Returns `today` for easier debugging
+// v7 — Fix CTA status Tashkent-day comparison (timezone-correct)
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -55,7 +52,7 @@ Contact customer via Telegram to arrange payment and delivery.`;
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_ID,
         text: message,
-        parse_mode: 'HTML',
+      parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [{ text: '✅ Mark as Paid', callback_data: `mark_paid_${orderData.orderId}` }],
@@ -286,9 +283,9 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 
     const { meow_taps, meow_taps_date, used_today } = ur.rows[0];
 
-    // ✅ Option A: SQL-level date comparison (robust for DATE/TIMESTAMP)
+    // ✅ Timezone-correct day comparison: interpret tap timestamp in Asia/Tashkent
     const cmp = await client.query(
-      `SELECT ($1::date = $2::date) AS is_today`,
+      `SELECT ((( $1 AT TIME ZONE 'Asia/Tashkent' )::date) = ($2::date)) AS is_today`,
       [meow_taps_date, today]
     );
     const isToday = !!cmp.rows[0]?.is_today;
