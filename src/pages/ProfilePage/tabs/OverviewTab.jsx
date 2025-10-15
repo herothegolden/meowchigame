@@ -1,10 +1,11 @@
-// v29 — On-hit-42 reads CTA status and dispatches detail payload
-// - notifyReached42() now calls /api/meow-cta-status and dispatches CustomEvent with {detail}.
-// - Removed unused pingCtaStatus() to keep lint clean.
-// - All other logic/timing preserved.
+// src/pages/ProfilePage/tabs/OverviewTab.jsx
+// v31 — Unify backend calls: use getMeowCtaStatus() from utils/api
+// - notifyReached42() now calls getMeowCtaStatus() (shared robust base) instead of building its own backendBase.
+// - Daily Streak card rendering is INCLUDED (no placeholders), matching previous behavior.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { getMeowCtaStatus } from "../../../utils/api"; // ✅ shared API (robust base, Telegram checks)
 
 // Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
@@ -19,9 +20,8 @@ const formatPlayTime = (seconds) => {
  * - stats: object returned from /api/get-profile-complete (or similar)
  * - streakInfo: optional
  * - onUpdate: optional callback to trigger parent refetch
- * - backendUrl / BACKEND_URL: optional backend base URL
  */
-const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) => {
+const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const totalPoints = (stats?.points || 0).toLocaleString();
   const totalPlay =
     typeof stats?.totalPlayTime === "string"
@@ -30,7 +30,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const highScoreToday = (stats?.high_score_today || 0).toLocaleString();
   const dailyStreak = stats?.daily_streak || 0;
 
-  // --- Day-aware cache (prevents stale carry-over and "start from 1" after reset) ---
+  // --- Day-aware cache ---
   const storageKey = "meowchi:v2:meow_taps";
   const serverDay =
     (stats?.meow_taps_date && String(stats.meow_taps_date).slice(0, 10)) ||
@@ -52,22 +52,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal0;
   });
 
-  // Backend base resolution
-  const backendBase = useMemo(() => {
-    if (typeof backendUrl === "string" && backendUrl) return backendUrl;
-    if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
-    if (typeof window !== "undefined") {
-      if (window.BACKEND_URL) return window.BACKEND_URL;
-      if (window.__MEOWCHI_BACKEND_URL__) return window.__MEOWCHI_BACKEND_URL__;
-    }
-    try {
-      if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) {
-        return import.meta.env.VITE_BACKEND_URL;
-      }
-    } catch (_) {}
-    return "";
-  }, [backendUrl, BACKEND_URL]);
-
   // Cache initData once
   const initDataRef = useRef("");
   useEffect(() => {
@@ -76,28 +60,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {}
   }, []);
 
-  // ✅ On-hit-42: call status endpoint and dispatch with payload so parent can set CTA immediately
+  // ✅ EXACT FIX: read CTA status via shared API and dispatch detail payload
   const notifyReached42 = useCallback(async () => {
     try {
-      if (!backendBase) {
-        window.dispatchEvent(new CustomEvent("meow:reached42"));
-        return;
-      }
-      const r = await fetch(`${backendBase}/api/meow-cta-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData: initDataRef.current }),
-        keepalive: true,
-      });
-      let d = null;
-      try {
-        d = await r.json();
-      } catch (_) {}
+      const d = await getMeowCtaStatus(); // uses robust base & Telegram checks from utils/api.js
       window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d || {} }));
     } catch (_) {
+      // Even if it fails, fire event so parent can run its retries
       window.dispatchEvent(new CustomEvent("meow:reached42"));
     }
-  }, [backendBase]);
+  }, []);
 
   // Persist helper
   const persist = useCallback(
@@ -132,14 +104,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   // Client small cooldown (aligns with backend 220ms)
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 220;
-
-  // Haptic helper (now actually used to avoid ESLint "no-unused-vars")
-  const haptic = useCallback(() => {
-    try {
-      const HW = window?.Telegram?.WebApp?.HapticFeedback;
-      if (HW?.impactOccurred) HW.impactOccurred("light");
-    } catch (_) {}
-  }, []);
 
   // Backlight glow tick (visual)
   const [glowTick, setGlowTick] = useState(0);
@@ -215,7 +179,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
-    const url = `${backendBase}/api/meow-tap`;
+    // Build a tolerant URL (falls back to app-relative /api if window/injects aren’t present)
+    const backendBase =
+      (typeof window !== "undefined" && (window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL)) ||
+      (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) ||
+      "";
+    const url = backendBase ? `${backendBase}/api/meow-tap` : "/api/meow-tap";
+
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -273,7 +243,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     } catch (_) {
       // Network error: keep optimistic for n>0; reconcile later on next success.
     }
-  }, [backendBase, notifyReached42, persist, meowTapsLocal]);
+  }, [notifyReached42, persist, meowTapsLocal]);
 
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
@@ -282,7 +252,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     if (meowTapsLocal >= 42) return;
 
-    // haptic pulse
     try {
       const HW = window?.Telegram?.WebApp?.HapticFeedback;
       if (HW?.impactOccurred) HW.impactOccurred("light");
@@ -324,7 +293,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     const HW = window?.Telegram?.WebApp?.HapticFeedback;
     if (HW?.impactOccurred) HW.impactOccurred("light");
     try {
-      await fetch(`${backendBase}/api/streak/claim-streak`, {
+      const backendBase =
+        (typeof window !== "undefined" && (window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL)) ||
+        (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) ||
+        "";
+      const url = backendBase ? `${backendBase}/api/streak/claim-streak` : "/api/streak/claim-streak";
+      await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initData: initDataRef.current }),
@@ -336,7 +310,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         if (typeof onUpdate === "function") onUpdate();
       } catch (_) {}
     }
-  }, [backendBase, canClaimComputed, claiming, onUpdate]);
+  }, [canClaimComputed, claiming, onUpdate]);
 
   return (
     <motion.div
@@ -349,6 +323,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         const isMeowCounter = stat.key === "meow-counter";
         const isStreakCard = stat.key === "social-energy";
         const isLocked = isMeowCounter && meowTapsLocal >= 42;
+
         const baseClass =
           `relative rounded-2xl border border-white/10 
            bg-gradient-to-br ${stat.tint}
@@ -364,7 +339,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             }
           : { className: baseClass };
 
-        // Meow Counter (with outer glow)
+        // Meow Counter (with glow + gold frame at 42)
         if (isMeowCounter) {
           return (
             <div key={`wrap-${i}`} className="relative">
@@ -396,14 +371,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 }}
               />
 
-              {/* Card itself */}
+              {/* Card */}
               <motion.div
                 whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
                 whileTap={{ scale: 0.985 }}
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 {...interactiveProps}
               >
-                {/* GOLD FRAME when locked (persistent) */}
+                {/* GOLD FRAME when locked */}
                 {isLocked && (
                   <>
                     <div className="pointer-events-none absolute inset-0 rounded-2xl ring-16 ring-amber-300/95 shadow-[0_0_68px_rgba(246,196,83,0.85)]" />
@@ -453,10 +428,18 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
           return (
             <div key={`streak-wrap-${i}`} className="relative">
               {/* Floating 🔥 button (inside the wrapper to avoid clipping) */}
-              {canClaimComputed && (
+              {( (streakInfo && streakInfo.canClaim === true) ||
+                 dailyStreak === 0 ||
+                 !stats?.streak_claimed_today ) && (
                 <motion.button
                   type="button"
-                  onClick={claimStreak}
+                  onClick={async () => {
+                    if (claiming) return;
+                    // simple guard mirrors claimStreak()
+                    try {
+                      await claimStreak();
+                    } catch (_) {}
+                  }}
                   disabled={claiming}
                   initial={{ y: -4, opacity: 0, scale: 0.95 }}
                   animate={{
@@ -484,7 +467,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
                 whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
                 whileTap={{ scale: 0.985 }}
                 transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                {...interactiveProps}
+                className={baseClass}
               >
                 {/* base sheen + inner ring */}
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
@@ -515,7 +498,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
             whileHover={{ scale: 1.015, boxShadow: "0 8px 22px rgba(255,255,255,0.06)" }}
             whileTap={{ scale: 0.985 }}
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
-            {...interactiveProps}
+            className={baseClass}
           >
             {/* base sheen + inner ring */}
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
