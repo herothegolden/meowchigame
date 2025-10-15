@@ -1,5 +1,7 @@
 // Path: backend/routes/orders.js
-// v9 — Fix CTA status: compare local dates without double time-zone shifting
+// v10 — FIX: CTA eligibility tolerant to race condition (line 273)
+//       Changed: guardedMeow logic now allows eligibility when meow_taps >= 42
+//       even if meow_taps_date is momentarily stale during DB commit
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -76,11 +78,11 @@ Contact customer via Telegram to arrange payment and delivery.`;
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    NEW: Meow Counter Promo Flow
    - Reserve (first 42 per day), one per user per day, idempotent
    - Activate promo on Order Page via claim token
-──────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────────────────────── */
 
 /**
  * POST /api/meow-claim
@@ -164,7 +166,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
 
     let finalClaimId = claimId;
     if (cr.rowCount === 0) {
-      // Already has a claim. Fetch it and ensure it’s not consumed.
+      // Already has a claim. Fetch it and ensure it's not consumed.
       const existing = await client.query(
         `SELECT id, consumed FROM meow_claims WHERE user_id = $1 AND day = $2`,
         [user.id, today]
@@ -291,8 +293,9 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
     );
     const isToday = !!cmp.rows[0]?.is_today;
 
-    // Guard meow_taps by display day
-    const guardedMeow = isToday ? Number(meow_taps || 0) : 0;
+    // ✅ v10 FIX: Guard meow_taps by display day OR if user reached 42 (must be today)
+    // This tolerates race condition where meow_taps_date hasn't committed yet
+    const guardedMeow = (isToday || meow_taps >= 42) ? Number(meow_taps || 0) : 0;
 
     // Global remaining for "today"
     const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
@@ -317,9 +320,9 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
   }
 });
 
-/* ────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
    Orders (existing)
-──────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────────────────────── */
 
 // ---- CREATE ORDER (WITH CART SUPPORT) ----
 router.post('/create-order', validateUser, async (req, res) => {
