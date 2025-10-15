@@ -1,5 +1,5 @@
 // Path: backend/routes/orders.js
-// v8 — Final timezone-safe day guard for CTA status (works for DATE or TIMESTAMP)
+// v9 — Fix CTA status: compare local dates without double time-zone shifting
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -84,6 +84,16 @@ Contact customer via Telegram to arrange payment and delivery.`;
 
 /**
  * POST /api/meow-claim
+ * Preconditions (atomic, same transaction):
+ *  - users.meow_taps >= 42
+ *  - users.meow_claim_used_today = FALSE
+ *  - meow_daily_claims(day).claims_taken < 42
+ * Effects:
+ *  - UPSERT meow_daily_claims row for today
+ *  - Insert into meow_claims (id, user_id, day) with UNIQUE(user_id, day)
+ *  - Set users.meow_claim_used_today = TRUE
+ *  - Increment meow_daily_claims.claims_taken
+ * Returns: { claimId, promo: 'MEOW42' }
  */
 router.post('/meow-claim', validateUser, async (req, res) => {
   const { user } = req;
@@ -91,11 +101,13 @@ router.post('/meow-claim', validateUser, async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // Compute today's date in Asia/Tashkent (from DB to avoid drift)
     const {
       rows: [tz],
     } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
     const today = tz.day;
 
+    // Lock user row
     const ur = await client.query(
       `SELECT COALESCE(meow_taps,0) AS meow_taps,
               COALESCE(meow_claim_used_today, FALSE) AS used_today
@@ -119,6 +131,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
       return res.status(409).json({ error: 'Already claimed today' });
     }
 
+    // Ensure daily row exists & lock it
     await client.query(
       `INSERT INTO meow_daily_claims (day, claims_taken)
        VALUES ($1, 0)
@@ -139,6 +152,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
       return res.status(429).json({ error: 'Daily limit reached (42/42)' });
     }
 
+    // Try to insert a new claim for (user, day); if exists, it's idempotent
     const claimId = genUUID();
     const cr = await client.query(
       `INSERT INTO meow_claims (id, user_id, day, consumed)
@@ -150,6 +164,7 @@ router.post('/meow-claim', validateUser, async (req, res) => {
 
     let finalClaimId = claimId;
     if (cr.rowCount === 0) {
+      // Already has a claim. Fetch it and ensure it’s not consumed.
       const existing = await client.query(
         `SELECT id, consumed FROM meow_claims WHERE user_id = $1 AND day = $2`,
         [user.id, today]
@@ -166,7 +181,10 @@ router.post('/meow-claim', validateUser, async (req, res) => {
       finalClaimId = row.id;
     }
 
+    // Mark user as used today
     await client.query(`UPDATE users SET meow_claim_used_today = TRUE WHERE telegram_id = $1`, [user.id]);
+
+    // Increment global daily counter
     await client.query(`UPDATE meow_daily_claims SET claims_taken = claims_taken + 1 WHERE day = $1`, [today]);
 
     await client.query('COMMIT');
@@ -182,6 +200,9 @@ router.post('/meow-claim', validateUser, async (req, res) => {
 
 /**
  * POST /api/activate-promo
+ * Body: { claimId }
+ * Verifies token belongs to user, is for today, and not yet consumed.
+ * Marks it consumed and returns pricing context.
  */
 router.post('/activate-promo', validateUser, async (req, res) => {
   const { user } = req;
@@ -237,16 +258,19 @@ router.post('/activate-promo', validateUser, async (req, res) => {
 /**
  * POST /api/meow-cta-status
  * Returns: { meow_taps, usedToday, remainingGlobal, eligible, today }
+ * NOTE: POST (not GET) because validateUser reads initData from req.body; apiCall posts by design.
  */
 router.post('/meow-cta-status', validateUser, async (req, res) => {
   const { user } = req;
   const client = await pool.connect();
   try {
+    // Derive "today" from DB to avoid Node clock drift
     const {
       rows: [tz],
     } = await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS today`);
     const today = tz.today;
 
+    // Read user state (include date for display guard)
     const ur = await client.query(
       `SELECT COALESCE(meow_taps,0) AS meow_taps,
               meow_taps_date,
@@ -259,15 +283,18 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 
     const { meow_taps, meow_taps_date, used_today } = ur.rows[0];
 
-    // ✅ Robust for DATE or TIMESTAMP: coerce to timestamp, shift to Tashkent, then compare dates
+    // ✅ DO NOT re-shift a local Tashkent "timestamp without time zone".
+    // Compare local calendar dates directly to avoid off-by-one.
     const cmp = await client.query(
-      `SELECT (( ($1::timestamp AT TIME ZONE 'Asia/Tashkent')::date ) = ($2::date)) AS is_today`,
+      `SELECT (($1::date) = ($2::date)) AS is_today`,
       [meow_taps_date, today]
     );
     const isToday = !!cmp.rows[0]?.is_today;
 
+    // Guard meow_taps by display day
     const guardedMeow = isToday ? Number(meow_taps || 0) : 0;
 
+    // Global remaining for "today"
     const dr = await client.query(`SELECT claims_taken FROM meow_daily_claims WHERE day = $1`, [today]);
     const claimsTaken = dr.rowCount ? Number(dr.rows[0].claims_taken || 0) : 0;
     const remainingGlobal = Math.max(42 - claimsTaken, 0);
@@ -300,20 +327,28 @@ router.post('/create-order', validateUser, async (req, res) => {
     const { user } = req;
     const { items, totalAmount } = req.body;
 
+    // Validate input
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required field: items (must be non-empty array)' });
     }
+
     if (!totalAmount || totalAmount <= 0) {
       return res.status(400).json({ error: 'Invalid total amount' });
     }
 
+    // Validate each item
     for (const item of items) {
       if (!item.productId || !item.productName || !item.quantity || !item.unitPrice || !item.totalPrice) {
-        return res.status(400).json({ error: 'Invalid item format. Each item must have: productId, productName, quantity, unitPrice, totalPrice' });
+        return res
+          .status(400)
+          .json({ error: 'Invalid item format. Each item must have: productId, productName, quantity, unitPrice, totalPrice' });
       }
+
       if (item.quantity < 1 || item.quantity > 100) {
         return res.status(400).json({ error: `Invalid quantity for ${item.productName} (must be 1-100)` });
       }
+
+      // Verify price calculation
       const expectedTotal = item.unitPrice * item.quantity;
       if (item.totalPrice !== expectedTotal) {
         return res.status(400).json({
@@ -324,6 +359,7 @@ router.post('/create-order', validateUser, async (req, res) => {
       }
     }
 
+    // Verify total amount calculation
     const calculatedTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
     if (totalAmount !== calculatedTotal) {
       return res.status(400).json({
@@ -335,15 +371,20 @@ router.post('/create-order', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
+      // Generate unique order ID
       const orderId = `MW${Date.now().toString().slice(-8)}`;
 
+      // Get user details
       const userResult = await client.query('SELECT first_name, username FROM users WHERE telegram_id = $1', [user.id]);
+
       const userData = userResult.rows[0] || {};
       const customerName = userData.first_name || 'Unknown';
       const username = userData.username || null;
 
+      // Create order summary for database
       const orderSummary = items.map((item) => `${item.productName} (${item.quantity})`).join(', ');
 
+      // Insert order into database
       const insertQuery = `
         INSERT INTO orders (
           id, 
@@ -359,21 +400,23 @@ router.post('/create-order', validateUser, async (req, res) => {
         RETURNING id, created_at
       `;
 
+      // Store total quantity and order summary
       const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
       const orderResult = await client.query(insertQuery, [
         orderId,
         user.id,
         customerName,
-        '', // customer_phone not collected
-        orderSummary,
-        totalQuantity,
+        '', // customer_phone not collected (empty string for NOT NULL constraint)
+        orderSummary, // Combined product names
+        totalQuantity, // Total quantity of all items
         totalAmount,
         'pending',
       ]);
 
       console.log(`✅ Order created: ${orderId} for user ${user.id} with ${items.length} items`);
 
+      // Send notification to admin
       const notificationSent = await sendAdminNotification({
         orderId,
         telegramId: user.id,
@@ -382,11 +425,15 @@ router.post('/create-order', validateUser, async (req, res) => {
         items,
         totalAmount,
       });
-      if (!notificationSent) console.warn('⚠️ Order saved but admin notification failed');
 
+      if (!notificationSent) {
+        console.warn('⚠️ Order saved but admin notification failed');
+      }
+
+      // Return success
       res.status(200).json({
         success: true,
-        orderId,
+        orderId: orderId,
         message: 'Order submitted successfully. Admin will contact you via Telegram.',
         order: {
           id: orderId,
@@ -418,12 +465,14 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
     const { orderId } = req.params;
     const { adminKey } = req.body;
 
+    // Validate admin authorization
     if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
     const client = await pool.connect();
     try {
+      // Get order details
       const orderResult = await client.query('SELECT telegram_id, quantity, status FROM orders WHERE id = $1', [orderId]);
 
       if (orderResult.rowCount === 0) {
@@ -436,7 +485,10 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
         return res.status(400).json({ error: 'Order already marked as paid' });
       }
 
+      // Update order status
       await client.query('UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['paid', orderId]);
+
+      // Update user's VIP level
       await client.query('UPDATE users SET vip_level = vip_level + $1 WHERE telegram_id = $2', [
         order.quantity,
         order.telegram_id,
