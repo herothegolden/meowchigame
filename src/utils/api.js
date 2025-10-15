@@ -1,4 +1,6 @@
 // Path: src/utils/api.js
+// v3 — adds Meow CTA helpers (status + claim). No other changes.
+
 // v2 — verified for Daily Streak claim flow (no behavior changes)
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -82,4 +84,20 @@ export const showError = (message) => {
 
 export const claimStreak = async () => {
   return await apiCall('/api/streak/claim-streak');
+};
+
+// ===== Meow CTA helpers (NEW) =====
+
+/**
+ * Returns: { eligible: boolean, usedToday: boolean, meow_taps: number, today: "YYYY-MM-DD" }
+ */
+export const getMeowCtaStatus = async () => {
+  return await apiCall('/api/meow-cta-status');
+};
+
+/**
+ * Marks today's Meow CTA as used (idempotent). Returns: { success: true, usedToday: true } on success.
+ */
+export const claimMeowCta = async () => {
+  return await apiCall('/api/meow-claim');
 };
