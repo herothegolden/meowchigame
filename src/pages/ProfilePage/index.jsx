@@ -1,8 +1,8 @@
-// Path: frontend/src/pages/ProfilePage/index.jsx
-// v18 — CTA flow fixes:
-// - Properly clear post-42 retry timers using a ref (fixes hidden timer leak).
-// - Render CTA only on Overview tab to match intended UX.
-// - Kept: instant paint shell, lazy tabs, CTA polling & retries.
+// v19 — Browser-safe guards (ProfilePage):
+// - Detect non-Telegram environment and avoid any apiCall() usage.
+// - Render a clear "Open in Telegram" banner instead of crashing in a normal browser.
+// - Attach post-42 listeners / polling only when inside Telegram.
+// - Preserve v18 fixes (retry timers cleanup, CTA shown only on Overview, lazy tabs).
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +18,9 @@ const TasksTab = lazy(() => import("./tabs/TasksTab"));
 
 const ProfilePage = () => {
   const navigate = useNavigate();
+
+  // Detect Telegram Mini App environment
+  const isTMA = typeof window !== "undefined" && !!window.Telegram?.WebApp?.initData;
 
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
@@ -37,6 +40,7 @@ const ProfilePage = () => {
   const post42TimersRef = useRef([]);
 
   const fetchData = useCallback(async () => {
+    if (!isTMA) return; // 🚫 Do not call backend outside Telegram
     try {
       setLoading(true);
       setError(null);
@@ -48,9 +52,10 @@ const ProfilePage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isTMA]);
 
   const fetchCtaStatus = useCallback(async () => {
+    if (!isTMA) return; // 🚫 No-op in browser
     try {
       // apiCall always posts initData in body; backend route is POST /api/meow-cta-status
       const res = await apiCall("/api/meow-cta-status");
@@ -60,10 +65,10 @@ const ProfilePage = () => {
         remainingGlobal: Number(res.remainingGlobal || 0),
         meow_taps: Number(res.meow_taps || 0),
       });
-    } catch (e) {
+    } catch {
       // Silently ignore; CTA is optional UI
     }
-  }, []);
+  }, [isTMA]);
 
   useEffect(() => {
     fetchData();
@@ -71,13 +76,16 @@ const ProfilePage = () => {
 
   // If already at 42 on initial load (e.g., navigated back), fetch CTA immediately.
   useEffect(() => {
+    if (!isTMA) return;
     if (data?.stats?.meow_taps >= 42) {
       fetchCtaStatus();
     }
-  }, [data?.stats?.meow_taps, fetchCtaStatus]);
+  }, [isTMA, data?.stats?.meow_taps, fetchCtaStatus]);
 
   // Listen for custom event from OverviewTab when user reaches 42 in-session.
   useEffect(() => {
+    if (!isTMA) return;
+
     const onReached42 = () => {
       // Immediate check
       fetchCtaStatus();
@@ -98,17 +106,22 @@ const ProfilePage = () => {
       for (const t of post42TimersRef.current) clearTimeout(t);
       post42TimersRef.current = [];
     };
-  }, [fetchCtaStatus]);
+  }, [isTMA, fetchCtaStatus]);
 
   // Poll CTA status lightly (reflects global 42 cap); also on tab switch
   useEffect(() => {
+    if (!isTMA) return;
     fetchCtaStatus();
     const t = setInterval(fetchCtaStatus, 20000);
     return () => clearInterval(t);
-  }, [fetchCtaStatus, activeTab]);
+  }, [isTMA, fetchCtaStatus, activeTab]);
 
   const handleClaimAndGoToOrder = useCallback(async () => {
     if (ctaLoading) return;
+    if (!isTMA) {
+      showError("Откройте мини-приложение в Telegram, чтобы активировать предложение.");
+      return;
+    }
     try {
       setCtaLoading(true);
       // apiCall always posts; backend route is POST /api/meow-claim
@@ -129,7 +142,7 @@ const ProfilePage = () => {
     } finally {
       setCtaLoading(false);
     }
-  }, [ctaLoading, navigate, fetchCtaStatus]);
+  }, [ctaLoading, isTMA, navigate, fetchCtaStatus]);
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
@@ -137,6 +150,32 @@ const ProfilePage = () => {
   // Show CTA if server says eligible (meow_taps >= 42, not used today, remainingGlobal > 0)
   const showMeowCTA = !!ctaStatus.eligible;
 
+  // -------- Non-Telegram rendering (browser deep link) --------
+  if (!isTMA) {
+    return (
+      <div className="p-4 space-y-6 pb-28 bg-background text-primary">
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 text-yellow-100 px-3 py-2 text-sm">
+          Эта страница требует мини-приложение Telegram.<br />
+          <span className="opacity-80">
+            Откройте бота и перейдите в «Профиль», чтобы увидеть ваши данные.
+          </span>
+        </div>
+
+        {/* Lightweight placeholder header */}
+        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+          <div className="text-white font-semibold mb-2">Профиль</div>
+          <div className="text-secondary text-sm">
+            Авторизация происходит через Telegram внутри мини-приложения.
+          </div>
+        </div>
+
+        {/* Keep BottomNav for consistent layout if you want, or remove if not applicable */}
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // -------- Telegram rendering --------
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
       {/* Inline error banner (non-blocking) */}
