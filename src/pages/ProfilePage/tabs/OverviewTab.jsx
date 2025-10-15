@@ -1,5 +1,6 @@
 // Path: frontend/src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v26 — Remove duplicate inline "Claim 🔥" chip; keep floating 🔥 only
+// v27 — On hitting 42, also ping /api/meow-cta-status immediately (no UI changes)
+// - Keeps existing dispatch of "meow:reached42"
 // - No other logic or styling changed.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,12 +53,51 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     return serverVal0;
   });
 
+  // Backend base resolution
+  const backendBase = useMemo(() => {
+    if (typeof backendUrl === "string" && backendUrl) return backendUrl;
+    if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
+    if (typeof window !== "undefined") {
+      if (window.BACKEND_URL) return window.BACKEND_URL;
+      if (window.__MEOWCHI_BACKEND_URL__) return window.__MEOWCHI_BACKEND_URL__;
+    }
+    try {
+      if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) {
+        return import.meta.env.VITE_BACKEND_URL;
+      }
+    } catch (_) {}
+    return "";
+  }, [backendUrl, BACKEND_URL]);
+
+  // Cache initData once
+  const initDataRef = useRef("");
+  useEffect(() => {
+    try {
+      initDataRef.current = window?.Telegram?.WebApp?.initData || "";
+    } catch (_) {}
+  }, []);
+
+  // 🔔 On-hit-42 immediate status ping (to avoid relying solely on container listener/polling)
+  const pingCtaStatus = useCallback(async () => {
+    if (!backendBase) return;
+    try {
+      await fetch(`${backendBase}/api/meow-cta-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: initDataRef.current }),
+        keepalive: true,
+      });
+    } catch (_) {}
+  }, [backendBase]);
+
   // Broadcast "hit 42" so parent can fetch CTA status immediately (only on confirmed/reconciled 42)
   const notifyReached42 = useCallback(() => {
     try {
       window.dispatchEvent(new CustomEvent("meow:reached42"));
     } catch (_) {}
-  }, []);
+    // NEW: proactively ping server status to flip eligibility without waiting for listener/poll
+    void pingCtaStatus();
+  }, [pingCtaStatus]);
 
   // Persist helper
   const persist = useCallback(
@@ -94,33 +134,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 220;
 
-  // ✅ Zen shows lifetime games played (unchanged)
-  const gamesPlayed = (stats?.games_played || 0).toLocaleString();
-
-  // Backend base resolution
-  const backendBase = useMemo(() => {
-    if (typeof backendUrl === "string" && backendUrl) return backendUrl;
-    if (typeof BACKEND_URL === "string" && BACKEND_URL) return BACKEND_URL;
-    if (typeof window !== "undefined") {
-      if (window.BACKEND_URL) return window.BACKEND_URL;
-      if (window.__MEOWCHI_BACKEND_URL__) return window.__MEOWCHI_BACKEND_URL__;
-    }
-    try {
-      if (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) {
-        return import.meta.env.VITE_BACKEND_URL;
-      }
-    } catch (_) {}
-    return "";
-  }, [backendUrl, BACKEND_URL]);
-
-  // Cache initData once
-  const initDataRef = useRef("");
-  useEffect(() => {
-    try {
-      initDataRef.current = window?.Telegram?.WebApp?.initData || "";
-    } catch (_) {}
-  }, []);
-
   const haptic = useCallback(() => {
     try {
       const HW = window?.Telegram?.WebApp?.HapticFeedback;
@@ -141,6 +154,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     }
     prevMeowRef.current = meowTapsLocal;
   }, [meowTapsLocal]);
+
+  // ✅ Zen shows lifetime games played (unchanged)
+  const gamesPlayed = (stats?.games_played || 0).toLocaleString();
 
   // Build stats list (Meow Counter card is tappable)
   const lifeStats = useMemo(
@@ -270,7 +286,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
 
     if (meowTapsLocal >= 42) return;
 
-    haptic();
+    const HW = window?.Telegram?.WebApp?.HapticFeedback;
+    if (HW?.impactOccurred) HW.impactOccurred("light");
 
     // 🔮 trigger backlight pulse on every tap attempt
     setGlowTick((t) => t + 1);
@@ -290,7 +307,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
     });
 
     void sendTap();
-  }, [meowTapsLocal, haptic, sendTap, persist]);
+  }, [meowTapsLocal, sendTap, persist]);
 
   // =========================
   // 🔥 Daily Streak Claim CTA
@@ -306,7 +323,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
   const claimStreak = useCallback(async () => {
     if (!canClaimComputed || claiming) return;
     setClaiming(true);
-    haptic();
+    const HW = window?.Telegram?.WebApp?.HapticFeedback;
+    if (HW?.impactOccurred) HW.impactOccurred("light");
     try {
       await fetch(`${backendBase}/api/streak/claim-streak`, {
         method: "POST",
@@ -322,7 +340,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate, backendUrl, BACKEND_URL }) =
         if (typeof onUpdate === "function") onUpdate();
       } catch (_) {}
     }
-  }, [backendBase, canClaimComputed, claiming, onUpdate, haptic]);
+  }, [backendBase, canClaimComputed, claiming, onUpdate]);
 
   return (
     <motion.div
