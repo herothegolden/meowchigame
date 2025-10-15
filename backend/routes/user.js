@@ -481,8 +481,15 @@ router.post('/meow-tap', validateUser, async (req, res) => {
           );
           if (updated.rowCount > 0) meow = updated.rows[0].meow_taps;
         } else {
-          // Date stale/missing → no write here; return display-safe 0 so UI doesn't lie.
+          // Date stale/missing → reset to today immediately to avoid UI desync at day boundary
           if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
+            await client.query(
+              `UPDATE users
+                 SET meow_taps = 0,
+                     meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
+               WHERE telegram_id = $1`,
+              [user.id]
+            );
             meow = 0;
           }
         }
