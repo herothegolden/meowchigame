@@ -1,6 +1,6 @@
 // backend/routes/user.js
-// v20 — Atomic /meow-tap: single UPDATE ... RETURNING with Tashkent day guard
-// Replaces multi-step txn so server value always advances and cannot stick at 1.
+// v21 — Atomic /meow-tap with batching: optional `inc` to apply multiple taps in one request
+// Reduces latency when user taps quickly by flushing queued taps at once (capped at 42).
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -424,8 +424,8 @@ router.post('/update-avatar', validateUser, async (req, res) => {
 });
 
 /* -------------------------------------------
-   NEW: Счётчик мяу (daily up to 42)
-   v20: ATOMIC single UPDATE with Tashkent day guard
+   Счётчик мяу (daily up to 42)
+   v21: ATOMIC single UPDATE with batching via `inc`
 ------------------------------------------- */
 
 router.post('/meow-tap', validateUser, async (req, res) => {
@@ -433,19 +433,26 @@ router.post('/meow-tap', validateUser, async (req, res) => {
     const { user } = req;
     const todayStr = getTashkentDate(); // YYYY-MM-DD in Asia/Tashkent
 
+    // Accept optional batch size; sanitize to 1..42
+    let inc = 1;
+    if (req.body && typeof req.body.inc !== 'undefined') {
+      const n = parseInt(req.body.inc, 10);
+      if (Number.isFinite(n)) inc = Math.max(1, Math.min(42, n));
+    }
+
     const client = await pool.connect();
     try {
       const upd = await client.query(
         `UPDATE users
            SET meow_taps = LEAST(42,
                  CASE WHEN meow_taps_date IS NOT NULL AND (meow_taps_date AT TIME ZONE 'Asia/Tashkent')::date = $2::date
-                      THEN COALESCE(meow_taps, 0) + 1
-                      ELSE 1 END
+                      THEN COALESCE(meow_taps, 0) + $3
+                      ELSE LEAST(42, $3) END
                ),
                meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
          WHERE telegram_id = $1
          RETURNING COALESCE(meow_taps,0) AS meow_taps, meow_taps_date`,
-        [user.id, todayStr]
+        [user.id, todayStr, inc]
       );
 
       if (upd.rowCount === 0) return res.status(404).json({ error: 'User not found' });
