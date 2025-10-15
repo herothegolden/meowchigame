@@ -1,4 +1,10 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
+// v35 – CRITICAL FIX: ensure /api/meow-tap uses the same authenticated apiCall as CTA
+// Changes from v34:
+// 1) Replaced raw fetch(.../api/meow-tap) with apiCall('/api/meow-tap') so validateUser sees initData.
+// 2) Kept all UI/animation and retry behavior unchanged.
+// 3) No unrelated edits.
+
 // v34 – CRITICAL FIX: Tap counter stuck at 1
 // Changes from v32:
 // 1. Removed onClick handler (kept only onPointerDown to avoid double-firing)
@@ -8,7 +14,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { getMeowCtaStatus } from "../../../utils/api";
+import { getMeowCtaStatus, apiCall } from "../../../utils/api";
 
 // Helper: convert seconds → "Xч Yм"
 const formatPlayTime = (seconds) => {
@@ -55,7 +61,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     return serverVal0;
   });
 
-  // Cache initData once
+  // Cache initData once (apiCall reads it itself, but keep for future fallbacks)
   const initDataRef = useRef("");
   useEffect(() => {
     try {
@@ -63,22 +69,19 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     } catch (_) {}
   }, []);
 
-  // ✅ v32 FIX: Fire event immediately WITHOUT calling API
-  // Let ProfilePage handle all retries to avoid race condition
+  // Fire event immediately; ProfilePage handles status retries
   const notifyReached42 = useCallback(() => {
-    // Immediate event dispatch (no API call)
     window.dispatchEvent(new CustomEvent("meow:reached42"));
 
-    // Delayed backup call at 500ms to ensure DB transaction is committed
+    // Delayed backup check at 500ms to ensure DB transaction is committed
     setTimeout(async () => {
       try {
         const d = await getMeowCtaStatus();
-        // Fire again with payload if eligible
         if (d?.eligible) {
           window.dispatchEvent(new CustomEvent("meow:reached42", { detail: d }));
         }
       } catch (_) {
-        // Silent - ProfilePage's retries will handle this
+        // Silent — ProfilePage handles its own retries
       }
     }, 500);
   }, []);
@@ -113,7 +116,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     dayRef.current = newDay;
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
-  // ✅ v34 FIX: Reduced from 220ms to 80ms for better tap responsiveness
+  // Reduced from 220ms to 80ms for better tap responsiveness
   const tapCooldownRef = useRef(0);
   const CLIENT_COOLDOWN_MS = 80;
 
@@ -191,28 +194,12 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const retryOnceRef = useRef(false);
 
   const sendTap = useCallback(async () => {
-    // Build a tolerant URL (falls back to app-relative /api if window/injects aren't present)
-    const backendBase =
-      (typeof window !== "undefined" && (window.__MEOWCHI_BACKEND_URL__ || window.BACKEND_URL)) ||
-      (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_BACKEND_URL) ||
-      "";
-    const url = backendBase ? `${backendBase}/api/meow-tap` : "/api/meow-tap";
-
     try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData: initDataRef.current }),
-        keepalive: true,
-      });
-
-      let data = null;
-      try {
-        data = await res.json();
-      } catch (_) {}
+      // ✅ Use the same authenticated API wrapper as CTA endpoints.
+      const data = await apiCall("/api/meow-tap");
 
       // Reconcile with server – authoritative but non-decreasing
-      if (res.ok && data && typeof data.meow_taps === "number") {
+      if (data && typeof data.meow_taps === "number") {
         setMeowTapsLocal((prev) => {
           const next = Math.min(42, Math.max(prev, data.meow_taps));
           persist(next);
@@ -229,17 +216,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
           setTimeout(() => {
             void (async () => {
               try {
-                const r2 = await fetch(url, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ initData: initDataRef.current }),
-                  keepalive: true,
-                });
-                let d2 = null;
-                try {
-                  d2 = await r2.json();
-                } catch (_) {}
-                if (r2.ok && d2 && typeof d2.meow_taps === "number") {
+                const d2 = await apiCall("/api/meow-tap");
+                if (d2 && typeof d2.meow_taps === "number") {
                   setMeowTapsLocal((prev) => {
                     const next = Math.min(42, Math.max(prev, d2.meow_taps));
                     persist(next);
@@ -253,11 +231,11 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         }
       }
     } catch (_) {
-      // Network error: keep optimistic for n>0; reconcile later on next success.
+      // Network/auth error: keep optimistic; server will reconcile on next success
     }
   }, [notifyReached42, persist, meowTapsLocal]);
 
-  // ✅ v34 FIX: ALWAYS increment optimistically (removed meowTapsLocal === 0 special case)
+  // ALWAYS increment optimistically (no special case for 0)
   const handleMeowTap = useCallback(() => {
     const now = Date.now();
     if (now - tapCooldownRef.current < CLIENT_COOLDOWN_MS) return;
@@ -273,7 +251,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     // visual pulse
     setGlowTick((t) => t + 1);
 
-    // ✅ CRITICAL FIX: Always increment optimistically (no special case for 0)
     setMeowTapsLocal((n) => {
       const next = Math.min(n + 1, 42);
       persist(next);
@@ -338,7 +315,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
            flex flex-col justify-center items-center text-center 
            shadow-[0_0_20px_rgba(0,0,0,0.25)] overflow-hidden`;
 
-        // ✅ v34 FIX: Removed onClick, kept only onPointerDown to prevent double-firing
+        // Removed onClick, keep only onPointerDown to prevent double-firing
         const interactiveProps = isMeowCounter
           ? {
               onPointerDown: handleMeowTap,
@@ -442,7 +419,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
                   type="button"
                   onClick={async () => {
                     if (claiming) return;
-                    // simple guard mirrors claimStreak()
                     try {
                       await claimStreak();
                     } catch (_) {}
