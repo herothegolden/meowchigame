@@ -1,13 +1,8 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v37 – Tap Queue & Flush Worker
-// Purpose: backend is accepting taps slowly (throttle). We keep UI optimistic,
-// then feed taps to /api/meow-tap one-by-one at a safe cadence until server catches up.
-//
-// Changes vs v36:
-// 1) Introduced a tap queue with a small worker that calls apiCall('/api/meow-tap', {}) at ~140ms cadence.
-// 2) Track lastServerMeow so we know when the server caught up to the UI.
-// 3) Still dispatch 'meow:reached42' when UI hits 42; CTA polling remains in ProfilePage.
-// 4) No unrelated code changed.
+// v1 – Minimal fix: authenticated tap flush + correct pending drain
+// Changes:
+// 1) Pass initData to /api/meow-tap so backend validates and increments properly.
+// 2) Decrement pending only when server value increases vs lastServerMeowRef.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -54,7 +49,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   // Track the server-observed counter to know when it's caught up.
   const lastServerMeowRef = useRef(serverVal0);
 
-  // Cache initData once (the wrapper uses it; kept for fallback needs)
+  // Cache initData once
   const initDataRef = useRef("");
   useEffect(() => {
     try {
@@ -102,7 +97,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     });
 
     dayRef.current = newDay;
-    lastServerMeowRef.current = serverVal0; // keep in sync
+    lastServerMeowRef.current = serverVal0; // keep in sync with backend-observed value
   }, [serverDay, serverVal0, notifyReached42, persist]);
 
   // Visual feel
@@ -127,7 +122,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const pendingTapsRef = useRef(0);
   const inflightRef = useRef(false);
   const workerTimerRef = useRef(null);
-  const FLUSH_INTERVAL_MS = 140; // feed one tap ~7/sec to survive server throttle
+  const FLUSH_INTERVAL_MS = 140; // ~7 req/sec to tolerate throttle
 
   const stopWorker = () => {
     if (workerTimerRef.current) {
@@ -147,27 +142,27 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (inflightRef.current) return;
 
       inflightRef.current = true;
+      const prevServer = lastServerMeowRef.current;
       try {
-        const d = await apiCall("/api/meow-tap", {}); // ensures validateUser via wrapper
-        // Surface for debugging:
-        // console.log("[tap-worker] /api/meow-tap →", d);
+        // ✅ pass initData explicitly so backend validates/authenticates the user
+        const d = await apiCall("/api/meow-tap", { initData: initDataRef.current });
+
         if (d && typeof d.meow_taps === "number") {
           const srv = Math.max(lastServerMeowRef.current, d.meow_taps);
           lastServerMeowRef.current = Math.min(42, srv);
-          // We only decrement pending if server advanced.
-          if (srv > serverVal0) {
+          // ✅ only decrement pending when the server actually advanced
+          if (srv > prevServer) {
             pendingTapsRef.current = Math.max(0, pendingTapsRef.current - 1);
           }
-        } else {
-          // If server did not report a number, keep pending; worker will retry next tick.
         }
+        // If server didn't return a number, keep pending; retry next tick.
       } catch (_) {
-        // transient fail; keep pending and try next tick
+        // transient fail; keep pending and retry next tick
       } finally {
         inflightRef.current = false;
       }
     }, FLUSH_INTERVAL_MS);
-  }, [serverVal0]);
+  }, []);
 
   // ==========================================================
 
