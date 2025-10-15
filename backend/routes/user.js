@@ -1,5 +1,5 @@
 // Path: backend/routes/user.js
-// v14 — ensure meow_taps_date is stored as Tashkent TIMESTAMP on every increment/reset (CTA eligibility fix)
+// v15 — Throttled tap now does one bounded increment (<42) with Tashkent timestamp
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -205,9 +205,6 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
       );
       userData.high_score_today = Number(highTodayResult.rows[0]?.high_today || 0);
 
-      // IMPORTANT: Do NOT override daily_streak here.
-      // daily_streak is claim-based and comes from DB via /api/streak/claim-streak.
-
       res.status(200).json(userData);
     } finally {
       client.release();
@@ -282,7 +279,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.rank = rankResult.rows[0]?.rank || null;
 
       // --- Derived daily metrics (display correctness) ---
-      // 1) Today's high score (Asia/Tashkent)
       const highTodayResult = await client.query(
         `SELECT COALESCE(MAX(score), 0) AS high_today
            FROM game_sessions
@@ -292,11 +288,8 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       );
       userData.high_score_today = Number(highTodayResult.rows[0]?.high_today || 0);
 
-      // IMPORTANT: Do NOT override daily_streak here.
-      // Use DB value for claim-based streak.
       const currentStreak = Number(userData.daily_streak || 0);
 
-      // Keep the claim-state logic, but base it on DB streak
       const lastLoginDate = userData.last_login_date;
       const streakClaimedToday = userData.streak_claimed_today || false;
       const diffDays = calculateDateDiff(lastLoginDate, todayStr);
@@ -307,7 +300,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       let message = '';
 
       if (lastLoginDate === null) {
-        // Brand-new user: must be able to claim Day 1
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100;
@@ -335,7 +327,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       userData.streakInfo = { canClaim, state, currentStreak, potentialBonus, message };
 
-      // Power uses today's high score + DB streak (not lifetime)
       const points_total = Number(userData.points || 0);
       const vip_level = Number(userData.vip_level || 0);
       const highest_score_today = Number(userData.high_score_today || 0);
@@ -458,25 +449,49 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // If throttled, DO NOT advance the throttle window; just return current value.
+      // If throttled, do a single bounded increment (<42) and stamp Tashkent time, then return.
       if (now - last < TAP_COOLDOWN_MS) {
+        await client.query('BEGIN');
+
         const row = await client.query(
           `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
              FROM users
-            WHERE telegram_id = $1`,
+            WHERE telegram_id = $1
+            FOR UPDATE`,
           [user.id]
         );
 
         let meow = row.rows[0]?.meow_taps ?? 0;
         const meowDate = row.rows[0]?.meow_taps_date;
-        // Ensure date correctness: if stored date is older, show 0
-        if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
-          meow = 0;
+
+        // If the stored date is not today, do NOT increment here; first non-throttled call handles reset.
+        if (meowDate && String(meowDate).slice(0,10) === todayStr && meow < 42) {
+          const updated = await client.query(
+            `UPDATE users
+               SET meow_taps = meow_taps + 1,
+                   meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
+             WHERE telegram_id = $1
+               AND meow_taps < 42
+             RETURNING meow_taps`,
+            [user.id]
+          );
+          if (updated.rowCount > 0) {
+            meow = updated.rows[0].meow_taps;
+          }
+        } else {
+          // Keep display-safe zero if the date is stale
+          if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
+            meow = 0;
+          }
         }
 
-        // Do NOT set throttle timestamp here
+        await client.query('COMMIT');
+
+        // Advance throttle window when we processed a throttled request
+        meowTapThrottle.set(user.id, now);
+
         return res.status(200).json({
-          meow_taps: meow,
+          meow_taps: Math.min(42, meow),
           locked: meow >= 42,
           remaining: Math.max(42 - meow, 0),
           throttled: true
