@@ -124,10 +124,10 @@ const ProfilePage = () => {
     try {
       setCtaLoading(true);
       const res = await apiCall("/api/meow-claim");
-      if (res?.success) {
+      if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
-        navigate(`/order?promo=MEOW42`);
+        navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
       } else {
         showError(res?.error || "Не удалось активировать предложение");
         fetchCtaStatus();
@@ -203,7 +203,7 @@ const ProfilePage = () => {
             <TabsTrigger value="tasks">Задания</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview">
+        <TabsContent value="overview">
             <Suspense fallback={<div className="p-4 text-center text-secondary text-sm">Loading overview...</div>}>
               <OverviewTab
                 stats={stats}
