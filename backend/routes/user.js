@@ -1,6 +1,7 @@
-// v16 — Guarantee: first non-throttled /meow-tap call always stamps Tashkent "today"
-//       BEFORE any early returns (locked ≥42), so date/write races from throttled path recover deterministically.
-//       (Behavior in throttled branch preserved: skip DB writes when date is stale.)
+// v17 – BULLETPROOF: Guarantee date stamp in ALL paths, add debug logging
+//       - Throttled path now ALWAYS stamps date if stale (no conditional)
+//       - Non-throttled path verified to stamp before early returns
+//       - Added console logs for debugging CTA eligibility issues
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -91,7 +92,7 @@ router.post('/validate', async (req, res) => {
 
       const currentDate = getTashkentDate();
       const lastLoginDate = appUser.last_login_date;
-      const currentStreak = appUser.daily_streak || 0; // ← DB value is the source of truth
+      const currentStreak = appUser.daily_streak || 0;
       const streakClaimedToday = appUser.streak_claimed_today || false;
       const diffDays = calculateDateDiff(lastLoginDate, currentDate);
 
@@ -101,7 +102,6 @@ router.post('/validate', async (req, res) => {
       let message = '';
 
       if (lastLoginDate === null) {
-        // Brand-new user: must be able to claim Day 1
         canClaim = true;
         state = 'ELIGIBLE';
         potentialBonus = 100;
@@ -186,7 +186,6 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
 
       // 🔒 DISPLAY-ONLY DAY GUARD: if stored date is not today, present 0 to client
@@ -195,8 +194,7 @@ router.post('/get-user-stats', validateUser, async (req, res) => {
         userData.meow_taps_date = todayStr;
       }
 
-      // --- Derived daily metrics (display correctness) ---
-      // 1) Today's high score (Asia/Tashkent)
+      // Today's high score
       const highTodayResult = await client.query(
         `SELECT COALESCE(MAX(score), 0) AS high_today
            FROM game_sessions
@@ -266,7 +264,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
 
       const userData = userResult.rows[0];
 
-      // No mutation here: daily meow reset occurs in cron at Tashkent midnight.
       const todayStr = getTashkentDate();
 
       // 🔒 DISPLAY-ONLY DAY GUARD for Profile payload
@@ -279,7 +276,6 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       userData.totalPlayTime = `${Math.floor(userData.total_play_time / 60)}h ${userData.total_play_time % 60}m`;
       userData.rank = rankResult.rows[0]?.rank || null;
 
-      // --- Derived daily metrics (display correctness) ---
       const highTodayResult = await client.query(
         `SELECT COALESCE(MAX(score), 0) AS high_today
            FROM game_sessions
@@ -438,6 +434,7 @@ router.post('/update-avatar', validateUser, async (req, res) => {
 
 /* -------------------------------------------
    NEW: Счётчик мяу (daily up to 42)
+   v17: BULLETPROOF date stamping + debug logs
 ------------------------------------------- */
 
 router.post('/meow-tap', validateUser, async (req, res) => {
@@ -450,10 +447,7 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // 🔒 Throttled path:
-      // If throttled, do a single bounded increment (<42) and stamp Tashkent time ONLY if the stored day is already today.
-      // If the stored date is stale/missing, DO NOT write here; let the first non-throttled call (below) perform the reset
-      // and stamp "today" BEFORE any early returns.
+      // 🔒 Throttled path
       if (now - last < TAP_COOLDOWN_MS) {
         await client.query('BEGIN');
 
@@ -467,9 +461,21 @@ router.post('/meow-tap', validateUser, async (req, res) => {
 
         let meow = row.rows[0]?.meow_taps ?? 0;
         const meowDate = row.rows[0]?.meow_taps_date;
+        const dateIsToday = meowDate && String(meowDate).slice(0,10) === todayStr;
 
-        // If the stored date is today → allow one bounded increment with fresh timestamp
-        if (meowDate && String(meowDate).slice(0,10) === todayStr && meow < 42) {
+        // ✅ BULLETPROOF: ALWAYS stamp date if stale, even in throttled path
+        if (!dateIsToday) {
+          console.log(`🔄 [THROTTLED] User ${user.id}: Stale date detected. Resetting to today.`);
+          await client.query(
+            `UPDATE users
+               SET meow_taps = 0,
+                   meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
+             WHERE telegram_id = $1`,
+            [user.id]
+          );
+          meow = 0;
+        } else if (meow < 42) {
+          // Date is today and below cap → increment
           const updated = await client.query(
             `UPDATE users
                SET meow_taps = meow_taps + 1,
@@ -479,25 +485,19 @@ router.post('/meow-tap', validateUser, async (req, res) => {
              RETURNING meow_taps`,
             [user.id]
           );
-          if (updated.rowCount > 0) meow = updated.rows[0].meow_taps;
-        } else {
-          // Date stale/missing → reset to today immediately to avoid UI desync at day boundary
-          if (!meowDate || String(meowDate).slice(0,10) !== todayStr) {
-            await client.query(
-              `UPDATE users
-                 SET meow_taps = 0,
-                     meow_taps_date = (now() AT TIME ZONE 'Asia/Tashkent')
-               WHERE telegram_id = $1`,
-              [user.id]
-            );
-            meow = 0;
+          if (updated.rowCount > 0) {
+            meow = updated.rows[0].meow_taps;
+            console.log(`✅ [THROTTLED] User ${user.id}: Incremented to ${meow}/42`);
           }
         }
 
         await client.query('COMMIT');
-
-        // Advance throttle window when we processed a throttled request
         meowTapThrottle.set(user.id, now);
+
+        // ✅ Debug log when reaching 42
+        if (meow === 42) {
+          console.log(`🎯 [THROTTLED] User ${user.id}: REACHED 42! Date: ${todayStr}`);
+        }
 
         return res.status(200).json({
           meow_taps: Math.min(42, meow),
@@ -507,10 +507,9 @@ router.post('/meow-tap', validateUser, async (req, res) => {
         });
       }
 
-      // 🔓 Non-throttled path:
+      // 🔓 Non-throttled path
       await client.query('BEGIN');
 
-      // Lock row, read current taps
       const rowRes = await client.query(
         `SELECT COALESCE(meow_taps, 0) AS meow_taps, meow_taps_date
            FROM users
@@ -524,11 +523,12 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       }
 
       let { meow_taps, meow_taps_date } = rowRes.rows[0];
+      const dateIsToday = meow_taps_date && String(meow_taps_date).slice(0,10) === todayStr;
 
-      // ✅ GUARANTEE: If first tap of the day (stale/missing date), stamp today's date *before* any early returns.
-      if (!meow_taps_date || String(meow_taps_date).slice(0,10) !== todayStr) {
+      // ✅ GUARANTEE: If date is stale/missing, reset to 0 and stamp today BEFORE any early returns
+      if (!dateIsToday) {
+        console.log(`🔄 [NON-THROTTLED] User ${user.id}: Stale/missing date. Resetting to today.`);
         meow_taps = 0;
-        meow_taps_date = todayStr;
         await client.query(
           `UPDATE users
              SET meow_taps = 0,
@@ -536,16 +536,18 @@ router.post('/meow-tap', validateUser, async (req, res) => {
            WHERE telegram_id = $1`,
           [user.id]
         );
+        console.log(`✅ [NON-THROTTLED] User ${user.id}: Date stamped to ${todayStr}, taps reset to 0`);
       }
 
-      // Early-return lock can only happen AFTER the date is stamped to today.
+      // Early-return for locked state (can only happen AFTER date is stamped)
       if (meow_taps >= 42) {
         await client.query('COMMIT');
-        // Advance throttle window on terminal (locked) response
         meowTapThrottle.set(user.id, now);
+        console.log(`🔒 [NON-THROTTLED] User ${user.id}: Already at 42, locked`);
         return res.status(200).json({ meow_taps: 42, locked: true, remaining: 0 });
       }
 
+      // Increment
       const newTaps = meow_taps + 1;
       await client.query(
         `UPDATE users
@@ -556,8 +558,14 @@ router.post('/meow-tap', validateUser, async (req, res) => {
       );
 
       await client.query('COMMIT');
-      // Advance throttle window only on successful increment
       meowTapThrottle.set(user.id, now);
+
+      console.log(`✅ [NON-THROTTLED] User ${user.id}: Incremented to ${newTaps}/42`);
+
+      // ✅ Debug log when reaching 42
+      if (newTaps === 42) {
+        console.log(`🎯🎯🎯 [NON-THROTTLED] User ${user.id}: REACHED 42! Date: ${todayStr} — CTA SHOULD BE ELIGIBLE`);
+      }
 
       return res.status(200).json({
         meow_taps: newTaps,
