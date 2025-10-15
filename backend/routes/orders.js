@@ -52,7 +52,7 @@ Contact customer via Telegram to arrange payment and delivery.`;
       body: JSON.stringify({
         chat_id: ADMIN_TELEGRAM_ID,
         text: message,
-      parse_mode: 'HTML',
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [{ text: '✅ Mark as Paid', callback_data: `mark_paid_${orderData.orderId}` }],
