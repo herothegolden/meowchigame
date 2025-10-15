@@ -24,7 +24,7 @@ import streakRoutes from './routes/streak.js';
 
 // ⬇️ Minimal additions:
 import { pool } from './config/database.js';
-import ctaRoutes from './routes/cta.js'; // NEW: mount CTA endpoints
+import ctaRoutes from './routes/cta.js'; // kept import; no endpoints mounted here
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,7 +63,7 @@ app.use('/api', tasksRoutes);
 app.use('/api', globalStatsRoutes);
 app.use('/api', ordersRoutes);
 app.use('/api/streak', streakRoutes);
-app.use('/api', ctaRoutes); // NEW: mounts /meow-cta-status and /meow-claim
+// app.use('/api', ctaRoutes); // ❌ removed to prevent duplicate endpoint overrides
 
 // ---- START SERVER ----
 const startServer = async () => {
