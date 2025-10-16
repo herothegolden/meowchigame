@@ -98,7 +98,7 @@ router.post('/validate', async (req, res) => {
       if (lastLoginDate === null) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100;
+        potentialBonus = 500; // FIXED BUG 3: was 100
         message = 'Claim your first streak!';
       } else if (diffDays === 0 && streakClaimedToday) {
         canClaim = false;
@@ -107,17 +107,17 @@ router.post('/validate', async (req, res) => {
       } else if (diffDays === 0 && !streakClaimedToday) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100 * (currentStreak + 1);
+        potentialBonus = 500 * (currentStreak + 1); // FIXED BUG 3: was 100 * (currentStreak + 1)
         message = `Claim your day ${currentStreak + 1} streak!`;
       } else if (diffDays === 1) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100 * (currentStreak + 1);
+        potentialBonus = 500 * (currentStreak + 1); // FIXED BUG 3: was 100 * (currentStreak + 1)
         message = `Continue your ${currentStreak}-day streak!`;
       } else if (diffDays > 1) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100;
+        potentialBonus = 500; // FIXED BUG 3: was 100
         message = 'Streak reset - start fresh!';
       }
 
@@ -290,7 +290,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       if (lastLoginDate === null) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100;
+        potentialBonus = 500; // FIXED BUG 3: was 100
         message = 'Claim your first streak!';
       } else if (diffDays === 0 && streakClaimedToday) {
         canClaim = false;
@@ -299,17 +299,17 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       } else if (diffDays === 0 && !streakClaimedToday) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100 * (currentStreak + 1);
+        potentialBonus = 500 * (currentStreak + 1); // FIXED BUG 3: was 100 * (currentStreak + 1)
         message = `Claim your day ${currentStreak + 1} streak!`;
       } else if (diffDays === 1) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100 * (currentStreak + 1);
+        potentialBonus = 500 * (currentStreak + 1); // FIXED BUG 3: was 100 * (currentStreak + 1)
         message = `Continue your ${currentStreak}-day streak!`;
       } else if (diffDays > 1) {
         canClaim = true;
         state = 'ELIGIBLE';
-        potentialBonus = 100;
+        potentialBonus = 500; // FIXED BUG 3: was 100
         message = 'Streak reset - start fresh!';
       }
 
