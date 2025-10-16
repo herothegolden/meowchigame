@@ -7,6 +7,53 @@ import { getTashkentDate, calculateDateDiff } from '../utils/timezone.js';
 
 const router = express.Router();
 
+/**
+ * FIXED BUG 2:
+ * Robust normalizer that accepts:
+ * - null/undefined               -> null
+ * - 'YYYY-MM-DD'                 -> same string
+ * - 'YYYY-MM-DDTHH:mm:ss...'     -> first 10 chars
+ * - numeric epoch ms             -> formatted 'YYYY-MM-DD' (UTC-based fallback)
+ * - Date instance                -> formatted 'YYYY-MM-DD' (UTC-based fallback)
+ *
+ * NOTE: We store `last_login_date` as 'YYYY-MM-DD' (Tashkent local via getTashkentDate()) below,
+ * so any legacy non-YYYY-MM-DD values will be one-time-normalized here.
+ */
+function normalizeToYMD(value) { // FIXED BUG 2
+  if (!value) return null;
+  if (typeof value === 'string') {
+    // If already a date or an ISO-like string, take the first 10 chars safely
+    const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+    // Attempt generic parse as last resort
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  }
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const yyyy = value.getUTCFullYear();
+    const mm = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(value.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return null;
+}
+
 // ---- CLAIM DAILY STREAK ----
 router.post('/claim-streak', validateUser, async (req, res) => {
   const { user } = req;
@@ -32,16 +79,22 @@ router.post('/claim-streak', validateUser, async (req, res) => {
     }
 
     const userData = userResult.rows[0];
-    const currentDate = getTashkentDate();
+    const currentDate = getTashkentDate(); // 'YYYY-MM-DD' in Tashkent
 
     // Calculate date difference first (so we can decide how to treat "claimed today")
-    const lastLoginDate = userData.last_login_date;
-    let diffDays = calculateDateDiff(lastLoginDate, currentDate);
+    // FIXED BUG 2: normalize last_login_date to 'YYYY-MM-DD' if needed
+    const lastLoginDateRaw = userData.last_login_date; // might be DATE, timestamp string, or null
+    const lastLoginDate = normalizeToYMD(lastLoginDateRaw); // FIXED BUG 2
 
-    // Hardening: if diffDays is null for any reason, treat as reset boundary
-    if (diffDays === null || Number.isNaN(diffDays)) {
-      diffDays = 999; // force reset logic below
-    }
+    // FIXED BUG 2: Call calculateDateDiff only with normalized YMD strings
+    // If we cannot normalize, treat as "no previous claim"
+    const diffDays = lastLoginDate ? calculateDateDiff(lastLoginDate, currentDate) : null; // FIXED BUG 2
+
+    // FIXED BUG 2: REMOVE the "diffDays = 999" hard reset path.
+    // Old code:
+    // if (diffDays === null || Number.isNaN(diffDays)) {
+    //   diffDays = 999; // force reset logic below
+    // }
 
     // Resilience: if the day rolled over but cron didn't run,
     // allow claim by ignoring yesterday's "streak_claimed_today".
@@ -53,8 +106,8 @@ router.post('/claim-streak', validateUser, async (req, res) => {
 
     // Determine new streak value
     let newStreak;
-    if (lastLoginDate === null) {
-      // First time claiming
+    if (!lastLoginDate || diffDays === null || Number.isNaN(diffDays)) { // FIXED BUG 2: treat invalid/unknown as first claim
+      // First time claiming (or previous date invalid/unknown)
       newStreak = 1;
     } else if (diffDays > 1) {
       // Missed days - reset to 1
@@ -65,9 +118,11 @@ router.post('/claim-streak', validateUser, async (req, res) => {
     }
 
     // Calculate bonus points
-    const bonusPoints = 100 * newStreak;
+    // FIXED BUG 3: change multiplier to 500 per day
+    const bonusPoints = 500 * newStreak; // FIXED BUG 3
 
     // Atomic update: streak, longest streak, points, flags, date
+    // FIXED BUG 2: Ensure we always store 'YYYY-MM-DD' (Tashkent local) in last_login_date
     const updateResult = await client.query(
       `UPDATE users 
        SET daily_streak = $1,
