@@ -530,6 +530,7 @@ router.post('/create-order', validateUser, async (req, res) => {
 });
 
 // ---- CONFIRM PAYMENT (Called by admin bot) ----
+// MODIFIED: Wrapped in transaction + inventory grants (3 items ×3 each) using shop.js UPSERT pattern
 router.post('/confirm-payment/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -541,36 +542,78 @@ router.post('/confirm-payment/:orderId', async (req, res) => {
 
     const client = await pool.connect();
     try {
+      // NEW: Start transaction (pattern aligned with game.js)
+      await client.query('BEGIN');
+
+      // Read order
       const orderResult = await client.query(
         'SELECT telegram_id, quantity, status FROM orders WHERE id = $1',
         [orderId]
       );
       if (orderResult.rowCount === 0) {
+        await client.query('ROLLBACK'); // NEW: rollback on not-found
         return res.status(404).json({ error: 'Order not found' });
       }
       const order = orderResult.rows[0];
       if (order.status === 'paid' || order.status === 'completed') {
+        await client.query('ROLLBACK'); // NEW: rollback on duplicate-confirm
         return res.status(400).json({ error: 'Order already marked as paid' });
       }
 
+      // MODIFIED: Update order status within txn
       await client.query(
         'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         ['paid', orderId]
       );
 
-      await client.query('UPDATE users SET vip_level = vip_level + $1 WHERE telegram_id = $2', [
-        order.quantity,
-        order.telegram_id,
-      ]);
+      // MODIFIED: Increment VIP and verify user exists
+      const vipUpdate = await client.query(
+        'UPDATE users SET vip_level = vip_level + $1 WHERE telegram_id = $2',
+        [order.quantity, order.telegram_id]
+      );
+      if (vipUpdate.rowCount === 0) {
+        console.error(`❌ VIP update failed: user ${order.telegram_id} not found for order ${orderId}`);
+        await client.query('ROLLBACK'); // NEW: rollback everything if user missing
+        return res.status(404).json({ error: 'User not found for VIP update' });
+      }
 
-      console.log(`✅ Order ${orderId} marked as paid. VIP level updated for user ${order.telegram_id}`);
+      // NEW: Inventory grants — follow shop.js UPSERT pattern (L88–92) by applying +1 three times per item
+      // Item IDs (from shop_items seed): 1 = Extra Time +10s (Time Booster), 3 = Cookie Bomb, 4 = Double Points (Point Multipliers)
+      const grantOnce = async (userId, itemId) => {
+        await client.query(
+          `INSERT INTO user_inventory (user_id, item_id, quantity)
+           VALUES ($1, $2, 1)
+           ON CONFLICT (user_id, item_id)
+           DO UPDATE SET quantity = user_inventory.quantity + 1`,
+          [userId, itemId]
+        );
+      };
 
-      res.status(200).json({
+      const targetItems = [1, 3, 4];
+      for (const itemId of targetItems) {
+        // Apply +3 using three UPSERTs (+1 each) to stay identical to shop.js pattern
+        await grantOnce(order.telegram_id, itemId);
+        await grantOnce(order.telegram_id, itemId);
+        await grantOnce(order.telegram_id, itemId);
+      }
+
+      // NEW: Commit the whole operation atomically
+      await client.query('COMMIT');
+
+      console.log(`✅ Order ${orderId} marked as paid; VIP +${order.quantity}; inventory granted: {1:+3,3:+3,4:+3} to user ${order.telegram_id}`);
+
+      return res.status(200).json({
         success: true,
-        message: 'Payment confirmed and VIP level updated',
+        message: 'Payment confirmed, VIP updated, and items granted',
         orderId,
         vipIncrement: order.quantity,
+        grantedItems: { 1: 3, 3: 3, 4: 3 },
       });
+    } catch (err) {
+      // NEW: Rollback on any failure inside handler
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.error('❌ Error within confirm-payment transaction:', err);
+      return res.status(500).json({ error: 'Failed to confirm payment', message: err.message });
     } finally {
       client.release();
     }
