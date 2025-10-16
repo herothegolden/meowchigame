@@ -204,33 +204,38 @@ const ShopPage = () => {
           />
         </div>
 
-        {/* [NEW: Real Cookie Power-Up Card] */}
-        <div className="max-w-md mx-auto -mt-6">
+        {/* ===================== */}
+        {/* 🎁 Section Header    */}
+        {/* ===================== */}
+        <div className="max-w-md mx-auto">
+          <div className="text-2xl font-semibold text-white mb-3 flex items-center gap-2">
+            <span className="text-2xl leading-none">🎁</span>
+            <span>쫀득 Real Cookie Power-Up</span>
+          </div>
+        </div>
+
+        {/* Card (title removed; ownership removed) */}
+        <div className="max-w-md mx-auto -mt-2">
           <div className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-4">
             <div className="flex items-start gap-3">
-              <div className="text-2xl leading-none">🎁</div>
               <div className="flex-1">
-                <div className="text-white font-semibold text-lg">
-                  쫀득 Real Cookie Power-Up
-                </div>
                 <div className="text-secondary text-sm mt-1 space-y-1">
                   <p>Закажи настоящее печенье Meowchi и получи игровые бусты!</p>
                   <p>
                     Виртуальные 쫀득-вайбы не enough? Попробуй настоящую bouncy текстуру +<br />
                     Time Booster ×3<br />
                     Cookie Bomb ×3<br />
-                    Point Multipliers ×3.
+                    Point Multipliers ×3
                   </p>
                 </div>
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-yellow-400 font-semibold">У тебя: 0</div>
+                <div className="flex items-center justify-end mt-4">
                   <button
                     type="button"
                     onClick={handleRealCookieCTA}
                     className="px-4 py-2 rounded-xl bg-yellow-400 text-black font-semibold shadow hover:brightness-95 active:brightness-90 transition inline-flex items-center gap-2"
                   >
                     <span className="text-black/90">⭐</span>
-                    <span>Заказать 지금</span>
+                    <span>Заказать</span>
                   </button>
                 </div>
               </div>
@@ -284,33 +289,38 @@ const ShopPage = () => {
         />
       </div>
 
-      {/* [NEW: Real Cookie Power-Up Card] — exactly between media and categories */}
-      <div className="max-w-md mx-auto -mt-6">
+      {/* ===================== */}
+      {/* 🎁 Section Header    */}
+      {/* ===================== */}
+      <div className="max-w-md mx-auto">
+        <div className="text-2xl font-semibold text-white mb-3 flex items-center gap-2">
+          <span className="text-2xl leading-none">🎁</span>
+          <span>쫀득 Real Cookie Power-Up</span>
+        </div>
+      </div>
+
+      {/* [Real Cookie Power-Up Card] — title removed; ownership removed */}
+      <div className="max-w-md mx-auto -mt-2">
         <div className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-4">
           <div className="flex items-start gap-3">
-            <div className="text-2xl leading-none">🎁</div>
             <div className="flex-1">
-              <div className="text-white font-semibold text-lg">
-                쫀득 Real Cookie Power-Up
-              </div>
               <div className="text-secondary text-sm mt-1 space-y-1">
                 <p>Закажи настоящее печенье Meowchi и получи игровые бусты!</p>
                 <p>
                   Виртуальные 쫀득-вайбы не enough? Попробуй настоящую bouncy текстуру +<br />
                   Time Booster ×3<br />
                   Cookie Bomb ×3<br />
-                  Point Multipliers ×3.
+                  Point Multipliers ×3
                 </p>
               </div>
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-yellow-400 font-semibold">У тебя: 0</div>
+              <div className="flex items-center justify-end mt-4">
                 <button
                   type="button"
                   onClick={handleRealCookieCTA}
                   className="px-4 py-2 rounded-xl bg-yellow-400 text-black font-semibold shadow hover:brightness-95 active:brightness-90 transition inline-flex items-center gap-2"
                 >
                   <span className="text-black/90">⭐</span>
-                  <span>Заказать 지금</span>
+                  <span>Заказать</span>
                 </button>
               </div>
             </div>
