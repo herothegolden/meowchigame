@@ -143,16 +143,36 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
 
       inflightRef.current = true;
       const prevServer = lastServerMeowRef.current;
+
       try {
-        // ✅ pass initData explicitly so backend validates/authenticates the user
-        const d = await apiCall("/api/meow-tap", { initData: initDataRef.current });
+        // ------------------------------------------------------------------
+        // FIXED: Meow Counter batching — compute batch size and send as `inc`
+        // ------------------------------------------------------------------
+        const remainingTo42 = 42 - prevServer;
+        const toSend = Math.max(
+          0,
+          Math.min(pendingTapsRef.current, remainingTo42)
+        ); // number of taps to apply this tick
+
+        if (toSend <= 0) {
+          inflightRef.current = false;
+          return;
+        }
+
+        // FIXED: Meow Counter batching — include `inc: toSend`
+        const d = await apiCall("/api/meow-tap", {
+          initData: initDataRef.current,
+          inc: toSend, // FIXED: Meow Counter batching
+        });
 
         if (d && typeof d.meow_taps === "number") {
-          const srv = Math.max(lastServerMeowRef.current, d.meow_taps);
-          lastServerMeowRef.current = Math.min(42, srv);
-          // ✅ only decrement pending when the server actually advanced
-          if (srv > prevServer) {
-            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - 1);
+          const srv = Math.min(42, Math.max(lastServerMeowRef.current, d.meow_taps));
+          const delta = Math.max(0, Math.min(toSend, srv - prevServer)); // FIXED: decrement by actual delta
+          lastServerMeowRef.current = srv;
+
+          // FIXED: Meow Counter batching — decrement pending by real server advance
+          if (delta > 0) {
+            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - delta); // FIXED: Meow Counter batching
           }
         }
         // If server didn't return a number, keep pending; retry next tick.
@@ -163,7 +183,6 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       }
     }, FLUSH_INTERVAL_MS);
   }, []);
-
   // ==========================================================
 
   const lifeStats = useMemo(
