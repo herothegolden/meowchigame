@@ -1,8 +1,6 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
-// v1 – Minimal fix: authenticated tap flush + correct pending drain
-// Changes:
-// 1) Pass initData to /api/meow-tap so backend validates and increments properly.
-// 2) Decrement pending only when server value increases vs lastServerMeowRef.
+// v2 – Batching + Correct Pending Drain + Safe Init + Non-destructive Reconcile + Cleanup
+// NOTE: All edits are marked with `// FIXED:` comments.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -39,7 +37,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.day === serverDay && Number.isFinite(parsed.value)) {
-          return serverVal0 === 0 ? 0 : Math.max(parsed.value, serverVal0);
+          // FIXED: State Initialization — keep highest of session vs server; don't force 0 when serverVal0 is 0
+          return Math.min(42, Math.max((parsed.value || 0), serverVal0)); // FIXED
         }
       }
     } catch (_) {}
@@ -89,7 +88,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (newDay !== prevDay) {
         next = serverVal0;
       } else {
-        next = serverVal0 === 0 ? 0 : Math.max(prev, serverVal0);
+        // FIXED: Reconciliation — do not overwrite with 0 while stats for the day haven't arrived yet
+        next = serverVal0 > 0 ? Math.max(prev, serverVal0) : prev; // FIXED
       }
       persist(next);
       if (next === 42 && prev !== 42) notifyReached42();
@@ -148,16 +148,16 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         // FIXED: Batching — include inc: pendingTapsRef.current
         const d = await apiCall("/api/meow-tap", { 
           initData: initDataRef.current,
-          inc: pendingTapsRef.current // FIXED: Batching
+          inc: pendingTapsRef.current // FIXED
         });
 
-        // FIXED: Batching — compute actual server-applied increment and decrement pending by that amount
+        // FIXED: Decrement Logic — compute actual server-applied increment and decrement pending by that amount
         if (d && typeof d.meow_taps === "number") {
           const srv = Math.max(lastServerMeowRef.current, d.meow_taps);
-          const actualIncrement = Math.max(0, srv - prevServer); // FIXED: Batching
+          const actualIncrement = Math.max(0, srv - prevServer); // FIXED
           lastServerMeowRef.current = Math.min(42, srv);
           if (actualIncrement > 0) {
-            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - actualIncrement); // FIXED: Batching
+            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - actualIncrement); // FIXED
           }
         }
         // If server didn't return a number, keep pending; retry next tick.
@@ -168,6 +168,13 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       }
     }, FLUSH_INTERVAL_MS);
   }, []);
+
+  // FIXED: Cleanup worker on unmount — prevents zombie intervals after tab switches
+  useEffect(() => {
+    return () => {
+      stopWorker();
+    };
+  }, []); // FIXED
 
   // ==========================================================
 
@@ -258,14 +265,14 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   const [claiming, setClaiming] = useState(false);
 
   // FIXED BUG 1: do NOT assume "not claimed" on first render; keep null (unknown) until data arrives
-  const streakClaimedToday = stats?.streak_claimed_today ?? null; // FIXED BUG 1
+  const streakClaimedToday = stats?.streak_claimed_today ?? null; // (retained)
 
   // FIXED BUG 1: wait for data to load; only rely on backend's canClaim flag
   const streakDataLoaded =
-    !!streakInfo && typeof streakInfo.canClaim === "boolean" && typeof stats?.daily_streak !== "undefined"; // FIXED BUG 1
+    !!streakInfo && typeof streakInfo.canClaim === "boolean" && typeof stats?.daily_streak !== "undefined"; // (retained)
 
-  // FIXED BUG 1: remove permissive defaults (dailyStreak===0 / !streakClaimedToday). Show only when data is loaded AND backend says canClaim.
-  const canClaimComputed = streakDataLoaded && streakInfo.canClaim === true; // FIXED BUG 1
+  // FIXED BUG 1: show only when data is loaded AND backend says canClaim.
+  const canClaimComputed = streakDataLoaded && streakInfo.canClaim === true; // (retained)
 
   const claimStreak = useCallback(async () => {
     if (!canClaimComputed || claiming) return;
@@ -398,8 +405,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (isStreakCard) {
         return (
           <div key={`streak-wrap-${i}`} className="relative">
-            {/* FIXED BUG 1: show CTA ONLY when data is loaded AND backend says canClaim */}
-            {streakDataLoaded && streakInfo?.canClaim === true && ( // FIXED BUG 1
+            {/* Streak CTA is controlled by backend canClaim; unchanged logic */}
+            {streakDataLoaded && streakInfo?.canClaim === true && (
               <motion.button
                 type="button"
                 onClick={async () => {
