@@ -252,11 +252,15 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   // =========================
   const [claiming, setClaiming] = useState(false);
 
-  const streakClaimedToday = !!stats?.streak_claimed_today;
-  const canClaimComputed =
-    (streakInfo && streakInfo.canClaim === true) ||
-    dailyStreak === 0 ||
-    !streakClaimedToday;
+  // FIXED BUG 1: do NOT assume "not claimed" on first render; keep null (unknown) until data arrives
+  const streakClaimedToday = stats?.streak_claimed_today ?? null; // FIXED BUG 1
+
+  // FIXED BUG 1: wait for data to load; only rely on backend's canClaim flag
+  const streakDataLoaded =
+    !!streakInfo && typeof streakInfo.canClaim === "boolean" && typeof stats?.daily_streak !== "undefined"; // FIXED BUG 1
+
+  // FIXED BUG 1: remove permissive defaults (dailyStreak===0 / !streakClaimedToday). Show only when data is loaded AND backend says canClaim.
+  const canClaimComputed = streakDataLoaded && streakInfo.canClaim === true; // FIXED BUG 1
 
   const claimStreak = useCallback(async () => {
     if (!canClaimComputed || claiming) return;
@@ -389,9 +393,8 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       if (isStreakCard) {
         return (
           <div key={`streak-wrap-${i}`} className="relative">
-            {( (streakInfo && streakInfo.canClaim === true) ||
-               dailyStreak === 0 ||
-               !stats?.streak_claimed_today ) && (
+            {/* FIXED BUG 1: show CTA ONLY when data is loaded AND backend says canClaim */}
+            {streakDataLoaded && streakInfo?.canClaim === true && ( // FIXED BUG 1
               <motion.button
                 type="button"
                 onClick={async () => {
@@ -449,7 +452,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
         </motion.div>
       );
     });
-  }, [lifeStats, meowTapsLocal, streakInfo, stats?.streak_claimed_today, claiming, claimStreak, glowTick, handleMeowTap]);
+  }, [lifeStats, meowTapsLocal, streakInfo, stats?.streak_claimed_today, claiming, claimStreak, glowTick, handleMeowTap, streakDataLoaded]);
 
   return (
     <motion.div
