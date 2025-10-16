@@ -143,36 +143,21 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
 
       inflightRef.current = true;
       const prevServer = lastServerMeowRef.current;
-
       try {
-        // ------------------------------------------------------------------
-        // FIXED: Meow Counter batching — compute batch size and send as `inc`
-        // ------------------------------------------------------------------
-        const remainingTo42 = 42 - prevServer;
-        const toSend = Math.max(
-          0,
-          Math.min(pendingTapsRef.current, remainingTo42)
-        ); // number of taps to apply this tick
-
-        if (toSend <= 0) {
-          inflightRef.current = false;
-          return;
-        }
-
-        // FIXED: Meow Counter batching — include `inc: toSend`
-        const d = await apiCall("/api/meow-tap", {
+        // ✅ pass initData explicitly so backend validates/authenticates the user
+        // FIXED: Batching — include inc: pendingTapsRef.current
+        const d = await apiCall("/api/meow-tap", { 
           initData: initDataRef.current,
-          inc: toSend, // FIXED: Meow Counter batching
+          inc: pendingTapsRef.current // FIXED: Batching
         });
 
+        // FIXED: Batching — compute actual server-applied increment and decrement pending by that amount
         if (d && typeof d.meow_taps === "number") {
-          const srv = Math.min(42, Math.max(lastServerMeowRef.current, d.meow_taps));
-          const delta = Math.max(0, Math.min(toSend, srv - prevServer)); // FIXED: decrement by actual delta
-          lastServerMeowRef.current = srv;
-
-          // FIXED: Meow Counter batching — decrement pending by real server advance
-          if (delta > 0) {
-            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - delta); // FIXED: Meow Counter batching
+          const srv = Math.max(lastServerMeowRef.current, d.meow_taps);
+          const actualIncrement = Math.max(0, srv - prevServer); // FIXED: Batching
+          lastServerMeowRef.current = Math.min(42, srv);
+          if (actualIncrement > 0) {
+            pendingTapsRef.current = Math.max(0, pendingTapsRef.current - actualIncrement); // FIXED: Batching
           }
         }
         // If server didn't return a number, keep pending; retry next tick.
@@ -183,6 +168,7 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       }
     }, FLUSH_INTERVAL_MS);
   }, []);
+
   // ==========================================================
 
   const lifeStats = useMemo(
