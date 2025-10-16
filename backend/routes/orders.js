@@ -1,10 +1,10 @@
-// Path: backend/routes/orders.js
-// v11 — CTA status hardening (minimal/surgical):
-//   A) Robust "today" derivation with fallback (tz.today || tz.day).
-//   B) Preserve race-tolerant guard (>=41) to avoid zeroing during 41→42 commit.
-//   C) One-shot, 200ms recheck inside /meow-cta-status when borderline (<42).
-//
-//   No other endpoints changed.
+// backend/routes/orders.js
+// v13 — Backward-compatible discounted checkout
+// - Accepts optional { discountAmount, claimId } on /create-order
+// - If discountAmount is omitted but totalAmount < Σ(items.totalPrice), infer the discount
+// - Validates that any discount is backed by a CONSUMED claim for TODAY (Asia/Tashkent)
+// - Enforces max discount cap: 42% of calculatedTotal
+// - Keeps existing item shape validation; no frontend per-item changes required
 
 import express from 'express';
 import { pool } from '../config/database.js';
@@ -30,9 +30,14 @@ async function sendAdminNotification(orderData) {
     const itemsList = orderData.items
       .map(
         (item, index) =>
-          `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${item.unitPrice.toLocaleString()} = ${item.totalPrice.toLocaleString()} UZS`
+          `${index + 1}. ${item.productName}\n   Qty: ${item.quantity} × ${Number(item.unitPrice).toLocaleString()} = ${Number(item.totalPrice).toLocaleString()} UZS`
       )
       .join('\n');
+
+    const discountNote =
+      orderData.discountAmount && orderData.discountAmount > 0
+        ? `\n🎁 <b>Discount:</b> -${Number(orderData.discountAmount).toLocaleString()} UZS${orderData.claimId ? ` (claim: <code>${orderData.claimId}</code>)` : ''}\n`
+        : '\n';
 
     const message = `🔔 <b>NEW ORDER #${orderData.orderId}</b>
 
@@ -44,7 +49,7 @@ async function sendAdminNotification(orderData) {
 🪙 <b>Order Items:</b>
 ${itemsList}
 
-💰 <b>Total Amount:</b> ${orderData.totalAmount.toLocaleString()} UZS
+${discountNote}💰 <b>Total Amount:</b> ${Number(orderData.totalAmount).toLocaleString()} UZS
 
 📊 <b>Status:</b> Pending Payment
 
@@ -68,7 +73,7 @@ Contact customer via Telegram to arrange payment and delivery.`;
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({}));
       console.error('❌ Telegram API error:', error);
       return false;
     }
@@ -335,14 +340,14 @@ router.post('/meow-cta-status', validateUser, async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Orders (existing)
+   Orders (existing)  — now with discount validation (backward compatible)
 ───────────────────────────────────────────────────────────────────────────── */
 
 // ---- CREATE ORDER (WITH CART SUPPORT) ----
 router.post('/create-order', validateUser, async (req, res) => {
   try {
     const { user } = req;
-    const { items, totalAmount } = req.body;
+    const { items, totalAmount, discountAmount, claimId } = req.body;
 
     // Validate input
     if (!items || Array.isArray(items) === false || items.length === 0) {
@@ -370,17 +375,86 @@ router.post('/create-order', validateUser, async (req, res) => {
       }
     }
 
+    // Sum of UNdiscounted per-item totals
     const calculatedTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-    if (totalAmount !== calculatedTotal) {
-      return res.status(400).json({
-        error: 'Total amount mismatch',
-        expected: calculatedTotal,
-        received: totalAmount,
-      });
-    }
 
+    // Open DB connection for claim checks / insert
     const client = await pool.connect();
     try {
+      // Determine today's date in Asia/Tashkent
+      const { rows: [tz] } =
+        await client.query(`SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date AS day`);
+      const today = tz.day;
+
+      // Decide discount path:
+      let verifiedDiscount = 0;
+      let usedClaimId = null;
+
+      // If discountAmount is explicitly sent
+      if (typeof discountAmount !== 'undefined' && discountAmount !== null) {
+        const disc = Math.max(0, Math.floor(Number(discountAmount) || 0));
+        if (disc > 0) {
+          if (!claimId) {
+            return res.status(400).json({ error: 'Discount requires a valid claimId' });
+          }
+          const cr = await client.query(
+            `SELECT id FROM meow_claims
+              WHERE id = $1 AND user_id = $2 AND day = $3 AND consumed = TRUE`,
+            [claimId, user.id, today]
+          );
+          if (cr.rowCount === 0) {
+            return res.status(400).json({ error: 'Invalid or expired claimId for discount' });
+          }
+          const maxDiscount = Math.floor(calculatedTotal * 0.42);
+          if (disc > maxDiscount) {
+            return res.status(400).json({
+              error: 'Discount exceeds allowed maximum (42%)',
+              maxAllowed: maxDiscount,
+              received: disc,
+            });
+          }
+          verifiedDiscount = disc;
+          usedClaimId = claimId;
+        }
+      } else {
+        // No discountAmount provided — backward compatibility:
+        // If totalAmount < calculatedTotal, infer a discount and verify a consumed claim.
+        if (totalAmount < calculatedTotal) {
+          const inferred = calculatedTotal - totalAmount; // must be an integer by construction
+          const cr = await client.query(
+            `SELECT id FROM meow_claims
+              WHERE user_id = $1 AND day = $2 AND consumed = TRUE
+              ORDER BY id DESC
+              LIMIT 1`,
+            [user.id, today]
+          );
+          if (cr.rowCount === 0) {
+            return res.status(400).json({ error: 'Discount detected but no valid consumed claim found for today' });
+          }
+          const maxDiscount = Math.floor(calculatedTotal * 0.42);
+          if (inferred > maxDiscount) {
+            return res.status(400).json({
+              error: 'Discount exceeds allowed maximum (42%)',
+              maxAllowed: maxDiscount,
+              received: inferred,
+            });
+          }
+          verifiedDiscount = inferred;
+          usedClaimId = cr.rows[0].id;
+        }
+      }
+
+      // Final amount validation
+      const expectedTotal = calculatedTotal - verifiedDiscount;
+      if (totalAmount !== expectedTotal) {
+        return res.status(400).json({
+          error: 'Total amount mismatch',
+          expected: expectedTotal,
+          received: totalAmount,
+        });
+      }
+
+      // --- Create order ---
       const orderId = `MW${Date.now().toString().slice(-8)}`;
 
       const userResult = await client.query(
@@ -392,6 +466,7 @@ router.post('/create-order', validateUser, async (req, res) => {
       const username = userData.username || null;
 
       const orderSummary = items.map((item) => `${item.productName} (${item.quantity})`).join(', ');
+      const totalQuantity = items.reduce((s, it) => s + it.quantity, 0);
 
       const insertQuery = `
         INSERT INTO orders (
@@ -401,8 +476,6 @@ router.post('/create-order', validateUser, async (req, res) => {
         RETURNING id, created_at
       `;
 
-      const totalQuantity = items.reduce((s, it) => s + it.quantity, 0);
-
       const orderResult = await client.query(insertQuery, [
         orderId,
         user.id,
@@ -410,11 +483,11 @@ router.post('/create-order', validateUser, async (req, res) => {
         '',              // customer_phone not collected
         orderSummary,    // Combined product names
         totalQuantity,   // Total quantity of all items
-        totalAmount,
+        totalAmount,     // Already discounted if applicable
         'pending',
       ]);
 
-      console.log(`✅ Order created: ${orderId} for user ${user.id} with ${items.length} items`);
+      console.log(`✅ Order created: ${orderId} for user ${user.id} with ${items.length} items (discount: ${verifiedDiscount})`);
 
       const notificationSent = await sendAdminNotification({
         orderId,
@@ -423,6 +496,8 @@ router.post('/create-order', validateUser, async (req, res) => {
         username,
         items,
         totalAmount,
+        discountAmount: verifiedDiscount,
+        claimId: usedClaimId,
       });
 
       if (!notificationSent) {
