@@ -1,7 +1,12 @@
-// v10 — Browser-safe guards (ShopPage):
-// - Detect non-Telegram environment and avoid any apiCall() usage.
-// - Render a clear "Open in Telegram" banner instead of crashing in a normal browser.
-// - Preserve instant-paint behavior and existing UI logic.
+// v11 — SAFE SHOP PAGE PERF FIXES (Fixes 1, 2, 5)
+// - FIX 1: Show Header Immediately (remove skeleton gate; always render ShopHeader with cached fallback).
+// - FIX 2: Extend Session Cache for userPoints (read/write separate key; instant header paint).
+// - FIX 5: Add Category Skeleton Cards while !data (match final layout scaffolding).
+//
+// Notes:
+// * No backend changes.
+// * No risky modifications.
+// * All original mechanics preserved.
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +41,16 @@ const ShopPage = () => {
   const [purchasing, setPurchasing] = useState(null);
   const [justPurchased, setJustPurchased] = useState(null);
 
+  // SAFE FIX 2: cache/fallback for points shown in header immediately
+  const [cachedUserPoints, setCachedUserPoints] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("userPoints");
+      return raw ? parseInt(raw, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
+
   useEffect(() => {
     // Read from session cache for instant paint
     const cached = sessionStorage.getItem("shopData");
@@ -43,6 +58,11 @@ const ShopPage = () => {
       try {
         const parsed = JSON.parse(cached);
         setData(parsed);
+        // Ensure separate points cache stays in sync for header-first paint
+        if (typeof parsed?.userPoints === "number") {
+          setCachedUserPoints(parsed.userPoints);
+          sessionStorage.setItem("userPoints", String(parsed.userPoints));
+        }
         setLoading(false);
       } catch {
         sessionStorage.removeItem("shopData");
@@ -84,7 +104,11 @@ const ShopPage = () => {
       };
 
       setData(nextData);
+
+      // SAFE FIX 2: keep separate points cache for instant header on next visits
       sessionStorage.setItem("shopData", JSON.stringify(nextData));
+      sessionStorage.setItem("userPoints", String(nextData.userPoints));
+      setCachedUserPoints(nextData.userPoints);
     } catch (err) {
       console.error("Failed to load shop data:", err);
       setError(err.message);
@@ -135,7 +159,11 @@ const ShopPage = () => {
             ownedBadges: updateBadges(prev.ownedBadges, itemId, prev.items),
           };
 
+          // Keep caches in sync for instant header paint after purchase or revisit
           sessionStorage.setItem("shopData", JSON.stringify(updated));
+          sessionStorage.setItem("userPoints", String(result.newPoints));
+          setCachedUserPoints(result.newPoints);
+
           return updated;
         });
       } catch (err) {
@@ -266,15 +294,8 @@ const ShopPage = () => {
   // -------- Telegram rendering --------
   return (
     <div className="p-4 space-y-6 bg-background text-primary">
-      {/* Header — skeleton while loading, otherwise real header */}
-      {loading && !data ? (
-        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse max-w-md">
-          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
-          <div className="h-4 w-64 bg-white/10 rounded" />
-        </div>
-      ) : (
-        <ShopHeader points={data?.userPoints || 0} />
-      )}
+      {/* SAFE FIX 1: Always render header immediately with cached fallback */}
+      <ShopHeader points={data?.userPoints ?? cachedUserPoints ?? 0} />
 
       {/* 🍪 Meowchi WebM Header Section (visual only; does not block) */}
       <div className="text-center space-y-4 mb-10">
@@ -328,13 +349,37 @@ const ShopPage = () => {
         </div>
       </div>
 
+      {/* SAFE FIX 5: Category Skeletons while data is not ready */}
+      {(!data || loading) && (
+        <div className="max-w-md mx-auto space-y-6">
+          {["time", "bomb", "multiplier"].map((cat) => (
+            <div key={`skel-${cat}`} className="space-y-3">
+              <div className="h-6 w-36 bg-white/10 rounded" />
+              <div className="grid grid-cols-3 gap-3">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={`skel-card-${cat}-${i}`}
+                    className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-3 animate-pulse"
+                  >
+                    <div className="h-16 bg-white/10 rounded mb-3" />
+                    <div className="h-4 bg-white/10 rounded w-3/4 mb-2" />
+                    <div className="h-4 bg-white/10 rounded w-1/2" />
+                    <div className="mt-3 h-8 bg-white/10 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Shop Categories — always render; hydrate with data when ready */}
       {["time", "bomb", "multiplier"].map((category) => (
         <CategorySection
           key={category}
           category={category}
           items={itemsByCategory[category]}
-          userPoints={data?.userPoints || 0}
+          userPoints={data?.userPoints ?? cachedUserPoints ?? 0}
           inventory={data?.inventory || []}
           ownedBadges={[]}
           onPurchase={handlePurchase}
