@@ -1,5 +1,4 @@
-// Path: frontend/src/pages/ProfilePage/ProfileHeader.jsx
-
+// Path: src/pages/ProfilePage/ProfileHeader.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
@@ -93,7 +92,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
-      console.error('Avatar upload error:', error);
+      // Removed debug log
       showError(error.message || 'Failed to upload avatar');
     } finally {
       setIsUploadingAvatar(false);
@@ -129,7 +128,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
                 className="w-full h-full object-cover relative"
                 style={{ zIndex: 1 }}
                 onError={() => {
-                  console.error('Avatar load error:', avatarUrl);
+                  // Removed debug log
                   setAvatarError(true);
                 }}
               />
