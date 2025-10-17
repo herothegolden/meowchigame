@@ -280,7 +280,7 @@ router.post('/get-profile-complete', validateUser, async (req, res) => {
       const currentStreak = Number(userData.daily_streak || 0);
       const lastLoginDate = userData.last_login_date;
       const streakClaimedToday = userData.streak_claimed_today || false;
-      const diffDays = calculateDateDiff(lastLoginDate, todayStr);
+      const diffDays = calculateDateDiff(lastLoginDate ? String(lastLoginDate).slice(0, 10) : null, todayStr);
 
       let canClaim = false;
       let state = 'CLAIMED';
