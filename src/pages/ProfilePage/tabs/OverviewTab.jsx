@@ -1,6 +1,7 @@
 // src/pages/ProfilePage/tabs/OverviewTab.jsx
 // v2 – Batching + Correct Pending Drain + Safe Init + Non-destructive Reconcile + Cleanup
 // NOTE: All edits are marked with `// FIXED:` comments.
+// PERF FIX: Wrapped component export with React.memo to prevent unnecessary re-renders.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -478,4 +479,5 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
   );
 };
 
-export default OverviewTab;
+// PERF FIX: Wrap with React.memo to reduce unnecessary re-renders on parent state changes
+export default React.memo(OverviewTab);
