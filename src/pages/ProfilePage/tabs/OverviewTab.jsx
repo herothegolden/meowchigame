@@ -182,9 +182,9 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
     () => [
       {
         key: "points",
-        title: "Съедено печенек",
+        title: "COOKIE LEGEND",
         value: totalPoints,
-        subtitle: "Гравитация дрожит. Ещё чуть-чуть — и мы улетим.",
+        subtitle: "쫀득-texture obsession. Never stop cooking!",
         tint: "from-[#c6b09a]/30 via-[#a98f78]/15 to-[#7d6958]/10",
       },
       {
