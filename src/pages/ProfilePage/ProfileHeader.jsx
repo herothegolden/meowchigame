@@ -1,11 +1,18 @@
 // Path: src/pages/ProfilePage/ProfileHeader.jsx
+// v3 — SAFE PERF FIXES for cached header compatibility
+// - PERF FIX: Accept partial cached stats (from sessionStorage) without breaking rendering.
+// - PERF FIX: Fallbacks for name/points/avatar when only minimal header cache is present.
+// - All existing behavior preserved for full stats payloads.
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Edit2, X, CheckSquare, LoaderCircle, Camera, Zap, Trophy, Shield, Award, Sparkles, Crown } from 'lucide-react';
 import { apiCall, showSuccess, showError } from '../../utils/api';
 
 const ProfileHeader = ({ stats, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(stats.first_name || '');
+  // PERF FIX: support cached header where "name" may be present instead of "first_name"
+  const displayFirstName = (stats?.first_name || stats?.name || '').trim(); // PERF FIX
+  const [editValue, setEditValue] = useState(displayFirstName);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -16,6 +23,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
   const telegramUser = tg?.initDataUnsafe?.user;
   const isDeveloper = telegramUser?.id === 6998637798;
 
+  // PERF FIX: accept "avatar" (cached) or "avatar_url" (full payload)
   const getAvatarUrl = (avatarData) => {
     if (!avatarData || typeof avatarData !== 'string') return null;
     if (avatarData.startsWith('data:image/')) return avatarData;
@@ -29,10 +37,11 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
   useEffect(() => {
     setAvatarError(false);
-  }, [stats.avatar_url]);
+  }, [stats?.avatar_url, stats?.avatar]); // PERF FIX: watch both keys
 
   const handleUpdate = async () => {
-    if (!editValue.trim() || editValue.trim() === stats.first_name) {
+    // Use displayFirstName as canonical source for equality check
+    if (!editValue.trim() || editValue.trim() === displayFirstName) { // PERF FIX
       setIsEditing(false);
       return;
     }
@@ -40,7 +49,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     try {
       const result = await apiCall('/api/update-profile', { firstName: editValue.trim() });
       setIsEditing(false);
-      onUpdate();
+      onUpdate && onUpdate();
       showSuccess(result.message);
     } catch (error) {
       showError(error.message);
@@ -88,11 +97,10 @@ const ProfileHeader = ({ stats, onUpdate }) => {
       const result = await apiCall('/api/update-avatar', { avatarBase64 });
       setUploadProgress(100);
       showSuccess(result.message || 'Avatar uploaded!');
-      await onUpdate();
+      await (onUpdate && onUpdate());
 
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
-      // Removed debug log
       showError(error.message || 'Failed to upload avatar');
     } finally {
       setIsUploadingAvatar(false);
@@ -100,14 +108,18 @@ const ProfileHeader = ({ stats, onUpdate }) => {
     }
   };
 
-  const avatarUrl = getAvatarUrl(stats.avatar_url);
+  // PERF FIX: prefer full payload key, fallback to cached key
+  const avatarUrl = getAvatarUrl(stats?.avatar_url ?? stats?.avatar); // PERF FIX
 
-  const userPower = stats.power ?? 0;
-  const userRank = stats.rank || '--';
-  const userVipLevel = stats.vip_level || 0;
+  const userPower = Number(stats?.power ?? 0);
+  const userRank = stats?.rank || '--';
+  const userVipLevel = Number(stats?.vip_level ?? 0);
   const placeholderAlliance = 'None';
   const placeholderAlliancePower = 0;
   const placeholderAllianceRank = '--';
+
+  // PERF FIX: robust points display if cached header only provided number
+  const pointsValue = Number(stats?.points ?? 0); // PERF FIX
 
   return (
     <div className="bg-nav p-6 rounded-lg border border-gray-700">
@@ -128,7 +140,6 @@ const ProfileHeader = ({ stats, onUpdate }) => {
                 className="w-full h-full object-cover relative"
                 style={{ zIndex: 1 }}
                 onError={() => {
-                  // Removed debug log
                   setAvatarError(true);
                 }}
               />
@@ -205,10 +216,10 @@ const ProfileHeader = ({ stats, onUpdate }) => {
             </div>
           ) : (
             <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-xl font-bold text-primary">{stats.first_name}</h1>
+              <h1 className="text-xl font-bold text-primary">{displayFirstName || 'User'}</h1> {/* PERF FIX */}
               <button
                 onClick={() => {
-                  setEditValue(stats.first_name || '');
+                  setEditValue(displayFirstName || '');
                   setIsEditing(true);
                 }}
                 className="text-secondary hover:text-accent transition-colors p-1"
@@ -237,7 +248,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
 
           {/* Username only (Level removed) */}
           <p className="text-sm text-secondary mt-1">
-            @{stats.username || 'user'}
+            @{stats?.username || 'user'}
           </p>
 
           {/* Power */}
@@ -264,7 +275,7 @@ const ProfileHeader = ({ stats, onUpdate }) => {
           <div className="flex items-center">
             <Sparkles className="w-4 h-4 text-accent mr-1" />
             <span className="text-secondary">Points:</span>
-            <span className="text-accent font-bold ml-1">{stats.points.toLocaleString()}</span>
+            <span className="text-accent font-bold ml-1">{pointsValue.toLocaleString()}</span> {/* PERF FIX */}
           </div>
         </div>
       </div>
