@@ -28,11 +28,11 @@ export default function GameOverModal({
       <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
         <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
 
-        {/* CHANGED: Bigger, centered cat image (w-48 h-48, mx-auto, mb-6) */}
+        {/* CHANGED: Updated image URL */}
         <img
-          src="https://ik.imagekit.io/59r2kpz8r/GameOver1_upDcv9X5E?updatedAt=1760687183906"
+          src="https://ik.imagekit.io/59r2kpz8r/GameOVER2.png?updatedAt=1760689816409"
           alt="Game Over"
-          className="w-48 h-48 mx-auto mb-6 object-contain" // CHANGED
+          className="w-48 h-48 mx-auto mb-6 object-contain"
         />
 
         <p className="text-2xl font-bold text-accent mb-2">
@@ -63,15 +63,12 @@ export default function GameOverModal({
               soundManager.playUI("button_click", { volume: 0.8 });
               navigateHome();
             }}
-            // CHANGED: Yellow sales CTA styling to match desired look
-            className="flex-1 bg-yellow-400 text-black py-3 px-4 rounded-xl font-bold hover:bg-yellow-500 transition-colors" // CHANGED
+            className="flex-1 bg-yellow-400 text-black py-3 px-4 rounded-xl font-bold hover:bg-yellow-500 transition-colors"
           >
-            {/* CHANGED: Button text from "Home" to "Заказать" */}
             <span>Заказать</span>
           </button>
         </div>
 
-        {/* CHANGED: Updated single-line fun Russian text (centered, text-sm, gray) */}
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-400">
             Hayaaa, купи <span className="font-bold">쫀득</span> Cookies получи Тайм-Бусти, 쿠키-Бомбы, Множители очков х3
