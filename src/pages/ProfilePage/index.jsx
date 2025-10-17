@@ -1,8 +1,4 @@
-// v21 — DEBUG VERSION: Visible debug panel for CTA troubleshooting
-// - Shows real-time ctaStatus state
-// - Logs meow:reached42 events
-// - Displays API responses
-// - Explains why CTA shows/hides
+// Profile Page
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,17 +33,6 @@ const ProfilePage = () => {
 
   const post42TimersRef = useRef([]);
 
-  // 🐛 DEBUG STATE
-  const [debugVisible, setDebugVisible] = useState(true);
-  const [debugLogs, setDebugLogs] = useState([]);
-  const debugLog = useCallback((type, message, data = null) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setDebugLogs((prev) => [
-      { type, message, data, timestamp },
-      ...prev.slice(0, 19), // Keep last 20 logs
-    ]);
-  }, []);
-
   const fetchData = useCallback(async () => {
     if (!isTMA) return;
     try {
@@ -55,38 +40,28 @@ const ProfilePage = () => {
       setError(null);
       const result = await apiCall("/api/get-profile-complete");
       setData(result);
-      debugLog("info", "Profile data loaded", { meow_taps: result?.stats?.meow_taps });
     } catch (err) {
-      console.error("❌ Failed to load profile:", err);
       setError(err.message || "Failed to load profile");
-      debugLog("error", "Profile load failed", err.message);
     } finally {
       setLoading(false);
     }
-  }, [isTMA, debugLog]);
+  }, [isTMA]);
 
   const fetchCtaStatus = useCallback(async () => {
     if (!isTMA) return;
     try {
-      debugLog("info", "🔄 Calling /api/meow-cta-status...");
       const res = await apiCall("/api/meow-cta-status");
-      debugLog("success", "✅ API Response", res);
-      
-      setCtaStatus((s) => {
-        const newState = {
-          ...s,
-          eligible: !!res.eligible,
-          usedToday: !!res.usedToday,
-          meow_taps: Number(res.meow_taps || 0),
-          remainingGlobal: Number(res.remainingGlobal || 0),
-        };
-        debugLog("info", "CTA State Updated", newState);
-        return newState;
-      });
-    } catch (err) {
-      debugLog("error", "❌ API Error", err.message);
+      setCtaStatus((s) => ({
+        ...s,
+        eligible: !!res.eligible,
+        usedToday: !!res.usedToday,
+        meow_taps: Number(res.meow_taps || 0),
+        remainingGlobal: Number(res.remainingGlobal || 0),
+      }));
+    } catch {
+      // Silent fail; UI falls back to current state
     }
-  }, [isTMA, debugLog]);
+  }, [isTMA]);
 
   useEffect(() => {
     fetchData();
@@ -96,53 +71,35 @@ const ProfilePage = () => {
   useEffect(() => {
     if (!isTMA) return;
     if (data?.stats?.meow_taps >= 42) {
-      debugLog("info", "📊 Profile loaded with meow_taps >= 42, fetching CTA status");
       fetchCtaStatus();
     }
-  }, [isTMA, data?.stats?.meow_taps, fetchCtaStatus, debugLog]);
+  }, [isTMA, data?.stats?.meow_taps, fetchCtaStatus]);
 
-  // 🔒 Consume payload from OverviewTab's "meow:reached42"
+  // Listen for "meow:reached42" events from OverviewTab
   useEffect(() => {
     if (!isTMA) return;
 
     const onReached42 = (e) => {
-      debugLog("event", "🎯 meow:reached42 EVENT FIRED", e.detail);
-      
-      // Fast-path: if server already replied eligible:true, set immediately
       if (e?.detail && e.detail.eligible === true) {
-        debugLog("success", "⚡ Fast-path: Setting eligible immediately");
         setCtaStatus((s) => ({ ...s, eligible: true, usedToday: !!e.detail.usedToday }));
       } else {
-        debugLog("info", "🔄 Fallback: Fetching CTA status");
         fetchCtaStatus();
       }
 
-      // Short retry ladder to outwait any residual commit latency
-      debugLog("info", "⏱️ Starting retry ladder (150ms, 400ms, 800ms)");
-      const t1 = setTimeout(() => {
-        debugLog("info", "⏱️ Retry 1 (150ms)");
-        fetchCtaStatus();
-      }, 150);
-      const t2 = setTimeout(() => {
-        debugLog("info", "⏱️ Retry 2 (400ms)");
-        fetchCtaStatus();
-      }, 400);
-      const t3 = setTimeout(() => {
-        debugLog("info", "⏱️ Retry 3 (800ms)");
-        fetchCtaStatus();
-      }, 800);
+      // Short retry ladder to smooth over latency
+      const t1 = setTimeout(fetchCtaStatus, 150);
+      const t2 = setTimeout(fetchCtaStatus, 400);
+      const t3 = setTimeout(fetchCtaStatus, 800);
       post42TimersRef.current.push(t1, t2, t3);
     };
 
     window.addEventListener("meow:reached42", onReached42);
-    debugLog("info", "👂 Listening for meow:reached42 events");
-    
     return () => {
       window.removeEventListener("meow:reached42", onReached42);
       for (const t of post42TimersRef.current) clearTimeout(t);
       post42TimersRef.current = [];
     };
-  }, [isTMA, fetchCtaStatus, debugLog]);
+  }, [isTMA, fetchCtaStatus]);
 
   // Light polling while on Profile to reflect caps/flags
   useEffect(() => {
@@ -160,49 +117,27 @@ const ProfilePage = () => {
     }
     try {
       setCtaLoading(true);
-      debugLog("info", "🎁 Claiming CTA...");
       const res = await apiCall("/api/meow-claim");
-      debugLog("success", "✅ Claim response", res);
-      
       if (res?.success && res?.claimId) {
         showSuccess("Скидка 42% активирована на заказ 🎉");
         setCtaStatus((s) => ({ ...s, eligible: false, usedToday: true }));
-        debugLog("success", "🎉 CTA claimed successfully!");
         navigate(`/order?promo=MEOW42&claim=${res.claimId}`);
       } else {
         showError(res?.error || "Не удалось активировать предложение");
-        debugLog("error", "❌ Claim failed", res?.error);
         fetchCtaStatus();
       }
     } catch (e) {
       showError(e?.message || "Сеть недоступна");
-      debugLog("error", "❌ Claim error", e.message);
       fetchCtaStatus();
     } finally {
       setCtaLoading(false);
     }
-  }, [ctaLoading, isTMA, navigate, fetchCtaStatus, debugLog]);
+  }, [ctaLoading, isTMA, navigate, fetchCtaStatus]);
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
 
-  // Show CTA solely based on server eligibility flag
   const showMeowCTA = !!ctaStatus.eligible;
-
-  // 🐛 DEBUG: Why is CTA showing/hiding?
-  const ctaReason = !ctaStatus.eligible
-    ? ctaStatus.usedToday
-      ? "Already used today"
-      : ctaStatus.meow_taps < 42
-      ? `Only ${ctaStatus.meow_taps}/42 taps`
-      : ctaStatus.remainingGlobal <= 0
-      ? "Global limit reached (42/42)"
-      : "Unknown reason"
-    : "Eligible! ✅";
-
-  useEffect(() => {
-    debugLog("info", `🎯 CTA Display: ${showMeowCTA ? "SHOWING" : "HIDDEN"} - ${ctaReason}`);
-  }, [showMeowCTA, ctaReason, debugLog]);
 
   // -------- Non-Telegram rendering (browser deep link) --------
   if (!isTMA) {
@@ -228,86 +163,6 @@ const ProfilePage = () => {
   // -------- Telegram rendering --------
   return (
     <div className="p-4 space-y-6 pb-28 bg-background text-primary">
-      {/* 🐛 DEBUG PANEL */}
-      {debugVisible && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 max-h-96 overflow-y-auto 
-                        rounded-lg border border-green-500/50 bg-black/90 backdrop-blur-sm 
-                        shadow-[0_0_20px_rgba(34,197,94,0.3)] text-xs">
-          <div className="sticky top-0 bg-green-900/80 px-3 py-2 flex items-center justify-between border-b border-green-500/30">
-            <span className="font-bold text-green-300">🐛 CTA DEBUG</span>
-            <button
-              onClick={() => setDebugVisible(false)}
-              className="text-green-300 hover:text-white text-lg leading-none"
-            >
-              ×
-            </button>
-          </div>
-          
-          <div className="p-3 space-y-2">
-            {/* Current CTA Status */}
-            <div className="rounded bg-gray-900/50 p-2 border border-gray-700">
-              <div className="font-bold text-green-400 mb-1">Current CTA State:</div>
-              <div className="text-white space-y-0.5">
-                <div>eligible: <span className={ctaStatus.eligible ? "text-green-400" : "text-red-400"}>
-                  {String(ctaStatus.eligible)}
-                </span></div>
-                <div>meow_taps: <span className="text-yellow-400">{ctaStatus.meow_taps}</span></div>
-                <div>usedToday: <span className={ctaStatus.usedToday ? "text-red-400" : "text-green-400"}>
-                  {String(ctaStatus.usedToday)}
-                </span></div>
-                <div>remainingGlobal: <span className="text-blue-400">{ctaStatus.remainingGlobal}</span></div>
-              </div>
-              <div className="mt-2 pt-2 border-t border-gray-700">
-                <div className="font-bold text-orange-400">Why CTA is {showMeowCTA ? "showing" : "hidden"}:</div>
-                <div className={showMeowCTA ? "text-green-400" : "text-red-400"}>{ctaReason}</div>
-              </div>
-            </div>
-
-            {/* Event Log */}
-            <div className="rounded bg-gray-900/50 p-2 border border-gray-700 max-h-48 overflow-y-auto">
-              <div className="font-bold text-green-400 mb-1">Event Log:</div>
-              {debugLogs.length === 0 ? (
-                <div className="text-gray-500 italic">No events yet...</div>
-              ) : (
-                <div className="space-y-1">
-                  {debugLogs.map((log, i) => (
-                    <div key={i} className="text-xs">
-                      <span className="text-gray-500">{log.timestamp}</span>{" "}
-                      <span className={
-                        log.type === "error" ? "text-red-400" :
-                        log.type === "success" ? "text-green-400" :
-                        log.type === "event" ? "text-purple-400" :
-                        "text-blue-400"
-                      }>
-                        {log.message}
-                      </span>
-                      {log.data && (
-                        <div className="text-gray-400 ml-2 text-[10px] font-mono">
-                          {JSON.stringify(log.data, null, 2).slice(0, 100)}
-                          {JSON.stringify(log.data).length > 100 ? "..." : ""}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toggle button when hidden */}
-      {!debugVisible && (
-        <button
-          onClick={() => setDebugVisible(true)}
-          className="fixed bottom-20 right-4 z-50 px-3 py-2 rounded-lg 
-                     bg-green-900/80 border border-green-500/50 text-green-300 
-                     hover:bg-green-900 text-xs font-bold shadow-lg"
-        >
-          🐛 DEBUG
-        </button>
-      )}
-
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-sm">
           Ошибка загрузки профиля: {error}{" "}
