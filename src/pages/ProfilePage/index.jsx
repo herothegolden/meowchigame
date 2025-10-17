@@ -1,4 +1,7 @@
-// Profile Page
+// v12 — PROFILE PAGE SAFE PERF FIXES
+// - PERF FIX 1: Cache Header Stats in sessionStorage for instant header paint
+// - PERF FIX 2: Parallel CTA Check when cache indicates ≥42
+// - PERF FIX 5: Consistent loading states (use cached values during load)
 
 import React, { useState, useEffect, useCallback, Suspense, lazy, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,8 +16,6 @@ const TasksTab = lazy(() => import("./tabs/TasksTab"));
 
 const ProfilePage = () => {
   const navigate = useNavigate();
-
-  // Detect Telegram Mini App environment
   const isTMA = typeof window !== "undefined" && !!window.Telegram?.WebApp?.initData;
 
   const [data, setData] = useState(null);
@@ -33,6 +34,17 @@ const ProfilePage = () => {
 
   const post42TimersRef = useRef([]);
 
+  // PERF FIX 1: Read cached header data immediately for instant header paint
+  const [cachedHeader, setCachedHeader] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("profileHeader");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // PERF FIX 1: When fetching completes, cache minimal header stats for next load
   const fetchData = useCallback(async () => {
     if (!isTMA) return;
     try {
@@ -40,6 +52,20 @@ const ProfilePage = () => {
       setError(null);
       const result = await apiCall("/api/get-profile-complete");
       setData(result);
+
+      // PERF FIX 1: Save minimal header info
+      const stats = result?.stats || {};
+      const streakInfo = stats?.streakInfo || {};
+      const cache = {
+        points: stats.points || 0,
+        name: stats.name || "",
+        rank: stats.rank || "",
+        avatar: stats.avatar || "",
+        streak: streakInfo?.streak || 0,
+        meow_taps: stats.meow_taps || 0,
+      };
+      sessionStorage.setItem("profileHeader", JSON.stringify(cache));
+      setCachedHeader(cache);
     } catch (err) {
       setError(err.message || "Failed to load profile");
     } finally {
@@ -63,9 +89,15 @@ const ProfilePage = () => {
     }
   }, [isTMA]);
 
+  // PERF FIX 2: Parallel CTA check if cache shows ≥42
   useEffect(() => {
+    if (!isTMA) return;
+    const cached = cachedHeader?.meow_taps;
+    if (cached && cached >= 42) {
+      fetchCtaStatus();
+    }
     fetchData();
-  }, [fetchData]);
+  }, [isTMA, fetchData, fetchCtaStatus, cachedHeader?.meow_taps]);
 
   // If we load a profile already at 42, check CTA immediately
   useEffect(() => {
@@ -85,8 +117,6 @@ const ProfilePage = () => {
       } else {
         fetchCtaStatus();
       }
-
-      // Short retry ladder to smooth over latency
       const t1 = setTimeout(fetchCtaStatus, 150);
       const t2 = setTimeout(fetchCtaStatus, 400);
       const t3 = setTimeout(fetchCtaStatus, 800);
@@ -136,10 +166,9 @@ const ProfilePage = () => {
 
   const stats = data?.stats || {};
   const streakInfo = data?.stats?.streakInfo || {};
-
   const showMeowCTA = !!ctaStatus.eligible;
 
-  // -------- Non-Telegram rendering (browser deep link) --------
+  // -------- Non-Telegram rendering --------
   if (!isTMA) {
     return (
       <div className="p-4 space-y-6 pb-28 bg-background text-primary">
@@ -175,15 +204,20 @@ const ProfilePage = () => {
         </div>
       )}
 
+      {/* PERF FIX 5: show cached header even while loading */}
       {loading ? (
-        <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
-          <div className="h-6 w-40 bg-white/10 rounded mb-3" />
-          <div className="grid grid-cols-3 gap-3">
-            <div className="h-16 bg-white/10 rounded" />
-            <div className="h-16 bg-white/10 rounded" />
-            <div className="h-16 bg-white/10 rounded" />
+        cachedHeader ? (
+          <ProfileHeader stats={cachedHeader} onUpdate={fetchData} />
+        ) : (
+          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4 animate-pulse">
+            <div className="h-6 w-40 bg-white/10 rounded mb-3" />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="h-16 bg-white/10 rounded" />
+              <div className="h-16 bg-white/10 rounded" />
+              <div className="h-16 bg-white/10 rounded" />
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <ProfileHeader stats={stats} onUpdate={fetchData} />
       )}
