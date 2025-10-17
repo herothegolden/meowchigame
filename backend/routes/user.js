@@ -88,7 +88,7 @@ router.post('/validate', async (req, res) => {
       const lastLoginDate = appUser.last_login_date;
       const currentStreak = appUser.daily_streak || 0;
       const streakClaimedToday = appUser.streak_claimed_today || false;
-      const diffDays = calculateDateDiff(lastLoginDate, currentDate);
+      const diffDays = calculateDateDiff(lastLoginDate ? String(lastLoginDate).slice(0, 10) : null, todayStr);
 
       let canClaim = false;
       let state = 'CLAIMED';
