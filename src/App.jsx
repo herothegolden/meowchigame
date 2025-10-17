@@ -1,8 +1,6 @@
-// Path: frontend/src/App.jsx
-// v21 — No black "Loading" screen on Profile (and anywhere else):
-// - Eager-import ProfilePage so it never hits a route fallback
-// - Use Suspense fallback={null} so the router never shows a blocking/loading UI
-// - Init runs in background; WebApp.ready() on next frame for TMA
+// v22 — SAFE SHOP PAGE PERF FIX (Fix 4 only)
+// - Replace <Suspense fallback={null}> with a minimal, non-blocking skeleton.
+// - All other behavior unchanged. No backend or risky modifications.
 
 import React, { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
@@ -41,8 +39,8 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col font-sans overflow-hidden bg-background text-primary">
       <main className="flex-grow overflow-y-auto pb-20">
-        {/* 👇 No visual fallback anywhere */}
-        <Suspense fallback={null}>
+        {/* Minimal visual fallback to avoid a blank frame */}
+        <Suspense fallback={<div className="h-1 w-full animate-pulse bg-white/10" />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/profile" element={<ProfilePage />} /> {/* eager, instant */}
