@@ -1,4 +1,4 @@
-// Path: frontend/src/pages/ProfilePage/tabs/LeaderboardTab.jsx
+// Path: src/pages/ProfilePage/tabs/LeaderboardTab.jsx
 // v6 — No animations:
 // - Removed framer-motion and all motion wrappers
 // - Kept: apiCall (sends initData), versioned session cache, lazy avatars with fixed size,
@@ -57,7 +57,7 @@ const LeaderboardTab = () => {
       setLeaderboard(data);
       sessionStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (error) {
-      console.error('Failed to load leaderboard:', error);
+      // Removed debugging log
       if (!cached) setLeaderboard([]);
     } finally {
       setLoading(false);
