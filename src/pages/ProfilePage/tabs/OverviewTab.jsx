@@ -189,41 +189,41 @@ const OverviewTab = ({ stats, streakInfo, onUpdate }) => {
       },
       {
         key: "zen",
-        title: "Уровень дзена",
+        title: "ZEN MASTER",
         value: gamesPlayed,
-        subtitle: "Чем больше часов, тем тише мысли.",
+        subtitle: "Твоя суперсила — chill. 쫀득-дзен активирован.",
         tint: "from-[#9db8ab]/30 via-[#7d9c8b]/15 to-[#587265]/10",
       },
       {
         key: "power-mood",
-        title: "Настроение по мощности",
+        title: "DAILY BOSS",
         value: highScoreToday,
-        subtitle: "Рекорд дня. Система сисет, ты тоже.",
+        subtitle: "Energy на максималках. Today you own it!",
         tint: "from-[#b3a8cf]/30 via-[#9c8bbd]/15 to-[#756a93]/10",
       },
       {
         key: "social-energy",
-        title: "Социальная энергия",
+        title: "FIRE STREAK",
         value: `${dailyStreak}`,
         subtitle:
-          dailyStreak > 0 ? "Ты говорил с людьми. Герой дня." : "Пора снова выйти в Meowchiverse.",
+          dailyStreak > 0 ? "Каждый день — новый level. 쫀득-bonus ждёт!" : "Пора снова выйти в Meowchiverse.",
         tint: "from-[#b79b8e]/30 via-[#9c8276]/15 to-[#6c5a51]/10",
       },
       {
         key: "invites",
-        title: "Приглашено друзей",
+        title: "SQUAD POWER",
         value: (stats?.invited_friends || 0).toLocaleString(),
-        subtitle: "Каждый получил полотенце. Никто не вернул.",
+        subtitle: "Invite = Level up! 🎮 Share the 쫀득!",
         tint: "from-[#a1b7c8]/30 via-[#869dac]/15 to-[#5d707d]/10",
       },
       {
         key: "meow-counter",
-        title: "Счётчик мяу",
+        title: "MEOW.",
         value: (meowTapsLocal >= 42 ? 42 : meowTapsLocal).toLocaleString(),
         subtitle:
           meowTapsLocal >= 42
             ? "Совершенство достигнуто — мир в равновесии."
-            : "Нажимай дальше. Мяу ждёт.",
+            : "42 = victory dance. Tap till you drop!",
         tint: "from-[#c7bda3]/30 via-[#a79a83]/15 to-[#756c57]/10",
         tappable: true,
       },
