@@ -27,7 +27,14 @@ export default function GameOverModal({
     >
       <div className="bg-nav rounded-2xl p-8 text-center max-w-sm w-full border border-gray-700">
         <h2 className="text-4xl font-bold text-primary mb-4">Game Over!</h2>
-        <div className="text-6xl mb-4">🎉</div>
+
+        {/* CHANGED: Replace emoji with image */}
+        <img
+          src="https://ik.imagekit.io/59r2kpz8r/GameOver1_upDcv9X5E?updatedAt=1760687183906"
+          alt="Game Over"
+          className="w-32 h-32 mb-4 object-contain"
+        />
+
         <p className="text-2xl font-bold text-accent mb-2">
           {score.toLocaleString()} Points
         </p>
@@ -58,8 +65,23 @@ export default function GameOverModal({
             }}
             className="flex-1 bg-nav border border-gray-700 text-primary py-3 px-4 rounded-xl font-bold hover:bg-gray-700 transition-colors"
           >
-            Home
+            {/* CHANGED: Button text from "Home" to "Заказать" */}
+            <span>Заказать</span>
           </button>
+        </div>
+
+        {/* CHANGED: Fun motivational text below buttons */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-400">
+            Попробуй настоящие <span className="font-bold">쫀득</span>-печеньки — 
+            <br />
+            bouncy текстура для bouncy результатов! 🍪
+          </p>
+          {/* Alternative:
+              <p className="text-sm text-gray-400 mt-2">
+                Real 쫀득 cookies = real game power! Закажи Meowchi сегодня 🚀
+              </p>
+          */}
         </div>
       </div>
     </motion.div>
